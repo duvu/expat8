@@ -1,59 +1,194 @@
-import { readJson, sendJson } from './http_utils.js';
+import express from 'express';
+
+import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
 import { toApiWord } from './word_store.js';
 
-export function createApp({ store, generationService, config }) {
-  return async function app(request, response) {
-    const url = new URL(request.url, `http://${request.headers.host ?? 'localhost'}`);
+export function createApp({ store, generationService, config, nonceCache = new InMemoryNonceCache() }) {
+  const app = express();
 
-    try {
-      if (request.method === 'GET' && url.pathname === '/health') {
-        return sendJson(response, 200, { ok: true });
-      }
+  app.get('/health', (_request, response) => {
+    response.json({ ok: true });
+  });
 
-      if (request.method === 'GET' && url.pathname === '/v1/words/next') {
-        const limit = clampLimit(url.searchParams.get('limit'), 1, 20);
-        const targetLanguage =
-          url.searchParams.get('target_language') ?? config.defaultTargetLanguage;
-        let words = store.findNewWords({ targetLanguage, limit });
-        if (words.length < limit && generationService) {
-          const generated = await generationService.generateAndStore({
-            sourceLanguage:
-              url.searchParams.get('source_language') ?? config.defaultSourceLanguage,
-            targetLanguage,
-            limit: limit - words.length
-          });
-          words = [...words, ...generated].slice(0, limit);
-        }
-        return sendJson(response, 200, { items: words.map(toApiWord) });
-      }
+  app.use(
+    '/v1',
+    rejectMissingCredentialHeaders,
+    captureRawBody({ config }),
+    appCredentialGuard({ config, nonceCache }),
+    parseJsonFromCapturedBody,
+    createV1Router({ store, generationService, config })
+  );
 
-      if (request.method === 'GET' && url.pathname === '/v1/words/recent') {
-        const limit = clampLimit(url.searchParams.get('limit'), 1, 1000);
-        const targetLanguage =
-          url.searchParams.get('target_language') ?? config.defaultTargetLanguage;
-        const words = store.recentWords({ targetLanguage, limit });
-        return sendJson(response, 200, { items: words.map(toApiWord) });
-      }
+  app.use((_request, response) => {
+    response.status(404).json({ error: 'not_found' });
+  });
 
-      if (request.method === 'POST' && url.pathname === '/v1/study-events/sync') {
-        const body = await readJson(request);
-        if (!body.device_id) {
-          return sendJson(response, 400, {
-            accepted_event_ids: [],
-            rejected_events: [{ reason: 'missing_device_id' }]
-          });
-        }
-        const result = store.syncStudyEvents({
-          deviceId: body.device_id,
-          events: Array.isArray(body.events) ? body.events : []
+  app.use((error, _request, response, _next) => {
+    response.status(500).json({ error: 'internal_error', message: error.message });
+  });
+
+  return app;
+}
+
+function createV1Router({ store, generationService, config }) {
+  const router = express.Router();
+
+  router.get(
+    '/words/next',
+    asyncHandler(async (request, response) => {
+      const limit = clampLimit(request.query.limit, 1, 20);
+      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
+      const excludeServerWordIds = normalizeExcludedWordIds(request.query.exclude_server_word_id);
+      const recentWords = await store.recentWords({ targetLanguage, limit: 1000 });
+      let words = await store.findNewWords({
+        targetLanguage,
+        limit,
+        excludeWordIds: excludeServerWordIds
+      });
+      if (words.length < limit && generationService) {
+        const generated = await generationService.generateAndStore({
+          sourceLanguage: request.query.source_language ?? config.defaultSourceLanguage,
+          targetLanguage,
+          limit: limit - words.length,
+          avoidTerms: recentWords.map((word) => word.term)
         });
-        return sendJson(response, 200, result);
+        words = [...words, ...generated].slice(0, limit);
       }
+      response.json({ items: words.map(toApiWord) });
+    })
+  );
 
-      return sendJson(response, 404, { error: 'not_found' });
-    } catch (error) {
-      return sendJson(response, 500, { error: 'internal_error', message: error.message });
+  router.get(
+    '/words/recent',
+    asyncHandler(async (request, response) => {
+      const limit = clampLimit(request.query.limit, 1, 1000);
+      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
+      const words = await store.recentWords({ targetLanguage, limit });
+      response.json({ items: words.map(toApiWord) });
+    })
+  );
+
+  router.post(
+    '/study-events/sync',
+    asyncHandler(async (request, response) => {
+      const body = request.body ?? {};
+      if (!body.device_id) {
+        return response.status(400).json({
+          accepted_event_ids: [],
+          rejected_events: [{ reason: 'missing_device_id' }]
+        });
+      }
+      const result = await store.syncStudyEvents({
+        deviceId: body.device_id,
+        events: Array.isArray(body.events) ? body.events : []
+      });
+      return response.json(result);
+    })
+  );
+
+  return router;
+}
+
+function normalizeExcludedWordIds(value) {
+  if (Array.isArray(value)) {
+    return value.filter((item) => typeof item === 'string' && item.length > 0);
+  }
+  return typeof value === 'string' && value.length > 0 ? [value] : [];
+}
+
+function rejectMissingCredentialHeaders(request, response, next) {
+  const requiredHeaders = [
+    'x-expat8-app-id',
+    'x-expat8-timestamp',
+    'x-expat8-nonce',
+    'x-expat8-content-sha256',
+    'x-expat8-signature'
+  ];
+
+  if (requiredHeaders.some((header) => !request.get(header))) {
+    return badRequest(response);
+  }
+  return next();
+}
+
+function captureRawBody({ config }) {
+  return (request, response, next) => {
+    const limit = request.method === 'GET'
+      ? config.appCredentialGetBodyLimitBytes
+      : config.appCredentialPostBodyLimitBytes;
+    const contentLength = Number.parseInt(request.get('content-length') ?? '0', 10);
+    if (contentLength > limit) {
+      return badRequest(response);
     }
+
+    const chunks = [];
+    let totalBytes = 0;
+    let exceeded = false;
+
+    request.on('data', (chunk) => {
+      totalBytes += chunk.length;
+      if (totalBytes > limit) {
+        exceeded = true;
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    request.on('end', () => {
+      if (exceeded) {
+        return badRequest(response);
+      }
+      request.rawBody = Buffer.concat(chunks);
+      return next();
+    });
+
+    request.on('error', () => badRequest(response));
+  };
+}
+
+function appCredentialGuard({ config, nonceCache }) {
+  return (request, response, next) => {
+    const url = new URL(request.originalUrl, 'http://localhost');
+    const result = verifyAppCredentialRequest({
+      method: request.method,
+      url,
+      headers: request.headers,
+      rawBody: request.rawBody ?? Buffer.alloc(0),
+      config,
+      nonceCache,
+      now: new Date()
+    });
+
+    if (!result.ok) {
+      return badRequest(response);
+    }
+
+    request.appCredential = { appId: result.appId };
+    return next();
+  };
+}
+
+function parseJsonFromCapturedBody(request, response, next) {
+  if (request.rawBody.length === 0) {
+    request.body = {};
+    return next();
+  }
+
+  try {
+    request.body = JSON.parse(request.rawBody.toString('utf8'));
+    return next();
+  } catch (error) {
+    return badRequest(response);
+  }
+}
+
+function badRequest(response) {
+  return response.status(400).json({ error: 'bad_request' });
+}
+
+function asyncHandler(handler) {
+  return (request, response, next) => {
+    Promise.resolve(handler(request, response, next)).catch(next);
   };
 }
 

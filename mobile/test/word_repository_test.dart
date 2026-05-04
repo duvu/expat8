@@ -25,18 +25,61 @@ void main() {
     final word = await repository.getNewWordWithFallback();
     expect(word?.localId, localWord.localId);
   });
+
+  test('passes excluded server word id to backend when requesting another new word', () async {
+    final database = await LocalDatabase.open();
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+    );
+
+    await repository.getNewWordWithFallback(excludeServerWordId: 'word_1');
+
+    expect(apiClient.lastExcludedServerWordId, 'word_1');
+  });
 }
 
 class _FailingApiClient extends BackendApiClient {
-  _FailingApiClient() : super(baseUrl: 'http://unused', timeout: Duration.zero);
+  _FailingApiClient()
+    : super(
+        baseUrl: 'http://unused',
+        timeout: Duration.zero,
+        appId: 'test-app',
+        appSecret: 'test-secret',
+      );
 
   @override
   Future<List<VocabularyWord>> fetchNewWords({
     int limit = 1,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
+    String? excludeServerWordId,
   }) {
     throw BackendApiException('forced failure');
+  }
+}
+
+class _RecordingApiClient extends BackendApiClient {
+  _RecordingApiClient()
+    : super(
+        baseUrl: 'http://unused',
+        timeout: Duration.zero,
+        appId: 'test-app',
+        appSecret: 'test-secret',
+      );
+
+  String? lastExcludedServerWordId;
+
+  @override
+  Future<List<VocabularyWord>> fetchNewWords({
+    int limit = 1,
+    String sourceLanguage = 'vi',
+    String targetLanguage = 'en',
+    String? excludeServerWordId,
+  }) async {
+    lastExcludedServerWordId = excludeServerWordId;
+    return [];
   }
 }
 

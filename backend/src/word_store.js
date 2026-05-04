@@ -40,9 +40,11 @@ export class WordStore {
     return { word, inserted: true };
   }
 
-  findNewWords({ targetLanguage = 'en', limit = 1 }) {
+  findNewWords({ targetLanguage = 'en', limit = 1, excludeWordIds = [] }) {
     return [...this.words.values()]
-      .filter((word) => word.language === targetLanguage)
+      .filter(
+        (word) => word.language === targetLanguage && !excludeWordIds.includes(word.id)
+      )
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, limit);
   }

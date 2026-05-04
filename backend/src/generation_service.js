@@ -1,3 +1,4 @@
+import { normalizeTerm } from './normalize.js';
 import { validateVocabularyItem } from './vocabulary_validator.js';
 
 export class VocabularyGenerationService {
@@ -7,37 +8,47 @@ export class VocabularyGenerationService {
     this.logger = logger;
   }
 
-  async generateAndStore({ sourceLanguage = 'vi', targetLanguage = 'en', limit = 5 }) {
-    let raw;
-    try {
-      raw = await this.liteLLMClient.generateVocabulary({
-        sourceLanguage,
-        targetLanguage,
-        limit
-      });
-    } catch (error) {
-      this.logger.warn('ai_generation_failed', { reason: error.message });
-      return [];
+  async generateAndStore({ sourceLanguage = 'vi', targetLanguage = 'en', limit = 5, avoidTerms = [] }) {
+    const accepted = [];
+    const blockedTerms = new Set(
+      avoidTerms.map((term) => normalizeTerm(String(term)))
+    );
+
+    for (let attempt = 0; attempt < 3 && accepted.length < limit; attempt += 1) {
+      let raw;
+      try {
+        raw = await this.liteLLMClient.generateVocabulary({
+          sourceLanguage,
+          targetLanguage,
+          limit: limit - accepted.length,
+          avoidTerms: [...blockedTerms]
+        });
+      } catch (error) {
+        this.logger.warn('ai_generation_failed', { reason: error.message });
+        break;
+      }
+
+      const items = parseVocabularyJson(raw);
+      for (const item of items) {
+        const candidate = {
+          ...item,
+          language: item.language ?? targetLanguage,
+          generation_source: 'litellm'
+        };
+        const normalizedCandidateTerm = normalizeTerm(String(candidate.term ?? ''));
+        blockedTerms.add(normalizedCandidateTerm);
+        const validation = validateVocabularyItem(candidate);
+        if (!validation.ok) {
+          this.logger.warn('ai_generation_item_rejected', { reason: validation.reason });
+          continue;
+        }
+        const { word, inserted } = await this.store.insertWord(candidate);
+        if (inserted) {
+          accepted.push(word);
+        }
+      }
     }
 
-    const items = parseVocabularyJson(raw);
-    const accepted = [];
-    for (const item of items) {
-      const candidate = {
-        ...item,
-        language: item.language ?? targetLanguage,
-        generation_source: 'litellm'
-      };
-      const validation = validateVocabularyItem(candidate);
-      if (!validation.ok) {
-        this.logger.warn('ai_generation_item_rejected', { reason: validation.reason });
-        continue;
-      }
-      const { word, inserted } = this.store.insertWord(candidate);
-      if (inserted) {
-        accepted.push(word);
-      }
-    }
     return accepted;
   }
 }

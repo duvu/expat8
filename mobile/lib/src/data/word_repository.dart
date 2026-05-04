@@ -18,9 +18,18 @@ class WordRepository {
   final BackendApiClient apiClient;
   final Uuid _uuid;
 
-  Future<VocabularyWord?> getNewWordWithFallback() async {
+  Future<VocabularyWord?> getNewWordWithFallback({String? excludeServerWordId}) async {
     try {
-      final words = await apiClient.fetchNewWords(limit: 1);
+      final excludeServerWordIds = await database.recentServerWordIds();
+      if (excludeServerWordId != null &&
+          excludeServerWordId.isNotEmpty &&
+          !excludeServerWordIds.contains(excludeServerWordId)) {
+        excludeServerWordIds.insert(0, excludeServerWordId);
+      }
+      final words = await apiClient.fetchNewWords(
+        limit: 1,
+        excludeServerWordIds: excludeServerWordIds,
+      );
       if (words.isNotEmpty) {
         await database.upsertWord(words.first);
         await database.pruneToMostRecent();

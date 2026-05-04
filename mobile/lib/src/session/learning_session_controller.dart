@@ -32,20 +32,25 @@ class LearningSessionController extends ChangeNotifier {
     notifyListeners();
 
     final now = DateTime.now().toUtc();
+    final excludedServerWordId = currentWord?.serverWordId;
     final preferred = _selectionWindow.preferredKind();
     VocabularyWord? word;
     CardKind? actualKind;
 
     if (preferred == CardKind.newWord) {
       _telemetry.track(TelemetryEvent.newWordRequested);
-      word = await repository.getNewWordWithFallback();
+      word = await repository.getNewWordWithFallback(
+        excludeServerWordId: excludedServerWordId,
+      );
       actualKind = word == null ? null : CardKind.newWord;
       word ??= await repository.getReviewWord(now);
       actualKind ??= word == null ? null : CardKind.review;
     } else {
       word = await repository.getReviewWord(now);
       actualKind = word == null ? null : CardKind.review;
-      word ??= await repository.getNewWordWithFallback();
+      word ??= await repository.getNewWordWithFallback(
+        excludeServerWordId: excludedServerWordId,
+      );
       actualKind ??= word == null ? null : CardKind.newWord;
     }
 

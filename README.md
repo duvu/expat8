@@ -5,7 +5,7 @@ This workspace contains the OpenSpec-driven MVP implementation for a Flutter voc
 ## Structure
 
 - `mobile/`: Flutter app source for Android and iOS.
-- `backend/`: Node.js backend service using built-in HTTP and test modules.
+- `backend/`: Node.js backend service using ExpressJS and `node:test`.
 - `contracts/`: mobile-backend API contracts.
 - `docs/`: product and technical documentation.
 - `openspec/`: change proposal, design, specs, and tasks.
@@ -15,7 +15,11 @@ This workspace contains the OpenSpec-driven MVP implementation for a Flutter voc
 Mobile compile-time values:
 
 ```bash
-flutter run --dart-define=BACKEND_BASE_URL=http://localhost:8787 --dart-define=NEW_WORD_TIMEOUT_SECONDS=5
+flutter run \
+	--dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+	--dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
+	--dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+	--dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
 ```
 
 Backend environment:
@@ -27,4 +31,22 @@ npm test
 npm start
 ```
 
-LiteLLM is optional for local smoke tests. Without a reachable LiteLLM server, the backend falls back to stored seed words and rejects failed generation attempts without exposing sensitive data.
+The backend requires signed app credential headers for `/v1/*` requests.
+`GET /health` remains unsigned for health checks. See `contracts/api.md` and
+`docs/app-credential-security.md` for the signing contract.
+
+Docker Compose backend stack:
+
+```bash
+LITELLM_API_KEY=your-key docker compose up --build -d
+curl http://localhost:8787/health
+docker compose logs -f backend
+docker compose down
+```
+
+The Compose stack builds the ExpressJS backend image, starts PostgreSQL,
+initializes the database from `backend/db/schema.sql`, and exposes the backend
+on `http://localhost:${BACKEND_PORT:-8787}`. LiteLLM is optional for local smoke
+tests. Without a reachable LiteLLM server or API key, the backend falls back to
+stored words and rejects failed generation attempts without exposing sensitive
+data.

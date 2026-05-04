@@ -1,5 +1,36 @@
 # API Contracts
 
+## App Credential Headers
+
+All `/v1/*` requests MUST include app credential headers. `GET /health` does
+not require these headers.
+
+```http
+X-Expat8-App-Id: app_mobile_prod
+X-Expat8-Timestamp: 2026-05-04T10:30:00.000Z
+X-Expat8-Nonce: random-128-bit-or-larger
+X-Expat8-Content-SHA256: base64url(sha256(raw_request_body))
+X-Expat8-Signature: v1=base64url(hmac_sha256(secret, canonical_request))
+```
+
+Canonical request:
+
+```text
+v1
+METHOD
+PATH_WITH_SORTED_QUERY
+TIMESTAMP
+NONCE
+CONTENT_SHA256
+```
+
+Invalid, missing, expired, replayed, or incorrectly signed app credential
+requests return:
+
+```json
+{ "error": "bad_request" }
+```
+
 ## Vocabulary Item
 
 ```json

@@ -3,8 +3,8 @@ import http from 'node:http';
 import test from 'node:test';
 
 import { createApp } from '../src/app.js';
-import { loadConfig } from '../src/config.js';
 import { WordStore } from '../src/word_store.js';
+import { loadTestConfig, signedFetchOptions } from './support/app_credential_helpers.js';
 
 test('smoke: new word retrieval, local save, rating queue, and backend sync', async (t) => {
   const backendStore = new WordStore();
@@ -12,7 +12,7 @@ test('smoke: new word retrieval, local save, rating queue, and backend sync', as
     createApp({
       store: backendStore,
       generationService: null,
-      config: loadConfig({})
+      config: loadTestConfig()
     })
   );
   await listen(server);
@@ -40,7 +40,8 @@ class SmokeLocalClient {
   }
 
   async fetchNewWord() {
-    const response = await fetch(`${this.baseUrl}/v1/words/next?limit=1`);
+    const url = `${this.baseUrl}/v1/words/next?limit=1`;
+    const response = await fetch(url, signedFetchOptions(url));
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.equal(body.items.length, 1);
@@ -66,14 +67,16 @@ class SmokeLocalClient {
   }
 
   async sync() {
-    const response = await fetch(`${this.baseUrl}/v1/study-events/sync`, {
+    const url = `${this.baseUrl}/v1/study-events/sync`;
+    const options = {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         device_id: this.deviceId,
         events: this.syncQueue
       })
-    });
+    };
+    const response = await fetch(url, signedFetchOptions(url, options));
     assert.equal(response.status, 200);
     const body = await response.json();
     this.syncQueue = this.syncQueue.filter(

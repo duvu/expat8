@@ -106,6 +106,27 @@ class LocalDatabase {
     return rows.isEmpty ? null : _wordFromRow(rows.first);
   }
 
+  Future<List<String>> recentServerWordIds({int limit = 20}) async {
+    final rows = await _db.query(
+      'local_words',
+      columns: ['server_word_id'],
+      where: 'server_word_id IS NOT NULL',
+      orderBy: 'COALESCE(last_seen_at, updated_at, created_at) DESC',
+      limit: limit,
+    );
+    final seen = <String>{};
+    final result = <String>[];
+    for (final row in rows) {
+      final serverWordId = row['server_word_id'] as String?;
+      if (serverWordId == null || serverWordId.isEmpty || seen.contains(serverWordId)) {
+        continue;
+      }
+      seen.add(serverWordId);
+      result.add(serverWordId);
+    }
+    return result;
+  }
+
   Future<void> updateWordAfterRating({
     required VocabularyWord word,
     required StudyRating rating,

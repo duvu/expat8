@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-expat8}
+      POSTGRES_USER: ${POSTGRES_USER:-expat8}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expat8_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: ${PORT:-8787}
+      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://lite.x51.vn}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}
+      DEFAULT_SOURCE_LANGUAGE: ${DEFAULT_SOURCE_LANGUAGE:-vi}
+      DEFAULT_TARGET_LANGUAGE: ${DEFAULT_TARGET_LANGUAGE:-en}
+      NEW_WORD_TIMEOUT_SECONDS: ${NEW_WORD_TIMEOUT_SECONDS:-5}
+      APP_CREDENTIALS_JSON: ${APP_CREDENTIALS_JSON:-[]}
+      APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS: ${APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS:-300}
+      APP_CREDENTIAL_NONCE_TTL_SECONDS: ${APP_CREDENTIAL_NONCE_TTL_SECONDS:-300}
+      APP_CREDENTIAL_GET_BODY_LIMIT_BYTES: ${APP_CREDENTIAL_GET_BODY_LIMIT_BYTES:-0}
+      APP_CREDENTIAL_POST_BODY_LIMIT_BYTES: ${APP_CREDENTIAL_POST_BODY_LIMIT_BYTES:-262144}
+    ports:
+      - "${BACKEND_PORT:-8787}:${PORT:-8787}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:' + (process.env.PORT || 8787) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  postgres_data:
