@@ -10,6 +10,7 @@ test('reads schema SQL and applies it through the pool', async () => {
   await initializeDatabaseSchema({ pool, schemaSql });
 
   assert.match(schemaSql, /CREATE TABLE words/);
+  assert.match(schemaSql, /CREATE TABLE user_proficiency/);
   assert.equal(pool.queries.length, 1);
   assert.equal(pool.queries[0], schemaSql);
 });

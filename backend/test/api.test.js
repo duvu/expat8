@@ -48,13 +48,14 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
           client_event_id: 'evt_1',
           server_word_id: next.items[0].server_word_id,
           local_word_id: 'local_1',
-          rating: 'remembered',
+          rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
         }
       ]
     })
   });
   assert.deepEqual(sync.accepted_event_ids, ['evt_1']);
+  assert.equal(sync.proficiency.level, 'A1');
 
   const retry = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
     method: 'POST',
@@ -66,7 +67,7 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
           client_event_id: 'evt_1',
           server_word_id: next.items[0].server_word_id,
           local_word_id: 'local_1',
-          rating: 'remembered',
+          rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
         }
       ]
@@ -74,6 +75,9 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
   });
   assert.deepEqual(retry.accepted_event_ids, ['evt_1']);
   assert.equal(store.studyEventsByClientId.size, 1);
+
+  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_1&language=en`);
+  assert.equal(proficiency.level, 'A1');
 });
 
 test('serves API with an async store implementation', async (t) => {
@@ -103,7 +107,7 @@ test('serves API with an async store implementation', async (t) => {
           client_event_id: 'evt_async_1',
           server_word_id: next.items[0].server_word_id,
           local_word_id: 'local_async_1',
-          rating: 'remembered',
+          rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
         }
       ]
@@ -111,6 +115,340 @@ test('serves API with an async store implementation', async (t) => {
   });
 
   assert.deepEqual(sync.accepted_event_ids, ['evt_async_1']);
+});
+
+test('returns proficiency change after five consecutive too_easy ratings', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  let result;
+
+  for (let index = 0; index < 5; index += 1) {
+    result = await fetchJson(`${baseUrl}/v1/study-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: 'device_level',
+        client_event_id: `evt_level_${index + 1}`,
+        word_id: 'word_reliable',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:40:0${index}.000Z`
+      })
+    });
+  }
+
+  assert.equal(result.success, true);
+  assert.equal(result.proficiency.level, 'A2');
+  assert.equal(result.proficiency.level_changed, true);
+  assert.equal(result.proficiency.previous_level, 'A1');
+});
+
+test('returns level-down after five consecutive hard ratings', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  for (let index = 0; index < 5; index += 1) {
+    await fetchJson(`${baseUrl}/v1/study-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: 'device_hard',
+        client_event_id: `evt_hard_up_${index + 1}`,
+        word_id: 'word_reliable',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:41:0${index}.000Z`
+      })
+    });
+  }
+
+  let result;
+  for (let index = 0; index < 5; index += 1) {
+    result = await fetchJson(`${baseUrl}/v1/study-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: 'device_hard',
+        client_event_id: `evt_hard_down_${index + 1}`,
+        word_id: 'word_reliable',
+        rating: 'hard',
+        occurred_at: `2026-05-04T10:42:0${index}.000Z`
+      })
+    });
+  }
+
+  assert.equal(result.proficiency.level, 'A1');
+  assert.equal(result.proficiency.level_changed, true);
+  assert.equal(result.proficiency.previous_level, 'A2');
+});
+
+test('rejects invalid rating on single-event endpoint', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const response = await fetch(
+    `${baseUrl}/v1/study-events`,
+    signedFetchOptions(`${baseUrl}/v1/study-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: 'device_invalid',
+        client_event_id: 'evt_invalid',
+        word_id: 'word_reliable',
+        rating: 'remembered',
+        occurred_at: '2026-05-04T10:43:00.000Z'
+      })
+    })
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'invalid_rating' });
+});
+
+test('uses device_id to resolve proficiency when word feed omits explicit level', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord({
+    id: 'word_a1',
+    term: 'basic',
+    language: 'en',
+    meaning_vi: 'co ban',
+    part_of_speech: 'adjective',
+    ipa: '/ˈbeɪ.sɪk/',
+    vietnamese_pronunciation: 'bay-sik',
+    example: 'This is a basic question.',
+    example_vi: 'Day la mot cau hoi co ban.',
+    difficulty: 'A1',
+    topics: ['study']
+  });
+  store.insertWord({
+    id: 'word_a2',
+    term: 'gather',
+    language: 'en',
+    meaning_vi: 'thu thap',
+    part_of_speech: 'verb',
+    ipa: '/ˈɡæð.ər/',
+    vietnamese_pronunciation: 'ga-der',
+    example: 'We gather ideas before the meeting.',
+    example_vi: 'Chung toi thu thap y tuong truoc cuoc hop.',
+    difficulty: 'A2',
+    topics: ['work']
+  });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  for (let index = 0; index < 5; index += 1) {
+    await fetchJson(`${baseUrl}/v1/study-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: 'device_feed',
+        client_event_id: `evt_feed_${index + 1}`,
+        word_id: 'word_a1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:44:0${index}.000Z`
+      })
+    });
+  }
+
+  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en&device_id=device_feed`);
+  assert.equal(next.items[0].server_word_id, 'word_a2');
+});
+
+test('applies proficiency filtering together with server-word exclusion', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord({
+    id: 'word_b1_a',
+    term: 'measure',
+    language: 'en',
+    meaning_vi: 'do luong',
+    part_of_speech: 'verb',
+    ipa: '/ˈmeʒ.ər/',
+    vietnamese_pronunciation: 'me-zher',
+    example: 'We measure the result every week.',
+    example_vi: 'Chung toi do luong ket qua moi tuan.',
+    difficulty: 'B1',
+    topics: ['work']
+  });
+  store.insertWord({
+    id: 'word_b1_b',
+    term: 'improve',
+    language: 'en',
+    meaning_vi: 'cai thien',
+    part_of_speech: 'verb',
+    ipa: '/ɪmˈpruːv/',
+    vietnamese_pronunciation: 'im-proov',
+    example: 'We improve the process every month.',
+    example_vi: 'Chung toi cai thien quy trinh moi thang.',
+    difficulty: 'B1',
+    topics: ['work']
+  });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const next = await fetchJson(
+    `${baseUrl}/v1/words/next?limit=1&target_language=en&proficiency_level=B1&exclude_server_word_id=word_b1_b`
+  );
+
+  assert.equal(next.items.length, 1);
+  assert.equal(next.items[0].server_word_id, 'word_b1_a');
+});
+
+test('registers, signs in, signs out, and associates signed-in learning with user', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(
+    wordInput({
+      id: 'word_identity_a',
+      term: 'identify',
+      difficulty: 'A1',
+      created_at: '2026-05-04T16:00:00.000Z',
+      updated_at: '2026-05-04T16:00:00.000Z'
+    })
+  );
+  store.insertWord(
+    wordInput({
+      id: 'word_identity_b',
+      term: 'account',
+      difficulty: 'A1',
+      created_at: '2026-05-04T16:01:00.000Z',
+      updated_at: '2026-05-04T16:01:00.000Z'
+    })
+  );
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const registered = await fetchJson(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'learner@example.com',
+      password: 'correct horse battery staple',
+      display_name: 'Learner One',
+      device_id: 'device_identity'
+    })
+  });
+
+  assert.match(registered.user_id, /^user_/);
+  assert.equal(registered.identifier, 'learner@example.com');
+  assert.equal(typeof registered.session_token, 'string');
+
+  const duplicate = await fetch(`${baseUrl}/v1/users/register`, signedFetchOptions(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'learner@example.com',
+      password: 'another password',
+      device_id: 'device_identity'
+    })
+  }));
+  assert.equal(duplicate.status, 409);
+
+  const signedIn = await fetchJson(`${baseUrl}/v1/users/sign-in`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'learner@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_identity'
+    })
+  });
+  assert.equal(signedIn.user_id, registered.user_id);
+
+  const first = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en&device_id=device_identity`, {
+    headers: bearerHeaders(signedIn.session_token)
+  });
+  assert.equal(first.items[0].server_word_id, 'word_identity_b');
+
+  const event = await fetchJson(`${baseUrl}/v1/study-events`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...bearerHeaders(signedIn.session_token)
+    },
+    body: JSON.stringify({
+      device_id: 'device_identity',
+      client_event_id: 'evt_identity_1',
+      word_id: first.items[0].server_word_id,
+      rating: 'easy',
+      occurred_at: '2026-05-04T16:00:00.000Z'
+    })
+  });
+  assert.equal(event.success, true);
+
+  const second = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en&device_id=device_identity`, {
+    headers: bearerHeaders(signedIn.session_token)
+  });
+  assert.equal(second.items[0].server_word_id, 'word_identity_a');
+
+  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_identity&language=en`, {
+    headers: bearerHeaders(signedIn.session_token)
+  });
+  assert.equal(proficiency.user_id, registered.user_id);
+
+  const signOut = await fetchJson(`${baseUrl}/v1/users/sign-out`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...bearerHeaders(signedIn.session_token)
+    },
+    body: JSON.stringify({})
+  });
+  assert.equal(signOut.success, true);
+
+  const afterSignOut = await fetch(`${baseUrl}/v1/proficiency?device_id=device_identity&language=en`, signedFetchOptions(`${baseUrl}/v1/proficiency?device_id=device_identity&language=en`, {
+    headers: bearerHeaders(signedIn.session_token)
+  }));
+  assert.equal(afterSignOut.status, 401);
 });
 
 test('protects v1 routes with app credentials while leaving health open', async (t) => {
@@ -237,6 +575,30 @@ class AsyncStoreAdapter {
   async syncStudyEvents(input) {
     return this.store.syncStudyEvents(input);
   }
+
+  async recordStudyEvent(input) {
+    return this.store.recordStudyEvent(input);
+  }
+
+  async getProficiency(input) {
+    return this.store.getProficiency(input);
+  }
+
+  async registerUser(input) {
+    return this.store.registerUser(input);
+  }
+
+  async createUserSession(input) {
+    return this.store.createUserSession(input);
+  }
+
+  async resolveUserSession(input) {
+    return this.store.resolveUserSession(input);
+  }
+
+  async revokeUserSession(input) {
+    return this.store.revokeUserSession(input);
+  }
 }
 
 function listen(server) {
@@ -249,6 +611,26 @@ async function fetchJson(url, options) {
     assert.fail(`${response.status} ${await response.text()}`);
   }
   return response.json();
+}
+
+function bearerHeaders(token) {
+  return { authorization: `Bearer ${token}` };
+}
+
+function wordInput(overrides = {}) {
+  return {
+    term: 'identity',
+    language: 'en',
+    meaning_vi: 'dinh danh',
+    part_of_speech: 'noun',
+    ipa: '/aɪˈden.tə.ti/',
+    vietnamese_pronunciation: 'ai-den-ti-ti',
+    example: 'Identity helps track progress.',
+    example_vi: 'Dinh danh giup theo doi tien do.',
+    difficulty: 'A1',
+    topics: ['account'],
+    ...overrides
+  };
 }
 
 class CountingStore extends AsyncStoreAdapter {

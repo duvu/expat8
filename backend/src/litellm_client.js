@@ -6,7 +6,13 @@ export class LiteLLMClient {
     this.fetchImpl = fetchImpl;
   }
 
-  async generateVocabulary({ sourceLanguage = 'vi', targetLanguage = 'en', limit = 5, avoidTerms = [] }) {
+  async generateVocabulary({
+    sourceLanguage = 'vi',
+    targetLanguage = 'en',
+    limit = 5,
+    avoidTerms = [],
+    difficultyLevel = 'A1'
+  }) {
     const response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -25,7 +31,8 @@ export class LiteLLMClient {
             role: 'user',
             content: [
               `Generate ${limit} ${targetLanguage} vocabulary words for Vietnamese speakers learning ${targetLanguage}.`,
-              `Each item: term is a ${targetLanguage} word/phrase, language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, ipa is the ${targetLanguage} IPA pronunciation, vietnamese_pronunciation is how to pronounce in Vietnamese phonetics, example is a ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of beginner/intermediate/advanced, topics is an array of relevant topic strings.`,
+              `Target CEFR difficulty level is ${difficultyLevel}.`,
+              `Each item: term is a ${targetLanguage} word/phrase, language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, ipa is the ${targetLanguage} IPA pronunciation, vietnamese_pronunciation is how to pronounce in Vietnamese phonetics, example is a ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of A1/A2/B1/B2/C1/C2 and should equal ${difficultyLevel}, topics is an array of relevant topic strings.`,
               avoidTerms.length > 0
                 ? `Do not return any term from this forbidden list: ${avoidTerms.join(', ')}.`
                 : 'Return terms that are different from previously generated results.',

@@ -1,4 +1,13 @@
-enum StudyRating { notRemembered, hard, remembered, tooEasy }
+enum StudyRating {
+  easy('easy'),
+  tooEasy('too_easy'),
+  hard('hard'),
+  tooHard('too_hard');
+
+  const StudyRating(this.apiValue);
+
+  final String apiValue;
+}
 
 enum SyncStatus { pending, synced, failed }
 
@@ -24,7 +33,7 @@ class StudyEvent {
       'client_event_id': clientEventId,
       'server_word_id': serverWordId,
       'local_word_id': localWordId,
-      'rating': rating.name,
+      'rating': rating.apiValue,
       'occurred_at': occurredAt.toUtc().toIso8601String(),
     };
   }

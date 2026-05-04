@@ -5,7 +5,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
-import '../models/study_event.dart';
+import '../models/proficiency_state.dart';
+import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 
 class BackendApiClient {
@@ -28,12 +29,17 @@ class BackendApiClient {
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
     List<String> excludeServerWordIds = const [],
+    String? proficiencyLevel,
+    String? deviceId,
+    String? sessionToken,
   }) async {
     final queryEntries = <MapEntry<String, String>>[
-      MapEntry('mode', 'new'),
+      const MapEntry('mode', 'new'),
       MapEntry('limit', '$limit'),
       MapEntry('source_language', sourceLanguage),
       MapEntry('target_language', targetLanguage),
+      if (proficiencyLevel != null) MapEntry('proficiency_level', proficiencyLevel),
+      if (deviceId != null) MapEntry('device_id', deviceId),
       ...excludeServerWordIds.map(
         (serverWordId) => MapEntry('exclude_server_word_id', serverWordId),
       ),
@@ -46,7 +52,14 @@ class BackendApiClient {
         .join('&');
     final uri = Uri.parse('$baseUrl/v1/words/next').replace(query: query);
     final response = await _httpClient
-      .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
+      .get(
+        uri,
+        headers: _signedHeaders(
+          method: 'GET',
+          uri: uri,
+          sessionToken: sessionToken,
+        ),
+      )
       .timeout(timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw BackendApiException('New-word feed failed: ${response.statusCode}');
@@ -56,6 +69,73 @@ class BackendApiClient {
     return items
         .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<ProficiencyState> fetchProficiency({
+    required String deviceId,
+    String language = 'en',
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/proficiency').replace(queryParameters: {
+      'device_id': deviceId,
+      'language': language,
+    });
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BackendApiException('Proficiency fetch failed: ${response.statusCode}');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return ProficiencyState.fromJson(body);
+  }
+
+  Future<StudyEventResult> submitStudyEvent({
+    required String deviceId,
+    required Map<String, dynamic> event,
+    String language = 'en',
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/study-events');
+    final payload = jsonEncode({
+      'device_id': deviceId,
+      'language': language,
+      ...event,
+    });
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+              sessionToken: sessionToken,
+            ),
+          },
+          body: payload,
+        )
+        .timeout(timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BackendApiException('Study-event submit failed: ${response.statusCode}');
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return StudyEventResult(
+      success: (body['success'] ?? false) as bool,
+      eventId: body['event_id'] as String?,
+      idempotent: (body['idempotent'] ?? false) as bool,
+      proficiency: ProficiencyState.fromJson(
+        body['proficiency'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
   }
 
   Future<List<VocabularyWord>> fetchRecentWords({
@@ -84,6 +164,7 @@ class BackendApiClient {
   Future<SyncResult> syncStudyEvents({
     required String deviceId,
     required List<Map<String, dynamic>> events,
+    String? sessionToken,
   }) async {
     final uri = Uri.parse('$baseUrl/v1/study-events/sync');
     final payload = jsonEncode({'device_id': deviceId, 'events': events});
@@ -96,6 +177,7 @@ class BackendApiClient {
               method: 'POST',
               uri: uri,
               body: Uint8List.fromList(utf8.encode(payload)),
+              sessionToken: sessionToken,
             ),
           },
           body: payload,
@@ -112,7 +194,97 @@ class BackendApiClient {
       rejectedEvents: List<Map<String, dynamic>>.from(
         body['rejected_events'] as List? ?? const [],
       ),
+      proficiency: body['proficiency'] is Map<String, dynamic>
+          ? ProficiencyState.fromJson(body['proficiency'] as Map<String, dynamic>)
+          : null,
     );
+  }
+
+  Future<UserSession> registerUser({
+    required String identifier,
+    required String password,
+    String? displayName,
+    String? deviceId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/users/register');
+    final payload = jsonEncode({
+      'identifier': identifier,
+      'password': password,
+      if (displayName != null) 'display_name': displayName,
+      if (deviceId != null) 'device_id': deviceId,
+    });
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+            ),
+          },
+          body: payload,
+        )
+        .timeout(timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BackendApiException('Registration failed: ${response.statusCode}');
+    }
+    return UserSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<UserSession> signIn({
+    required String identifier,
+    required String password,
+    String? deviceId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/users/sign-in');
+    final payload = jsonEncode({
+      'identifier': identifier,
+      'password': password,
+      if (deviceId != null) 'device_id': deviceId,
+    });
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+            ),
+          },
+          body: payload,
+        )
+        .timeout(timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BackendApiException('Sign-in failed: ${response.statusCode}');
+    }
+    return UserSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> signOut({required UserSession session}) async {
+    final uri = Uri.parse('$baseUrl/v1/users/sign-out');
+    final payload = jsonEncode({});
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+              sessionToken: session.sessionToken,
+            ),
+          },
+          body: payload,
+        )
+        .timeout(timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw BackendApiException('Sign-out failed: ${response.statusCode}');
+    }
   }
 }
 
@@ -121,6 +293,7 @@ extension on BackendApiClient {
     required String method,
     required Uri uri,
     Uint8List? body,
+    String? sessionToken,
   }) {
     final timestamp = DateTime.now().toUtc().toIso8601String();
     final nonce = 'mobile_${DateTime.now().microsecondsSinceEpoch}';
@@ -141,6 +314,7 @@ extension on BackendApiClient {
       'x-expat8-nonce': nonce,
       'x-expat8-content-sha256': contentSha256,
       'x-expat8-signature': signature,
+      if (sessionToken != null) 'authorization': 'Bearer $sessionToken',
     };
   }
 
@@ -193,10 +367,26 @@ class SyncResult {
   const SyncResult({
     required this.acceptedEventIds,
     required this.rejectedEvents,
+    this.proficiency,
   });
 
   final List<String> acceptedEventIds;
   final List<Map<String, dynamic>> rejectedEvents;
+  final ProficiencyState? proficiency;
+}
+
+class StudyEventResult {
+  const StudyEventResult({
+    required this.success,
+    required this.eventId,
+    required this.idempotent,
+    required this.proficiency,
+  });
+
+  final bool success;
+  final String? eventId;
+  final bool idempotent;
+  final ProficiencyState proficiency;
 }
 
 class BackendApiException implements Exception {

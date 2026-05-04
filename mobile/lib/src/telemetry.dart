@@ -1,6 +1,8 @@
 enum TelemetryEvent {
   cardShown,
   newWordRequested,
+  newWordSwipeRequested,
+  recentReviewSwipeRequested,
   newWordBackendSuccess,
   newWordBackendTimeout,
   newWordLocalFallback,

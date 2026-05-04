@@ -2,25 +2,25 @@
 
 ## 1. Tổng quan
 
-Ứng dụng giúp người dùng học từ vựng ngoại ngữ theo cơ chế vuốt xuống để nhận thẻ học tiếp theo. Mỗi thẻ hiển thị một từ hoặc cụm từ mới kèm giải nghĩa, cách đọc dành cho người Việt, phiên âm IPA và ví dụ sử dụng.
+Ứng dụng giúp người dùng học từ vựng ngoại ngữ theo cơ chế vuốt ngang để điều hướng thẻ học: vuốt từ phải qua trái để lấy từ mới, vuốt từ trái qua phải để ôn lại từ vừa học. Mỗi thẻ hiển thị một từ hoặc cụm từ mới kèm giải nghĩa, cách đọc dành cho người Việt, phiên âm IPA và ví dụ sử dụng.
 
 Ứng dụng được xây dựng bằng Flutter, hỗ trợ Android và iOS. Dữ liệu học cần hoạt động tốt khi mạng yếu hoặc mất kết nối. Mobile chỉ lưu 1000 từ gần nhất trên máy, đồng thời đồng bộ với backend. Backend có thể lưu số lượng từ không giới hạn và dùng AI qua LiteLLM để sinh nội dung từ vựng mới.
 
-Giai đoạn đầu chưa cần đăng nhập hoặc xác thực. Tuy nhiên kiến trúc dữ liệu và API cần chuẩn bị sẵn để sau này có thể cá nhân hóa theo người dùng, trình độ, ngôn ngữ nguồn, ngôn ngữ đích và lịch sử học.
+Người dùng có thể học ở chế độ ẩn danh hoặc đăng ký/đăng nhập. Khi đăng nhập, lịch sử học, từ đã học và trình độ được gắn với tài khoản trên server; khi không đăng nhập, app vẫn dùng `device_id` và dữ liệu local để học bình thường.
 
 ## 2. Mục tiêu
 
-- Cung cấp trải nghiệm học từ nhanh, đơn giản: vuốt xuống là có thẻ học tiếp theo.
+- Cung cấp trải nghiệm học từ nhanh, đơn giản: vuốt ngang phải qua trái để lấy từ mới, trái qua phải để ôn lại từ vừa học.
 - Duy trì tỉ lệ học gồm 3 từ mới và 7 từ ôn tập trong mỗi chu kỳ 10 thẻ.
 - Cho phép học ổn định khi backend lỗi, timeout hoặc thiết bị offline.
 - Lưu tối đa 1000 từ gần nhất trên mobile để kiểm soát dung lượng.
 - Đồng bộ lịch sử học và dữ liệu từ với backend.
 - Dùng AI để sinh từ mới, giải nghĩa, cách đọc cho người Việt, IPA và ví dụ.
-- Thiết kế sẵn đường nâng cấp cho đăng nhập và cá nhân hóa sau này.
+- Cho phép đăng ký, đăng nhập, đăng xuất tùy chọn mà không chặn luồng học ẩn danh.
 
 ## 3. Không thuộc phạm vi giai đoạn đầu
 
-- Đăng nhập, đăng ký, OAuth, email hoặc xác thực người dùng.
+- OAuth, magic link, social login hoặc xác thực đa yếu tố.
 - Thanh toán, gói premium hoặc giới hạn theo subscription.
 - Social learning, bảng xếp hạng, lớp học hoặc chia sẻ tiến độ.
 - Đánh giá phát âm bằng giọng nói.
@@ -44,11 +44,12 @@ Các giả định ban đầu:
 
 1. Người dùng mở app.
 2. App tải trạng thái học gần nhất từ local database.
-3. Người dùng vuốt xuống.
-4. App chọn thẻ tiếp theo theo tỉ lệ:
-   - 3 thẻ là từ mới.
-   - 7 thẻ là từ ôn tập.
-5. Thẻ hiển thị:
+3. Người dùng có thể mở drawer bên trái để vào `Vocabulary`, `Register`, `Sign in` hoặc `Sign out`.
+4. Người dùng vuốt từ phải qua trái để lấy từ mới, hoặc vuốt từ trái qua phải để ôn lại từ vừa học gần đây.
+5. App chọn thẻ theo intent:
+   - Intent từ mới ưu tiên gọi backend rồi fallback local.
+   - Intent ôn lại ưu tiên từ vừa học gần đây rồi fallback lịch ôn tập.
+6. Thẻ hiển thị:
    - Từ hoặc cụm từ.
    - Loại từ nếu có.
    - Nghĩa tiếng Việt.
@@ -56,30 +57,41 @@ Các giả định ban đầu:
    - Phiên âm IPA.
    - Ví dụ sử dụng bằng ngoại ngữ.
    - Dịch ví dụ sang tiếng Việt.
-6. Người dùng đánh dấu mức độ nhớ, ví dụ:
+7. Người dùng đánh dấu mức độ nhớ, ví dụ:
    - Chưa nhớ.
    - Khó.
    - Nhớ.
    - Quá dễ.
-7. App lưu kết quả học vào local database.
-8. App đồng bộ nền với server khi có mạng.
+8. App lưu kết quả học vào local database.
+9. App đồng bộ nền với server khi có mạng. Nếu đang đăng nhập, request sync kèm bearer session để server gắn event với user.
 
-### 5.2 Hành vi vuốt xuống
+### 5.2 Hành vi vuốt ngang
 
-Vuốt xuống là hành động chính để lấy thẻ tiếp theo. App cần phản hồi nhanh, ưu tiên lấy dữ liệu đã có trong local trước nếu cần để tránh cảm giác chờ.
+Vuốt ngang là hành động chính trên bề mặt thẻ học. App cần phản hồi nhanh, ưu tiên lấy dữ liệu đã có trong local trước nếu cần để tránh cảm giác chờ.
 
-Khi thẻ tiếp theo là từ mới:
+Khi người dùng vuốt từ phải qua trái:
 
 - App gọi backend để lấy từ mới.
 - Nếu backend trả lời thành công trong tối đa 5 giây, dùng dữ liệu từ backend.
 - Nếu backend lỗi, timeout quá 5 giây hoặc thiết bị offline, app lấy từ mới từ local database.
 - Nếu local cũng không còn từ mới phù hợp, app có thể chuyển sang thẻ ôn tập và hiển thị trạng thái nhẹ như "Đang dùng nội dung đã lưu".
 
-Khi thẻ tiếp theo là từ ôn tập:
+Khi người dùng vuốt từ trái qua phải:
 
-- App ưu tiên chọn từ trong local database dựa trên lịch ôn tập.
+- App ưu tiên chọn từ vừa học gần đây để ôn lại nhanh trong cùng phiên.
+- Nếu không có từ vừa học phù hợp, app fallback sang lịch ôn tập trong local database.
 - Không cần gọi backend trên đường chính của thao tác vuốt.
 - Kết quả ôn tập được sync sau.
+
+### 5.3 Drawer và định danh
+
+Màn hình chính có drawer bên trái:
+
+- `Vocabulary`: quay về màn học từ vựng.
+- Khi chưa đăng nhập: hiển thị `Register` và `Sign in` ở cuối drawer.
+- Khi đã đăng nhập: hiển thị `Sign out` ở cuối drawer.
+
+Đăng ký và đăng nhập tạo session local. Đăng xuất revoke session trên backend và xóa session local để app quay lại chế độ ẩn danh. Nếu network lỗi, dữ liệu học local và `device_id` vẫn đủ để người dùng tiếp tục học.
 
 ## 6. Tỉ lệ học mới và ôn tập
 
@@ -153,7 +165,7 @@ Nếu một từ cũ đang có sự kiện học chưa sync, app cần sync sự
 
 - Server lưu lịch sử học dài hạn.
 - Mobile hoạt động được khi offline.
-- Sau này có thể đăng nhập và khôi phục lịch sử học trên thiết bị mới.
+- Khi đăng nhập, có thể gắn lịch sử học mới với user để khôi phục/cá nhân hóa trên server.
 - Không mất dữ liệu học khi backend tạm lỗi.
 
 ### 9.2 Chiến lược sync
@@ -192,6 +204,13 @@ Quy tắc ban đầu:
 - Trạng thái tổng hợp của từ có thể tính lại từ event mới nhất.
 - Nếu có conflict timestamp, server ưu tiên event có `client_event_id` duy nhất và `occurred_at`.
 
+### 9.4 Ẩn danh và đăng nhập
+
+- Anonymous mode: request gửi `device_id`, không gửi bearer token.
+- Signed-in mode: request vẫn gửi `device_id`, đồng thời gửi `Authorization: Bearer <session_token>`.
+- Backend dùng app credential để xác thực app trước, sau đó mới resolve optional user session.
+- Session không hợp lệ bị từ chối cho request signed-in, nhưng user có thể đăng xuất local để quay lại anonymous mode.
+
 ## 10. Kiến trúc tổng thể
 
 ```text
@@ -225,6 +244,7 @@ Flutter app nên tách các lớp chính:
 - Repository layer: quyết định lấy dữ liệu từ backend hay local.
 - Local data layer: SQLite hoặc Isar/Hive cho từ vựng, lịch học và sync queue.
 - API client: gọi backend với timeout 5 giây cho từ mới.
+- Identity state: lưu session hiện tại trong `app_settings`, tách khỏi `device_id`.
 
 ### 11.1 Local database đề xuất
 
@@ -243,6 +263,7 @@ Backend cung cấp API cho:
 
 - Lấy từ mới.
 - Sync event học từ mobile.
+- Đăng ký, đăng nhập, đăng xuất và resolve optional user session.
 - Trả về các từ gần đây nếu cần bootstrap local.
 - Sinh từ mới bằng AI qua LiteLLM.
 - Lưu từ đã sinh vào database để tái sử dụng.

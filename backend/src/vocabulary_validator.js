@@ -1,4 +1,5 @@
 import { normalizeTerm } from './normalize.js';
+import { validateDifficultyLevel } from './proficiency.js';
 
 const requiredFields = [
   'term',
@@ -23,6 +24,9 @@ export function validateVocabularyItem(item) {
   }
   if (!String(item.ipa).trim()) {
     return { ok: false, reason: 'empty_ipa' };
+  }
+  if (!validateDifficultyLevel(item.difficulty)) {
+    return { ok: false, reason: 'invalid_difficulty' };
   }
   const normalizedTerm = normalizeTerm(item.term);
   const normalizedExample = normalizeTerm(item.example);

@@ -24,7 +24,7 @@ test('syncs study events idempotently', () => {
         client_event_id: 'evt_1',
         server_word_id: 'word_1',
         local_word_id: 'local_1',
-        rating: 'remembered',
+        rating: 'easy',
         occurred_at: '2026-05-04T10:30:00.000Z'
       }
     ]
@@ -36,6 +36,189 @@ test('syncs study events idempotently', () => {
   assert.deepEqual(first.accepted_event_ids, ['evt_1']);
   assert.deepEqual(second.accepted_event_ids, ['evt_1']);
   assert.equal(store.studyEventsByClientId.size, 1);
+  assert.equal(first.proficiency.level, 'A1');
+});
+
+test('levels up after five consecutive too_easy ratings', () => {
+  const store = new WordStore({ seed: false });
+
+  for (let index = 0; index < 5; index += 1) {
+    const result = store.recordStudyEvent({
+      deviceId: 'device_1',
+      event: {
+        client_event_id: `evt_${index + 1}`,
+        server_word_id: 'word_1',
+        local_word_id: 'local_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:30:0${index}.000Z`
+      }
+    });
+
+    if (index < 4) {
+      assert.equal(result.proficiency.level_changed, false);
+      assert.equal(result.proficiency.consecutive_count, index + 1);
+    } else {
+      assert.equal(result.proficiency.level_changed, true);
+      assert.equal(result.proficiency.level, 'A2');
+      assert.equal(result.proficiency.previous_level, 'A1');
+    }
+  }
+});
+
+test('levels down after five consecutive hard ratings without dropping below A1', () => {
+  const store = new WordStore({ seed: false });
+
+  for (let index = 0; index < 5; index += 1) {
+    store.recordStudyEvent({
+      deviceId: 'device_up',
+      event: {
+        client_event_id: `evt_up_${index + 1}`,
+        server_word_id: 'word_1',
+        local_word_id: 'local_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:35:0${index}.000Z`
+      }
+    });
+  }
+
+  for (let index = 0; index < 5; index += 1) {
+    const result = store.recordStudyEvent({
+      deviceId: 'device_up',
+      event: {
+        client_event_id: `evt_down_${index + 1}`,
+        server_word_id: 'word_1',
+        local_word_id: 'local_1',
+        rating: 'hard',
+        occurred_at: `2026-05-04T10:36:0${index}.000Z`
+      }
+    });
+
+    if (index === 4) {
+      assert.equal(result.proficiency.level_changed, true);
+      assert.equal(result.proficiency.level, 'A1');
+      assert.equal(result.proficiency.previous_level, 'A2');
+    }
+  }
+});
+
+test('does not advance beyond C2', () => {
+  const store = new WordStore({ seed: false });
+
+  for (let wave = 0; wave < 6; wave += 1) {
+    const result = store.recordStudyEvent({
+      deviceId: 'device_c2',
+      event: {
+        client_event_id: `evt_c2_${wave + 1}`,
+        server_word_id: 'word_1',
+        local_word_id: 'local_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:39:0${wave}.000Z`
+      }
+    });
+
+    if (wave === 4) {
+      assert.equal(result.proficiency.level, 'A2');
+    }
+  }
+
+  for (let block = 0; block < 20; block += 1) {
+    store.recordStudyEvent({
+      deviceId: 'device_c2',
+      event: {
+        client_event_id: `evt_c2_more_${block + 1}`,
+        server_word_id: 'word_1',
+        local_word_id: 'local_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:${40 + Math.floor(block / 10)}:${(block % 10).toString().padStart(2, '0')}.000Z`
+      }
+    });
+  }
+
+  const proficiency = store.getProficiency({ deviceId: 'device_c2', language: 'en' });
+  assert.equal(proficiency.level, 'C2');
+});
+
+test('resets consecutive counter when rating type changes', () => {
+  const store = new WordStore({ seed: false });
+
+  for (let index = 0; index < 3; index += 1) {
+    store.recordStudyEvent({
+      deviceId: 'device_reset',
+      event: {
+        client_event_id: `evt_reset_${index + 1}`,
+        server_word_id: 'word_1',
+        local_word_id: 'local_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:37:0${index}.000Z`
+      }
+    });
+  }
+
+  const result = store.recordStudyEvent({
+    deviceId: 'device_reset',
+    event: {
+      client_event_id: 'evt_reset_final',
+      server_word_id: 'word_1',
+      local_word_id: 'local_1',
+      rating: 'easy',
+      occurred_at: '2026-05-04T10:37:09.000Z'
+    }
+  });
+
+  assert.equal(result.proficiency.level_changed, false);
+  assert.equal(result.proficiency.consecutive_count, 1);
+  assert.equal(result.proficiency.consecutive_rating_type, 'easy');
+});
+
+test('auto-initializes proficiency for a new device', () => {
+  const store = new WordStore({ seed: false });
+
+  const proficiency = store.getProficiency({ deviceId: 'fresh_device', language: 'en' });
+
+  assert.equal(proficiency.level, 'A1');
+  assert.equal(proficiency.language, 'en');
+});
+
+test('filters words by proficiency level with fallback order', () => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_a2', term: 'basic', difficulty: 'A2' }));
+  store.insertWord(wordInput({ id: 'word_b2', term: 'refine', difficulty: 'B2' }));
+  store.insertWord(wordInput({ id: 'word_c1', term: 'articulate', difficulty: 'C1' }));
+
+  const words = store.findNewWords({
+    targetLanguage: 'en',
+    limit: 1,
+    proficiencyLevel: 'B1'
+  });
+
+  assert.deepEqual(words.map((word) => word.id), ['word_b2']);
+});
+
+test('uses device proficiency when word feed omits explicit level', () => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_a1', term: 'basic', difficulty: 'A1' }));
+  store.insertWord(wordInput({ id: 'word_a2', term: 'bridge', difficulty: 'A2' }));
+
+  for (let index = 0; index < 5; index += 1) {
+    store.recordStudyEvent({
+      deviceId: 'device_query',
+      event: {
+        client_event_id: `evt_query_${index + 1}`,
+        server_word_id: 'word_a1',
+        local_word_id: 'local_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T10:38:0${index}.000Z`
+      }
+    });
+  }
+
+  const words = store.findNewWords({
+    targetLanguage: 'en',
+    limit: 1,
+    deviceId: 'device_query'
+  });
+
+  assert.deepEqual(words.map((word) => word.id), ['word_a2']);
 });
 
 function wordInput(overrides = {}) {

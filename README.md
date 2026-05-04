@@ -2,6 +2,19 @@
 
 This workspace contains the OpenSpec-driven MVP implementation for a Flutter vocabulary learning app and a lightweight backend service.
 
+## Adaptive Proficiency
+
+The current app/backend flow includes an adaptive CEFR proficiency ladder:
+
+- New devices initialize at `A1`
+- Mobile shows the current level in the top-right corner of the learning screen
+- Rating buttons are `Easy`, `Too Easy`, `Hard`, and `Too Hard`
+- Backend upgrades proficiency after 5 consecutive `too_easy` ratings
+- Backend downgrades proficiency after 5 consecutive `hard` ratings
+- `/v1/words/next` can filter by explicit `proficiency_level` or by resolved device proficiency
+
+See `contracts/api.md` for the request and response shapes.
+
 ## Structure
 
 - `mobile/`: Flutter app source for Android and iOS.
@@ -34,6 +47,14 @@ npm start
 The backend requires signed app credential headers for `/v1/*` requests.
 `GET /health` remains unsigned for health checks. See `contracts/api.md` and
 `docs/app-credential-security.md` for the signing contract.
+
+The backend test suite now covers adaptive proficiency state, CEFR filtering,
+single-event submission, and sync responses:
+
+```bash
+cd backend
+npm test
+```
 
 Docker Compose backend stack:
 

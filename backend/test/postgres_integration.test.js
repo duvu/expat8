@@ -29,7 +29,7 @@ test('postgres store works against the schema SQL', pgTestOptions, async (t) => 
       {
         client_event_id: 'evt_pg_1',
         server_word_id: first.word.id,
-        rating: 'remembered',
+        rating: 'easy',
         occurred_at: '2026-05-04T10:30:00.000Z'
       }
     ]
@@ -40,7 +40,7 @@ test('postgres store works against the schema SQL', pgTestOptions, async (t) => 
       {
         client_event_id: 'evt_pg_1',
         server_word_id: first.word.id,
-        rating: 'remembered',
+        rating: 'easy',
         occurred_at: '2026-05-04T10:30:00.000Z'
       }
     ]
@@ -52,6 +52,7 @@ test('postgres store works against the schema SQL', pgTestOptions, async (t) => 
   assert.equal(recent.length, 1);
   assert.deepEqual(sync.accepted_event_ids, ['evt_pg_1']);
   assert.deepEqual(retry.accepted_event_ids, ['evt_pg_1']);
+  assert.equal(sync.proficiency.level, 'A1');
 });
 
 test('API routes work with postgres store when a test database is available', pgTestOptions, async (t) => {
@@ -84,7 +85,7 @@ test('API routes work with postgres store when a test database is available', pg
         {
           client_event_id: 'evt_api_pg_1',
           server_word_id: next.items[0].server_word_id,
-          rating: 'remembered',
+          rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
         }
       ]
@@ -92,10 +93,11 @@ test('API routes work with postgres store when a test database is available', pg
   });
 
   assert.deepEqual(sync.accepted_event_ids, ['evt_api_pg_1']);
+  assert.equal(sync.proficiency.level, 'A1');
 });
 
 async function resetSchema(pool) {
-  await pool.query('DROP TABLE IF EXISTS user_word_states, study_events, words CASCADE');
+  await pool.query('DROP TABLE IF EXISTS user_word_states, user_proficiency, study_events, words CASCADE');
   await initializeDatabaseSchema({ pool });
 }
 

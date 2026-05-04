@@ -24,7 +24,9 @@ test('stores valid generated words and rejects duplicates', async () => {
   const service = new VocabularyGenerationService({
     store,
     liteLLMClient: {
-      generateVocabulary: async () => JSON.stringify({ items: [wordInput(), wordInput()] })
+      generateVocabulary: async ({ difficultyLevel }) => JSON.stringify({
+        items: [wordInput({ difficulty: difficultyLevel }), wordInput({ difficulty: difficultyLevel })]
+      })
     },
     logger: { warn() {} }
   });
@@ -75,6 +77,26 @@ test('retries generation with avoided terms when the first result is a duplicate
   assert.equal(accepted[0].term, 'Opportunity');
   assert.deepEqual(attempts[0], ['accomplish']);
   assert.deepEqual(attempts[1], ['accomplish']);
+});
+
+test('passes target CEFR level through generation flow', async () => {
+  const store = new WordStore({ seed: false });
+  let requestedDifficultyLevel = null;
+  const service = new VocabularyGenerationService({
+    store,
+    liteLLMClient: {
+      generateVocabulary: async ({ difficultyLevel }) => {
+        requestedDifficultyLevel = difficultyLevel;
+        return JSON.stringify({ items: [wordInput({ difficulty: 'A2' })] });
+      }
+    },
+    logger: { warn() {} }
+  });
+
+  const accepted = await service.generateAndStore({ limit: 1, difficultyLevel: 'A2' });
+
+  assert.equal(requestedDifficultyLevel, 'A2');
+  assert.equal(accepted[0].difficulty, 'A2');
 });
 
 function wordInput(overrides = {}) {

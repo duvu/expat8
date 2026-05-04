@@ -1,4 +1,5 @@
 import { normalizeTerm } from './normalize.js';
+import { normalizeDifficultyLevel } from './proficiency.js';
 import { validateVocabularyItem } from './vocabulary_validator.js';
 
 export class VocabularyGenerationService {
@@ -8,7 +9,13 @@ export class VocabularyGenerationService {
     this.logger = logger;
   }
 
-  async generateAndStore({ sourceLanguage = 'vi', targetLanguage = 'en', limit = 5, avoidTerms = [] }) {
+  async generateAndStore({
+    sourceLanguage = 'vi',
+    targetLanguage = 'en',
+    limit = 5,
+    avoidTerms = [],
+    difficultyLevel = 'B1'
+  }) {
     const accepted = [];
     const blockedTerms = new Set(
       avoidTerms.map((term) => normalizeTerm(String(term)))
@@ -21,7 +28,8 @@ export class VocabularyGenerationService {
           sourceLanguage,
           targetLanguage,
           limit: limit - accepted.length,
-          avoidTerms: [...blockedTerms]
+          avoidTerms: [...blockedTerms],
+          difficultyLevel
         });
       } catch (error) {
         this.logger.warn('ai_generation_failed', { reason: error.message });
@@ -33,6 +41,7 @@ export class VocabularyGenerationService {
         const candidate = {
           ...item,
           language: item.language ?? targetLanguage,
+          difficulty: normalizeDifficultyLevel(item.difficulty) ?? item.difficulty,
           generation_source: 'litellm'
         };
         const normalizedCandidateTerm = normalizeTerm(String(candidate.term ?? ''));

@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/word_repository.dart';
+import '../models/proficiency_state.dart';
 import '../models/study_event.dart';
+import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import '../telemetry.dart';
 import 'card_selection.dart';
@@ -21,39 +23,77 @@ class LearningSessionController extends ChangeNotifier {
   VocabularyWord? currentWord;
   bool isLoading = false;
   String? statusMessage;
+  ProficiencyState proficiency = ProficiencyState.initial();
+  UserSession? userSession;
+  String? _deviceId;
+  String? _levelChangeMessage;
+
+  String? takeLevelChangeMessage() {
+    final message = _levelChangeMessage;
+    _levelChangeMessage = null;
+    return message;
+  }
 
   Future<void> loadInitial() async {
-    await nextCard();
+    _deviceId ??= await repository.getOrCreateDeviceId();
+    userSession = await repository.loadUserSession();
+    try {
+      proficiency = await repository.fetchProficiency(deviceId: _deviceId!);
+    } catch (_) {
+      proficiency = ProficiencyState.initial();
+    }
+    await showNewWord();
   }
 
   Future<void> nextCard() async {
+    await showNewWord();
+  }
+
+  Future<void> showNewWord() async {
     isLoading = true;
     statusMessage = null;
     notifyListeners();
 
     final now = DateTime.now().toUtc();
     final excludedServerWordId = currentWord?.serverWordId;
-    final preferred = _selectionWindow.preferredKind();
     VocabularyWord? word;
     CardKind? actualKind;
 
-    if (preferred == CardKind.newWord) {
-      _telemetry.track(TelemetryEvent.newWordRequested);
-      word = await repository.getNewWordWithFallback(
-        excludeServerWordId: excludedServerWordId,
-      );
-      actualKind = word == null ? null : CardKind.newWord;
-      word ??= await repository.getReviewWord(now);
-      actualKind ??= word == null ? null : CardKind.review;
-    } else {
-      word = await repository.getReviewWord(now);
-      actualKind = word == null ? null : CardKind.review;
-      word ??= await repository.getNewWordWithFallback(
-        excludeServerWordId: excludedServerWordId,
-      );
-      actualKind ??= word == null ? null : CardKind.newWord;
-    }
+    _telemetry.track(TelemetryEvent.newWordRequested);
+    _telemetry.track(TelemetryEvent.newWordSwipeRequested);
+    word = await repository.getNewWordWithFallback(
+      excludeServerWordId: excludedServerWordId,
+      proficiencyLevel: proficiency.level,
+      deviceId: _deviceId,
+    );
+    actualKind = word == null ? null : CardKind.newWord;
+    word ??= await repository.getReviewWord(now);
+    actualKind ??= word == null ? null : CardKind.review;
 
+    _showWord(word, actualKind);
+  }
+
+  Future<void> showRecentReview() async {
+    isLoading = true;
+    statusMessage = null;
+    notifyListeners();
+
+    final excludedServerWordId = currentWord?.serverWordId;
+    final now = DateTime.now().toUtc();
+    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
+    VocabularyWord? word = await repository.getRecentReviewWord(now);
+    CardKind? actualKind = word == null ? null : CardKind.review;
+    word ??= await repository.getNewWordWithFallback(
+      excludeServerWordId: excludedServerWordId,
+      proficiencyLevel: proficiency.level,
+      deviceId: _deviceId,
+    );
+    actualKind ??= word == null ? null : CardKind.newWord;
+
+    _showWord(word, actualKind);
+  }
+
+  void _showWord(VocabularyWord? word, CardKind? actualKind) {
     if (word == null) {
       statusMessage = 'No local learning card is available.';
     } else {
@@ -76,15 +116,56 @@ class LearningSessionController extends ChangeNotifier {
     if (word == null) {
       return;
     }
-    await repository.recordRating(
+    _deviceId ??= await repository.getOrCreateDeviceId();
+    final updatedProficiency = await repository.recordRating(
       word: word,
       rating: rating,
       now: DateTime.now().toUtc(),
+      deviceId: _deviceId!,
     );
+    if (updatedProficiency != null) {
+      final previousLevel = proficiency.level;
+      proficiency = updatedProficiency;
+      if (updatedProficiency.levelChanged && updatedProficiency.level != previousLevel) {
+        _levelChangeMessage = 'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
+      }
+    }
     _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
       'rating': rating.name,
       'word_id': word.serverWordId ?? word.localId,
     });
     await nextCard();
+  }
+
+  Future<void> register({
+    required String identifier,
+    required String password,
+    String? displayName,
+  }) async {
+    statusMessage = null;
+    userSession = await repository.registerUser(
+      identifier: identifier,
+      password: password,
+      displayName: displayName,
+    );
+    notifyListeners();
+  }
+
+  Future<void> signIn({
+    required String identifier,
+    required String password,
+  }) async {
+    statusMessage = null;
+    userSession = await repository.signInUser(
+      identifier: identifier,
+      password: password,
+    );
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    await repository.signOutUser();
+    userSession = null;
+    notifyListeners();
   }
 }

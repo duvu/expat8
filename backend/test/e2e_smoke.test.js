@@ -23,7 +23,7 @@ test('smoke: new word retrieval, local save, rating queue, and backend sync', as
 
   const word = await localClient.fetchNewWord();
   localClient.saveWord(word);
-  localClient.rateWord(word, 'remembered');
+  localClient.rateWord(word, 'easy');
   await localClient.sync();
 
   assert.equal(localClient.words.size, 1);

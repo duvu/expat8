@@ -6,7 +6,9 @@
 - Node.js 22 or newer for the backend.
 - Optional LiteLLM server for live AI vocabulary generation.
 
-The current development machine used for this implementation has Node.js available but does not have Flutter or Dart on `PATH`, so only backend tests can be executed here.
+The current development machine used for this implementation has Node.js and
+Flutter available. Local SQLite-backed Flutter tests require the native
+`libsqlite3.so` library to be available on the host.
 
 ## Backend
 
@@ -89,6 +91,11 @@ flutter run --dart-define=BACKEND_BASE_URL=http://localhost:8787 --dart-define=N
 
 The app uses a local SQLite database via `sqflite` and stores vocabulary, study events, and sync queue entries locally before sync.
 
+The mobile app supports optional registration/sign-in. Anonymous learning uses
+the persisted `device_id`; signed-in learning keeps that `device_id` and adds a
+bearer session token to eligible feed, study-event, sync, and proficiency
+requests.
+
 ## Smoke Test Coverage
 
 Backend tests include a service-level smoke test that simulates:
@@ -101,12 +108,18 @@ Backend tests include a service-level smoke test that simulates:
 
 ## Known MVP Limitations
 
-- No authentication is implemented. Server records use `device_id` and keep `user_id` nullable for future auth.
+- Optional registration/sign-in is implemented with backend sessions. OAuth,
+  magic-link login, password reset, and multi-factor authentication are not in
+  this MVP.
 - App credential checks protect `/v1/*` from unsigned requests, but they are
-  not user authentication and do not prove human identity.
+  not user authentication and do not prove human identity. User sessions are
+  resolved only after the app credential layer passes.
 - The backend uses PostgreSQL when `DATABASE_URL` is set. Unit tests still use an in-memory store by default, and PostgreSQL integration tests run when `TEST_DATABASE_URL` is provided.
 - Nonce replay protection is in-memory for the current single-instance backend.
   Multi-instance deployments need a shared nonce store such as Redis.
-- The Flutter project is source-scaffolded but Android/iOS platform folders were not generated because Flutter SDK is unavailable in this environment.
+- Flutter SQLite tests need host SQLite native libraries. If `flutter test`
+  reports `Failed to load dynamic library 'libsqlite3.so'`, install the host
+  SQLite library before running `local_database_test.dart` or
+  `word_repository_test.dart`.
 - No pronunciation audio or speech scoring is included.
 - AI generation failures are logged without user payloads and the backend can still serve stored seed words.

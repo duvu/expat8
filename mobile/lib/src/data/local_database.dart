@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
+import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 
 class LocalDatabase {
@@ -12,11 +13,11 @@ class LocalDatabase {
 
   final Database _db;
 
-  static Future<LocalDatabase> open() async {
-    final dbPath = path.join(await getDatabasesPath(), 'expat8_words.db');
+  static Future<LocalDatabase> open({String databaseName = 'expat8_words.db'}) async {
+    final dbPath = path.join(await getDatabasesPath(), databaseName);
     final database = await openDatabase(
       dbPath,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE local_words (
@@ -59,6 +60,7 @@ class LocalDatabase {
             created_at TEXT NOT NULL
           )
         ''');
+        await _createAppSettingsTable(db);
         await db.execute('CREATE INDEX idx_local_words_status ON local_words(status)');
         await db.execute(
           'CREATE INDEX idx_local_words_last_seen ON local_words(last_seen_at)',
@@ -67,8 +69,22 @@ class LocalDatabase {
           'CREATE INDEX idx_study_events_sync_status ON study_events(sync_status)',
         );
       },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await _createAppSettingsTable(db);
+        }
+      },
     );
     return LocalDatabase(database);
+  }
+
+  static Future<void> _createAppSettingsTable(DatabaseExecutor db) {
+    return db.execute('''
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> upsertWord(VocabularyWord word) async {
@@ -106,6 +122,21 @@ class LocalDatabase {
     return rows.isEmpty ? null : _wordFromRow(rows.first);
   }
 
+  Future<VocabularyWord?> recentlyLearnedReviewWord() async {
+    final rows = await _db.query(
+      'local_words',
+      where: 'status IN (?, ?, ?) AND last_seen_at IS NOT NULL',
+      whereArgs: [
+        WordStatus.learning.name,
+        WordStatus.review.name,
+        WordStatus.mastered.name,
+      ],
+      orderBy: 'last_seen_at DESC, updated_at DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _wordFromRow(rows.first);
+  }
+
   Future<List<String>> recentServerWordIds({int limit = 20}) async {
     final rows = await _db.query(
       'local_words',
@@ -127,21 +158,72 @@ class LocalDatabase {
     return result;
   }
 
+  Future<String> getOrCreateDeviceId(String Function() createId) async {
+    final rows = await _db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['device_id'],
+      limit: 1,
+    );
+    final existing = rows.isEmpty ? null : rows.first['value'] as String?;
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final deviceId = createId();
+    await _db.insert(
+      'app_settings',
+      {'key': 'device_id', 'value': deviceId},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return deviceId;
+  }
+
+  Future<void> saveUserSession(UserSession session) async {
+    await _db.insert(
+      'app_settings',
+      {'key': 'user_session', 'value': jsonEncode(session.toJson())},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<UserSession?> loadUserSession() async {
+    final rows = await _db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['user_session'],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return UserSession.fromJson(jsonDecode(rows.first['value'] as String) as Map<String, dynamic>);
+  }
+
+  Future<void> clearUserSession() async {
+    await _db.delete(
+      'app_settings',
+      where: 'key = ?',
+      whereArgs: ['user_session'],
+    );
+  }
+
   Future<void> updateWordAfterRating({
     required VocabularyWord word,
     required StudyRating rating,
     required DateTime now,
   }) async {
     final nextReview = switch (rating) {
-      StudyRating.notRemembered => now.add(const Duration(minutes: 5)),
+      StudyRating.tooHard => now.add(const Duration(minutes: 5)),
       StudyRating.hard => now.add(const Duration(days: 1)),
-      StudyRating.remembered => now.add(const Duration(days: 3)),
+      StudyRating.easy => now.add(const Duration(days: 3)),
       StudyRating.tooEasy => now.add(const Duration(days: 7)),
     };
     final status = switch (rating) {
-      StudyRating.notRemembered => WordStatus.learning,
+      StudyRating.tooHard => WordStatus.learning,
       StudyRating.hard => WordStatus.review,
-      StudyRating.remembered => WordStatus.review,
+      StudyRating.easy => WordStatus.review,
       StudyRating.tooEasy => WordStatus.mastered,
     };
     await _db.update(
@@ -166,7 +248,7 @@ class LocalDatabase {
           'client_event_id': event.clientEventId,
           'local_word_id': event.localWordId,
           'server_word_id': event.serverWordId,
-          'rating': event.rating.name,
+          'rating': event.rating.apiValue,
           'occurred_at': event.occurredAt.toUtc().toIso8601String(),
           'sync_status': event.syncStatus.name,
         },
