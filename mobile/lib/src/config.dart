@@ -4,6 +4,13 @@ class AppConfig {
     required this.newWordTimeout,
     required this.appCredentialAppId,
     required this.appCredentialSecret,
+    required this.logLevel,
+    required this.logMaxEntries,
+    required this.logRetentionDays,
+    required this.vocabPrefetchLimit,
+    required this.vocabDailyRefreshCount,
+    required this.vocabProactiveThreshold,
+    required this.vocabProactiveMinNew,
   });
 
   factory AppConfig.fromEnvironment() {
@@ -23,6 +30,34 @@ class AppConfig {
         'APP_CREDENTIAL_SECRET',
         defaultValue: 'expat8-mobile-secret',
       ),
+      logLevel: String.fromEnvironment(
+        'APP_LOG_LEVEL',
+        defaultValue: 'info',
+      ),
+      logMaxEntries: int.fromEnvironment(
+        'APP_LOG_MAX_ENTRIES',
+        defaultValue: 5000,
+      ),
+      logRetentionDays: int.fromEnvironment(
+        'APP_LOG_RETENTION_DAYS',
+        defaultValue: 7,
+      ),
+      vocabPrefetchLimit: int.fromEnvironment(
+        'VOCAB_PREFETCH_LIMIT',
+        defaultValue: 1000,
+      ),
+      vocabDailyRefreshCount: int.fromEnvironment(
+        'VOCAB_DAILY_REFRESH_COUNT',
+        defaultValue: 150,
+      ),
+      vocabProactiveThreshold: int.fromEnvironment(
+        'VOCAB_PROACTIVE_THRESHOLD',
+        defaultValue: 100,
+      ),
+      vocabProactiveMinNew: int.fromEnvironment(
+        'VOCAB_PROACTIVE_MIN_NEW',
+        defaultValue: 15,
+      ),
     );
   }
 
@@ -30,4 +65,11 @@ class AppConfig {
   final Duration newWordTimeout;
   final String appCredentialAppId;
   final String appCredentialSecret;
+  final String logLevel;
+  final int logMaxEntries;
+  final int logRetentionDays;
+  final int vocabPrefetchLimit;
+  final int vocabDailyRefreshCount;
+  final int vocabProactiveThreshold;
+  final int vocabProactiveMinNew;
 }

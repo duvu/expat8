@@ -1,6 +1,8 @@
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
+import 'package:expat8_language_app/src/config.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
 import 'package:expat8_language_app/src/data/word_repository.dart';
+import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/study_event.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
@@ -29,6 +31,32 @@ void main() {
 
     final word = await repository.getNewWordWithFallback();
     expect(word?.localId, localWord.localId);
+  });
+
+  test('emits fallback logs when backend new-word request fails', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_logging_fallback.db',
+    );
+    final localWord = _word('local_word_log');
+    await database.upsertWord(localWord);
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _FailingApiClient(),
+      logger: logger,
+    );
+
+    final result = await repository.getNewWordWithFallbackResult();
+
+    expect(result.word?.localId, localWord.localId);
+    expect(
+      entries.any((entry) => entry.event == 'new_word.backend.error'),
+      true,
+    );
   });
 
   test('reports local fallback source when backend fails but local word exists', () async {
@@ -141,6 +169,150 @@ void main() {
     expect(apiClient.signOutCalled, true);
     expect(apiClient.lastSessionToken, isNull);
   });
+
+  test('sync pending events logs retry on failure', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_sync_retry_log.db',
+    );
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _SyncFailingApiClient(),
+      logger: logger,
+    );
+
+    final now = DateTime.now().toUtc();
+    await database.insertStudyEvent(
+      StudyEvent(
+        clientEventId: 'evt_sync_1',
+        localWordId: 'local_sync_1',
+        serverWordId: 'server_sync_1',
+        rating: StudyRating.easy,
+        occurredAt: now,
+        syncStatus: SyncStatus.pending,
+      ),
+    );
+
+    await repository.syncPendingEvents(
+      deviceId: 'device_repo',
+      now: now.add(const Duration(minutes: 1)),
+    );
+
+    expect(entries.any((entry) => entry.event == 'sync.batch.retry'), true);
+  });
+
+  test('exports logs as JSONL payload', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_export_logs_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 10, 0),
+        level: AppLogLevel.error,
+        category: AppLogCategory.api,
+        event: 'api.error',
+        message: 'Request failed',
+        context: const {'status_code': 500},
+      ),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      logger: const NoopLogger(),
+    );
+
+    final exported = await repository.exportLogs(minimumLevel: AppLogLevel.warning);
+
+    expect(exported.count, 1);
+    expect(exported.payload.contains('api.error'), true);
+  });
+
+  test('checkAndRunFirstInstallPrefetch skips when prefetch already done', () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_prefetch_skip_$ts.db',
+    );
+    await database.setSetting(LocalDatabase.keyIsPrefetchDone, 'true');
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+    repository.initRefreshWorker('device_test');
+
+    await repository.checkAndRunFirstInstallPrefetch();
+
+    expect(apiClient.fetchRecentWordsCalled, false);
+  });
+
+  test('checkAndRunFirstInstallPrefetch completes without error when not yet done', () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_prefetch_run_$ts.db',
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+    repository.initRefreshWorker('device_test');
+
+    // Should not throw
+    await repository.checkAndRunFirstInstallPrefetch();
+
+    // prefetch is running in background; its result is tested in vocabulary_refresh_worker_test
+    expect(apiClient, isNotNull);
+  });
+
+  test('checkAndRunDailyRefresh skips when already refreshed today', () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_daily_skip_$ts.db',
+    );
+    final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    await database.setSetting(LocalDatabase.keyLastDailyRefreshDate, today);
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+    repository.initRefreshWorker('device_test');
+
+    await repository.checkAndRunDailyRefresh();
+
+    expect(apiClient.fetchRecentWordsCalled, false);
+  });
+
+  test('recordWordStudied increments words_studied counter in settings', () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_proactive_trigger_$ts.db',
+    );
+    await database.upsertWord(_word('word_1'));
+
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(proactiveThreshold: 5, proactiveMinNew: 5),
+    );
+    repository.initRefreshWorker('device_test');
+
+    // Study 3 words; counter should be 3, no threshold reached yet
+    for (var i = 0; i < 3; i++) {
+      await repository.recordWordStudied();
+    }
+
+    final raw = await database.getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
+    expect(int.parse(raw!), 3);
+  });
 }
 
 class _FailingApiClient extends BackendApiClient {
@@ -178,6 +350,7 @@ class _RecordingApiClient extends BackendApiClient {
   List<String> lastExcludedServerWordIds = const [];
   String? lastSessionToken;
   bool signOutCalled = false;
+  bool fetchRecentWordsCalled = false;
 
   @override
   Future<List<VocabularyWord>> fetchNewWords({
@@ -191,6 +364,18 @@ class _RecordingApiClient extends BackendApiClient {
   }) async {
     lastExcludedServerWordIds = excludeServerWordIds;
     lastSessionToken = sessionToken;
+    return [];
+  }
+
+  @override
+  Future<List<VocabularyWord>> fetchRecentWords({
+    int limit = 1000,
+    String sourceLanguage = 'vi',
+    String targetLanguage = 'en',
+    List<String> excludeIds = const [],
+    String? deviceId,
+  }) async {
+    fetchRecentWordsCalled = true;
     return [];
   }
 
@@ -249,6 +434,25 @@ class _RecordingApiClient extends BackendApiClient {
   }
 }
 
+class _SyncFailingApiClient extends BackendApiClient {
+  _SyncFailingApiClient()
+      : super(
+          baseUrl: 'http://unused',
+          timeout: Duration.zero,
+          appId: 'test-app',
+          appSecret: 'test-secret',
+        );
+
+  @override
+  Future<SyncResult> syncStudyEvents({
+    required String deviceId,
+    required List<Map<String, dynamic>> events,
+    String? sessionToken,
+  }) {
+    throw BackendApiException('forced sync failure');
+  }
+}
+
 VocabularyWord _word(String id) {
   final now = DateTime.utc(2026, 5, 4);
   return VocabularyWord(
@@ -267,5 +471,21 @@ VocabularyWord _word(String id) {
     status: WordStatus.newWord,
     createdAt: now,
     updatedAt: now,
+  );
+}
+
+AppConfig _testConfig({int proactiveThreshold = 100, int proactiveMinNew = 15}) {
+  return AppConfig(
+    backendBaseUrl: 'http://unused',
+    newWordTimeout: Duration.zero,
+    appCredentialAppId: 'test-app',
+    appCredentialSecret: 'test-secret',
+    logLevel: 'info',
+    logMaxEntries: 100,
+    logRetentionDays: 1,
+    vocabPrefetchLimit: 100,
+    vocabDailyRefreshCount: 20,
+    vocabProactiveThreshold: proactiveThreshold,
+    vocabProactiveMinNew: proactiveMinNew,
   );
 }

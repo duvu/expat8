@@ -146,4 +146,64 @@ void main() {
     expect(requests[2].headers['authorization'], 'Bearer session_sign_in');
     expect(requests[3].headers['authorization'], 'Bearer session_sign_in');
   });
+
+  test('surfaces duplicate-user registration metadata from backend errors', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'error': 'user_exists'}),
+        409,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://expat8.x51.vn',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'expat8-mobile-secret',
+      httpClient: client,
+    );
+
+    try {
+      await apiClient.registerUser(
+        identifier: 'learner@example.com',
+        password: 'correct-password',
+      );
+      fail('Expected registerUser to throw');
+    } on BackendApiException catch (error) {
+      expect(error.statusCode, 409);
+      expect(error.backendError, 'user_exists');
+      expect(error.message, 'Registration failed: 409');
+    }
+  });
+
+  test('surfaces invalid-credentials metadata from sign-in backend errors', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'error': 'invalid_credentials'}),
+        401,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://expat8.x51.vn',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'expat8-mobile-secret',
+      httpClient: client,
+    );
+
+    try {
+      await apiClient.signIn(
+        identifier: 'learner@example.com',
+        password: 'wrong-password',
+      );
+      fail('Expected signIn to throw');
+    } on BackendApiException catch (error) {
+      expect(error.statusCode, 401);
+      expect(error.backendError, 'invalid_credentials');
+      expect(error.message, 'Sign-in failed: 401');
+    }
+  });
 }

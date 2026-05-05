@@ -29,6 +29,9 @@ Environment values:
 - `DEFAULT_SOURCE_LANGUAGE`: default source language, currently `vi`.
 - `DEFAULT_TARGET_LANGUAGE`: default target language, currently `en`.
 - `NEW_WORD_TIMEOUT_SECONDS`: product timeout mirrored by mobile config.
+- `CORS_ALLOWED_ORIGIN`: allowed browser origin for `/v1/*` CORS responses,
+  default `*` for local development. Production should set the exact web app
+  origin.
 - `APP_CREDENTIALS_JSON`: JSON array of active app credentials. Use a local
   placeholder only in development; real secrets must come from deployment
   secrets.
@@ -44,6 +47,10 @@ in `contracts/api.md`. `/health` remains unsigned for Compose and load balancer
 checks. Backend tests use a safe local fixture in
 `backend/test/support/app_credential_helpers.js`; do not reuse that fixture as
 a production secret.
+
+Browser clients may send unsigned `OPTIONS` preflight requests to `/v1/*`.
+Those preflight requests are answered before app credential verification, but
+all non-OPTIONS `/v1/*` requests still require valid app credential headers.
 
 ## Docker Compose Backend Deployment
 
@@ -71,6 +78,8 @@ Compose environment values:
 - `LITELLM_BASE_URL`: default `https://lite.x51.vn`.
 - `LITELLM_API_KEY`: LiteLLM API key, intentionally blank by default.
 - `LITELLM_MODEL`: default `gpt-4o-mini`.
+- `CORS_ALLOWED_ORIGIN`: default `*`; set an explicit production web origin
+  before exposing browser clients.
 - `APP_CREDENTIALS_JSON`: app credentials passed to the backend container,
   default `[]`.
 - `APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS`: default `300`.
@@ -87,6 +96,21 @@ cd mobile
 flutter pub get
 flutter test
 flutter run --dart-define=BACKEND_BASE_URL=http://localhost:8787 --dart-define=NEW_WORD_TIMEOUT_SECONDS=5
+```
+
+On Linux, `sqflite_common_ffi` needs a host `libsqlite3.so`. Prefer installing
+the development package:
+
+```bash
+sudo apt install libsqlite3-dev
+```
+
+If the host only exposes `libsqlite3.so.0`, use a local shim for test runs:
+
+```bash
+mkdir -p /tmp/expat8-sqlite-lib
+ln -sf /lib/x86_64-linux-gnu/libsqlite3.so.0 /tmp/expat8-sqlite-lib/libsqlite3.so
+LD_LIBRARY_PATH=/tmp/expat8-sqlite-lib flutter test
 ```
 
 The app uses a local SQLite database via `sqflite` and stores vocabulary, study events, and sync queue entries locally before sync.
@@ -157,8 +181,8 @@ chain by default; TLS trust failures are reported as smoke failures.
 - Nonce replay protection is in-memory for the current single-instance backend.
   Multi-instance deployments need a shared nonce store such as Redis.
 - Flutter SQLite tests need host SQLite native libraries. If `flutter test`
-  reports `Failed to load dynamic library 'libsqlite3.so'`, install the host
-  SQLite library before running `local_database_test.dart` or
-  `word_repository_test.dart`.
+  reports `Failed to load dynamic library 'libsqlite3.so'`, install
+  `libsqlite3-dev` or run tests with the documented local `LD_LIBRARY_PATH`
+  shim before running SQLite-backed tests.
 - No pronunciation audio or speech scoring is included.
 - AI generation failures are logged without user payloads and the backend can still serve stored seed words.

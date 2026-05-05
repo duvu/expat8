@@ -1,0 +1,67 @@
+# Mobile System Logging
+
+## Muc tieu
+Tai lieu nay mo ta cach dung logging subsystem tren mobile app de debug va trace loi tren may that ma khong can ket noi emulator.
+
+## Cau hinh
+App ho tro cac bien `--dart-define` sau:
+- `APP_LOG_LEVEL`: muc log toi thieu (`debug`, `info`, `warning`, `error`)
+- `APP_LOG_MAX_ENTRIES`: so ban ghi toi da giu lai trong local store
+- `APP_LOG_RETENTION_DAYS`: so ngay giu log truoc khi prune theo tuoi
+
+Gia tri mac dinh:
+- `APP_LOG_LEVEL=info`
+- `APP_LOG_MAX_ENTRIES=5000`
+- `APP_LOG_RETENTION_DAYS=7`
+
+Vi du chay debug:
+```bash
+flutter run -d emulator-5554 \
+  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret \
+  --dart-define=APP_LOG_LEVEL=debug
+```
+
+## Cac nguon log duoc ghi
+- API lifecycle: request/response/error cho `words/next`, `proficiency`, `study-events`, `study-events/sync`
+- Session lifecycle: load initial, new word request, review request, rating submit, level change
+- Sync lifecycle: batch start, retry scheduling, sync worker run
+- Local DB lifecycle: upsert word, retry scheduling, log persistence
+- Auth lifecycle: register/sign-in/sign-out success/failure
+
+## Mo man hinh log trong app
+1. Mo drawer tu man hinh hoc tu vung
+2. Chon `Logs`
+3. Chon filter:
+- Minimum Level
+- Category
+4. Bam `Refresh` de tai lai danh sach
+
+## Export log
+1. Trong man hinh `System Logs`, bam icon `Export logs`
+2. App tao file JSONL da sanitize
+3. Snackbar hien so luong ban ghi va duong dan file
+
+Ghi chu:
+- Neu chay tren web test mode, export tra ve payload in-memory thay vi file path.
+
+## Bao mat va redaction
+Truoc khi persist hoac export, app redact cac truong nhay cam:
+- `authorization`, `token`, `session_token`
+- `password`
+- `app_secret`, `secret`
+- Chuoi bearer token trong message
+
+Tat ca gia tri nhay cam duoc thay bang `[REDACTED]`.
+
+## Checklist debug tren may that
+1. Tai hien loi tren may that
+2. Mo `Logs` va chon `warning` hoac `error`
+3. Kiem tra `trace_id`, `event`, `category` theo timeline
+4. Export JSONL va gui cho team ky thuat
+5. Neu can trace sau hon, chay lai voi `APP_LOG_LEVEL=debug`
+
+## Luu y van hanh
+- Logging da co retention theo tuoi + so luong ban ghi de tranh phinh bo nho
+- Neu gap van de hieu nang, giam level ve `warning` trong production

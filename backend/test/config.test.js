@@ -34,6 +34,16 @@ test('loads app credential security settings from environment', () => {
   assert.equal(config.appCredentialPostBodyLimitBytes, 1024);
 });
 
+test('loads CORS allowed origin with a development default', () => {
+  assert.equal(loadConfig({}).corsAllowedOrigin, '*');
+  assert.equal(
+    loadConfig({
+      CORS_ALLOWED_ORIGIN: 'https://expat8.example'
+    }).corsAllowedOrigin,
+    'https://expat8.example'
+  );
+});
+
 test('rejects malformed app credential configuration', () => {
   assert.throws(
     () =>

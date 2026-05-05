@@ -8,6 +8,7 @@ export function loadConfig(env = process.env) {
     defaultSourceLanguage: env.DEFAULT_SOURCE_LANGUAGE ?? 'vi',
     defaultTargetLanguage: env.DEFAULT_TARGET_LANGUAGE ?? 'en',
     newWordTimeoutSeconds: Number.parseInt(env.NEW_WORD_TIMEOUT_SECONDS ?? '5', 10),
+    corsAllowedOrigin: env.CORS_ALLOWED_ORIGIN ?? '*',
     appCredentials: parseAppCredentials(env.APP_CREDENTIALS_JSON),
     appCredentialTimestampSkewSeconds: Number.parseInt(
       env.APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS ?? '300',

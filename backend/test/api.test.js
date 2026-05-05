@@ -451,6 +451,90 @@ test('registers, signs in, signs out, and associates signed-in learning with use
   assert.equal(afterSignOut.status, 401);
 });
 
+test('handles browser CORS preflight while preserving app credential protection', async (t) => {
+  const store = new CountingStore();
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig({
+        CORS_ALLOWED_ORIGIN: 'http://localhost:8080'
+      })
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const registerUrl = `${baseUrl}/v1/users/register`;
+  const origin = 'http://localhost:8080';
+
+  const preflight = await fetch(registerUrl, {
+    method: 'OPTIONS',
+    headers: {
+      origin,
+      'access-control-request-method': 'POST',
+      'access-control-request-headers':
+        'content-type,authorization,x-expat8-app-id,x-expat8-timestamp,x-expat8-nonce,x-expat8-content-sha256,x-expat8-signature'
+    }
+  });
+
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+  assert.match(preflight.headers.get('access-control-allow-methods'), /POST/);
+  assert.match(preflight.headers.get('access-control-allow-methods'), /OPTIONS/);
+  assert.match(preflight.headers.get('access-control-allow-headers'), /x-expat8-app-id/);
+  assert.equal(store.registerUserCalls, 0);
+
+  const unsigned = await fetch(registerUrl, {
+    method: 'POST',
+    headers: {
+      origin,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      identifier: 'cors@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_cors'
+    })
+  });
+  assert.equal(unsigned.status, 400);
+  assert.equal(unsigned.headers.get('access-control-allow-origin'), origin);
+  assert.deepEqual(await unsigned.json(), { error: 'bad_request' });
+  assert.equal(store.registerUserCalls, 0);
+
+  const created = await fetch(registerUrl, signedFetchOptions(registerUrl, {
+    method: 'POST',
+    headers: {
+      origin,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      identifier: 'cors@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_cors'
+    })
+  }));
+  assert.equal(created.status, 201);
+  assert.equal(created.headers.get('access-control-allow-origin'), origin);
+
+  const duplicate = await fetch(registerUrl, signedFetchOptions(registerUrl, {
+    method: 'POST',
+    headers: {
+      origin,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      identifier: 'cors@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_cors'
+    })
+  }));
+  assert.equal(duplicate.status, 409);
+  assert.equal(duplicate.headers.get('access-control-allow-origin'), origin);
+  assert.deepEqual(await duplicate.json(), { error: 'user_exists' });
+});
+
 test('protects v1 routes with app credentials while leaving health open', async (t) => {
   const store = new CountingStore();
   const generationService = {
@@ -637,12 +721,18 @@ class CountingStore extends AsyncStoreAdapter {
   constructor() {
     super(new WordStore());
     this.findNewWordsCalls = 0;
+    this.registerUserCalls = 0;
     this.syncStudyEventsCalls = 0;
   }
 
   async findNewWords(input) {
     this.findNewWordsCalls += 1;
     return super.findNewWords(input);
+  }
+
+  async registerUser(input) {
+    this.registerUserCalls += 1;
+    return super.registerUser(input);
   }
 
   async syncStudyEvents(input) {

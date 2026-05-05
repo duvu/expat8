@@ -3,21 +3,27 @@ import 'dart:convert';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
+import '../logging/logger.dart';
 import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 
 class LocalDatabase {
-  LocalDatabase(this._db);
+  LocalDatabase(this._db, {Logger? logger}) : _logger = logger ?? const NoopLogger();
 
   final Database _db;
+  Logger _logger;
+
+  void attachLogger(Logger logger) {
+    _logger = logger;
+  }
 
   static Future<LocalDatabase> open({String databaseName = 'expat8_words.db'}) async {
     final dbPath = path.join(await getDatabasesPath(), databaseName);
     final database = await openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE local_words (
@@ -61,6 +67,7 @@ class LocalDatabase {
           )
         ''');
         await _createAppSettingsTable(db);
+        await _createAppLogsTable(db);
         await db.execute('CREATE INDEX idx_local_words_status ON local_words(status)');
         await db.execute(
           'CREATE INDEX idx_local_words_last_seen ON local_words(last_seen_at)',
@@ -68,10 +75,19 @@ class LocalDatabase {
         await db.execute(
           'CREATE INDEX idx_study_events_sync_status ON study_events(sync_status)',
         );
+        await db.execute(
+          'CREATE INDEX idx_app_logs_timestamp ON app_logs(timestamp)',
+        );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await _createAppSettingsTable(db);
+        }
+        if (oldVersion < 3) {
+          await _createAppLogsTable(db);
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_app_logs_timestamp ON app_logs(timestamp)',
+          );
         }
       },
     );
@@ -87,11 +103,125 @@ class LocalDatabase {
     ''');
   }
 
+  static Future<void> _createAppLogsTable(DatabaseExecutor db) {
+    return db.execute('''
+      CREATE TABLE IF NOT EXISTS app_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        level TEXT NOT NULL,
+        category TEXT NOT NULL,
+        event TEXT NOT NULL,
+        message TEXT NOT NULL,
+        trace_id TEXT,
+        context TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> persistLogEntry(LogEntry entry) async {
+    await _db.insert('app_logs', {
+      'timestamp': entry.timestamp.toUtc().toIso8601String(),
+      'level': entry.level.name,
+      'category': entry.category.name,
+      'event': entry.event,
+      'message': entry.message,
+      'trace_id': entry.traceId,
+      'context': jsonEncode(entry.context),
+    });
+  }
+
+  Future<List<LogEntry>> queryLogs({
+    AppLogLevel? minimumLevel,
+    AppLogCategory? category,
+    DateTime? from,
+    DateTime? to,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final where = <String>[];
+    final whereArgs = <Object?>[];
+
+    if (minimumLevel != null) {
+      final allowed = AppLogLevel.values
+          .where((level) => level.priority >= minimumLevel.priority)
+          .map((level) => level.name)
+          .toList(growable: false);
+      where.add('level IN (${List.filled(allowed.length, '?').join(',')})');
+      whereArgs.addAll(allowed);
+    }
+
+    if (category != null) {
+      where.add('category = ?');
+      whereArgs.add(category.name);
+    }
+    if (from != null) {
+      where.add('timestamp >= ?');
+      whereArgs.add(from.toUtc().toIso8601String());
+    }
+    if (to != null) {
+      where.add('timestamp <= ?');
+      whereArgs.add(to.toUtc().toIso8601String());
+    }
+
+    final rows = await _db.query(
+      'app_logs',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: whereArgs,
+      orderBy: 'timestamp DESC, id DESC',
+      limit: limit,
+      offset: offset,
+    );
+
+    return rows.map(_logFromRow).toList(growable: false);
+  }
+
+  Future<int> pruneLogs({
+    int maxEntries = 5000,
+    Duration maxAge = const Duration(days: 7),
+    DateTime? now,
+  }) async {
+    final cutoff = (now ?? DateTime.now().toUtc()).subtract(maxAge).toIso8601String();
+    var removed = await _db.delete(
+      'app_logs',
+      where: 'timestamp < ?',
+      whereArgs: [cutoff],
+    );
+
+    final count = Sqflite.firstIntValue(
+          await _db.rawQuery('SELECT COUNT(*) FROM app_logs'),
+        ) ??
+        0;
+
+    if (count > maxEntries) {
+      final overflowRows = await _db.rawQuery(
+        '''
+        SELECT id FROM app_logs
+        ORDER BY timestamp DESC, id DESC
+        LIMIT -1 OFFSET ?
+        ''',
+        [maxEntries],
+      );
+      for (final row in overflowRows) {
+        removed += await _db.delete('app_logs', where: 'id = ?', whereArgs: [row['id']]);
+      }
+    }
+    return removed;
+  }
+
   Future<void> upsertWord(VocabularyWord word) async {
     await _db.insert(
       'local_words',
       _wordToRow(word),
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await _logger.debug(
+      category: AppLogCategory.database,
+      event: 'local_words.upsert',
+      message: 'Word upserted in local cache.',
+      context: {
+        'local_id': word.localId,
+        'server_word_id': word.serverWordId,
+      },
     );
   }
 
@@ -301,6 +431,49 @@ class LocalDatabase {
       where: 'id = ?',
       whereArgs: [entry.id],
     );
+    await _logger.warning(
+      category: AppLogCategory.sync,
+      event: 'sync_queue.retry_scheduled',
+      message: 'Sync retry scheduled for queue entry.',
+      context: {
+        'queue_id': entry.id,
+        'retry_count': retryCount,
+      },
+    );
+  }
+
+  // Settings key constants
+  static const String keyIsPrefetchDone = 'is_prefetch_done';
+  static const String keyLastDailyRefreshDate = 'last_daily_refresh_date';
+  static const String keyWordsStudiedSinceLastRefresh = 'words_studied_since_last_refresh';
+
+  Future<String?> getSetting(String key) async {
+    final rows = await _db.query(
+      'app_settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['value'] as String?;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    await _db.insert(
+      'app_settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<int> countUnstudiedNewWords() async {
+    return Sqflite.firstIntValue(
+          await _db.rawQuery(
+            'SELECT COUNT(*) FROM local_words WHERE status = ?',
+            [WordStatus.newWord.name],
+          ),
+        ) ??
+        0;
   }
 
   Future<int> pruneToMostRecent({int maxWords = 1000}) async {
@@ -378,6 +551,21 @@ class LocalDatabase {
       retryCount: row['retry_count'] as int,
       nextRetryAt: DateTime.parse(row['next_retry_at'] as String),
       createdAt: DateTime.parse(row['created_at'] as String),
+    );
+  }
+
+  LogEntry _logFromRow(Map<String, Object?> row) {
+    return LogEntry(
+      id: row['id'] as int,
+      timestamp: DateTime.parse(row['timestamp'] as String).toUtc(),
+      level: AppLogLevel.fromName(row['level'] as String),
+      category: AppLogCategory.values.byName(row['category'] as String),
+      event: row['event'] as String,
+      message: row['message'] as String,
+      traceId: row['trace_id'] as String?,
+      context: Map<String, Object?>.from(
+        jsonDecode(row['context'] as String) as Map<String, dynamic>,
+      ),
     );
   }
 

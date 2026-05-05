@@ -62,6 +62,30 @@ void main() {
     );
   });
 
+  test('registration bad request maps to entered-details guidance', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(
+        _ControllerApiClient(
+          registerError: BackendApiException(
+            'Registration failed: 400',
+            statusCode: 400,
+            backendError: 'bad_request',
+          ),
+        ),
+      ),
+    );
+
+    await controller.register(
+      identifier: 'learner@example.com',
+      password: 'short',
+    );
+
+    expect(
+      controller.authErrorMessage,
+      'The request was rejected. Check the entered details and try again.',
+    );
+  });
+
   test('sign-in success exposes feedback and active user', () async {
     final controller = LearningSessionController(
       repository: await _repository(_ControllerApiClient()),
@@ -102,6 +126,30 @@ void main() {
     expect(controller.userSession?.identifier, 'learner@example.com');
     expect(controller.authErrorMessage, 'Email or password is incorrect.');
     expect(controller.takeUserFeedbackMessage(), 'Email or password is incorrect.');
+  });
+
+  test('sign-out failure still reports local sign-out when session is cleared locally', () async {
+    final apiClient = _ControllerApiClient();
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+    await controller.signIn(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+    );
+    apiClient.signOutError = BackendApiException('Sign-out failed: 503', statusCode: 503);
+
+    await controller.signOut();
+
+    expect(controller.userSession, isNull);
+    expect(
+      controller.authErrorMessage,
+      'Signed out locally. Server sign-out could not be confirmed.',
+    );
+    expect(
+      controller.takeUserFeedbackMessage(),
+      'Signed out locally. Server sign-out could not be confirmed.',
+    );
   });
 
   test('new-word fallback miss clears stale current word', () async {
@@ -154,8 +202,6 @@ Future<WordRepository> _repository(_ControllerApiClient apiClient) async {
 class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
-    this.signInError,
-    this.signOutError,
     this.fetchNewWordsError,
   }) : super(
           baseUrl: 'http://unused',

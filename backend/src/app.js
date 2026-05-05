@@ -2,7 +2,11 @@ import express from 'express';
 
 import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
 import { normalizeDifficultyLevel, InvalidStudyRatingError } from './proficiency.js';
-import { DuplicateUserError, InvalidCredentialsError } from './user_identity.js';
+import {
+  DuplicateUserError,
+  InvalidCredentialsError,
+  InvalidRegistrationInputError
+} from './user_identity.js';
 import { toApiWord } from './word_store.js';
 
 export function createApp({ store, generationService, config, nonceCache = new InMemoryNonceCache() }) {
@@ -14,6 +18,7 @@ export function createApp({ store, generationService, config, nonceCache = new I
 
   app.use(
     '/v1',
+    corsMiddleware({ config }),
     rejectMissingCredentialHeaders,
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
@@ -51,7 +56,7 @@ function createV1Router({ store, generationService, config }) {
         if (error instanceof DuplicateUserError) {
           return response.status(409).json({ error: 'user_exists' });
         }
-        if (error instanceof InvalidCredentialsError) {
+        if (error instanceof InvalidRegistrationInputError) {
           return response.status(400).json({ error: 'bad_request' });
         }
         throw error;
@@ -289,6 +294,34 @@ function rejectMissingCredentialHeaders(request, response, next) {
     return badRequest(response);
   }
   return next();
+}
+
+function corsMiddleware({ config }) {
+  const allowedOrigin = config.corsAllowedOrigin ?? '*';
+  const allowedMethods = 'GET, POST, OPTIONS';
+  const allowedHeaders = [
+    'content-type',
+    'authorization',
+    'x-expat8-app-id',
+    'x-expat8-timestamp',
+    'x-expat8-nonce',
+    'x-expat8-content-sha256',
+    'x-expat8-signature'
+  ].join(', ');
+
+  return (request, response, next) => {
+    response.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    response.setHeader('Access-Control-Allow-Methods', allowedMethods);
+    response.setHeader('Access-Control-Allow-Headers', allowedHeaders);
+    response.setHeader('Access-Control-Max-Age', '86400');
+    if (allowedOrigin !== '*') {
+      response.vary('Origin');
+    }
+    if (request.method === 'OPTIONS') {
+      return response.status(204).end();
+    }
+    return next();
+  };
 }
 
 function captureRawBody({ config }) {

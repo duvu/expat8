@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/study_event.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
+import 'logs_screen.dart';
 import 'vocabulary_card.dart';
 
 class LearningScreen extends StatefulWidget {
@@ -54,6 +55,12 @@ class _LearningScreenState extends State<LearningScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Vocabulary'),
+        bottom: controller.isAuthInProgress
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(4),
+                child: AuthProgressIndicator(isVisible: true),
+              )
+            : null,
         actions: [
           ProficiencyLevelLabel(level: controller.proficiency.level),
         ],
@@ -63,6 +70,14 @@ class _LearningScreenState extends State<LearningScreen> {
         userSession: controller.userSession,
         isAuthInProgress: controller.isAuthInProgress,
         onVocabulary: () => Navigator.of(context).maybePop(),
+        onLogs: () {
+          Navigator.of(context).maybePop();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => LogsScreen(repository: controller.repository),
+            ),
+          );
+        },
         onRegister: _register,
         onSignIn: _signIn,
         onSignOut: () async {
@@ -210,6 +225,7 @@ class LearningDrawer extends StatelessWidget {
   const LearningDrawer({
     required this.isSignedIn,
     required this.onVocabulary,
+    required this.onLogs,
     required this.onRegister,
     required this.onSignIn,
     required this.onSignOut,
@@ -222,6 +238,7 @@ class LearningDrawer extends StatelessWidget {
   final UserSession? userSession;
   final bool isAuthInProgress;
   final VoidCallback onVocabulary;
+  final VoidCallback onLogs;
   final VoidCallback onRegister;
   final VoidCallback onSignIn;
   final VoidCallback onSignOut;
@@ -236,6 +253,11 @@ class LearningDrawer extends StatelessWidget {
               leading: const Icon(Icons.menu_book_outlined),
               title: const Text('Vocabulary'),
               onTap: onVocabulary,
+            ),
+            ListTile(
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('Logs'),
+              onTap: onLogs,
             ),
             if (isSignedIn)
               _DrawerUserInfo(
@@ -288,8 +310,8 @@ class _DrawerUserInfo extends StatelessWidget {
   }
 }
 
-class _IdentityCredentials {
-  const _IdentityCredentials({
+class IdentityCredentials {
+  const IdentityCredentials({
     required this.identifier,
     required this.password,
     this.displayName,
@@ -300,69 +322,151 @@ class _IdentityCredentials {
   final String? displayName;
 }
 
-Future<_IdentityCredentials?> _showIdentityDialog({
+Future<IdentityCredentials?> _showIdentityDialog({
   required BuildContext context,
   required String title,
   bool includeDisplayName = false,
 }) {
-  final identifierController = TextEditingController();
-  final passwordController = TextEditingController();
-  final displayNameController = TextEditingController();
-  return showDialog<_IdentityCredentials>(
+  return showDialog<IdentityCredentials>(
     context: context,
     builder: (context) {
-      return AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: identifierController,
-              decoration: const InputDecoration(labelText: 'Email'),
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.username],
-            ),
-            if (includeDisplayName)
-              TextField(
-                controller: displayNameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-                autofillHints: const [AutofillHints.name],
-              ),
-            TextField(
-              controller: passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-              autofillHints: const [AutofillHints.password],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop(
-                _IdentityCredentials(
-                  identifier: identifierController.text.trim(),
-                  password: passwordController.text,
-                  displayName: displayNameController.text.trim().isEmpty
-                      ? null
-                      : displayNameController.text.trim(),
-                ),
-              );
-            },
-            child: Text(title),
-          ),
-        ],
+      return IdentityDialog(
+        title: title,
+        includeDisplayName: includeDisplayName,
+        onSubmit: (credentials) => Navigator.of(context).pop(credentials),
       );
     },
-  ).whenComplete(() {
-    identifierController.dispose();
-    passwordController.dispose();
-    displayNameController.dispose();
+  );
+}
+
+class IdentityDialog extends StatefulWidget {
+  const IdentityDialog({
+    required this.title,
+    required this.onSubmit,
+    this.includeDisplayName = false,
+    super.key,
   });
+
+  final String title;
+  final bool includeDisplayName;
+  final ValueChanged<IdentityCredentials> onSubmit;
+
+  @override
+  State<IdentityDialog> createState() => _IdentityDialogState();
+}
+
+class _IdentityDialogState extends State<IdentityDialog> {
+  final _identifierController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  String? _identifierError;
+  String? _passwordError;
+
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    _passwordController.dispose();
+    _displayNameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _identifierController,
+            decoration: InputDecoration(
+              labelText: 'Email',
+              errorText: _identifierError,
+            ),
+            keyboardType: TextInputType.emailAddress,
+            autofillHints: const [AutofillHints.username],
+          ),
+          if (widget.includeDisplayName)
+            TextField(
+              controller: _displayNameController,
+              decoration: const InputDecoration(labelText: 'Name'),
+              autofillHints: const [AutofillHints.name],
+            ),
+          TextField(
+            controller: _passwordController,
+            decoration: InputDecoration(
+              labelText: 'Password',
+              errorText: _passwordError,
+            ),
+            obscureText: true,
+            autofillHints: const [AutofillHints.password],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(widget.title),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    final identifier = _identifierController.text.trim().toLowerCase();
+    final password = _passwordController.text;
+    final identifierError = _validateIdentifier(identifier);
+    final passwordError = password.length < 8
+        ? 'Password must be at least 8 characters.'
+        : null;
+
+    setState(() {
+      _identifierError = identifierError;
+      _passwordError = passwordError;
+    });
+
+    if (identifierError != null || passwordError != null) {
+      return;
+    }
+
+    final displayName = _displayNameController.text.trim();
+    widget.onSubmit(
+      IdentityCredentials(
+        identifier: identifier,
+        password: password,
+        displayName: displayName.isEmpty ? null : displayName,
+      ),
+    );
+  }
+
+  String? _validateIdentifier(String identifier) {
+    if (identifier.isEmpty) {
+      return 'Enter an email address.';
+    }
+    final emailLikePattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+    if (!emailLikePattern.hasMatch(identifier)) {
+      return 'Enter a valid email address.';
+    }
+    return null;
+  }
+}
+
+class AuthProgressIndicator extends StatelessWidget {
+  const AuthProgressIndicator({required this.isVisible, super.key});
+
+  final bool isVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isVisible) {
+      return const SizedBox.shrink();
+    }
+    return const LinearProgressIndicator(minHeight: 4);
+  }
 }
 
 class ProficiencyLevelLabel extends StatelessWidget {

@@ -215,7 +215,7 @@ export class WordStore {
     };
     this.usersById.set(user.id, user);
     this.usersByIdentifier.set(user.identifier, user);
-    const session = this.createUserSession({ identifier, password, deviceId });
+    const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
 
@@ -225,18 +225,8 @@ export class WordStore {
     if (!user || !verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
-    const now = new Date().toISOString();
-    const token = createSessionToken();
-    const session = {
-      id: createId('session'),
-      user_id: user.id,
-      token_hash: hashSessionToken(token),
-      device_id: deviceId,
-      created_at: now,
-      revoked_at: null
-    };
-    this.userSessionsByTokenHash.set(session.token_hash, session);
-    return { user, session, sessionToken: token };
+    const session = this.#createSessionForUser({ user, deviceId });
+    return { user, ...session };
   }
 
   resolveUserSession({ sessionToken }) {
@@ -258,6 +248,21 @@ export class WordStore {
     }
     session.revoked_at = new Date().toISOString();
     return { revoked: true };
+  }
+
+  #createSessionForUser({ user, deviceId = null }) {
+    const now = new Date().toISOString();
+    const token = createSessionToken();
+    const session = {
+      id: createId('session'),
+      user_id: user.id,
+      token_hash: hashSessionToken(token),
+      device_id: deviceId,
+      created_at: now,
+      revoked_at: null
+    };
+    this.userSessionsByTokenHash.set(session.token_hash, session);
+    return { session, sessionToken: token };
   }
 
   #applyProficiencyChange({ deviceId, userId = null, language, rating }) {

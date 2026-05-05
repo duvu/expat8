@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../api/backend_api_client.dart';
 import '../data/word_repository.dart';
+import '../logging/logger.dart';
 import '../models/proficiency_state.dart';
 import '../models/study_event.dart';
 import '../models/user_session.dart';
@@ -14,12 +15,15 @@ class LearningSessionController extends ChangeNotifier {
     required this.repository,
     CardSelectionWindow? selectionWindow,
     TelemetrySink? telemetry,
+    Logger? logger,
   })  : _selectionWindow = selectionWindow ?? CardSelectionWindow(),
-        _telemetry = telemetry ?? DebugTelemetrySink();
+        _telemetry = telemetry ?? DebugTelemetrySink(),
+        _logger = logger ?? const NoopLogger();
 
   final WordRepository repository;
   final CardSelectionWindow _selectionWindow;
   final TelemetrySink _telemetry;
+  final Logger _logger;
 
   VocabularyWord? currentWord;
   bool isLoading = false;
@@ -58,6 +62,11 @@ class LearningSessionController extends ChangeNotifier {
   }
 
   Future<void> loadInitial() async {
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.load_initial.start',
+      message: 'Loading initial session state.',
+    );
     _deviceId ??= await repository.getOrCreateDeviceId();
     userSession = await repository.loadUserSession();
     try {
@@ -66,6 +75,15 @@ class LearningSessionController extends ChangeNotifier {
       proficiency = ProficiencyState.initial();
     }
     await showNewWord();
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.load_initial.complete',
+      message: 'Initial session state loaded.',
+      context: {
+        'has_user_session': userSession != null,
+        'proficiency_level': proficiency.level,
+      },
+    );
   }
 
   Future<void> nextCard() async {
@@ -87,6 +105,14 @@ class LearningSessionController extends ChangeNotifier {
 
     _telemetry.track(TelemetryEvent.newWordRequested);
     _telemetry.track(TelemetryEvent.newWordSwipeRequested);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.new_word.requested',
+      message: 'User requested a new word card.',
+      context: {
+        'proficiency_level': proficiency.level,
+      },
+    );
     final result = await repository.getNewWordWithFallbackResult(
       excludeServerWordId: excludedServerWordId,
       proficiencyLevel: proficiency.level,
@@ -116,6 +142,11 @@ class LearningSessionController extends ChangeNotifier {
     final excludedServerWordId = currentWord?.serverWordId;
     final now = DateTime.now().toUtc();
     _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.review.requested',
+      message: 'User requested a recent review card.',
+    );
     final reviewResult = await repository.getRecentReviewWordResult(now);
     _trackReviewLookup(reviewResult);
     VocabularyWord? word = reviewResult.word;
@@ -170,6 +201,15 @@ class LearningSessionController extends ChangeNotifier {
     if (word == null) {
       return;
     }
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.rating.submitted',
+      message: 'Submitting study rating for current card.',
+      context: {
+        'rating': rating.name,
+        'word_id': word.serverWordId ?? word.localId,
+      },
+    );
     _deviceId ??= await repository.getOrCreateDeviceId();
     final updatedProficiency = await repository.recordRating(
       word: word,
@@ -182,6 +222,15 @@ class LearningSessionController extends ChangeNotifier {
       proficiency = updatedProficiency;
       if (updatedProficiency.levelChanged && updatedProficiency.level != previousLevel) {
         _levelChangeMessage = 'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
+        await _logger.info(
+          category: AppLogCategory.session,
+          event: 'session.proficiency.changed',
+          message: 'Proficiency level changed after rating submission.',
+          context: {
+            'previous_level': updatedProficiency.previousLevel ?? previousLevel,
+            'new_level': updatedProficiency.level,
+          },
+        );
       }
     }
     _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
@@ -338,6 +387,14 @@ class LearningSessionController extends ChangeNotifier {
   }
 
   String _authFailureMessage(AuthAction action, Object error) {
+    _logger.warning(
+      category: AppLogCategory.auth,
+      event: 'auth.failure',
+      message: '${action.failureLabel} failed.',
+      context: {
+        'error': '$error',
+      },
+    );
     if (error is BackendApiException) {
       final backendError = error.backendError;
       if (action == AuthAction.register &&

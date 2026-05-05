@@ -14,6 +14,13 @@ export class InvalidCredentialsError extends Error {
   }
 }
 
+export class InvalidRegistrationInputError extends Error {
+  constructor() {
+    super('invalid registration input');
+    this.name = 'InvalidRegistrationInputError';
+  }
+}
+
 export function normalizeUserIdentifier(identifier) {
   return String(identifier ?? '').trim().toLowerCase();
 }
@@ -21,7 +28,7 @@ export function normalizeUserIdentifier(identifier) {
 export function requireRegistrationInput({ identifier, password }) {
   const normalizedIdentifier = normalizeUserIdentifier(identifier);
   if (!normalizedIdentifier || typeof password !== 'string' || password.length < 8) {
-    throw new InvalidCredentialsError();
+    throw new InvalidRegistrationInputError();
   }
   return {
     identifier: normalizedIdentifier,

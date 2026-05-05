@@ -1,4 +1,5 @@
 import 'package:expat8_language_app/src/data/local_database.dart';
+import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/study_event.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
@@ -106,6 +107,147 @@ void main() {
     final word = await database.recentlyLearnedReviewWord();
 
     expect(word?.localId, 'newer');
+  });
+
+  test('persists logs across restart and supports filtering', () async {
+    final dbName = 'local_database_test_logs_${DateTime.now().microsecondsSinceEpoch}.db';
+    final first = await LocalDatabase.open(databaseName: dbName);
+    await first.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 10, 0),
+        level: AppLogLevel.info,
+        category: AppLogCategory.api,
+        event: 'api.request',
+        message: 'Request started',
+        traceId: 'trace_1',
+        context: const {'uri': '/v1/words/next'},
+      ),
+    );
+    await first.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 10, 1),
+        level: AppLogLevel.error,
+        category: AppLogCategory.sync,
+        event: 'sync.error',
+        message: 'Sync failed',
+        traceId: 'trace_2',
+        context: const {'code': 500},
+      ),
+    );
+
+    final second = await LocalDatabase.open(databaseName: dbName);
+    final filtered = await second.queryLogs(
+      minimumLevel: AppLogLevel.warning,
+      category: AppLogCategory.sync,
+      limit: 20,
+    );
+
+    expect(filtered.length, 1);
+    expect(filtered.single.event, 'sync.error');
+  });
+
+  test('prunes logs by age and max entries', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_log_prune.db',
+    );
+
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 1),
+        level: AppLogLevel.info,
+        category: AppLogCategory.app,
+        event: 'old_event',
+        message: 'old',
+        context: const {},
+      ),
+    );
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 12, 0),
+        level: AppLogLevel.info,
+        category: AppLogCategory.app,
+        event: 'new_event_1',
+        message: 'new',
+        context: const {},
+      ),
+    );
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 12, 1),
+        level: AppLogLevel.info,
+        category: AppLogCategory.app,
+        event: 'new_event_2',
+        message: 'new',
+        context: const {},
+      ),
+    );
+
+    final removed = await database.pruneLogs(
+      maxEntries: 1,
+      maxAge: const Duration(days: 2),
+      now: DateTime.utc(2026, 5, 6),
+    );
+    final remaining = await database.queryLogs(limit: 20);
+
+    expect(removed, greaterThanOrEqualTo(2));
+    expect(remaining.length, 1);
+    expect(remaining.single.event, 'new_event_2');
+  });
+
+  test('getSetting returns null for unknown key', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_get_setting_null.db',
+    );
+
+    final value = await database.getSetting('unknown_key');
+    expect(value, isNull);
+  });
+
+  test('setSetting stores and getSetting retrieves a value', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_set_get_setting.db',
+    );
+
+    await database.setSetting('my_key', 'my_value');
+    final value = await database.getSetting('my_key');
+
+    expect(value, 'my_value');
+  });
+
+  test('setSetting replaces existing value for the same key', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_set_replace_setting.db',
+    );
+
+    await database.setSetting('my_key', 'first');
+    await database.setSetting('my_key', 'second');
+    final value = await database.getSetting('my_key');
+
+    expect(value, 'second');
+  });
+
+  test('countUnstudiedNewWords returns 0 for empty database', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_count_new_empty.db',
+    );
+
+    final count = await database.countUnstudiedNewWords();
+    expect(count, 0);
+  });
+
+  test('countUnstudiedNewWords counts only new_word status entries', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_count_new.db',
+    );
+    final now = DateTime.utc(2026, 5, 4);
+    await database.upsertWord(_word('new_1', now));
+    await database.upsertWord(_word('new_2', now));
+    await database.upsertWord(
+      _word('review_1', now).copyWith(status: WordStatus.review),
+    );
+
+    final count = await database.countUnstudiedNewWords();
+    expect(count, 2);
   });
 }
 

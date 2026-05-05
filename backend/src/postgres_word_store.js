@@ -283,26 +283,34 @@ export class PostgresWordStore {
         throw new DuplicateUserError(input.identifier);
       }
       const now = new Date().toISOString();
-      const inserted = await client.query(
-        `INSERT INTO users (
-          id,
-          identifier,
-          display_name,
-          password_hash,
-          created_at,
-          updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *`,
-        [
-          createId('user'),
-          input.identifier,
-          displayName,
-          createPasswordHash(input.password),
-          now,
-          now
-        ]
-      );
+      let inserted;
+      try {
+        inserted = await client.query(
+          `INSERT INTO users (
+            id,
+            identifier,
+            display_name,
+            password_hash,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *`,
+          [
+            createId('user'),
+            input.identifier,
+            displayName,
+            createPasswordHash(input.password),
+            now,
+            now
+          ]
+        );
+      } catch (error) {
+        if (error?.code === '23505') {
+          throw new DuplicateUserError(input.identifier);
+        }
+        throw error;
+      }
       const sessionResult = await this.#createSessionForUser({
         client,
         user: inserted.rows[0],

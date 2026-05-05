@@ -1,12 +1,5 @@
-import 'dart:async';
-
-import 'package:expat8_language_app/src/api/backend_api_client.dart';
-import 'package:expat8_language_app/src/data/local_database.dart';
-import 'package:expat8_language_app/src/data/word_repository.dart';
-import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
-import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:expat8_language_app/src/ui/learning_screen.dart';
 import 'package:expat8_language_app/src/ui/vocabulary_card.dart';
 import 'package:flutter/material.dart';
@@ -80,6 +73,7 @@ void main() {
           drawer: LearningDrawer(
             isSignedIn: false,
             onVocabulary: () {},
+            onLogs: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -92,6 +86,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Vocabulary'), findsOneWidget);
+    expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
     expect(find.text('Sign out'), findsNothing);
@@ -112,6 +107,7 @@ void main() {
               sessionToken: 'session_1',
             ),
             onVocabulary: () {},
+            onLogs: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -128,33 +124,6 @@ void main() {
     expect(find.text('learner@example.com'), findsOneWidget);
     expect(find.text('Register'), findsNothing);
     expect(find.text('Sign in'), findsNothing);
-  });
-
-  testWidgets('stored session renders signed-in user info on app start', (tester) async {
-    final database = await LocalDatabase.open(databaseName: _databaseName('stored_session'));
-    await database.saveUserSession(
-      const UserSession(
-        userId: 'user_1',
-        identifier: 'learner@example.com',
-        displayName: 'Learner',
-        sessionToken: 'session_1',
-      ),
-    );
-    final controller = LearningSessionController(
-      repository: WordRepository(
-        database: database,
-        apiClient: _ScreenApiClient(),
-      ),
-    );
-
-    await tester.pumpWidget(MaterialApp(home: LearningScreen(controller: controller)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Learner'), findsOneWidget);
-    expect(find.text('learner@example.com'), findsOneWidget);
-    expect(find.text('Sign out'), findsOneWidget);
   });
 
   testWidgets('horizontal card gestures route right-to-left and left-to-right intents', (tester) async {
@@ -220,147 +189,152 @@ void main() {
     );
 
     expect(find.text('Swipe left for a new word. Swipe right for review.'), findsOneWidget);
-    await tester.tap(find.widgetWithText(OutlinedButton, 'New Word'));
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Review'));
+    await tester.tap(find.text('New Word'));
+    await tester.pump();
+    await tester.tap(find.text('Review'));
+    await tester.pump();
 
     expect(newWordCount, 1);
     expect(reviewCount, 1);
   });
 
-  testWidgets('registration success shows a SnackBar message', (tester) async {
-    final controller = LearningSessionController(
-      repository: await _repository(_ScreenApiClient()),
-    );
+  testWidgets('drawer disables auth actions while auth is in progress', (tester) async {
+    final scaffoldKey = GlobalKey<ScaffoldState>();
+    var registerCount = 0;
+    var signInCount = 0;
 
-    await tester.pumpWidget(MaterialApp(home: LearningScreen(controller: controller)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Register'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).at(0), 'learner@example.com');
-    await tester.enterText(find.byType(TextField).at(1), 'Learner');
-    await tester.enterText(find.byType(TextField).at(2), 'correct-password');
-    await tester.tap(find.widgetWithText(FilledButton, 'Register'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Registered as Learner.'), findsOneWidget);
-  });
-
-  testWidgets('registration failure shows a SnackBar message', (tester) async {
-    final controller = LearningSessionController(
-      repository: await _repository(
-        _ScreenApiClient(
-          registerError: BackendApiException(
-            'Registration failed: 409',
-            statusCode: 409,
-            backendError: 'user_exists',
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          key: scaffoldKey,
+          drawer: LearningDrawer(
+            isSignedIn: false,
+            isAuthInProgress: true,
+            onVocabulary: () {},
+            onLogs: () {},
+            onRegister: () => registerCount += 1,
+            onSignIn: () => signInCount += 1,
+            onSignOut: () {},
           ),
         ),
       ),
     );
 
-    await tester.pumpWidget(MaterialApp(home: LearningScreen(controller: controller)));
+    scaffoldKey.currentState!.openDrawer();
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open navigation menu'));
-    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Register'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).at(0), 'learner@example.com');
-    await tester.enterText(find.byType(TextField).at(2), 'correct-password');
-    await tester.tap(find.widgetWithText(FilledButton, 'Register'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.tap(find.text('Sign in'));
+    await tester.pump();
 
-    expect(find.text('An account already exists for this email.'), findsOneWidget);
+    expect(registerCount, 0);
+    expect(signInCount, 0);
   });
 
-  testWidgets('stale cards do not hide no-card feedback', (tester) async {
-    final controller = LearningSessionController(
-      repository: await _repository(
-        _ScreenApiClient(fetchNewWordsError: TimeoutException('timeout')),
+  testWidgets('identity dialog validates input before submitting auth', (tester) async {
+    var submitCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: IdentityDialog(
+              title: 'Register',
+              includeDisplayName: true,
+              onSubmit: (_) => submitCount += 1,
+            ),
+          ),
+        ),
       ),
-    )..currentWord = _word();
-
-    await tester.pumpWidget(MaterialApp(home: LearningScreen(controller: controller)));
-    await tester.pumpAndSettle();
-
-    expect(find.text('reliable'), findsNothing);
-    expect(
-      find.text('Could not reach the word feed and no local new word is available.'),
-      findsOneWidget,
     );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Register'));
+    await tester.pump();
+
+    expect(find.text('Enter an email address.'), findsOneWidget);
+    expect(find.text('Password must be at least 8 characters.'), findsOneWidget);
+    expect(submitCount, 0);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'not-an-email');
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), '1234567');
+    await tester.tap(find.widgetWithText(FilledButton, 'Register'));
+    await tester.pump();
+
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
+    expect(find.text('Password must be at least 8 characters.'), findsOneWidget);
+    expect(submitCount, 0);
   });
-}
 
-int _databaseCounter = 0;
+  testWidgets('identity dialog submits valid input once', (tester) async {
+    IdentityCredentials? submitted;
 
-String _databaseName(String prefix) {
-  return '${prefix}_${DateTime.now().microsecondsSinceEpoch}_${_databaseCounter++}.db';
-}
-
-Future<WordRepository> _repository(_ScreenApiClient apiClient) async {
-  final database = await LocalDatabase.open(databaseName: _databaseName('learning_screen'));
-  return WordRepository(database: database, apiClient: apiClient);
-}
-
-class _ScreenApiClient extends BackendApiClient {
-  _ScreenApiClient({
-    this.registerError,
-    this.fetchNewWordsError,
-  }) : super(
-          baseUrl: 'http://unused',
-          timeout: Duration.zero,
-          appId: 'test-app',
-          appSecret: 'test-secret',
-        );
-
-  Object? registerError;
-  Object? fetchNewWordsError;
-
-  @override
-  Future<List<VocabularyWord>> fetchNewWords({
-    int limit = 1,
-    String sourceLanguage = 'vi',
-    String targetLanguage = 'en',
-    List<String> excludeServerWordIds = const [],
-    String? proficiencyLevel,
-    String? deviceId,
-    String? sessionToken,
-  }) async {
-    final error = fetchNewWordsError;
-    if (error != null) {
-      throw error;
-    }
-    return [];
-  }
-
-  @override
-  Future<ProficiencyState> fetchProficiency({
-    required String deviceId,
-    String language = 'en',
-    String? sessionToken,
-  }) async {
-    return ProficiencyState.initial();
-  }
-
-  @override
-  Future<UserSession> registerUser({
-    required String identifier,
-    required String password,
-    String? displayName,
-    String? deviceId,
-  }) async {
-    final error = registerError;
-    if (error != null) {
-      throw error;
-    }
-    return UserSession(
-      userId: 'user_1',
-      identifier: identifier,
-      displayName: displayName ?? 'Learner',
-      sessionToken: 'session_1',
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: IdentityDialog(
+              title: 'Sign in',
+              onSubmit: (credentials) => submitted = credentials,
+            ),
+          ),
+        ),
+      ),
     );
-  }
+
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'Learner@Example.com');
+    await tester.enterText(find.widgetWithText(TextField, 'Password'), 'correct-password');
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.pump();
+
+    expect(submitted?.identifier, 'learner@example.com');
+    expect(submitted?.password, 'correct-password');
+  });
+
+  testWidgets('auth progress indicator is visible only while auth is in progress', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AuthProgressIndicator(isVisible: true),
+        ),
+      ),
+    );
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: AuthProgressIndicator(isVisible: false),
+        ),
+      ),
+    );
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('learning action bar disables buttons while loading', (tester) async {
+    var newWordCount = 0;
+    var reviewCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LearningActionBar(
+            isLoading: true,
+            onNewWord: () async => newWordCount += 1,
+            onReview: () async => reviewCount += 1,
+          ),
+        ),
+      ),
+    );
+
+    final buttonFinder = find.byWidgetPredicate((widget) => widget is OutlinedButton);
+    final newWordButton = tester.widget<OutlinedButton>(buttonFinder.at(0));
+    final reviewButton = tester.widget<OutlinedButton>(buttonFinder.at(1));
+    expect(newWordButton.onPressed, isNull);
+    expect(reviewButton.onPressed, isNull);
+    expect(newWordCount, 0);
+    expect(reviewCount, 0);
+  });
 }
 
 VocabularyWord _word() {

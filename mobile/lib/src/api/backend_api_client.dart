@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
+import '../logging/logger.dart';
 import '../models/proficiency_state.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
@@ -16,13 +17,16 @@ class BackendApiClient {
     required this.appId,
     required this.appSecret,
     http.Client? httpClient,
-  }) : _httpClient = httpClient ?? http.Client();
+    Logger? logger,
+  })  : _httpClient = httpClient ?? http.Client(),
+        _logger = logger ?? const NoopLogger();
 
   final String baseUrl;
   final Duration timeout;
   final String appId;
   final String appSecret;
   final http.Client _httpClient;
+  final Logger _logger;
 
   Future<List<VocabularyWord>> fetchNewWords({
     int limit = 1,
@@ -33,6 +37,7 @@ class BackendApiClient {
     String? deviceId,
     String? sessionToken,
   }) async {
+    final traceId = _newTraceId();
     final queryEntries = <MapEntry<String, String>>[
       const MapEntry('mode', 'new'),
       MapEntry('limit', '$limit'),
@@ -51,16 +56,50 @@ class BackendApiClient {
         )
         .join('&');
     final uri = Uri.parse('$baseUrl/v1/words/next').replace(query: query);
-    final response = await _httpClient
-      .get(
-        uri,
-        headers: _signedHeaders(
-          method: 'GET',
-          uri: uri,
-          sessionToken: sessionToken,
-        ),
-      )
-      .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'words_next.request',
+      message: 'Requesting next vocabulary word.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'limit': limit,
+        'exclude_count': excludeServerWordIds.length,
+      },
+    );
+    late final http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } catch (error) {
+      await _logger.error(
+        category: AppLogCategory.api,
+        event: 'words_next.error',
+        message: 'Next-word request failed before response.',
+        traceId: traceId,
+        context: {
+          'error': '$error',
+        },
+      );
+      rethrow;
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'words_next.response',
+      message: 'Received next-word response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+      },
+    );
     _throwIfFailed(response, 'New-word feed failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final items = body['items'] as List? ?? const [];
@@ -74,10 +113,20 @@ class BackendApiClient {
     String language = 'en',
     String? sessionToken,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/proficiency').replace(queryParameters: {
       'device_id': deviceId,
       'language': language,
     });
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'proficiency.request',
+      message: 'Requesting proficiency state.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+      },
+    );
     final response = await _httpClient
         .get(
           uri,
@@ -88,6 +137,15 @@ class BackendApiClient {
           ),
         )
         .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'proficiency.response',
+      message: 'Received proficiency response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+      },
+    );
     _throwIfFailed(response, 'Proficiency fetch failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return ProficiencyState.fromJson(body);
@@ -99,6 +157,7 @@ class BackendApiClient {
     String language = 'en',
     String? sessionToken,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/study-events');
     final payload = jsonEncode({
       'device_id': deviceId,
@@ -120,6 +179,15 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'study_event.response',
+      message: 'Received study-event response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+      },
+    );
     _throwIfFailed(response, 'Study-event submit failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return StudyEventResult(
@@ -136,20 +204,62 @@ class BackendApiClient {
     int limit = 1000,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
+    List<String> excludeIds = const [],
+    String? deviceId,
   }) async {
-    final uri = Uri.parse('$baseUrl/v1/words/recent').replace(queryParameters: {
-      'limit': '$limit',
-      'source_language': sourceLanguage,
-      'target_language': targetLanguage,
-    });
-    final response = await _httpClient
-      .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
-      .timeout(timeout);
+    final traceId = _newTraceId();
+    final queryEntries = <MapEntry<String, String>>[
+      MapEntry('limit', '$limit'),
+      MapEntry('source_language', sourceLanguage),
+      MapEntry('target_language', targetLanguage),
+      if (deviceId != null) MapEntry('device_id', deviceId),
+    ];
+    final query = queryEntries
+        .map(
+          (entry) =>
+              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}',
+        )
+        .join('&');
+    final uri = Uri.parse('$baseUrl/v1/words/recent').replace(query: query);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'words_recent.request',
+      message: 'Requesting recent vocabulary words.',
+      traceId: traceId,
+      context: {
+        'limit': limit,
+        'exclude_count': excludeIds.length,
+      },
+    );
+    late final http.Response response;
+    try {
+      response = await _httpClient
+          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
+          .timeout(timeout);
+    } catch (error) {
+      await _logger.error(
+        category: AppLogCategory.api,
+        event: 'words_recent.error',
+        message: 'Recent-words request failed before response.',
+        traceId: traceId,
+        context: {'error': '$error'},
+      );
+      rethrow;
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'words_recent.response',
+      message: 'Received recent-words response.',
+      traceId: traceId,
+      context: {'status_code': response.statusCode},
+    );
     _throwIfFailed(response, 'Recent words failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final items = body['items'] as List? ?? const [];
+    final excludeSet = excludeIds.toSet();
     return items
         .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
+        .where((word) => word.serverWordId == null || !excludeSet.contains(word.serverWordId))
         .toList();
   }
 
@@ -158,8 +268,18 @@ class BackendApiClient {
     required List<Map<String, dynamic>> events,
     String? sessionToken,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/study-events/sync');
     final payload = jsonEncode({'device_id': deviceId, 'events': events});
+    await _logger.info(
+      category: AppLogCategory.sync,
+      event: 'sync.request',
+      message: 'Syncing study events.',
+      traceId: traceId,
+      context: {
+        'events_count': events.length,
+      },
+    );
     final response = await _httpClient
         .post(
           uri,
@@ -175,6 +295,15 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.sync,
+      event: 'sync.response',
+      message: 'Received sync response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+      },
+    );
     _throwIfFailed(response, 'Study-event sync failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return SyncResult(
@@ -287,6 +416,10 @@ class BackendApiClient {
       statusCode: response.statusCode,
       backendError: backendError,
     );
+  }
+
+  String _newTraceId() {
+    return 'api_${DateTime.now().microsecondsSinceEpoch}';
   }
 }
 

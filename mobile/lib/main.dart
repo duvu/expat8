@@ -7,6 +7,7 @@ import 'src/api/backend_api_client.dart';
 import 'src/config.dart';
 import 'src/data/local_database.dart';
 import 'src/data/word_repository.dart';
+import 'src/logging/logger.dart';
 import 'src/session/learning_session_controller.dart';
 import 'src/ui/learning_screen.dart';
 
@@ -19,14 +20,52 @@ Future<void> main() async {
 
   final config = AppConfig.fromEnvironment();
   final database = await LocalDatabase.open();
+  final logger = PersistedLogger(
+    minimumLevel: AppLogLevel.fromName(config.logLevel),
+    write: (entry) async {
+      await database.persistLogEntry(entry);
+      await database.pruneLogs(
+        maxEntries: config.logMaxEntries,
+        maxAge: Duration(days: config.logRetentionDays),
+      );
+    },
+  );
+  database.attachLogger(logger);
   final apiClient = BackendApiClient(
     baseUrl: config.backendBaseUrl,
     timeout: config.newWordTimeout,
     appId: config.appCredentialAppId,
     appSecret: config.appCredentialSecret,
+    logger: logger,
   );
-  final repository = WordRepository(database: database, apiClient: apiClient);
-  final controller = LearningSessionController(repository: repository);
+  final repository = WordRepository(
+    database: database,
+    apiClient: apiClient,
+    logger: logger,
+    config: config,
+  );
+  final controller = LearningSessionController(repository: repository, logger: logger);
+
+  // Initialize the refresh worker once device ID is known
+  try {
+    final deviceId = await repository.getOrCreateDeviceId();
+    repository.initRefreshWorker(deviceId);
+    await repository.checkAndRunFirstInstallPrefetch();
+    await repository.checkAndRunDailyRefresh();
+  } catch (error) {
+    await logger.warning(
+      category: AppLogCategory.app,
+      event: 'app.refresh.init_error',
+      message: 'Vocabulary refresh worker init failed at startup.',
+      context: {'error': '$error'},
+    );
+  }
+
+  await logger.info(
+    category: AppLogCategory.app,
+    event: 'app.start',
+    message: 'App bootstrap completed.',
+  );
 
   runApp(LanguageLearningApp(controller: controller));
 }

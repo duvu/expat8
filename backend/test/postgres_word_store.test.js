@@ -144,6 +144,41 @@ test('postgres store registers users, resolves sessions, revokes sessions, and e
   assert.equal(afterRevoke, null);
 });
 
+test('postgres store maps duplicate user insert races to duplicate user errors', async () => {
+  const pool = new FakePool();
+  const store = new PostgresWordStore({ pool });
+  pool.nextUserInsertError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+    code: '23505'
+  });
+
+  await assert.rejects(
+    () =>
+      store.registerUser({
+        identifier: 'race@example.com',
+        password: 'correct-password'
+      }),
+    DuplicateUserError
+  );
+});
+
+test('postgres store does not mask non-duplicate user insert errors', async () => {
+  const pool = new FakePool();
+  const store = new PostgresWordStore({ pool });
+  const persistenceError = Object.assign(new Error('database is unavailable'), {
+    code: '57P01'
+  });
+  pool.nextUserInsertError = persistenceError;
+
+  await assert.rejects(
+    () =>
+      store.registerUser({
+        identifier: 'outage@example.com',
+        password: 'correct-password'
+      }),
+    persistenceError
+  );
+});
+
 class FakePool {
   constructor() {
     this.words = new Map();
@@ -278,6 +313,11 @@ class FakePool {
     }
 
     if (normalizedSql.startsWith('INSERT INTO users')) {
+      if (this.nextUserInsertError) {
+        const error = this.nextUserInsertError;
+        this.nextUserInsertError = null;
+        throw error;
+      }
       const row = userRowFromParams(params);
       this.users.set(row.id, row);
       return { rows: [row] };

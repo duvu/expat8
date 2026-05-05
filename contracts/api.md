@@ -31,6 +31,39 @@ requests return:
 { "error": "bad_request" }
 ```
 
+## Browser CORS
+
+Browser preflight requests are the only `/v1/*` exception to app credential
+headers. The backend answers `OPTIONS /v1/*` before raw-body capture and app
+credential verification so web clients can send signed requests with custom
+`x-expat8-*` headers.
+
+Example preflight:
+
+```http
+OPTIONS /v1/users/register
+Origin: http://localhost:8080
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type,authorization,x-expat8-app-id,x-expat8-timestamp,x-expat8-nonce,x-expat8-content-sha256,x-expat8-signature
+```
+
+Expected response:
+
+```http
+204 No Content
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: content-type, authorization, x-expat8-app-id, x-expat8-timestamp, x-expat8-nonce, x-expat8-content-sha256, x-expat8-signature
+Access-Control-Max-Age: 86400
+```
+
+`Access-Control-Allow-Origin` uses `CORS_ALLOWED_ORIGIN`, defaulting to `*` for
+development. Production deployments should set the exact web origin. Successful
+`/v1/*` responses and expected API errors include the same CORS headers so
+browser clients can read the response body. Non-OPTIONS `/v1/*` requests remain
+protected by app credentials and return `400 { "error": "bad_request" }` when
+unsigned or incorrectly signed.
+
 ## Optional User Session
 
 App credentials are required for every `/v1/*` request. User identity is
