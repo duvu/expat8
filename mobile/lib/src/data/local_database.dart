@@ -288,6 +288,36 @@ class LocalDatabase {
     return result;
   }
 
+  Future<List<String>> activeCachedServerWordIds({int limit = 1000}) async {
+    final rows = await _db.query(
+      'local_words',
+      columns: ['server_word_id'],
+      where: 'server_word_id IS NOT NULL',
+      orderBy: 'COALESCE(last_seen_at, updated_at, created_at) DESC',
+      limit: limit,
+    );
+    final seen = <String>{};
+    final result = <String>[];
+    for (final row in rows) {
+      final serverWordId = row['server_word_id'] as String?;
+      if (serverWordId == null || serverWordId.isEmpty || seen.contains(serverWordId)) {
+        continue;
+      }
+      seen.add(serverWordId);
+      result.add(serverWordId);
+    }
+    return result;
+  }
+
+  Future<bool> deleteLocalWord(String localId) async {
+    final removed = await _db.delete(
+      'local_words',
+      where: 'local_id = ?',
+      whereArgs: [localId],
+    );
+    return removed > 0;
+  }
+
   Future<String> getOrCreateDeviceId(String Function() createId) async {
     final rows = await _db.query(
       'app_settings',

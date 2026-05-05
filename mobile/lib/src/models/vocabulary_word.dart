@@ -1,5 +1,7 @@
 enum WordStatus { newWord, learning, review, mastered }
 
+enum LearningCardType { newCard, review }
+
 class VocabularyWord {
   const VocabularyWord({
     required this.localId,
@@ -19,6 +21,8 @@ class VocabularyWord {
     this.nextReviewAt,
     required this.createdAt,
     required this.updatedAt,
+    this.cardType,
+    this.selectionReason,
   });
 
   factory VocabularyWord.fromJson(Map<String, dynamic> json) {
@@ -36,9 +40,11 @@ class VocabularyWord {
       exampleVi: json['example_vi'] as String,
       difficulty: json['difficulty'] as String,
       topics: List<String>.from(json['topics'] as List? ?? const []),
-      status: WordStatus.newWord,
+      status: _statusFromJsonCardType(json['card_type'] as String?),
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? now,
       updatedAt: now,
+      cardType: _cardTypeFromJson(json['card_type'] as String?),
+      selectionReason: json['selection_reason'] as String?,
     );
   }
 
@@ -59,6 +65,8 @@ class VocabularyWord {
   final DateTime? nextReviewAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final LearningCardType? cardType;
+  final String? selectionReason;
 
   VocabularyWord copyWith({
     String? localId,
@@ -78,6 +86,8 @@ class VocabularyWord {
     DateTime? nextReviewAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    LearningCardType? cardType,
+    String? selectionReason,
   }) {
     return VocabularyWord(
       localId: localId ?? this.localId,
@@ -98,6 +108,20 @@ class VocabularyWord {
       nextReviewAt: nextReviewAt ?? this.nextReviewAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      cardType: cardType ?? this.cardType,
+      selectionReason: selectionReason ?? this.selectionReason,
     );
   }
+}
+
+LearningCardType? _cardTypeFromJson(String? raw) {
+  return switch (raw) {
+    'new' => LearningCardType.newCard,
+    'review' => LearningCardType.review,
+    _ => null,
+  };
+}
+
+WordStatus _statusFromJsonCardType(String? raw) {
+  return raw == 'review' ? WordStatus.review : WordStatus.newWord;
 }

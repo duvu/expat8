@@ -80,6 +80,114 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
   assert.equal(proficiency.level, 'A1');
 });
 
+test('does not call AI generation when database inventory is empty', async (t) => {
+  const store = new WordStore({ seed: false });
+  const generationService = {
+    calls: 0,
+    async generateAndStore() {
+      this.calls += 1;
+      throw new Error('AI generation must not run in the mobile request path');
+    }
+  };
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=5&target_language=en`);
+
+  assert.deepEqual(next.items, []);
+  assert.equal(generationService.calls, 0);
+});
+
+test('serves backend-selected learning cards with target and actual mix metadata', async (t) => {
+  const store = new WordStore({ seed: false });
+  for (let index = 0; index < 17; index += 1) {
+    store.insertWord(wordInput({
+      id: `review_${index}`,
+      term: `review ${index}`,
+      created_at: `2026-05-01T00:${index.toString().padStart(2, '0')}:00.000Z`,
+      updated_at: `2026-05-01T00:${index.toString().padStart(2, '0')}:00.000Z`
+    }));
+    store.recordStudyEvent({
+      deviceId: 'device_mix',
+      event: {
+        client_event_id: `evt_review_${index}`,
+        server_word_id: `review_${index}`,
+        local_word_id: `local_review_${index}`,
+        rating: 'hard',
+        occurred_at: `2026-05-01T01:${index.toString().padStart(2, '0')}:00.000Z`
+      }
+    });
+  }
+  for (let index = 0; index < 3; index += 1) {
+    store.insertWord(wordInput({
+      id: `new_${index}`,
+      term: `new ${index}`,
+      created_at: `2026-05-02T00:${index.toString().padStart(2, '0')}:00.000Z`,
+      updated_at: `2026-05-02T00:${index.toString().padStart(2, '0')}:00.000Z`
+    }));
+  }
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const batch = await fetchJson(`${baseUrl}/v1/learning/cards?device_id=device_mix&limit=20&target_language=en`);
+
+  assert.deepEqual(batch.target_mix, { new: 3, review: 17 });
+  assert.deepEqual(batch.actual_mix, { new: 3, review: 17 });
+  assert.equal(batch.items.filter((item) => item.card_type === 'new').length, 3);
+  assert.equal(batch.items.filter((item) => item.card_type === 'review').length, 17);
+  assert.ok(batch.items.every((item) => typeof item.selection_reason === 'string'));
+});
+
+test('replaces cache inventory, filters unknown ids, and excludes cached words from new-card selection', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'cached_word', term: 'cached' }));
+  store.insertWord(wordInput({ id: 'available_word', term: 'available' }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const putUrl = `${baseUrl}/v1/user-word-cache`;
+  const cache = await fetchJson(putUrl, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_cache',
+      server_word_ids: ['cached_word', 'missing_word'],
+      observed_at: '2026-05-05T00:00:00.000Z'
+    })
+  });
+
+  assert.equal(cache.stored_count, 1);
+  assert.deepEqual(cache.unknown_server_word_ids, ['missing_word']);
+
+  const batch = await fetchJson(`${baseUrl}/v1/learning/cards?device_id=device_cache&limit=1&target_language=en`);
+  assert.equal(batch.items.length, 1);
+  assert.equal(batch.items[0].server_word_id, 'available_word');
+});
+
 test('serves API with an async store implementation', async (t) => {
   const store = new AsyncStoreAdapter(new WordStore());
   const server = http.createServer(

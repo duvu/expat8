@@ -13,7 +13,6 @@ import '../models/study_event.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import 'local_database.dart';
-import 'vocabulary_refresh_worker.dart';
 
 class WordRepository {
   WordRepository({
@@ -31,7 +30,7 @@ class WordRepository {
   final Logger _logger;
   final Uuid _uuid;
   final AppConfig _config;
-  VocabularyRefreshWorker? _refreshWorker;
+  String? _refillDeviceId;
 
   Future<String> getOrCreateDeviceId() {
     return database.getOrCreateDeviceId(_uuid.v4);
@@ -40,13 +39,7 @@ class WordRepository {
   /// Initializes the internal [VocabularyRefreshWorker] using the given deviceId.
   /// Must be called once the deviceId is known (e.g. during app startup).
   void initRefreshWorker(String deviceId) {
-    _refreshWorker = VocabularyRefreshWorker(
-      database: database,
-      apiClient: apiClient,
-      deviceId: deviceId,
-      config: _config,
-      logger: _logger,
-    );
+    _refillDeviceId = deviceId;
   }
 
   /// Checks if the first-install prefetch has been done; if not, runs it
@@ -56,7 +49,10 @@ class WordRepository {
     if (done == 'true') {
       return;
     }
-    unawaited(_refreshWorker?.runPrefetch());
+    unawaited(_runBackendManagedRefill(
+      limit: _config.vocabPrefetchLimit,
+      markPrefetchDone: true,
+    ));
   }
 
   /// Checks if the daily refresh is due today; if so, runs it fire-and-forget.
@@ -66,7 +62,10 @@ class WordRepository {
     if (lastRefresh == today) {
       return;
     }
-    unawaited(_refreshWorker?.runDailyRefresh());
+    unawaited(_runBackendManagedRefill(
+      limit: _config.vocabDailyRefreshCount,
+      markDailyRefreshDate: today,
+    ));
   }
 
   /// Records that a word was studied, and triggers a proactive refresh if the
@@ -82,8 +81,35 @@ class WordRepository {
       final unstudied = await database.countUnstudiedNewWords();
       if (unstudied < _config.vocabProactiveMinNew) {
         final needed = _config.vocabProactiveMinNew - unstudied;
-        unawaited(_refreshWorker?.runProactiveRefresh(needed));
+        unawaited(_runBackendManagedRefill(limit: needed));
       }
+    }
+  }
+
+  Future<void> _runBackendManagedRefill({
+    required int limit,
+    bool markPrefetchDone = false,
+    String? markDailyRefreshDate,
+  }) async {
+    final deviceId = _refillDeviceId ?? await getOrCreateDeviceId();
+    try {
+      await refillLearningCards(deviceId: deviceId, limit: limit);
+      if (markPrefetchDone) {
+        await database.setSetting(LocalDatabase.keyIsPrefetchDone, 'true');
+      }
+      if (markDailyRefreshDate != null) {
+        await database.setSetting(
+          LocalDatabase.keyLastDailyRefreshDate,
+          markDailyRefreshDate,
+        );
+      }
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'learning_cards.refill_deferred',
+        message: 'Backend-managed vocabulary refill failed.',
+        context: {'error': '$error'},
+      );
     }
   }
 
@@ -184,6 +210,24 @@ class WordRepository {
     String? deviceId,
   }) async {
     try {
+      if (deviceId != null) {
+        final unstudiedCount = await database.countUnstudiedNewWords();
+        if (unstudiedCount < _config.vocabProactiveMinNew) {
+          final refilled = await refillLearningCards(
+            deviceId: deviceId,
+            limit: _config.vocabProactiveMinNew,
+          );
+          if (refilled.isNotEmpty) {
+            final localWord = await database.nextNewWord();
+            if (localWord != null) {
+              return WordLookupResult(
+                word: localWord,
+                source: WordLookupSource.backend,
+              );
+            }
+          }
+        }
+      }
       final excludeServerWordIds = await database.recentServerWordIds();
       if (excludeServerWordId != null &&
           excludeServerWordId.isNotEmpty &&
@@ -302,6 +346,56 @@ class WordRepository {
     );
   }
 
+  Future<CacheInventoryResult> syncCacheInventory({required String deviceId}) async {
+    final session = await database.loadUserSession();
+    final serverWordIds = await database.activeCachedServerWordIds();
+    final result = await apiClient.syncCacheInventory(
+      deviceId: deviceId,
+      serverWordIds: serverWordIds,
+      sessionToken: session?.sessionToken,
+    );
+    await _logger.info(
+      category: AppLogCategory.sync,
+      event: 'cache_inventory.sync',
+      message: 'Synced local cache inventory.',
+      context: {
+        'device_id': deviceId,
+        'cached_count': serverWordIds.length,
+        'stored_count': result.storedCount,
+        'unknown_count': result.unknownServerWordIds.length,
+      },
+    );
+    return result;
+  }
+
+  Future<List<VocabularyWord>> refillLearningCards({
+    required String deviceId,
+    int limit = 20,
+  }) async {
+    final session = await database.loadUserSession();
+    final batch = await apiClient.fetchLearningCards(
+      deviceId: deviceId,
+      limit: limit,
+      sessionToken: session?.sessionToken,
+    );
+    for (final word in batch.items) {
+      await database.upsertWord(word);
+    }
+    await database.pruneToMostRecent();
+    await syncCacheInventory(deviceId: deviceId);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'learning_cards.refill',
+      message: 'Refilled local cache from backend-selected cards.',
+      context: {
+        'fetched_count': batch.items.length,
+        'new_count': batch.actualMix.newCount,
+        'review_count': batch.actualMix.reviewCount,
+      },
+    );
+    return batch.items;
+  }
+
   Future<ProficiencyState?> recordRating({
     required VocabularyWord word,
     required StudyRating rating,
@@ -316,8 +410,33 @@ class WordRepository {
       occurredAt: now,
       syncStatus: SyncStatus.pending,
     );
-    await database.updateWordAfterRating(word: word, rating: rating, now: now);
     await database.insertStudyEvent(event);
+    if (rating == StudyRating.easy) {
+      await database.deleteLocalWord(word.localId);
+      try {
+        await syncCacheInventory(deviceId: deviceId);
+      } catch (error) {
+        await _logger.warning(
+          category: AppLogCategory.sync,
+          event: 'cache_inventory.sync_deferred',
+          message: 'Cache inventory sync failed after easy deletion.',
+          context: {
+            'error': '$error',
+          },
+        );
+      }
+      await _logger.info(
+        category: AppLogCategory.session,
+        event: 'rating.easy.delete_local',
+        message: 'Easy-rated word removed from local cache.',
+        context: {
+          'local_id': word.localId,
+          'server_word_id': word.serverWordId,
+        },
+      );
+    } else {
+      await database.updateWordAfterRating(word: word, rating: rating, now: now);
+    }
     await recordWordStudied();
     try {
       final session = await database.loadUserSession();

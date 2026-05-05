@@ -39,6 +39,62 @@ test('syncs study events idempotently', () => {
   assert.equal(first.proficiency.level, 'A1');
 });
 
+test('stores repeated study attempts and projects the latest word state', () => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'state_word', term: 'stateful' }));
+
+  store.recordStudyEvent({
+    deviceId: 'device_state',
+    event: {
+      client_event_id: 'evt_state_1',
+      server_word_id: 'state_word',
+      local_word_id: 'local_state',
+      rating: 'hard',
+      occurred_at: '2026-05-04T10:30:00.000Z'
+    }
+  });
+  store.recordStudyEvent({
+    deviceId: 'device_state',
+    event: {
+      client_event_id: 'evt_state_2',
+      server_word_id: 'state_word',
+      local_word_id: 'local_state',
+      rating: 'easy',
+      occurred_at: '2026-05-04T10:35:00.000Z'
+    }
+  });
+
+  const state = store.wordStateFor({
+    deviceId: 'device_state',
+    wordId: 'state_word',
+    language: 'en'
+  });
+
+  assert.equal(store.studyEventsByClientId.size, 2);
+  assert.equal(state.last_rating, 'easy');
+  assert.equal(state.status, 'completed');
+});
+
+test('replaces cached word inventory and caps it at 1000 known ids', () => {
+  const store = new WordStore({ seed: false });
+  for (let index = 0; index < 1005; index += 1) {
+    store.insertWord(wordInput({ id: `cache_${index}`, term: `cache ${index}` }));
+  }
+
+  const result = store.replaceCachedWordIds({
+    deviceId: 'device_cache',
+    wordIds: [
+      ...Array.from({ length: 1005 }, (_, index) => `cache_${index}`),
+      'unknown_word'
+    ],
+    observedAt: '2026-05-05T00:00:00.000Z'
+  });
+
+  assert.equal(result.stored_count, 1000);
+  assert.deepEqual(result.unknown_server_word_ids, ['unknown_word']);
+  assert.equal(store.cachedWordIdsFor({ deviceId: 'device_cache' }).size, 1000);
+});
+
 test('levels up after five consecutive too_easy ratings', () => {
   const store = new WordStore({ seed: false });
 

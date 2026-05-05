@@ -52,7 +52,7 @@ Expected response:
 ```http
 204 No Content
 Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS
 Access-Control-Allow-Headers: content-type, authorization, x-expat8-app-id, x-expat8-timestamp, x-expat8-nonce, x-expat8-content-sha256, x-expat8-signature
 Access-Control-Max-Age: 86400
 ```
@@ -191,6 +191,61 @@ Notes:
 - Returned word `difficulty` values are canonical CEFR values.
 - With a valid bearer session, the feed avoids words already learned by that
   user when alternatives are available.
+- This compatibility endpoint is database-only. It never calls AI generation
+  during the mobile request path.
+
+## GET /v1/learning/cards
+
+Backend-selected batch endpoint for the mobile refill path. This endpoint reads
+only from database state and returns a target mix of 15% new cards and 85%
+review cards, with shortage fallback when either pool is unavailable.
+
+Query parameters:
+
+- `device_id`: required device identifier.
+- `limit`: maximum returned cards, capped at `50`.
+- `target_language`: optional target language code, default `en`.
+
+Response:
+
+```json
+{
+  "target_mix": {
+    "new": 3,
+    "review": 17
+  },
+  "actual_mix": {
+    "new": 3,
+    "review": 17
+  },
+  "items": [
+    {
+      "server_word_id": "word_123",
+      "term": "reliable",
+      "language": "en",
+      "meaning_vi": "dang tin cay",
+      "part_of_speech": "adjective",
+      "ipa": "/rɪˈlaɪəbl/",
+      "vietnamese_pronunciation": "ri-lai-uh-bol",
+      "example": "She is a reliable teammate.",
+      "example_vi": "Co ay la mot dong doi dang tin cay.",
+      "difficulty": "B1",
+      "topics": ["work", "people"],
+      "created_at": "2026-05-04T00:00:00.000Z",
+      "card_type": "new",
+      "selection_reason": "new_available"
+    }
+  ]
+}
+```
+
+`card_type` is either `new` or `review`. `selection_reason` is diagnostic
+metadata such as `new_available`, `due_review`,
+`review_shortage_fallback`, or `new_shortage_fallback`.
+
+With a valid bearer session, selection uses the signed-in `user_id` and keeps
+`device_id` as device/cache context. Without a bearer session, selection uses
+the anonymous `device_id`.
 
 ## GET /v1/words/recent
 
@@ -207,6 +262,35 @@ Response:
   "items": []
 }
 ```
+
+## PUT /v1/user-word-cache
+
+Replaces the backend's advisory inventory of server words currently stored on a
+device. The inventory is used only to avoid duplicate card selection; it is not
+authorization and is not proof that a word was studied.
+
+Request:
+
+```json
+{
+  "device_id": "device_abc",
+  "server_word_ids": ["word_123", "word_456"],
+  "observed_at": "2026-05-05T10:00:00.000Z"
+}
+```
+
+Response:
+
+```json
+{
+  "stored_count": 2,
+  "unknown_server_word_ids": []
+}
+```
+
+The backend caps stored IDs at `1000` and reports unknown IDs instead of
+storing them. Signed-in requests associate the inventory with `user_id` while
+retaining `device_id`.
 
 Signed-in sync uses the same JSON body and adds `Authorization: Bearer
 <session_token>`. Accepted events are associated with the user while retaining

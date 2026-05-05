@@ -42,6 +42,12 @@ Mobile ── GET cards ──▶ Backend ──▶ DB selection only ──▶ 
 
 ## Target Behavior
 
+Implementation status: this design is implemented by the
+`backend-managed-vocabulary-pool-selection` change. The current runtime uses a
+database-only mobile request path, a background `VocabularyPoolScheduler`, a
+batch card endpoint, cache inventory sync, append-only study events, and latest
+word-state projection.
+
 ### Vocabulary pool maintenance
 
 Backend owns a vocabulary pool per target language.
@@ -61,6 +67,8 @@ Suggested defaults:
 | `VOCAB_DAILY_GENERATION_COUNT` | `10` | New words generated after pool is full |
 | `VOCAB_DAILY_GENERATION_HOUR_UTC` | `0` | Hour used for daily top-up |
 | `VOCAB_GENERATION_BATCH_SIZE` | `20` | Max words requested per AI call |
+| `VOCAB_SCHEDULER_ENABLED` | `true` | Whether server startup starts the scheduler |
+| `VOCAB_SCHEDULER_LOCK_TTL_SECONDS` | `120` | Lock expiration for concurrent backend instances |
 
 ### Mobile card selection
 
@@ -405,15 +413,16 @@ UNIQUE (device_id, word_id) WHERE user_id IS NULL
 
 ## API Surface
 
-### Keep or replace `GET /v1/words/next`
+### Keep `GET /v1/words/next` as compatibility endpoint
 
 The existing endpoint can remain for compatibility, but its behavior should change:
 
 - It must not call AI.
 - It should select from DB only.
-- It should use learner state and cache exclusions.
+- It preserves the previous response shape and exclusion/proficiency filters.
 
-However, because the product now asks for a 15%/85% mix, a batch-oriented endpoint is clearer:
+Because the product now asks for a 15%/85% mix, the batch-oriented endpoint is
+the preferred refill API:
 
 ```http
 GET /v1/learning/cards?limit=20&device_id=device_abc&target_language=en
@@ -423,12 +432,20 @@ Response:
 
 ```json
 {
+  "target_mix": {
+    "new": 3,
+    "review": 17
+  },
+  "actual_mix": {
+    "new": 3,
+    "review": 17
+  },
   "items": [
     {
       "server_word_id": "word_123",
       "term": "reliable",
       "card_type": "new",
-      "selection_reason": "new_ratio"
+      "selection_reason": "new_available"
     },
     {
       "server_word_id": "word_456",
@@ -436,17 +453,12 @@ Response:
       "card_type": "review",
       "selection_reason": "due_review"
     }
-  ],
-  "target_mix": {
-    "new_ratio": 0.15,
-    "review_ratio": 0.85
-  },
-  "actual_mix": {
-    "new_count": 3,
-    "review_count": 17
-  }
+  ]
 }
 ```
+
+Implemented `selection_reason` values include `new_available`, `due_review`,
+`review_shortage_fallback`, and `new_shortage_fallback`.
 
 ### Study events
 
@@ -566,29 +578,36 @@ Keep validation and dedupe. Add generation telemetry and review tooling later. D
 
 ### Phase 1: Backend generation decoupling
 
-- Remove AI calls from mobile request path.
-- Add scheduler that fills `words` to 1000.
-- Add daily +10 generation after pool is full.
-- Add generation run logging and locking.
+- Implemented: AI calls are removed from `/v1/words/next`.
+- Implemented: scheduler fills `words` to the configured minimum.
+- Implemented: scheduler performs daily top-up after pool is full.
+- Implemented: generation run logging and ownership locking are in the store
+  contract and PostgreSQL schema.
 
 ### Phase 2: Backend selection state
 
-- Add/finish `user_word_states` projection from study events.
-- Add `user_cached_words`.
-- Add cache sync endpoint.
-- Change card selection to exclude learned/mastered and cached words.
+- Implemented: accepted study events project latest `user_word_states`.
+- Implemented: `user_cached_words` and `PUT /v1/user-word-cache`.
+- Implemented: new-card selection excludes completed and cached words.
 
 ### Phase 3: 15/85 card batch API
 
-- Add batch card endpoint.
-- Implement rolling target mix.
-- Return selection metadata for testing/debugging.
+- Implemented: `GET /v1/learning/cards`.
+- Implemented: per-batch target mix of 15% new / 85% review with shortage
+  fallback.
+- Implemented: target/actual mix and per-card selection metadata.
 
 ### Phase 4: Mobile integration
 
-- Sync local cache inventory.
-- Replace local-only new/review decision with backend batch refill.
-- On `easy`, delete local word, keep study event, sync event, and refill.
+- Implemented: API client and repository support cache inventory sync.
+- Implemented: API client and repository support backend-selected card refill.
+- Implemented: `easy` inserts the local study event before deleting the local
+  word and then syncs cache inventory.
+
+Note: the older `VocabularyRefreshWorker` remains in the codebase as an
+offline/local-cache fallback. Product freshness is now backend-owned; mobile
+daily/prefetch behavior should be treated as cache warmup, not as the source of
+global vocabulary growth.
 
 ## Acceptance Criteria
 
@@ -616,4 +635,3 @@ Suggested modified capabilities:
 - `backend-learning-card-selection`
 - `mobile-local-cache-sync`
 - `mobile-learning-session`
-

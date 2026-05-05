@@ -263,6 +263,80 @@ class BackendApiClient {
         .toList();
   }
 
+  Future<LearningCardBatch> fetchLearningCards({
+    required String deviceId,
+    int limit = 20,
+    String targetLanguage = 'en',
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/learning/cards').replace(queryParameters: {
+      'device_id': deviceId,
+      'limit': '$limit',
+      'target_language': targetLanguage,
+    });
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    _throwIfFailed(response, 'Learning-card batch failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['items'] as List? ?? const [];
+    return LearningCardBatch(
+      items: items
+          .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      targetMix: LearningCardMix.fromJson(
+        body['target_mix'] as Map<String, dynamic>? ?? const {},
+      ),
+      actualMix: LearningCardMix.fromJson(
+        body['actual_mix'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
+  }
+
+  Future<CacheInventoryResult> syncCacheInventory({
+    required String deviceId,
+    required List<String> serverWordIds,
+    DateTime? observedAt,
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/user-word-cache');
+    final payload = jsonEncode({
+      'device_id': deviceId,
+      'server_word_ids': serverWordIds,
+      'observed_at': (observedAt ?? DateTime.now().toUtc()).toUtc().toIso8601String(),
+    });
+    final response = await _httpClient
+        .put(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'PUT',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+              sessionToken: sessionToken,
+            ),
+          },
+          body: payload,
+        )
+        .timeout(timeout);
+    _throwIfFailed(response, 'Cache inventory sync failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return CacheInventoryResult(
+      storedCount: body['stored_count'] as int? ?? 0,
+      unknownServerWordIds: List<String>.from(
+        body['unknown_server_word_ids'] as List? ?? const [],
+      ),
+    );
+  }
+
   Future<SyncResult> syncStudyEvents({
     required String deviceId,
     required List<Map<String, dynamic>> events,
@@ -522,6 +596,45 @@ class StudyEventResult {
   final String? eventId;
   final bool idempotent;
   final ProficiencyState proficiency;
+}
+
+class LearningCardBatch {
+  const LearningCardBatch({
+    required this.items,
+    required this.targetMix,
+    required this.actualMix,
+  });
+
+  final List<VocabularyWord> items;
+  final LearningCardMix targetMix;
+  final LearningCardMix actualMix;
+}
+
+class LearningCardMix {
+  const LearningCardMix({
+    required this.newCount,
+    required this.reviewCount,
+  });
+
+  factory LearningCardMix.fromJson(Map<String, dynamic> json) {
+    return LearningCardMix(
+      newCount: json['new'] as int? ?? 0,
+      reviewCount: json['review'] as int? ?? 0,
+    );
+  }
+
+  final int newCount;
+  final int reviewCount;
+}
+
+class CacheInventoryResult {
+  const CacheInventoryResult({
+    required this.storedCount,
+    required this.unknownServerWordIds,
+  });
+
+  final int storedCount;
+  final List<String> unknownServerWordIds;
 }
 
 class BackendApiException implements Exception {

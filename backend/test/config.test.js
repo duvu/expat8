@@ -44,6 +44,19 @@ test('loads CORS allowed origin with a development default', () => {
   );
 });
 
+test('loads logging settings with production-safe defaults', () => {
+  const defaults = loadConfig({});
+  assert.equal(defaults.logLevel, 'info');
+  assert.equal(defaults.logRedactionEnabled, true);
+
+  const custom = loadConfig({
+    LOG_LEVEL: 'DEBUG',
+    LOG_REDACTION_ENABLED: 'false'
+  });
+  assert.equal(custom.logLevel, 'debug');
+  assert.equal(custom.logRedactionEnabled, false);
+});
+
 test('rejects malformed app credential configuration', () => {
   assert.throws(
     () =>

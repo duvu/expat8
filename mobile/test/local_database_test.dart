@@ -249,6 +249,23 @@ void main() {
     final count = await database.countUnstudiedNewWords();
     expect(count, 2);
   });
+
+  test('lists active cached server ids and deletes local words by id', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_active_cache_delete.db',
+    );
+    final now = DateTime.utc(2026, 5, 4);
+    await database.upsertWord(_word('server_1', now));
+    await database.upsertWord(_word('server_2', now));
+
+    final beforeDelete = await database.activeCachedServerWordIds();
+    final deleted = await database.deleteLocalWord('server_1');
+    final afterDelete = await database.activeCachedServerWordIds();
+
+    expect(beforeDelete, containsAll(['server_1', 'server_2']));
+    expect(deleted, true);
+    expect(afterDelete, ['server_2']);
+  });
 }
 
 VocabularyWord _word(String id, DateTime updatedAt) {

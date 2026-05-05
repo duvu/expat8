@@ -25,8 +25,21 @@ export function loadConfig(env = process.env) {
     appCredentialPostBodyLimitBytes: Number.parseInt(
       env.APP_CREDENTIAL_POST_BODY_LIMIT_BYTES ?? '262144',
       10
-    )
+    ),
+    logLevel: String(env.LOG_LEVEL ?? 'info').toLowerCase(),
+    logRedactionEnabled: parseBoolean(env.LOG_REDACTION_ENABLED ?? 'true'),
+    vocabSchedulerEnabled: parseBoolean(env.VOCAB_SCHEDULER_ENABLED ?? 'true'),
+    vocabPoolMinSize: Number.parseInt(env.VOCAB_POOL_MIN_SIZE ?? '1000', 10),
+    vocabFillIntervalSeconds: Number.parseInt(env.VOCAB_FILL_INTERVAL_SECONDS ?? '60', 10),
+    vocabDailyGenerationCount: Number.parseInt(env.VOCAB_DAILY_GENERATION_COUNT ?? '10', 10),
+    vocabDailyGenerationHourUtc: Number.parseInt(env.VOCAB_DAILY_GENERATION_HOUR_UTC ?? '0', 10),
+    vocabGenerationBatchSize: Number.parseInt(env.VOCAB_GENERATION_BATCH_SIZE ?? '20', 10),
+    vocabSchedulerLockTtlSeconds: Number.parseInt(env.VOCAB_SCHEDULER_LOCK_TTL_SECONDS ?? '120', 10)
   };
+}
+
+function parseBoolean(raw) {
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
 }
 
 function parseAppCredentials(raw) {

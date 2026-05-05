@@ -21,13 +21,15 @@ import {
 } from './user_identity.js';
 
 export class PostgresWordStore {
-  constructor({ pool }) {
+  constructor({ pool, logger = console }) {
     this.pool = pool;
+    this.logger = logger;
   }
 
   async insertWord(input) {
     const normalizedTerm = normalizeTerm(input.term);
     const now = new Date().toISOString();
+    const startedAt = Date.now();
     const row = {
       id: input.id ?? createId('word'),
       term: input.term,
@@ -87,6 +89,11 @@ export class PostgresWordStore {
     );
 
     if (inserted.rows[0]) {
+      this.logger.debug?.('db_insert_word_completed', {
+        language: row.language,
+        inserted: true,
+        elapsed_ms: Date.now() - startedAt
+      });
       return { word: rowToWord(inserted.rows[0]), inserted: true };
     }
 
@@ -96,10 +103,16 @@ export class PostgresWordStore {
       LIMIT 1`,
       [row.language, row.normalized_term]
     );
+    this.logger.debug?.('db_insert_word_completed', {
+      language: row.language,
+      inserted: false,
+      elapsed_ms: Date.now() - startedAt
+    });
     return { word: rowToWord(existing.rows[0]), inserted: false };
   }
 
   async findNewWords({ targetLanguage = 'en', limit = 1, excludeWordIds = [], proficiencyLevel, deviceId, userId }) {
+    const startedAt = Date.now();
     const resolvedLevel = proficiencyLevel
       ? normalizeDifficultyLevel(proficiencyLevel)
       : deviceId || userId
@@ -107,13 +120,20 @@ export class PostgresWordStore {
         : null;
 
     if (!resolvedLevel) {
-      return this.#findWordsForLevel({
+      const words = await this.#findWordsForLevel({
         targetLanguage,
         limit,
         excludeWordIds,
         deviceId,
         userId
       });
+      this.logger.debug?.('db_find_new_words_completed', {
+        target_language: targetLanguage,
+        limit,
+        item_count: words.length,
+        elapsed_ms: Date.now() - startedAt
+      });
+      return words;
     }
 
     for (const level of getFallbackDifficultyLevels(resolvedLevel)) {
@@ -126,10 +146,23 @@ export class PostgresWordStore {
         proficiencyLevel: level
       });
       if (words.length > 0) {
+        this.logger.debug?.('db_find_new_words_completed', {
+          target_language: targetLanguage,
+          limit,
+          item_count: words.length,
+          resolved_level: level,
+          elapsed_ms: Date.now() - startedAt
+        });
         return words;
       }
     }
 
+    this.logger.debug?.('db_find_new_words_completed', {
+      target_language: targetLanguage,
+      limit,
+      item_count: 0,
+      elapsed_ms: Date.now() - startedAt
+    });
     return [];
   }
 
@@ -144,7 +177,215 @@ export class PostgresWordStore {
     return result.rows.map(rowToWord);
   }
 
+  async countUsableWords({ targetLanguage = 'en' } = {}) {
+    const result = await this.pool.query(
+      `SELECT COUNT(*)::int AS count FROM words WHERE language = $1`,
+      [targetLanguage]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  async recordGenerationRun(input) {
+    const now = new Date().toISOString();
+    const row = {
+      id: input.id ?? createId('generation_run'),
+      target_language: input.targetLanguage,
+      mode: input.mode,
+      status: input.status,
+      requested_count: input.requestedCount ?? 0,
+      inserted_count: input.insertedCount ?? 0,
+      error_message: input.errorMessage ?? null,
+      run_date: input.runDate ?? now.slice(0, 10),
+      started_at: input.startedAt ?? now,
+      finished_at: input.finishedAt ?? now
+    };
+    await this.pool.query(
+      `INSERT INTO generation_runs (
+        id,
+        target_language,
+        mode,
+        status,
+        requested_count,
+        inserted_count,
+        error_message,
+        run_date,
+        started_at,
+        finished_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        row.id,
+        row.target_language,
+        row.mode,
+        row.status,
+        row.requested_count,
+        row.inserted_count,
+        row.error_message,
+        row.run_date,
+        row.started_at,
+        row.finished_at
+      ]
+    );
+    return row;
+  }
+
+  async hasGenerationRun({ targetLanguage = 'en', mode, runDate }) {
+    const result = await this.pool.query(
+      `SELECT id FROM generation_runs
+      WHERE target_language = $1 AND mode = $2 AND run_date = $3 AND status = 'success'
+      LIMIT 1`,
+      [targetLanguage, mode, runDate]
+    );
+    return result.rows.length > 0;
+  }
+
+  async acquireGenerationLock({ targetLanguage = 'en', ownerId, now = new Date(), ttlSeconds = 120 } = {}) {
+    const nowIso = now.toISOString();
+    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
+    const result = await this.pool.query(
+      `INSERT INTO scheduler_locks (target_language, owner_id, expires_at, updated_at)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (target_language) DO UPDATE
+      SET owner_id = EXCLUDED.owner_id,
+          expires_at = EXCLUDED.expires_at,
+          updated_at = EXCLUDED.updated_at
+      WHERE scheduler_locks.expires_at <= $4 OR scheduler_locks.owner_id = $2
+      RETURNING *`,
+      [targetLanguage, ownerId, expiresAt, nowIso]
+    );
+    return result.rows.length > 0;
+  }
+
+  async releaseGenerationLock({ targetLanguage = 'en', ownerId } = {}) {
+    await this.pool.query(
+      `DELETE FROM scheduler_locks
+      WHERE target_language = $1 AND owner_id = $2`,
+      [targetLanguage, ownerId]
+    );
+  }
+
+  async replaceCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const distinctIds = [...new Set(wordIds.filter((wordId) => typeof wordId === 'string' && wordId.length > 0))];
+      const knownResult = distinctIds.length === 0
+        ? { rows: [] }
+        : await client.query(
+            `SELECT id FROM words WHERE id = ANY($1)`,
+            [distinctIds]
+          );
+      const knownIds = new Set(knownResult.rows.map((row) => row.id));
+      const unknown = distinctIds.filter((wordId) => !knownIds.has(wordId));
+      const stored = distinctIds.filter((wordId) => knownIds.has(wordId)).slice(0, 1000);
+      const ownerWhere = userId ? 'user_id = $1' : 'device_id = $1 AND user_id IS NULL';
+      await client.query(
+        `DELETE FROM user_cached_words WHERE ${ownerWhere}`,
+        [userId ?? deviceId]
+      );
+      const now = new Date().toISOString();
+      for (const wordId of stored) {
+        await client.query(
+          `INSERT INTO user_cached_words (
+            device_id,
+            user_id,
+            word_id,
+            observed_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5)`,
+          [deviceId, userId, wordId, observedAt, now]
+        );
+      }
+      return {
+        stored_count: stored.length,
+        unknown_server_word_ids: unknown
+      };
+    });
+  }
+
+  async cachedWordIdsFor({ deviceId, userId = null }) {
+    const result = userId
+      ? await this.pool.query(
+          `SELECT word_id FROM user_cached_words WHERE user_id = $1`,
+          [userId]
+        )
+      : await this.pool.query(
+          `SELECT word_id FROM user_cached_words WHERE device_id = $1 AND user_id IS NULL`,
+          [deviceId]
+        );
+    return new Set(result.rows.map((row) => row.word_id));
+  }
+
+  async wordStateFor({ deviceId, userId = null, wordId }) {
+    const result = userId
+      ? await this.pool.query(
+          `SELECT * FROM user_word_states WHERE user_id = $1 AND word_id = $2 LIMIT 1`,
+          [userId, wordId]
+        )
+      : await this.pool.query(
+          `SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND word_id = $2 LIMIT 1`,
+          [deviceId, wordId]
+        );
+    return result.rows[0] ?? null;
+  }
+
+  async learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 20, now = new Date().toISOString() }) {
+    const cappedLimit = Math.max(1, Math.min(limit, 50));
+    const targetNew = Math.round(cappedLimit * 0.15);
+    const targetReview = cappedLimit - targetNew;
+    const [wordsResult, cachedIds, stateResult] = await Promise.all([
+      this.pool.query(`SELECT * FROM words WHERE language = $1`, [targetLanguage]),
+      this.cachedWordIdsFor({ deviceId, userId }),
+      userId
+        ? this.pool.query(`SELECT * FROM user_word_states WHERE user_id = $1 AND language = $2`, [userId, targetLanguage])
+        : this.pool.query(
+            `SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND language = $2`,
+            [deviceId, targetLanguage]
+          )
+    ]);
+    const words = wordsResult.rows.map(rowToWord);
+    const wordsById = new Map(words.map((word) => [word.id, word]));
+    const states = stateResult.rows;
+    const stateByWordId = new Map(states.map((state) => [state.word_id, state]));
+    const nowDate = new Date(now);
+    const reviewCandidates = states
+      .filter((state) => state.status !== 'completed')
+      .filter((state) => !state.next_review_at || new Date(state.next_review_at) <= nowDate)
+      .map((state) => wordsById.get(state.word_id))
+      .filter(Boolean)
+      .sort((left, right) => left.updated_at.localeCompare(right.updated_at));
+    const newCandidates = words
+      .filter((word) => !cachedIds.has(word.id))
+      .filter((word) => !stateByWordId.has(word.id))
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    const cards = [];
+    const take = (candidates, count, cardType, reason) => {
+      for (const word of candidates) {
+        if (cards.length >= cappedLimit || count <= 0) {
+          break;
+        }
+        if (cards.some((card) => card.word.id === word.id)) {
+          continue;
+        }
+        cards.push({ word, cardType, selectionReason: reason });
+        count -= 1;
+      }
+    };
+    take(reviewCandidates, targetReview, 'review', 'due_review');
+    take(newCandidates, targetNew, 'new', 'new_available');
+    take(newCandidates, cappedLimit - cards.length, 'new', 'review_shortage_fallback');
+    take(reviewCandidates, cappedLimit - cards.length, 'review', 'new_shortage_fallback');
+    return {
+      items: cards,
+      target_mix: { new: targetNew, review: targetReview },
+      actual_mix: {
+        new: cards.filter((card) => card.cardType === 'new').length,
+        review: cards.filter((card) => card.cardType === 'review').length
+      }
+    };
+  }
+
   async syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
+    const startedAt = Date.now();
     const accepted = [];
     const rejected = [];
     let latestResult = await this.getProficiency({ deviceId, userId, language });
@@ -169,6 +410,12 @@ export class PostgresWordStore {
       accepted.push(event.client_event_id);
     }
 
+    this.logger.info?.('db_sync_study_events_completed', {
+      device_id: deviceId,
+      accepted_count: accepted.length,
+      rejected_count: rejected.length,
+      elapsed_ms: Date.now() - startedAt
+    });
     return {
       accepted_event_ids: accepted,
       rejected_events: rejected,
@@ -180,6 +427,7 @@ export class PostgresWordStore {
     requireStudyRating(event.rating);
 
     return this.#withOptionalTransaction(async (client) => {
+      const startedAt = Date.now();
       const receivedAt = new Date().toISOString();
       const inserted = await client.query(
         `INSERT INTO study_events (
@@ -218,12 +466,24 @@ export class PostgresWordStore {
       });
 
       if (!inserted.rows[0]) {
+        this.logger.debug?.('db_record_study_event_idempotent', {
+          device_id: deviceId,
+          client_event_id: event.client_event_id,
+          elapsed_ms: Date.now() - startedAt
+        });
         return {
           eventId: null,
           idempotent: true,
           proficiency: await this.#buildProficiencyResponse({ client, deviceId, userId, language })
         };
       }
+      await this.#upsertWordState({
+        client,
+        deviceId,
+        userId: eventUserId,
+        language,
+        event: inserted.rows[0]
+      });
 
       const levelChange = await this.#applyProficiencyChange({
         client,
@@ -234,6 +494,11 @@ export class PostgresWordStore {
         currentLevel: proficiency.level
       });
 
+      this.logger.debug?.('db_record_study_event_completed', {
+        device_id: deviceId,
+        client_event_id: event.client_event_id,
+        elapsed_ms: Date.now() - startedAt
+      });
       return {
         eventId: inserted.rows[0].id,
         idempotent: false,
@@ -541,6 +806,77 @@ export class PostgresWordStore {
     return result.rows.map(rowToWord);
   }
 
+  async #upsertWordState({ client, deviceId, userId = null, language, event }) {
+    if (!event.word_id) {
+      return;
+    }
+    const occurredAt = new Date(event.occurred_at);
+    const nextReviewAt = nextReviewForRating(event.rating, occurredAt);
+    const status = statusForRating(event.rating);
+    const now = new Date().toISOString();
+    const params = [
+      createId('word_state'),
+      userId,
+      deviceId,
+      event.word_id,
+      language,
+      status,
+      event.rating,
+      event.occurred_at,
+      nextReviewAt?.toISOString() ?? null,
+      now
+    ];
+    await client.query(
+      userId
+        ? `INSERT INTO user_word_states (
+            id,
+            user_id,
+            device_id,
+            word_id,
+            language,
+            status,
+            last_rating,
+            last_studied_at,
+            next_review_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ON CONFLICT (user_id, word_id) WHERE user_id IS NOT NULL
+          DO UPDATE SET
+            device_id = EXCLUDED.device_id,
+            language = EXCLUDED.language,
+            status = EXCLUDED.status,
+            last_rating = EXCLUDED.last_rating,
+            last_studied_at = EXCLUDED.last_studied_at,
+            next_review_at = EXCLUDED.next_review_at,
+            review_count = user_word_states.review_count + 1,
+            updated_at = EXCLUDED.updated_at`
+        : `INSERT INTO user_word_states (
+            id,
+            user_id,
+            device_id,
+            word_id,
+            language,
+            status,
+            last_rating,
+            last_studied_at,
+            next_review_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ON CONFLICT (device_id, word_id) WHERE user_id IS NULL
+          DO UPDATE SET
+            language = EXCLUDED.language,
+            status = EXCLUDED.status,
+            last_rating = EXCLUDED.last_rating,
+            last_studied_at = EXCLUDED.last_studied_at,
+            next_review_at = EXCLUDED.next_review_at,
+            review_count = user_word_states.review_count + 1,
+            updated_at = EXCLUDED.updated_at`,
+      params
+    );
+  }
+
   async #createSessionForUser({ client, user, deviceId = null }) {
     const now = new Date().toISOString();
     const sessionToken = createSessionToken();
@@ -582,6 +918,7 @@ export class PostgresWordStore {
       return result;
     } catch (error) {
       await client.query('ROLLBACK');
+      this.logger.error?.('db_transaction_failed', { error });
       throw error;
     } finally {
       client.release();
@@ -607,4 +944,21 @@ function rowToWord(row) {
     created_at: row.created_at,
     updated_at: row.updated_at
   };
+}
+
+function statusForRating(rating) {
+  if (rating === 'easy' || rating === 'too_easy') {
+    return 'completed';
+  }
+  return rating === 'too_hard' ? 'learning' : 'review';
+}
+
+function nextReviewForRating(rating, occurredAt) {
+  if (rating === 'easy' || rating === 'too_easy') {
+    return null;
+  }
+  if (rating === 'too_hard') {
+    return new Date(occurredAt.getTime() + 5 * 60 * 1000);
+  }
+  return new Date(occurredAt.getTime() + 24 * 60 * 60 * 1000);
 }

@@ -184,6 +184,7 @@ class FakePool {
     this.words = new Map();
     this.studyEvents = new Map();
     this.userProficiencies = new Map();
+    this.userWordStates = new Map();
     this.users = new Map();
     this.sessions = new Map();
   }
@@ -261,6 +262,27 @@ class FakePool {
         this.studyEvents.set(row.client_event_id, row);
         return { rows: [row] };
       }
+      return { rows: [] };
+    }
+
+    if (normalizedSql.startsWith('INSERT INTO user_word_states')) {
+      const row = wordStateRowFromParams(params);
+      const key = row.user_id ? `user:${row.user_id}:${row.word_id}` : `device:${row.device_id}:${row.word_id}`;
+      const existing = this.userWordStates.get(key);
+      if (existing) {
+        Object.assign(existing, {
+          device_id: row.device_id,
+          language: row.language,
+          status: row.status,
+          last_rating: row.last_rating,
+          last_studied_at: row.last_studied_at,
+          next_review_at: row.next_review_at,
+          review_count: existing.review_count + 1,
+          updated_at: row.updated_at
+        });
+        return { rows: [] };
+      }
+      this.userWordStates.set(key, row);
       return { rows: [] };
     }
 
@@ -425,6 +447,34 @@ function studyEventRowFromParams(params) {
     rating,
     occurred_at,
     received_at
+  };
+}
+
+function wordStateRowFromParams(params) {
+  const [
+    id,
+    user_id,
+    device_id,
+    word_id,
+    language,
+    status,
+    last_rating,
+    last_studied_at,
+    next_review_at,
+    updated_at
+  ] = params;
+  return {
+    id,
+    user_id,
+    device_id,
+    word_id,
+    language,
+    status,
+    last_rating,
+    last_studied_at,
+    next_review_at,
+    review_count: 1,
+    updated_at
   };
 }
 

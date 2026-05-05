@@ -28,6 +28,10 @@ export class WordStore {
     this.usersById = new Map();
     this.usersByIdentifier = new Map();
     this.userSessionsByTokenHash = new Map();
+    this.generationRuns = [];
+    this.generationLocks = new Map();
+    this.cachedWordIdsByOwner = new Map();
+    this.wordStatesByOwnerWord = new Map();
     if (seed) {
       seedWords().forEach((word) => this.insertWord(word));
     }
@@ -103,6 +107,148 @@ export class WordStore {
       .slice(0, Math.min(limit, 1000));
   }
 
+  countUsableWords({ targetLanguage = 'en' } = {}) {
+    return [...this.words.values()].filter((word) => word.language === targetLanguage).length;
+  }
+
+  recordGenerationRun(input) {
+    const now = new Date().toISOString();
+    const run = {
+      id: input.id ?? createId('generation_run'),
+      target_language: input.targetLanguage,
+      mode: input.mode,
+      status: input.status,
+      requested_count: input.requestedCount ?? 0,
+      inserted_count: input.insertedCount ?? 0,
+      error_message: input.errorMessage ?? null,
+      run_date: input.runDate ?? now.slice(0, 10),
+      started_at: input.startedAt ?? now,
+      finished_at: input.finishedAt ?? now
+    };
+    this.generationRuns.push(run);
+    return run;
+  }
+
+  hasGenerationRun({ targetLanguage = 'en', mode, runDate }) {
+    return this.generationRuns.some(
+      (run) =>
+        run.target_language === targetLanguage &&
+        run.mode === mode &&
+        run.run_date === runDate &&
+        run.status === 'success'
+    );
+  }
+
+  acquireGenerationLock({ targetLanguage = 'en', ownerId, now = new Date(), ttlSeconds = 120 } = {}) {
+    const existing = this.generationLocks.get(targetLanguage);
+    if (existing && new Date(existing.expires_at) > now && existing.owner_id !== ownerId) {
+      return false;
+    }
+    this.generationLocks.set(targetLanguage, {
+      owner_id: ownerId,
+      expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString()
+    });
+    return true;
+  }
+
+  releaseGenerationLock({ targetLanguage = 'en', ownerId } = {}) {
+    const existing = this.generationLocks.get(targetLanguage);
+    if (existing?.owner_id === ownerId) {
+      this.generationLocks.delete(targetLanguage);
+    }
+  }
+
+  replaceCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
+    const known = [];
+    const unknown = [];
+    const seen = new Set();
+    for (const wordId of wordIds) {
+      if (typeof wordId !== 'string' || wordId.length === 0 || seen.has(wordId)) {
+        continue;
+      }
+      seen.add(wordId);
+      if (!this.words.has(wordId)) {
+        unknown.push(wordId);
+        continue;
+      }
+      if (known.length < 1000) {
+        known.push(wordId);
+      }
+    }
+    const key = this.#ownerKey({ deviceId, userId });
+    this.cachedWordIdsByOwner.set(key, {
+      wordIds: new Set(known),
+      observed_at: observedAt
+    });
+    return {
+      stored_count: known.length,
+      unknown_server_word_ids: unknown
+    };
+  }
+
+  cachedWordIdsFor({ deviceId, userId = null }) {
+    return new Set(this.cachedWordIdsByOwner.get(this.#ownerKey({ deviceId, userId }))?.wordIds ?? []);
+  }
+
+  wordStateFor({ deviceId, userId = null, wordId }) {
+    return this.wordStatesByOwnerWord.get(this.#wordStateKey({ deviceId, userId, wordId })) ?? null;
+  }
+
+  learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 20, now = new Date().toISOString() }) {
+    const cappedLimit = Math.max(1, Math.min(limit, 50));
+    const targetNew = Math.round(cappedLimit * 0.15);
+    const targetReview = cappedLimit - targetNew;
+    const cachedWordIds = this.cachedWordIdsFor({ deviceId, userId });
+    const nowDate = new Date(now);
+    const ownerStates = [...this.wordStatesByOwnerWord.values()].filter((state) =>
+      userId ? state.user_id === userId : state.device_id === deviceId
+    );
+    const stateByWordId = new Map(ownerStates.map((state) => [state.word_id, state]));
+    const reviewCandidates = ownerStates
+      .filter((state) => state.language === targetLanguage && state.status !== 'completed')
+      .filter((state) => !state.next_review_at || new Date(state.next_review_at) <= nowDate)
+      .map((state) => this.words.get(state.word_id))
+      .filter(Boolean)
+      .sort((left, right) => left.updated_at.localeCompare(right.updated_at));
+    const newCandidates = [...this.words.values()]
+      .filter((word) => word.language === targetLanguage)
+      .filter((word) => !cachedWordIds.has(word.id))
+      .filter((word) => !stateByWordId.has(word.id) || stateByWordId.get(word.id)?.status !== 'completed')
+      .filter((word) => !stateByWordId.has(word.id))
+      .sort((left, right) => bCompareCreated(left, right));
+
+    const cards = [];
+    const take = (candidates, count, cardType, reason) => {
+      for (const word of candidates) {
+        if (cards.length >= cappedLimit || count <= 0) {
+          break;
+        }
+        if (cards.some((card) => card.word.id === word.id)) {
+          continue;
+        }
+        cards.push({ word, cardType, selectionReason: reason });
+        count -= 1;
+      }
+    };
+
+    take(reviewCandidates, targetReview, 'review', 'due_review');
+    take(newCandidates, targetNew, 'new', 'new_available');
+    if (cards.length < cappedLimit) {
+      take(newCandidates, cappedLimit - cards.length, 'new', 'review_shortage_fallback');
+    }
+    if (cards.length < cappedLimit) {
+      take(reviewCandidates, cappedLimit - cards.length, 'review', 'new_shortage_fallback');
+    }
+
+    const actualNew = cards.filter((card) => card.cardType === 'new').length;
+    const actualReview = cards.filter((card) => card.cardType === 'review').length;
+    return {
+      items: cards,
+      target_mix: { new: targetNew, review: targetReview },
+      actual_mix: { new: actualNew, review: actualReview }
+    };
+  }
+
   syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
     const accepted = [];
     const rejected = [];
@@ -163,6 +309,7 @@ export class WordStore {
       received_at: receivedAt
     };
     this.studyEventsByClientId.set(event.client_event_id, storedEvent);
+    this.#upsertWordState({ deviceId, userId: storedEvent.user_id, language, event: storedEvent });
 
     const levelChange = this.#applyProficiencyChange({ deviceId, userId: storedEvent.user_id, language, rating });
 
@@ -344,6 +491,55 @@ export class WordStore {
         .filter(Boolean)
     );
   }
+
+  #upsertWordState({ deviceId, userId = null, language, event }) {
+    if (!event.word_id) {
+      return;
+    }
+    const occurredAt = new Date(event.occurred_at);
+    const nextReviewAt = nextReviewForRating(event.rating, occurredAt);
+    const state = {
+      user_id: userId,
+      device_id: deviceId,
+      word_id: event.word_id,
+      language,
+      status: statusForRating(event.rating),
+      last_rating: event.rating,
+      last_studied_at: event.occurred_at,
+      next_review_at: nextReviewAt?.toISOString() ?? null,
+      updated_at: new Date().toISOString()
+    };
+    this.wordStatesByOwnerWord.set(this.#wordStateKey({ deviceId, userId, wordId: event.word_id }), state);
+  }
+
+  #ownerKey({ deviceId, userId = null }) {
+    return userId ? `user:${userId}` : `device:${deviceId}`;
+  }
+
+  #wordStateKey({ deviceId, userId = null, wordId }) {
+    return `${this.#ownerKey({ deviceId, userId })}:word:${wordId}`;
+  }
+}
+
+function bCompareCreated(left, right) {
+  return right.created_at.localeCompare(left.created_at);
+}
+
+function statusForRating(rating) {
+  if (rating === 'easy' || rating === 'too_easy') {
+    return 'completed';
+  }
+  return rating === 'too_hard' ? 'learning' : 'review';
+}
+
+function nextReviewForRating(rating, occurredAt) {
+  if (rating === 'easy' || rating === 'too_easy') {
+    return null;
+  }
+  if (rating === 'too_hard') {
+    return new Date(occurredAt.getTime() + 5 * 60 * 1000);
+  }
+  return new Date(occurredAt.getTime() + 24 * 60 * 60 * 1000);
 }
 
 export function toApiWord(word) {

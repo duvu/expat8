@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import express from 'express';
 
 import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
@@ -7,18 +9,31 @@ import {
   InvalidCredentialsError,
   InvalidRegistrationInputError
 } from './user_identity.js';
+import { createLogger } from './logger.js';
 import { toApiWord } from './word_store.js';
 
-export function createApp({ store, generationService, config, nonceCache = new InMemoryNonceCache() }) {
+export function createApp({
+  store,
+  generationService,
+  config,
+  logger = createLogger({
+    level: config.logLevel,
+    redactionEnabled: config.logRedactionEnabled,
+    component: 'api'
+  }),
+  nonceCache = new InMemoryNonceCache()
+}) {
   const app = express();
 
-  app.get('/health', (_request, response) => {
+  app.get('/health', (request, response) => {
+    response.setHeader('x-request-id', resolveRequestId(request));
     response.json({ ok: true });
   });
 
   app.use(
     '/v1',
     corsMiddleware({ config }),
+    requestContextMiddleware({ logger }),
     rejectMissingCredentialHeaders,
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
@@ -26,18 +41,36 @@ export function createApp({ store, generationService, config, nonceCache = new I
     createV1Router({ store, generationService, config })
   );
 
-  app.use((_request, response) => {
+  app.use((request, response) => {
+    request.log?.warn('route_not_found', {
+      method: request.method,
+      path: request.originalUrl
+    });
     response.status(404).json({ error: 'not_found' });
   });
 
-  app.use((error, _request, response, _next) => {
-    response.status(500).json({ error: 'internal_error', message: error.message });
+  app.use((error, request, response, _next) => {
+    const statusCode = Number.isInteger(error.statusCode) ? error.statusCode : 500;
+    const category = classifyError(error, statusCode);
+    request.log?.error('request_failed', {
+      category,
+      method: request.method,
+      path: request.originalUrl,
+      status_code: statusCode,
+      error
+    });
+
+    if (statusCode >= 500) {
+      response.status(statusCode).json({ error: 'internal_error', message: error.message });
+      return;
+    }
+    response.status(statusCode).json({ error: error.code ?? 'bad_request', message: error.message });
   });
 
   return app;
 }
 
-function createV1Router({ store, generationService, config }) {
+function createV1Router({ store, generationService: _generationService, config }) {
   const router = express.Router();
 
   router.post(
@@ -89,10 +122,12 @@ function createV1Router({ store, generationService, config }) {
     asyncHandler(async (request, response) => {
       const sessionToken = bearerToken(request);
       if (!sessionToken) {
+        request.log?.warn('sign_out_failed', { reason: 'missing_session_token' });
         return response.status(401).json({ error: 'invalid_session' });
       }
       const result = await store.revokeUserSession({ sessionToken });
       if (!result.revoked) {
+        request.log?.warn('sign_out_failed', { reason: 'invalid_session' });
         return response.status(401).json({ error: 'invalid_session' });
       }
       return response.json({ success: true });
@@ -111,8 +146,7 @@ function createV1Router({ store, generationService, config }) {
       const proficiencyLevel = normalizeOptionalProficiencyLevel(request.query.proficiency_level);
       const deviceId = request.query.device_id ?? null;
       const excludeServerWordIds = normalizeExcludedWordIds(request.query.exclude_server_word_id);
-      const recentWords = await store.recentWords({ targetLanguage, limit: 1000 });
-      let words = await store.findNewWords({
+      const words = await store.findNewWords({
         targetLanguage,
         limit,
         excludeWordIds: excludeServerWordIds,
@@ -120,17 +154,44 @@ function createV1Router({ store, generationService, config }) {
         deviceId,
         userId: userSession?.user.id ?? null
       });
-      if (words.length < limit && generationService) {
-        const generated = await generationService.generateAndStore({
-          sourceLanguage: request.query.source_language ?? config.defaultSourceLanguage,
-          targetLanguage,
-          limit: limit - words.length,
-          avoidTerms: recentWords.map((word) => word.term),
-          difficultyLevel: proficiencyLevel ?? undefined
-        });
-        words = [...words, ...generated].slice(0, limit);
-      }
+      request.log?.debug('words_next_served', {
+        target_language: targetLanguage,
+        limit,
+        item_count: words.length
+      });
       response.json({ items: words.map(toApiWord) });
+    })
+  );
+
+  router.get(
+    '/learning/cards',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveOptionalUserSession({ request, response, store });
+      if (userSession === false) {
+        return;
+      }
+      const deviceId = request.query.device_id;
+      if (!deviceId || typeof deviceId !== 'string') {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const limit = clampLimit(request.query.limit, 1, 50);
+      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
+      const result = await store.learningCards({
+        deviceId,
+        userId: userSession?.user.id ?? null,
+        targetLanguage,
+        limit,
+        now: new Date().toISOString()
+      });
+      return response.json({
+        target_mix: result.target_mix,
+        actual_mix: result.actual_mix,
+        items: result.items.map((card) => ({
+          ...toApiWord(card.word),
+          card_type: card.cardType,
+          selection_reason: card.selectionReason
+        }))
+      });
     })
   );
 
@@ -178,6 +239,10 @@ function createV1Router({ store, generationService, config }) {
         });
       } catch (error) {
         if (error instanceof InvalidStudyRatingError) {
+          request.log?.warn('study_event_rejected', {
+            reason: 'invalid_rating',
+            client_event_id: body.client_event_id ?? null
+          });
           return response.status(400).json({ error: 'invalid_rating' });
         }
         throw error;
@@ -194,6 +259,7 @@ function createV1Router({ store, generationService, config }) {
       }
       const body = request.body ?? {};
       if (!body.device_id) {
+        request.log?.warn('study_events_sync_rejected', { reason: 'missing_device_id' });
         return response.status(400).json({
           accepted_event_ids: [],
           rejected_events: [{ reason: 'missing_device_id' }]
@@ -209,10 +275,38 @@ function createV1Router({ store, generationService, config }) {
         return response.json(result);
       } catch (error) {
         if (error instanceof InvalidStudyRatingError) {
+          request.log?.warn('study_events_sync_rejected', { reason: 'invalid_rating' });
           return response.status(400).json({ error: 'invalid_rating' });
         }
         throw error;
       }
+    })
+  );
+
+  router.put(
+    '/user-word-cache',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveOptionalUserSession({ request, response, store });
+      if (userSession === false) {
+        return;
+      }
+      const body = request.body ?? {};
+      if (
+        !body.device_id ||
+        typeof body.device_id !== 'string' ||
+        !Array.isArray(body.server_word_ids) ||
+        body.server_word_ids.length > 1000 ||
+        (body.observed_at !== undefined && Number.isNaN(Date.parse(body.observed_at)))
+      ) {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const result = await store.replaceCachedWordIds({
+        deviceId: body.device_id,
+        userId: userSession?.user.id ?? null,
+        wordIds: body.server_word_ids,
+        observedAt: body.observed_at ?? new Date().toISOString()
+      });
+      return response.json(result);
     })
   );
 
@@ -253,6 +347,7 @@ async function resolveOptionalUserSession({ request, response, store }) {
   }
   const session = await store.resolveUserSession({ sessionToken: token });
   if (!session) {
+    request.log?.warn('session_resolution_failed', { reason: 'invalid_session' });
     response.status(401).json({ error: 'invalid_session' });
     return false;
   }
@@ -281,6 +376,51 @@ function normalizeExcludedWordIds(value) {
   return typeof value === 'string' && value.length > 0 ? [value] : [];
 }
 
+function requestContextMiddleware({ logger }) {
+  return (request, response, next) => {
+    const requestId = resolveRequestId(request);
+    const startedAt = process.hrtime.bigint();
+    request.requestId = requestId;
+    request.log = logger.child({ request_id: requestId });
+    response.setHeader('x-request-id', requestId);
+
+    request.log.info('request_started', {
+      method: request.method,
+      path: request.originalUrl
+    });
+
+    response.on('finish', () => {
+      const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+      request.log.info('request_completed', {
+        method: request.method,
+        path: request.originalUrl,
+        status_code: response.statusCode,
+        elapsed_ms: Number(elapsedMs.toFixed(2))
+      });
+    });
+
+    return next();
+  };
+}
+
+function resolveRequestId(request) {
+  const forwarded = request.get?.('x-request-id') || request.get?.('x-correlation-id');
+  return forwarded && forwarded.trim().length > 0 ? forwarded.trim() : crypto.randomUUID();
+}
+
+function classifyError(error, statusCode) {
+  if (error instanceof InvalidStudyRatingError) {
+    return 'validation_error';
+  }
+  if (statusCode === 401) {
+    return 'auth_error';
+  }
+  if (statusCode >= 500) {
+    return 'internal_error';
+  }
+  return 'bad_request';
+}
+
 function rejectMissingCredentialHeaders(request, response, next) {
   const requiredHeaders = [
     'x-expat8-app-id',
@@ -291,6 +431,7 @@ function rejectMissingCredentialHeaders(request, response, next) {
   ];
 
   if (requiredHeaders.some((header) => !request.get(header))) {
+    request.log?.warn('request_rejected', { reason: 'missing_credential_headers' });
     return badRequest(response);
   }
   return next();
@@ -298,7 +439,7 @@ function rejectMissingCredentialHeaders(request, response, next) {
 
 function corsMiddleware({ config }) {
   const allowedOrigin = config.corsAllowedOrigin ?? '*';
-  const allowedMethods = 'GET, POST, OPTIONS';
+  const allowedMethods = 'GET, POST, PUT, OPTIONS';
   const allowedHeaders = [
     'content-type',
     'authorization',

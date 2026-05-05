@@ -50,6 +50,7 @@ Future<void> main() async {
   try {
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
+    await repository.syncCacheInventory(deviceId: deviceId);
     await repository.checkAndRunFirstInstallPrefetch();
     await repository.checkAndRunDailyRefresh();
   } catch (error) {

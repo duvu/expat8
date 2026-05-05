@@ -41,6 +41,23 @@ Environment values:
 - `APP_CREDENTIAL_GET_BODY_LIMIT_BYTES`: maximum GET body size, default `0`.
 - `APP_CREDENTIAL_POST_BODY_LIMIT_BYTES`: maximum POST body size, default
   `262144`.
+- `LOG_LEVEL`: backend structured log level (`debug`/`info`/`warn`/`error`),
+  default `info`.
+- `LOG_REDACTION_ENABLED`: redacts sensitive values in logs, default `true`.
+- `VOCAB_SCHEDULER_ENABLED`: starts the backend vocabulary scheduler when the
+  HTTP server starts, default `true`.
+- `VOCAB_POOL_MIN_SIZE`: minimum usable words per target language before the
+  scheduler switches to daily top-up, default `1000`.
+- `VOCAB_FILL_INTERVAL_SECONDS`: scheduler cadence while a pool is below the
+  minimum, default `60`.
+- `VOCAB_DAILY_GENERATION_COUNT`: number of words generated once per day after
+  the pool is full, default `10`.
+- `VOCAB_DAILY_GENERATION_HOUR_UTC`: earliest UTC hour for the daily top-up,
+  default `0`.
+- `VOCAB_GENERATION_BATCH_SIZE`: maximum words requested per fill run, default
+  `20`.
+- `VOCAB_SCHEDULER_LOCK_TTL_SECONDS`: lock expiration for multi-instance
+  scheduler ownership, default `120`.
 
 All `/v1/*` requests must be signed with the app credential headers documented
 in `contracts/api.md`. `/health` remains unsigned for Compose and load balancer
@@ -86,6 +103,15 @@ Compose environment values:
 - `APP_CREDENTIAL_NONCE_TTL_SECONDS`: default `300`.
 - `APP_CREDENTIAL_GET_BODY_LIMIT_BYTES`: default `0`.
 - `APP_CREDENTIAL_POST_BODY_LIMIT_BYTES`: default `262144`.
+- `LOG_LEVEL`: default `info`.
+- `LOG_REDACTION_ENABLED`: default `true`.
+- `VOCAB_SCHEDULER_ENABLED`: default `true`.
+- `VOCAB_POOL_MIN_SIZE`: default `1000`.
+- `VOCAB_FILL_INTERVAL_SECONDS`: default `60`.
+- `VOCAB_DAILY_GENERATION_COUNT`: default `10`.
+- `VOCAB_DAILY_GENERATION_HOUR_UTC`: default `0`.
+- `VOCAB_GENERATION_BATCH_SIZE`: default `20`.
+- `VOCAB_SCHEDULER_LOCK_TTL_SECONDS`: default `120`.
 
 For a fresh database volume, PostgreSQL initializes tables and indexes from `backend/db/schema.sql`. To reset local Compose data, run `docker compose down -v`.
 
@@ -113,7 +139,22 @@ ln -sf /lib/x86_64-linux-gnu/libsqlite3.so.0 /tmp/expat8-sqlite-lib/libsqlite3.s
 LD_LIBRARY_PATH=/tmp/expat8-sqlite-lib flutter test
 ```
 
-The app uses a local SQLite database via `sqflite` and stores vocabulary, study events, and sync queue entries locally before sync.
+The app uses a local SQLite database via `sqflite` and stores vocabulary, study
+events, and sync queue entries locally before sync.
+
+Vocabulary refill is backend-managed:
+
+- Mobile syncs the active local `server_word_id` inventory with
+  `PUT /v1/user-word-cache`.
+- Mobile can request backend-selected refill batches through
+  `GET /v1/learning/cards`.
+- Backend batches target 15% new cards and 85% review cards, then report the
+  actual mix in response metadata.
+- `easy` writes the study event first, removes the word from `local_words`,
+  syncs cache inventory, and lets the next local/backend refill supply a
+  replacement.
+- The older mobile prefetch/daily refresh code remains a fallback/offline cache
+  mechanism, but freshness is now owned by backend scheduler generation.
 
 The mobile app supports optional registration/sign-in. Anonymous learning uses
 the persisted `device_id`; signed-in learning keeps that `device_id` and adds a
@@ -185,4 +226,6 @@ chain by default; TLS trust failures are reported as smoke failures.
   `libsqlite3-dev` or run tests with the documented local `LD_LIBRARY_PATH`
   shim before running SQLite-backed tests.
 - No pronunciation audio or speech scoring is included.
-- AI generation failures are logged without user payloads and the backend can still serve stored seed words.
+- AI generation runs outside mobile request handling. Scheduler failures are
+  logged without secrets/user payloads and retried later; mobile card responses
+  continue to read only stored database words.

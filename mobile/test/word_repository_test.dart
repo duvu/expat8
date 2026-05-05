@@ -130,6 +130,50 @@ void main() {
     expect(proficiency?.level, 'A2');
   });
 
+  test('easy rating queues study event, deletes local word, and syncs cache inventory', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_easy_delete_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient(failSubmit: true);
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+    );
+    final word = _word('easy_word');
+    await database.upsertWord(word);
+
+    await repository.recordRating(
+      word: word,
+      rating: StudyRating.easy,
+      now: DateTime.utc(2026, 5, 4),
+      deviceId: 'device_repo',
+    );
+
+    final remaining = await database.nextNewWord();
+    final dueEntries = await database.dueSyncEntries(
+      DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+
+    expect(remaining, isNull);
+    expect(dueEntries.single.payload, contains('"server_word_id":"easy_word"'));
+    expect(apiClient.lastSyncedCachedServerWordIds, isEmpty);
+  });
+
+  test('syncs cache inventory from local active words', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_inventory_sync_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(database: database, apiClient: apiClient);
+    await database.upsertWord(_word('cached_1'));
+    await database.upsertWord(_word('cached_2'));
+
+    await repository.syncCacheInventory(deviceId: 'device_repo');
+
+    expect(apiClient.lastSyncedDeviceId, 'device_repo');
+    expect(apiClient.lastSyncedCachedServerWordIds, containsAll(['cached_1', 'cached_2']));
+  });
+
   test('registers user, persists session, and sends session token on learning requests', () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_user_session.db',
@@ -339,7 +383,7 @@ class _FailingApiClient extends BackendApiClient {
 }
 
 class _RecordingApiClient extends BackendApiClient {
-  _RecordingApiClient()
+  _RecordingApiClient({this.failSubmit = false})
     : super(
         baseUrl: 'http://unused',
         timeout: Duration.zero,
@@ -347,10 +391,13 @@ class _RecordingApiClient extends BackendApiClient {
         appSecret: 'test-secret',
       );
 
+  final bool failSubmit;
   List<String> lastExcludedServerWordIds = const [];
   String? lastSessionToken;
   bool signOutCalled = false;
   bool fetchRecentWordsCalled = false;
+  String? lastSyncedDeviceId;
+  List<String> lastSyncedCachedServerWordIds = const [];
 
   @override
   Future<List<VocabularyWord>> fetchNewWords({
@@ -380,6 +427,37 @@ class _RecordingApiClient extends BackendApiClient {
   }
 
   @override
+  Future<CacheInventoryResult> syncCacheInventory({
+    required String deviceId,
+    required List<String> serverWordIds,
+    DateTime? observedAt,
+    String? sessionToken,
+  }) async {
+    lastSyncedDeviceId = deviceId;
+    lastSyncedCachedServerWordIds = serverWordIds;
+    lastSessionToken = sessionToken;
+    return CacheInventoryResult(
+      storedCount: serverWordIds.length,
+      unknownServerWordIds: const [],
+    );
+  }
+
+  @override
+  Future<LearningCardBatch> fetchLearningCards({
+    required String deviceId,
+    int limit = 20,
+    String targetLanguage = 'en',
+    String? sessionToken,
+  }) async {
+    lastSessionToken = sessionToken;
+    return const LearningCardBatch(
+      items: [],
+      targetMix: LearningCardMix(newCount: 0, reviewCount: 0),
+      actualMix: LearningCardMix(newCount: 0, reviewCount: 0),
+    );
+  }
+
+  @override
   Future<StudyEventResult> submitStudyEvent({
     required String deviceId,
     required Map<String, dynamic> event,
@@ -387,6 +465,9 @@ class _RecordingApiClient extends BackendApiClient {
     String? sessionToken,
   }) async {
     lastSessionToken = sessionToken;
+    if (failSubmit) {
+      throw BackendApiException('forced submit failure');
+    }
     return StudyEventResult(
       success: true,
       eventId: event['client_event_id'] as String,

@@ -21,6 +21,13 @@ export class VocabularyGenerationService {
       avoidTerms.map((term) => normalizeTerm(String(term)))
     );
 
+    this.logger.info?.('generation_started', {
+      target_language: targetLanguage,
+      source_language: sourceLanguage,
+      requested_count: limit,
+      difficulty_level: difficultyLevel
+    });
+
     for (let attempt = 0; attempt < 3 && accepted.length < limit; attempt += 1) {
       let raw;
       try {
@@ -32,7 +39,10 @@ export class VocabularyGenerationService {
           difficultyLevel
         });
       } catch (error) {
-        this.logger.warn('ai_generation_failed', { reason: error.message });
+        this.logger.warn?.('ai_generation_failed', {
+          attempt: attempt + 1,
+          reason: error.message
+        });
         break;
       }
 
@@ -48,7 +58,10 @@ export class VocabularyGenerationService {
         blockedTerms.add(normalizedCandidateTerm);
         const validation = validateVocabularyItem(candidate);
         if (!validation.ok) {
-          this.logger.warn('ai_generation_item_rejected', { reason: validation.reason });
+          this.logger.warn?.('ai_generation_item_rejected', {
+            reason: validation.reason,
+            term: candidate.term
+          });
           continue;
         }
         const { word, inserted } = await this.store.insertWord(candidate);
@@ -57,6 +70,12 @@ export class VocabularyGenerationService {
         }
       }
     }
+
+    this.logger.info?.('generation_completed', {
+      target_language: targetLanguage,
+      requested_count: limit,
+      inserted_count: accepted.length
+    });
 
     return accepted;
   }
