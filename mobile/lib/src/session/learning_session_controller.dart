@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../api/backend_api_client.dart';
 import '../data/word_repository.dart';
 import '../models/proficiency_state.dart';
 import '../models/study_event.dart';
@@ -22,16 +23,38 @@ class LearningSessionController extends ChangeNotifier {
 
   VocabularyWord? currentWord;
   bool isLoading = false;
+  bool isAuthInProgress = false;
   String? statusMessage;
+  String? authSuccessMessage;
+  String? authErrorMessage;
   ProficiencyState proficiency = ProficiencyState.initial();
   UserSession? userSession;
   String? _deviceId;
   String? _levelChangeMessage;
+  String? _userFeedbackMessage;
 
   String? takeLevelChangeMessage() {
     final message = _levelChangeMessage;
     _levelChangeMessage = null;
     return message;
+  }
+
+  String? takeUserFeedbackMessage() {
+    final message = _userFeedbackMessage;
+    _userFeedbackMessage = null;
+    return message;
+  }
+
+  String? get userDisplayLabel {
+    final session = userSession;
+    if (session == null) {
+      return null;
+    }
+    final displayName = session.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+    return session.identifier;
   }
 
   Future<void> loadInitial() async {
@@ -50,6 +73,9 @@ class LearningSessionController extends ChangeNotifier {
   }
 
   Future<void> showNewWord() async {
+    if (isLoading) {
+      return;
+    }
     isLoading = true;
     statusMessage = null;
     notifyListeners();
@@ -61,19 +87,28 @@ class LearningSessionController extends ChangeNotifier {
 
     _telemetry.track(TelemetryEvent.newWordRequested);
     _telemetry.track(TelemetryEvent.newWordSwipeRequested);
-    word = await repository.getNewWordWithFallback(
+    final result = await repository.getNewWordWithFallbackResult(
       excludeServerWordId: excludedServerWordId,
       proficiencyLevel: proficiency.level,
       deviceId: _deviceId,
     );
+    word = result.word;
+    _trackNewWordLookup(result);
     actualKind = word == null ? null : CardKind.newWord;
     word ??= await repository.getReviewWord(now);
     actualKind ??= word == null ? null : CardKind.review;
 
-    _showWord(word, actualKind);
+    _showWord(
+      word,
+      actualKind,
+      emptyMessage: result.message ?? 'No learning card is available. Check connection and try again.',
+    );
   }
 
   Future<void> showRecentReview() async {
+    if (isLoading) {
+      return;
+    }
     isLoading = true;
     statusMessage = null;
     notifyListeners();
@@ -81,21 +116,40 @@ class LearningSessionController extends ChangeNotifier {
     final excludedServerWordId = currentWord?.serverWordId;
     final now = DateTime.now().toUtc();
     _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
-    VocabularyWord? word = await repository.getRecentReviewWord(now);
+    final reviewResult = await repository.getRecentReviewWordResult(now);
+    _trackReviewLookup(reviewResult);
+    VocabularyWord? word = reviewResult.word;
     CardKind? actualKind = word == null ? null : CardKind.review;
-    word ??= await repository.getNewWordWithFallback(
+    final newWordResult = word == null
+        ? await repository.getNewWordWithFallbackResult(
       excludeServerWordId: excludedServerWordId,
       proficiencyLevel: proficiency.level,
       deviceId: _deviceId,
-    );
+    )
+        : null;
+    if (newWordResult != null) {
+      _trackNewWordLookup(newWordResult);
+      word = newWordResult.word;
+    }
     actualKind ??= word == null ? null : CardKind.newWord;
 
-    _showWord(word, actualKind);
+    _showWord(
+      word,
+      actualKind,
+      emptyMessage: newWordResult?.message ??
+          reviewResult.message ??
+          'No review or new card is available. Try again later.',
+    );
   }
 
-  void _showWord(VocabularyWord? word, CardKind? actualKind) {
+  void _showWord(
+    VocabularyWord? word,
+    CardKind? actualKind, {
+    required String emptyMessage,
+  }) {
     if (word == null) {
-      statusMessage = 'No local learning card is available.';
+      currentWord = null;
+      statusMessage = emptyMessage;
     } else {
       currentWord = word;
       _selectionWindow.record(actualKind!);
@@ -142,30 +196,175 @@ class LearningSessionController extends ChangeNotifier {
     required String password,
     String? displayName,
   }) async {
-    statusMessage = null;
-    userSession = await repository.registerUser(
-      identifier: identifier,
-      password: password,
-      displayName: displayName,
-    );
-    notifyListeners();
+    if (isAuthInProgress) {
+      return;
+    }
+    final previousSession = userSession;
+    _beginAuthAction();
+    try {
+      final session = await repository.registerUser(
+        identifier: identifier,
+        password: password,
+        displayName: displayName,
+      );
+      userSession = session;
+      authSuccessMessage = 'Registered as ${_displayLabelFor(session)}.';
+      _userFeedbackMessage = authSuccessMessage;
+      _telemetry.track(TelemetryEvent.authRegisterSuccess, {
+        'user_id': session.userId,
+      });
+    } catch (error) {
+      userSession = previousSession;
+      authErrorMessage = _authFailureMessage(AuthAction.register, error);
+      _userFeedbackMessage = authErrorMessage;
+      _telemetry.track(TelemetryEvent.authRegisterFailure, {
+        'error': '$error',
+      });
+    } finally {
+      _endAuthAction();
+    }
   }
 
   Future<void> signIn({
     required String identifier,
     required String password,
   }) async {
-    statusMessage = null;
-    userSession = await repository.signInUser(
-      identifier: identifier,
-      password: password,
-    );
-    notifyListeners();
+    if (isAuthInProgress) {
+      return;
+    }
+    final previousSession = userSession;
+    _beginAuthAction();
+    try {
+      final session = await repository.signInUser(
+        identifier: identifier,
+        password: password,
+      );
+      userSession = session;
+      authSuccessMessage = 'Signed in as ${_displayLabelFor(session)}.';
+      _userFeedbackMessage = authSuccessMessage;
+      _telemetry.track(TelemetryEvent.authSignInSuccess, {
+        'user_id': session.userId,
+      });
+    } catch (error) {
+      userSession = previousSession;
+      authErrorMessage = _authFailureMessage(AuthAction.signIn, error);
+      _userFeedbackMessage = authErrorMessage;
+      _telemetry.track(TelemetryEvent.authSignInFailure, {
+        'error': '$error',
+      });
+    } finally {
+      _endAuthAction();
+    }
   }
 
   Future<void> signOut() async {
-    await repository.signOutUser();
-    userSession = null;
+    if (isAuthInProgress) {
+      return;
+    }
+    _beginAuthAction();
+    try {
+      await repository.signOutUser();
+      userSession = null;
+      authSuccessMessage = 'Signed out.';
+      _userFeedbackMessage = authSuccessMessage;
+      _telemetry.track(TelemetryEvent.authSignOutSuccess);
+    } catch (error) {
+      userSession = await repository.loadUserSession();
+      final clearedLocally = userSession == null;
+      authErrorMessage = clearedLocally
+          ? 'Signed out locally. Server sign-out could not be confirmed.'
+          : _authFailureMessage(AuthAction.signOut, error);
+      _userFeedbackMessage = authErrorMessage;
+      _telemetry.track(TelemetryEvent.authSignOutFailure, {
+        'error': '$error',
+        'cleared_locally': clearedLocally,
+      });
+    } finally {
+      _endAuthAction();
+    }
+  }
+
+  void _beginAuthAction() {
+    isAuthInProgress = true;
+    statusMessage = null;
+    authSuccessMessage = null;
+    authErrorMessage = null;
     notifyListeners();
   }
+
+  void _endAuthAction() {
+    isAuthInProgress = false;
+    notifyListeners();
+  }
+
+  void _trackNewWordLookup(WordLookupResult result) {
+    switch (result.source) {
+      case WordLookupSource.backend:
+        _telemetry.track(TelemetryEvent.newWordBackendSuccess);
+        return;
+      case WordLookupSource.localFallback:
+        _telemetry.track(TelemetryEvent.newWordLocalFallback);
+        return;
+      case WordLookupSource.none:
+        _telemetry.track(TelemetryEvent.newWordFallbackMiss);
+        return;
+      case WordLookupSource.recentReview:
+      case WordLookupSource.dueReview:
+        return;
+    }
+  }
+
+  void _trackReviewLookup(WordLookupResult result) {
+    switch (result.source) {
+      case WordLookupSource.recentReview:
+      case WordLookupSource.dueReview:
+        _telemetry.track(TelemetryEvent.recentReviewHit);
+        return;
+      case WordLookupSource.none:
+        _telemetry.track(TelemetryEvent.recentReviewMiss);
+        return;
+      case WordLookupSource.backend:
+      case WordLookupSource.localFallback:
+        return;
+    }
+  }
+
+  String _displayLabelFor(UserSession session) {
+    final displayName = session.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+    return session.identifier;
+  }
+
+  String _authFailureMessage(AuthAction action, Object error) {
+    if (error is BackendApiException) {
+      final backendError = error.backendError;
+      if (action == AuthAction.register &&
+          (error.statusCode == 409 || backendError == 'user_exists')) {
+        return 'An account already exists for this email.';
+      }
+      if (action == AuthAction.signIn &&
+          (error.statusCode == 401 || backendError == 'invalid_credentials')) {
+        return 'Email or password is incorrect.';
+      }
+      if (error.statusCode == 400 || backendError == 'bad_request') {
+        return 'The request was rejected. Check the entered details and try again.';
+      }
+      if (error.statusCode != null) {
+        return '${action.failureLabel} failed. Server returned ${error.statusCode}.';
+      }
+    }
+    return '${action.failureLabel} failed. Check connection and try again.';
+  }
+}
+
+enum AuthAction {
+  register('Registration'),
+  signIn('Sign-in'),
+  signOut('Sign-out');
+
+  const AuthAction(this.failureLabel);
+
+  final String failureLabel;
 }

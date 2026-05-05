@@ -83,6 +83,19 @@ class WordRepository {
     String? proficiencyLevel,
     String? deviceId,
   }) async {
+    return (await getNewWordWithFallbackResult(
+      excludeServerWordId: excludeServerWordId,
+      proficiencyLevel: proficiencyLevel,
+      deviceId: deviceId,
+    ))
+        .word;
+  }
+
+  Future<WordLookupResult> getNewWordWithFallbackResult({
+    String? excludeServerWordId,
+    String? proficiencyLevel,
+    String? deviceId,
+  }) async {
     try {
       final excludeServerWordIds = await database.recentServerWordIds();
       if (excludeServerWordId != null &&
@@ -101,13 +114,34 @@ class WordRepository {
       if (words.isNotEmpty) {
         await database.upsertWord(words.first);
         await database.pruneToMostRecent();
-        return words.first;
+        return WordLookupResult(
+          word: words.first,
+          source: WordLookupSource.backend,
+        );
       }
-    } catch (_) {
+      final localWord = await database.nextNewWord();
+      return WordLookupResult(
+        word: localWord,
+        source: localWord == null
+            ? WordLookupSource.none
+            : WordLookupSource.localFallback,
+        message: localWord == null ? 'No backend or local new word was available.' : null,
+      );
+    } catch (error) {
       // Local fallback is the product behavior for offline, failed, or timed-out
       // backend requests. Telemetry is emitted by the caller.
+      final localWord = await database.nextNewWord();
+      return WordLookupResult(
+        word: localWord,
+        source: localWord == null
+            ? WordLookupSource.none
+            : WordLookupSource.localFallback,
+        message: localWord == null
+            ? 'Could not reach the word feed and no local new word is available.'
+            : null,
+        error: error,
+      );
     }
-    return database.nextNewWord();
   }
 
   Future<VocabularyWord?> getReviewWord(DateTime now) {
@@ -115,8 +149,20 @@ class WordRepository {
   }
 
   Future<VocabularyWord?> getRecentReviewWord(DateTime now) async {
+    return (await getRecentReviewWordResult(now)).word;
+  }
+
+  Future<WordLookupResult> getRecentReviewWordResult(DateTime now) async {
     final recent = await database.recentlyLearnedReviewWord();
-    return recent ?? await database.nextDueReviewWord(now);
+    if (recent != null) {
+      return WordLookupResult(word: recent, source: WordLookupSource.recentReview);
+    }
+    final dueReview = await database.nextDueReviewWord(now);
+    return WordLookupResult(
+      word: dueReview,
+      source: dueReview == null ? WordLookupSource.none : WordLookupSource.dueReview,
+      message: dueReview == null ? 'No recent or due review word is available.' : null,
+    );
   }
 
   Future<void> bootstrapRecentWords() async {
@@ -180,4 +226,28 @@ class WordRepository {
       }
     }
   }
+}
+
+enum WordLookupSource {
+  backend,
+  localFallback,
+  recentReview,
+  dueReview,
+  none,
+}
+
+class WordLookupResult {
+  const WordLookupResult({
+    required this.word,
+    required this.source,
+    this.message,
+    this.error,
+  });
+
+  final VocabularyWord? word;
+  final WordLookupSource source;
+  final String? message;
+  final Object? error;
+
+  bool get hasWord => word != null;
 }

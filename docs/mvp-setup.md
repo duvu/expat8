@@ -6,15 +6,15 @@
 - Node.js 22 or newer for the backend.
 - Optional LiteLLM server for live AI vocabulary generation.
 
-The current development machine used for this implementation has Node.js and
-Flutter available. Local SQLite-backed Flutter tests require the native
-`libsqlite3.so` library to be available on the host.
+Local SQLite-backed Flutter tests require the native SQLite library to be
+available on the host.
 
 ## Backend
 
 ```bash
 cd backend
 copy .env.example .env
+npm ci
 npm test
 npm start
 ```
@@ -96,6 +96,28 @@ the persisted `device_id`; signed-in learning keeps that `device_id` and adds a
 bearer session token to eligible feed, study-event, sync, and proficiency
 requests.
 
+Auth UX behavior:
+
+- Register, sign-in, and sign-out show SnackBar feedback for success and
+  failure.
+- Duplicate auth submissions are ignored while an auth action is in progress.
+- Register/sign-in failures keep the previous valid session, or remain
+  anonymous when no session existed.
+- Sign-out clears the local session even if server confirmation fails, then
+  shows that the app signed out locally.
+- The drawer shows signed-in user info using `displayName` first and
+  `identifier` as fallback. Stored sessions loaded on app start render the same
+  user info.
+
+Swipe behavior:
+
+- Right-to-left requests a new word.
+- Left-to-right requests a recent/due review word.
+- Slow drags are accepted using a drag-distance threshold, not only velocity.
+- The learning screen also exposes explicit `New Word` and `Review` actions.
+- If a backend request and local fallback both miss, the stale card is cleared
+  and a no-card/retry message is rendered.
+
 ## Smoke Test Coverage
 
 Backend tests include a service-level smoke test that simulates:
@@ -105,6 +127,23 @@ Backend tests include a service-level smoke test that simulates:
 - Rating the word and adding a study event to a sync queue.
 - Posting the event to `/v1/study-events/sync`.
 - Verifying the backend stores the event idempotently.
+
+Read-only deployed smoke check:
+
+```bash
+node scripts/smoke-deployed-backend.mjs
+```
+
+Optional environment:
+
+- `BACKEND_BASE_URL`: defaults to `https://expat8.x51.vn`.
+- `APP_CREDENTIAL_APP_ID`: defaults to the mobile app credential id.
+- `APP_CREDENTIAL_SECRET`: defaults to the mobile app credential secret.
+- `SMOKE_TIMEOUT_MS`: defaults to `5000`.
+
+The script verifies unsigned `/health`, unsigned `/v1/words/recent` rejection,
+and signed `/v1/words/recent`. For HTTPS URLs, Node validates the certificate
+chain by default; TLS trust failures are reported as smoke failures.
 
 ## Known MVP Limitations
 

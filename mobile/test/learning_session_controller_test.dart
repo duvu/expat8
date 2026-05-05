@@ -1,0 +1,263 @@
+import 'dart:async';
+
+import 'package:expat8_language_app/src/api/backend_api_client.dart';
+import 'package:expat8_language_app/src/data/local_database.dart';
+import 'package:expat8_language_app/src/data/word_repository.dart';
+import 'package:expat8_language_app/src/models/proficiency_state.dart';
+import 'package:expat8_language_app/src/models/user_session.dart';
+import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:expat8_language_app/src/session/learning_session_controller.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
+  test('registration success exposes feedback and active user', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(_ControllerApiClient()),
+    );
+
+    await controller.register(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+      displayName: 'Learner',
+    );
+
+    expect(controller.isAuthInProgress, false);
+    expect(controller.userSession?.identifier, 'learner@example.com');
+    expect(controller.userDisplayLabel, 'Learner');
+    expect(controller.authSuccessMessage, 'Registered as Learner.');
+    expect(controller.takeUserFeedbackMessage(), 'Registered as Learner.');
+  });
+
+  test('registration failure leaves previous session and exposes error feedback', () async {
+    final apiClient = _ControllerApiClient(
+      registerError: BackendApiException(
+        'Registration failed: 409',
+        statusCode: 409,
+        backendError: 'user_exists',
+      ),
+    );
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+
+    await controller.register(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+    );
+
+    expect(controller.isAuthInProgress, false);
+    expect(controller.userSession, isNull);
+    expect(controller.authErrorMessage, 'An account already exists for this email.');
+    expect(
+      controller.takeUserFeedbackMessage(),
+      'An account already exists for this email.',
+    );
+  });
+
+  test('sign-in success exposes feedback and active user', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(_ControllerApiClient()),
+    );
+
+    await controller.signIn(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+    );
+
+    expect(controller.isAuthInProgress, false);
+    expect(controller.userSession?.sessionToken, 'session_controller');
+    expect(controller.authSuccessMessage, 'Signed in as Learner.');
+    expect(controller.takeUserFeedbackMessage(), 'Signed in as Learner.');
+  });
+
+  test('sign-in failure preserves previous valid session and exposes error feedback', () async {
+    final apiClient = _ControllerApiClient();
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+    await controller.signIn(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+    );
+    apiClient.signInError = BackendApiException(
+      'Sign-in failed: 401',
+      statusCode: 401,
+      backendError: 'invalid_credentials',
+    );
+
+    await controller.signIn(
+      identifier: 'other@example.com',
+      password: 'wrong-password',
+    );
+
+    expect(controller.isAuthInProgress, false);
+    expect(controller.userSession?.identifier, 'learner@example.com');
+    expect(controller.authErrorMessage, 'Email or password is incorrect.');
+    expect(controller.takeUserFeedbackMessage(), 'Email or password is incorrect.');
+  });
+
+  test('new-word fallback miss clears stale current word', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(
+        _ControllerApiClient(fetchNewWordsError: TimeoutException('timeout')),
+      ),
+    );
+    controller.currentWord = _word('stale_word');
+
+    await controller.showNewWord();
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord, isNull);
+    expect(
+      controller.statusMessage,
+      'Could not reach the word feed and no local new word is available.',
+    );
+  });
+
+  test('recent-review miss clears stale current word when no fallback exists', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(
+        _ControllerApiClient(fetchNewWordsError: TimeoutException('timeout')),
+      ),
+    );
+    controller.currentWord = _word('stale_word');
+
+    await controller.showRecentReview();
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord, isNull);
+    expect(
+      controller.statusMessage,
+      'Could not reach the word feed and no local new word is available.',
+    );
+  });
+}
+
+int _databaseCounter = 0;
+
+Future<WordRepository> _repository(_ControllerApiClient apiClient) async {
+  final database = await LocalDatabase.open(
+    databaseName:
+        'learning_session_controller_${DateTime.now().microsecondsSinceEpoch}_${_databaseCounter++}.db',
+  );
+  return WordRepository(database: database, apiClient: apiClient);
+}
+
+class _ControllerApiClient extends BackendApiClient {
+  _ControllerApiClient({
+    this.registerError,
+    this.signInError,
+    this.signOutError,
+    this.fetchNewWordsError,
+  }) : super(
+          baseUrl: 'http://unused',
+          timeout: Duration.zero,
+          appId: 'test-app',
+          appSecret: 'test-secret',
+        );
+
+  Object? registerError;
+  Object? signInError;
+  Object? signOutError;
+  Object? fetchNewWordsError;
+
+  @override
+  Future<List<VocabularyWord>> fetchNewWords({
+    int limit = 1,
+    String sourceLanguage = 'vi',
+    String targetLanguage = 'en',
+    List<String> excludeServerWordIds = const [],
+    String? proficiencyLevel,
+    String? deviceId,
+    String? sessionToken,
+  }) async {
+    final error = fetchNewWordsError;
+    if (error != null) {
+      throw error;
+    }
+    return [];
+  }
+
+  @override
+  Future<ProficiencyState> fetchProficiency({
+    required String deviceId,
+    String language = 'en',
+    String? sessionToken,
+  }) async {
+    return ProficiencyState.initial();
+  }
+
+  @override
+  Future<UserSession> registerUser({
+    required String identifier,
+    required String password,
+    String? displayName,
+    String? deviceId,
+  }) async {
+    final error = registerError;
+    if (error != null) {
+      throw error;
+    }
+    return UserSession(
+      userId: 'user_controller',
+      identifier: identifier,
+      displayName: displayName ?? 'Learner',
+      sessionToken: 'session_controller',
+    );
+  }
+
+  @override
+  Future<UserSession> signIn({
+    required String identifier,
+    required String password,
+    String? deviceId,
+  }) async {
+    final error = signInError;
+    if (error != null) {
+      throw error;
+    }
+    return UserSession(
+      userId: 'user_controller',
+      identifier: identifier,
+      displayName: 'Learner',
+      sessionToken: 'session_controller',
+    );
+  }
+
+  @override
+  Future<void> signOut({required UserSession session}) async {
+    final error = signOutError;
+    if (error != null) {
+      throw error;
+    }
+  }
+}
+
+VocabularyWord _word(String id) {
+  final now = DateTime.utc(2026, 5, 5);
+  return VocabularyWord(
+    localId: id,
+    serverWordId: id,
+    term: id,
+    language: 'en',
+    meaningVi: 'meaning',
+    partOfSpeech: 'noun',
+    ipa: '/word/',
+    vietnamesePronunciation: 'word',
+    example: 'A sample word.',
+    exampleVi: 'A sample meaning.',
+    difficulty: 'A1',
+    topics: const ['sample'],
+    status: WordStatus.newWord,
+    createdAt: now,
+    updatedAt: now,
+  );
+}

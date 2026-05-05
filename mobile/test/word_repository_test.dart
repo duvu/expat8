@@ -31,6 +31,40 @@ void main() {
     expect(word?.localId, localWord.localId);
   });
 
+  test('reports local fallback source when backend fails but local word exists', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_fallback_result.db',
+    );
+    final localWord = _word('local_word_result');
+    await database.upsertWord(localWord);
+    final repository = WordRepository(
+      database: database,
+      apiClient: _FailingApiClient(),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult();
+
+    expect(result.word?.localId, localWord.localId);
+    expect(result.source, WordLookupSource.localFallback);
+  });
+
+  test('reports miss source when backend fails and no local word exists', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_fallback_miss.db',
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _FailingApiClient(),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult();
+
+    expect(result.word, isNull);
+    expect(result.source, WordLookupSource.none);
+    expect(result.message, 'Could not reach the word feed and no local new word is available.');
+    expect(result.error, isA<BackendApiException>());
+  });
+
   test('passes excluded server word id to backend when requesting another new word', () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_exclusion.db',

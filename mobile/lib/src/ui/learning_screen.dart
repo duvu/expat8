@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/study_event.dart';
+import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
 import 'vocabulary_card.dart';
 
@@ -29,15 +30,22 @@ class _LearningScreenState extends State<LearningScreen> {
 
   void _onControllerChanged() {
     setState(() {});
-    final message = widget.controller.takeLevelChangeMessage();
-    if (message != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-      });
+    final messages = [
+      widget.controller.takeUserFeedbackMessage(),
+      widget.controller.takeLevelChangeMessage(),
+    ].whereType<String>();
+    for (final message in messages) {
+      _showSnackBar(message);
     }
+  }
+
+  void _showSnackBar(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    });
   }
 
   @override
@@ -52,6 +60,8 @@ class _LearningScreenState extends State<LearningScreen> {
       ),
       drawer: LearningDrawer(
         isSignedIn: controller.userSession != null,
+        userSession: controller.userSession,
+        isAuthInProgress: controller.isAuthInProgress,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onRegister: _register,
         onSignIn: _signIn,
@@ -61,6 +71,7 @@ class _LearningScreenState extends State<LearningScreen> {
         },
       ),
       body: LearningCardGestureSurface(
+        isEnabled: !controller.isLoading,
         onNewWordSwipe: controller.showNewWord,
         onRecentReviewSwipe: controller.showRecentReview,
         child: ListView(
@@ -78,11 +89,27 @@ class _LearningScreenState extends State<LearningScreen> {
               ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: LearningActionBar(
+                isLoading: controller.isLoading,
+                onNewWord: controller.showNewWord,
+                onReview: controller.showRecentReview,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: RatingButtonBar(
-                onEasy: () => controller.rateCurrent(StudyRating.easy),
-                onTooEasy: () => controller.rateCurrent(StudyRating.tooEasy),
-                onHard: () => controller.rateCurrent(StudyRating.hard),
-                onTooHard: () => controller.rateCurrent(StudyRating.tooHard),
+                onEasy: controller.currentWord == null || controller.isLoading
+                    ? null
+                    : () => controller.rateCurrent(StudyRating.easy),
+                onTooEasy: controller.currentWord == null || controller.isLoading
+                    ? null
+                    : () => controller.rateCurrent(StudyRating.tooEasy),
+                onHard: controller.currentWord == null || controller.isLoading
+                    ? null
+                    : () => controller.rateCurrent(StudyRating.hard),
+                onTooHard: controller.currentWord == null || controller.isLoading
+                    ? null
+                    : () => controller.rateCurrent(StudyRating.tooHard),
               ),
             ),
           ],
@@ -92,6 +119,9 @@ class _LearningScreenState extends State<LearningScreen> {
   }
 
   Future<void> _register() async {
+    if (widget.controller.isAuthInProgress) {
+      return;
+    }
     Navigator.of(context).maybePop();
     final credentials = await _showIdentityDialog(
       context: context,
@@ -109,6 +139,9 @@ class _LearningScreenState extends State<LearningScreen> {
   }
 
   Future<void> _signIn() async {
+    if (widget.controller.isAuthInProgress) {
+      return;
+    }
     Navigator.of(context).maybePop();
     final credentials = await _showIdentityDialog(
       context: context,
@@ -124,31 +157,51 @@ class _LearningScreenState extends State<LearningScreen> {
   }
 }
 
-class LearningCardGestureSurface extends StatelessWidget {
+class LearningCardGestureSurface extends StatefulWidget {
   const LearningCardGestureSurface({
     required this.onNewWordSwipe,
     required this.onRecentReviewSwipe,
     required this.child,
+    this.isEnabled = true,
     super.key,
   });
 
+  final bool isEnabled;
   final Future<void> Function() onNewWordSwipe;
   final Future<void> Function() onRecentReviewSwipe;
   final Widget child;
 
   @override
+  State<LearningCardGestureSurface> createState() => _LearningCardGestureSurfaceState();
+}
+
+class _LearningCardGestureSurfaceState extends State<LearningCardGestureSurface> {
+  double _horizontalDragDelta = 0;
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
+      onHorizontalDragStart: (_) => _horizontalDragDelta = 0,
+      onHorizontalDragUpdate: (details) {
+        _horizontalDragDelta += details.primaryDelta ?? 0;
+      },
       onHorizontalDragEnd: (details) {
+        if (!widget.isEnabled) {
+          _horizontalDragDelta = 0;
+          return;
+        }
         final velocity = details.primaryVelocity ?? 0;
-        if (velocity < -200) {
-          onNewWordSwipe();
-        } else if (velocity > 200) {
-          onRecentReviewSwipe();
+        final delta = _horizontalDragDelta;
+        _horizontalDragDelta = 0;
+        // Product semantics: right-to-left requests a new word; left-to-right requests review.
+        if (velocity < -200 || delta < -80) {
+          widget.onNewWordSwipe();
+        } else if (velocity > 200 || delta > 80) {
+          widget.onRecentReviewSwipe();
         }
       },
-      child: child,
+      child: widget.child,
     );
   }
 }
@@ -160,10 +213,14 @@ class LearningDrawer extends StatelessWidget {
     required this.onRegister,
     required this.onSignIn,
     required this.onSignOut,
+    this.userSession,
+    this.isAuthInProgress = false,
     super.key,
   });
 
   final bool isSignedIn;
+  final UserSession? userSession;
+  final bool isAuthInProgress;
   final VoidCallback onVocabulary;
   final VoidCallback onRegister;
   final VoidCallback onSignIn;
@@ -180,28 +237,53 @@ class LearningDrawer extends StatelessWidget {
               title: const Text('Vocabulary'),
               onTap: onVocabulary,
             ),
+            if (isSignedIn)
+              _DrawerUserInfo(
+                userSession: userSession,
+              ),
             const Spacer(),
             if (isSignedIn)
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text('Sign out'),
-                onTap: onSignOut,
+                onTap: isAuthInProgress ? null : onSignOut,
               )
             else ...[
               ListTile(
                 leading: const Icon(Icons.person_add_alt_1_outlined),
                 title: const Text('Register'),
-                onTap: onRegister,
+                onTap: isAuthInProgress ? null : onRegister,
               ),
               ListTile(
                 leading: const Icon(Icons.login),
                 title: const Text('Sign in'),
-                onTap: onSignIn,
+                onTap: isAuthInProgress ? null : onSignIn,
               ),
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DrawerUserInfo extends StatelessWidget {
+  const _DrawerUserInfo({required this.userSession});
+
+  final UserSession? userSession;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = userSession?.displayName?.trim();
+    final identifier = userSession?.identifier;
+    final title = displayName == null || displayName.isEmpty
+        ? identifier ?? 'Signed in'
+        : displayName;
+    final subtitle = identifier == null || identifier == title ? null : identifier;
+    return ListTile(
+      leading: const Icon(Icons.account_circle_outlined),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
     );
   }
 }
@@ -302,6 +384,59 @@ class ProficiencyLevelLabel extends StatelessWidget {
   }
 }
 
+class LearningActionBar extends StatelessWidget {
+  const LearningActionBar({
+    required this.isLoading,
+    required this.onNewWord,
+    required this.onReview,
+    super.key,
+  });
+
+  final bool isLoading;
+  final Future<void> Function() onNewWord;
+  final Future<void> Function() onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Swipe left for a new word. Swipe right for review.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: isLoading ? null : () => onNewWord(),
+                icon: const Icon(Icons.chevron_left),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('New Word'),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: isLoading ? null : () => onReview(),
+                icon: const Icon(Icons.chevron_right),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Review'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class RatingButtonBar extends StatelessWidget {
   const RatingButtonBar({
     required this.onEasy,
@@ -311,10 +446,10 @@ class RatingButtonBar extends StatelessWidget {
     super.key,
   });
 
-  final VoidCallback onEasy;
-  final VoidCallback onTooEasy;
-  final VoidCallback onHard;
-  final VoidCallback onTooHard;
+  final VoidCallback? onEasy;
+  final VoidCallback? onTooEasy;
+  final VoidCallback? onHard;
+  final VoidCallback? onTooHard;
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +491,7 @@ class _RatingButton extends StatelessWidget {
   const _RatingButton({required this.label, required this.onPressed});
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {

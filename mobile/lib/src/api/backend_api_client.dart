@@ -61,9 +61,7 @@ class BackendApiClient {
         ),
       )
       .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('New-word feed failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'New-word feed failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final items = body['items'] as List? ?? const [];
     return items
@@ -90,9 +88,7 @@ class BackendApiClient {
           ),
         )
         .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Proficiency fetch failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'Proficiency fetch failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return ProficiencyState.fromJson(body);
   }
@@ -124,9 +120,7 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Study-event submit failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'Study-event submit failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return StudyEventResult(
       success: (body['success'] ?? false) as bool,
@@ -151,9 +145,7 @@ class BackendApiClient {
     final response = await _httpClient
       .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
       .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Recent words failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'Recent words failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final items = body['items'] as List? ?? const [];
     return items
@@ -183,9 +175,7 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Study-event sync failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'Study-event sync failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return SyncResult(
       acceptedEventIds: List<String>.from(
@@ -227,9 +217,7 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Registration failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'Registration failed');
     return UserSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
@@ -258,9 +246,7 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Sign-in failed: ${response.statusCode}');
-    }
+    _throwIfFailed(response, 'Sign-in failed');
     return UserSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   }
 
@@ -282,9 +268,25 @@ class BackendApiClient {
           body: payload,
         )
         .timeout(timeout);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendApiException('Sign-out failed: ${response.statusCode}');
+    _throwIfFailed(response, 'Sign-out failed');
+  }
+
+  void _throwIfFailed(http.Response response, String context) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return;
     }
+    String? backendError;
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      backendError = body['error'] as String?;
+    } catch (_) {
+      backendError = null;
+    }
+    throw BackendApiException(
+      '$context: ${response.statusCode}',
+      statusCode: response.statusCode,
+      backendError: backendError,
+    );
   }
 }
 
@@ -390,9 +392,15 @@ class StudyEventResult {
 }
 
 class BackendApiException implements Exception {
-  BackendApiException(this.message);
+  BackendApiException(
+    this.message, {
+    this.statusCode,
+    this.backendError,
+  });
 
   final String message;
+  final int? statusCode;
+  final String? backendError;
 
   @override
   String toString() => message;
