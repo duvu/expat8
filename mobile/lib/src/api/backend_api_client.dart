@@ -28,86 +28,6 @@ class BackendApiClient {
   final http.Client _httpClient;
   final Logger _logger;
 
-  Future<List<VocabularyWord>> fetchNewWords({
-    int limit = 1,
-    String sourceLanguage = 'vi',
-    String targetLanguage = 'en',
-    List<String> excludeServerWordIds = const [],
-    String? proficiencyLevel,
-    String? deviceId,
-    String? sessionToken,
-  }) async {
-    final traceId = _newTraceId();
-    final queryEntries = <MapEntry<String, String>>[
-      const MapEntry('mode', 'new'),
-      MapEntry('limit', '$limit'),
-      MapEntry('source_language', sourceLanguage),
-      MapEntry('target_language', targetLanguage),
-      if (proficiencyLevel != null) MapEntry('proficiency_level', proficiencyLevel),
-      if (deviceId != null) MapEntry('device_id', deviceId),
-      ...excludeServerWordIds.map(
-        (serverWordId) => MapEntry('exclude_server_word_id', serverWordId),
-      ),
-    ];
-    final query = queryEntries
-        .map(
-          (entry) =>
-              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}',
-        )
-        .join('&');
-    final uri = Uri.parse('$baseUrl/v1/words/next').replace(query: query);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'words_next.request',
-      message: 'Requesting next vocabulary word.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'limit': limit,
-        'exclude_count': excludeServerWordIds.length,
-      },
-    );
-    late final http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } catch (error) {
-      await _logger.error(
-        category: AppLogCategory.api,
-        event: 'words_next.error',
-        message: 'Next-word request failed before response.',
-        traceId: traceId,
-        context: {
-          'error': '$error',
-        },
-      );
-      rethrow;
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'words_next.response',
-      message: 'Received next-word response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-      },
-    );
-    _throwIfFailed(response, 'New-word feed failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
-    return items
-        .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
   Future<ProficiencyState> fetchProficiency({
     required String deviceId,
     String language = 'en',
@@ -259,29 +179,38 @@ class BackendApiClient {
     final excludeSet = excludeIds.toSet();
     return items
         .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
-        .where((word) => word.serverWordId == null || !excludeSet.contains(word.serverWordId))
+        .where((word) =>
+            word.serverWordId == null ||
+            !excludeSet.contains(word.serverWordId))
         .toList();
   }
 
   Future<LearningCardBatch> fetchLearningCards({
     required String deviceId,
-    int limit = 20,
+    int limit = 10,
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
-    final uri = Uri.parse('$baseUrl/v1/learning/cards').replace(queryParameters: {
+    final uri = Uri.parse('$baseUrl/v1/learning/cards');
+    final payload = jsonEncode({
       'device_id': deviceId,
-      'limit': '$limit',
+      'limit': limit,
       'target_language': targetLanguage,
+      'card_mode': 'new',
     });
     final response = await _httpClient
-        .get(
+        .post(
           uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+              sessionToken: sessionToken,
+            ),
+          },
+          body: payload,
         )
         .timeout(timeout);
     _throwIfFailed(response, 'Learning-card batch failed');
@@ -310,7 +239,8 @@ class BackendApiClient {
     final payload = jsonEncode({
       'device_id': deviceId,
       'server_word_ids': serverWordIds,
-      'observed_at': (observedAt ?? DateTime.now().toUtc()).toUtc().toIso8601String(),
+      'observed_at':
+          (observedAt ?? DateTime.now().toUtc()).toUtc().toIso8601String(),
     });
     final response = await _httpClient
         .put(
@@ -388,7 +318,8 @@ class BackendApiClient {
         body['rejected_events'] as List? ?? const [],
       ),
       proficiency: body['proficiency'] is Map<String, dynamic>
-          ? ProficiencyState.fromJson(body['proficiency'] as Map<String, dynamic>)
+          ? ProficiencyState.fromJson(
+              body['proficiency'] as Map<String, dynamic>)
           : null,
     );
   }
@@ -421,7 +352,8 @@ class BackendApiClient {
         )
         .timeout(timeout);
     _throwIfFailed(response, 'Registration failed');
-    return UserSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserSession.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<UserSession> signIn({
@@ -450,7 +382,8 @@ class BackendApiClient {
         )
         .timeout(timeout);
     _throwIfFailed(response, 'Sign-in failed');
-    return UserSession.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return UserSession.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> signOut({required UserSession session}) async {
@@ -542,7 +475,8 @@ extension on BackendApiClient {
     final sortedKeys = uri.queryParametersAll.keys.toList()..sort();
     final sortedParams = <String>[];
     for (final key in sortedKeys) {
-      final values = [...(uri.queryParametersAll[key] ?? const <String>[])]..sort();
+      final values = [...(uri.queryParametersAll[key] ?? const <String>[])]
+        ..sort();
       for (final value in values) {
         sortedParams.add(
           '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(value)}',

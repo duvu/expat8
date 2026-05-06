@@ -187,7 +187,7 @@ Swipe behavior:
 
 Backend tests include a service-level smoke test that simulates:
 
-- Fetching a new word from `/v1/words/next`.
+- Fetching learning cards from `/v1/learning/cards`.
 - Saving it into a client-side local cache.
 - Rating the word and adding a study event to a sync queue.
 - Posting the event to `/v1/study-events/sync`.

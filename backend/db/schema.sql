@@ -123,3 +123,5 @@ CREATE UNIQUE INDEX idx_user_word_states_user_word ON user_word_states(user_id, 
 CREATE INDEX idx_generation_runs_language_date ON generation_runs(target_language, mode, run_date);
 CREATE INDEX idx_user_cached_words_device ON user_cached_words(device_id, updated_at DESC);
 CREATE INDEX idx_user_cached_words_user ON user_cached_words(user_id, updated_at DESC);
+CREATE UNIQUE INDEX idx_user_cached_words_device_word ON user_cached_words(device_id, word_id) WHERE user_id IS NULL;
+CREATE UNIQUE INDEX idx_user_cached_words_user_word ON user_cached_words(user_id, word_id) WHERE user_id IS NOT NULL;

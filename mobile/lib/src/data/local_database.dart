@@ -10,7 +10,8 @@ import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 
 class LocalDatabase {
-  LocalDatabase(this._db, {Logger? logger}) : _logger = logger ?? const NoopLogger();
+  LocalDatabase(this._db, {Logger? logger})
+      : _logger = logger ?? const NoopLogger();
 
   final Database _db;
   Logger _logger;
@@ -19,7 +20,8 @@ class LocalDatabase {
     _logger = logger;
   }
 
-  static Future<LocalDatabase> open({String databaseName = 'expat8_words.db'}) async {
+  static Future<LocalDatabase> open(
+      {String databaseName = 'expat8_words.db'}) async {
     final dbPath = path.join(await getDatabasesPath(), databaseName);
     final database = await openDatabase(
       dbPath,
@@ -68,7 +70,8 @@ class LocalDatabase {
         ''');
         await _createAppSettingsTable(db);
         await _createAppLogsTable(db);
-        await db.execute('CREATE INDEX idx_local_words_status ON local_words(status)');
+        await db.execute(
+            'CREATE INDEX idx_local_words_status ON local_words(status)');
         await db.execute(
           'CREATE INDEX idx_local_words_last_seen ON local_words(last_seen_at)',
         );
@@ -180,7 +183,8 @@ class LocalDatabase {
     Duration maxAge = const Duration(days: 7),
     DateTime? now,
   }) async {
-    final cutoff = (now ?? DateTime.now().toUtc()).subtract(maxAge).toIso8601String();
+    final cutoff =
+        (now ?? DateTime.now().toUtc()).subtract(maxAge).toIso8601String();
     var removed = await _db.delete(
       'app_logs',
       where: 'timestamp < ?',
@@ -202,7 +206,8 @@ class LocalDatabase {
         [maxEntries],
       );
       for (final row in overflowRows) {
-        removed += await _db.delete('app_logs', where: 'id = ?', whereArgs: [row['id']]);
+        removed += await _db
+            .delete('app_logs', where: 'id = ?', whereArgs: [row['id']]);
       }
     }
     return removed;
@@ -239,7 +244,8 @@ class LocalDatabase {
   Future<VocabularyWord?> nextDueReviewWord(DateTime now) async {
     final rows = await _db.query(
       'local_words',
-      where: 'status IN (?, ?, ?) AND (next_review_at IS NULL OR next_review_at <= ?)',
+      where:
+          'status IN (?, ?, ?) AND (next_review_at IS NULL OR next_review_at <= ?)',
       whereArgs: [
         WordStatus.learning.name,
         WordStatus.review.name,
@@ -279,7 +285,9 @@ class LocalDatabase {
     final result = <String>[];
     for (final row in rows) {
       final serverWordId = row['server_word_id'] as String?;
-      if (serverWordId == null || serverWordId.isEmpty || seen.contains(serverWordId)) {
+      if (serverWordId == null ||
+          serverWordId.isEmpty ||
+          seen.contains(serverWordId)) {
         continue;
       }
       seen.add(serverWordId);
@@ -300,7 +308,9 @@ class LocalDatabase {
     final result = <String>[];
     for (final row in rows) {
       final serverWordId = row['server_word_id'] as String?;
-      if (serverWordId == null || serverWordId.isEmpty || seen.contains(serverWordId)) {
+      if (serverWordId == null ||
+          serverWordId.isEmpty ||
+          seen.contains(serverWordId)) {
         continue;
       }
       seen.add(serverWordId);
@@ -328,15 +338,23 @@ class LocalDatabase {
     );
     final existing = rows.isEmpty ? null : rows.first['value'] as String?;
     if (existing != null && existing.isNotEmpty) {
-      return existing;
+      final normalized = _anonymousDeviceId(existing);
+      if (normalized != existing) {
+        await setSetting('device_id', normalized);
+      }
+      return normalized;
     }
-    final deviceId = createId();
+    final deviceId = _anonymousDeviceId(createId());
     await _db.insert(
       'app_settings',
       {'key': 'device_id', 'value': deviceId},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     return deviceId;
+  }
+
+  String _anonymousDeviceId(String value) {
+    return value.startsWith('anonymous_') ? value : 'anonymous_$value';
   }
 
   Future<void> saveUserSession(UserSession session) async {
@@ -358,7 +376,8 @@ class LocalDatabase {
     if (rows.isEmpty) {
       return null;
     }
-    return UserSession.fromJson(jsonDecode(rows.first['value'] as String) as Map<String, dynamic>);
+    return UserSession.fromJson(
+        jsonDecode(rows.first['value'] as String) as Map<String, dynamic>);
   }
 
   Future<void> clearUserSession() async {
@@ -456,7 +475,8 @@ class LocalDatabase {
       'sync_queue',
       {
         'retry_count': retryCount,
-        'next_retry_at': now.add(Duration(minutes: delayMinutes)).toIso8601String(),
+        'next_retry_at':
+            now.add(Duration(minutes: delayMinutes)).toIso8601String(),
       },
       where: 'id = ?',
       whereArgs: [entry.id],
@@ -475,7 +495,8 @@ class LocalDatabase {
   // Settings key constants
   static const String keyIsPrefetchDone = 'is_prefetch_done';
   static const String keyLastDailyRefreshDate = 'last_daily_refresh_date';
-  static const String keyWordsStudiedSinceLastRefresh = 'words_studied_since_last_refresh';
+  static const String keyWordsStudiedSinceLastRefresh =
+      'words_studied_since_last_refresh';
 
   Future<String?> getSetting(String key) async {
     final rows = await _db.query(

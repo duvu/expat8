@@ -36,7 +36,9 @@ void main() {
     expect(controller.takeUserFeedbackMessage(), 'Registered as Learner.');
   });
 
-  test('registration failure leaves previous session and exposes error feedback', () async {
+  test(
+      'registration failure leaves previous session and exposes error feedback',
+      () async {
     final apiClient = _ControllerApiClient(
       registerError: BackendApiException(
         'Registration failed: 409',
@@ -55,7 +57,8 @@ void main() {
 
     expect(controller.isAuthInProgress, false);
     expect(controller.userSession, isNull);
-    expect(controller.authErrorMessage, 'An account already exists for this email.');
+    expect(controller.authErrorMessage,
+        'An account already exists for this email.');
     expect(
       controller.takeUserFeedbackMessage(),
       'An account already exists for this email.',
@@ -102,7 +105,9 @@ void main() {
     expect(controller.takeUserFeedbackMessage(), 'Signed in as Learner.');
   });
 
-  test('sign-in failure preserves previous valid session and exposes error feedback', () async {
+  test(
+      'sign-in failure preserves previous valid session and exposes error feedback',
+      () async {
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
       repository: await _repository(apiClient),
@@ -125,10 +130,13 @@ void main() {
     expect(controller.isAuthInProgress, false);
     expect(controller.userSession?.identifier, 'learner@example.com');
     expect(controller.authErrorMessage, 'Email or password is incorrect.');
-    expect(controller.takeUserFeedbackMessage(), 'Email or password is incorrect.');
+    expect(controller.takeUserFeedbackMessage(),
+        'Email or password is incorrect.');
   });
 
-  test('sign-out failure still reports local sign-out when session is cleared locally', () async {
+  test(
+      'sign-out failure still reports local sign-out when session is cleared locally',
+      () async {
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
       repository: await _repository(apiClient),
@@ -137,7 +145,8 @@ void main() {
       identifier: 'learner@example.com',
       password: 'correct-password',
     );
-    apiClient.signOutError = BackendApiException('Sign-out failed: 503', statusCode: 503);
+    apiClient.signOutError =
+        BackendApiException('Sign-out failed: 503', statusCode: 503);
 
     await controller.signOut();
 
@@ -155,7 +164,8 @@ void main() {
   test('new-word fallback miss clears stale current word', () async {
     final controller = LearningSessionController(
       repository: await _repository(
-        _ControllerApiClient(fetchNewWordsError: TimeoutException('timeout')),
+        _ControllerApiClient(
+            fetchLearningCardsError: TimeoutException('timeout')),
       ),
     );
     controller.currentWord = _word('stale_word');
@@ -170,10 +180,12 @@ void main() {
     );
   });
 
-  test('recent-review miss clears stale current word when no fallback exists', () async {
+  test('recent-review miss clears stale current word when no fallback exists',
+      () async {
     final controller = LearningSessionController(
       repository: await _repository(
-        _ControllerApiClient(fetchNewWordsError: TimeoutException('timeout')),
+        _ControllerApiClient(
+            fetchLearningCardsError: TimeoutException('timeout')),
       ),
     );
     controller.currentWord = _word('stale_word');
@@ -202,7 +214,7 @@ Future<WordRepository> _repository(_ControllerApiClient apiClient) async {
 class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
-    this.fetchNewWordsError,
+    this.fetchLearningCardsError,
   }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
@@ -213,23 +225,24 @@ class _ControllerApiClient extends BackendApiClient {
   Object? registerError;
   Object? signInError;
   Object? signOutError;
-  Object? fetchNewWordsError;
+  Object? fetchLearningCardsError;
 
   @override
-  Future<List<VocabularyWord>> fetchNewWords({
-    int limit = 1,
-    String sourceLanguage = 'vi',
+  Future<LearningCardBatch> fetchLearningCards({
+    required String deviceId,
+    int limit = 20,
     String targetLanguage = 'en',
-    List<String> excludeServerWordIds = const [],
-    String? proficiencyLevel,
-    String? deviceId,
     String? sessionToken,
   }) async {
-    final error = fetchNewWordsError;
+    final error = fetchLearningCardsError;
     if (error != null) {
       throw error;
     }
-    return [];
+    return const LearningCardBatch(
+      items: [],
+      targetMix: LearningCardMix(newCount: 10, reviewCount: 0),
+      actualMix: LearningCardMix(newCount: 0, reviewCount: 0),
+    );
   }
 
   @override

@@ -165,58 +165,46 @@ Response:
 }
 ```
 
-## GET /v1/words/next
+## POST /v1/learning/cards
 
-Query parameters:
+Backend-selected batch endpoint for the mobile card-loading path. This is the
+only supported API for loading learning cards. `GET /v1/words/next` has been
+removed and is not kept as a compatibility route.
 
-- `mode`: `new`
-- `limit`: max items to return
-- `source_language`: source language code, default `vi`
-- `target_language`: target language code, default `en`
-- `proficiency_level`: optional CEFR level filter: `A1`, `A2`, `B1`, `B2`, `C1`, `C2`
-- `device_id`: optional device identifier; when present and `proficiency_level` is omitted, backend resolves current proficiency for that device
-- `exclude_server_word_id`: optional repeated query parameter used to avoid already seen server word ids
+The request MUST NOT include client-side word exclusions such as current word
+IDs, `exclude_server_word_id`, or any other exclusion list. Duplicate avoidance
+is owned by backend learner state and active cache/claim inventory.
 
-Response:
+Request:
 
 ```json
 {
-  "items": []
+  "device_id": "anonymous_550e8400-e29b-41d4-a716-446655440000",
+  "target_language": "en",
+  "limit": 10,
+  "card_mode": "new"
 }
 ```
 
-Notes:
+Fields:
 
-- If no words exist at the exact requested proficiency level, the backend falls back to adjacent levels.
-- Returned word `difficulty` values are canonical CEFR values.
-- With a valid bearer session, the feed avoids words already learned by that
-  user when alternatives are available.
-- This compatibility endpoint is database-only. It never calls AI generation
-  during the mobile request path.
-
-## GET /v1/learning/cards
-
-Backend-selected batch endpoint for the mobile refill path. This endpoint reads
-only from database state and returns a target mix of 15% new cards and 85%
-review cards, with shortage fallback when either pool is unavailable.
-
-Query parameters:
-
-- `device_id`: required device identifier.
-- `limit`: maximum returned cards, capped at `50`.
+- `device_id`: required stable anonymous or device identifier. Anonymous mobile
+  clients use `anonymous_<uuid-v4>`.
 - `target_language`: optional target language code, default `en`.
+- `limit`: optional maximum returned cards, capped at `10`.
+- `card_mode`: optional mode. `new` is the supported value for this flow.
 
 Response:
 
 ```json
 {
   "target_mix": {
-    "new": 3,
-    "review": 17
+    "new": 10,
+    "review": 0
   },
   "actual_mix": {
-    "new": 3,
-    "review": 17
+    "new": 10,
+    "review": 0
   },
   "items": [
     {
@@ -239,13 +227,14 @@ Response:
 }
 ```
 
-`card_type` is either `new` or `review`. `selection_reason` is diagnostic
-metadata such as `new_available`, `due_review`,
-`review_shortage_fallback`, or `new_shortage_fallback`.
+`card_type` is `new` for this flow. `selection_reason` is diagnostic metadata
+such as `new_available`.
 
 With a valid bearer session, selection uses the signed-in `user_id` and keeps
-`device_id` as device/cache context. Without a bearer session, selection uses
-the anonymous `device_id`.
+`device_id` as device/cache context. Signed-in selection also excludes anonymous
+history and active cache claims for the submitted device. Without a bearer
+session, selection uses the anonymous `device_id`. Returned word IDs are
+persisted as active cache/claim inventory before the response is completed.
 
 ## GET /v1/words/recent
 

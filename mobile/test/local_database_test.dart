@@ -21,7 +21,8 @@ void main() {
     final now = DateTime.utc(2026, 5, 4);
 
     for (var i = 0; i < 1001; i++) {
-      await database.upsertWord(_word('word_$i', now.add(Duration(minutes: i))));
+      await database
+          .upsertWord(_word('word_$i', now.add(Duration(minutes: i))));
     }
 
     final removed = await database.pruneToMostRecent();
@@ -51,16 +52,29 @@ void main() {
     expect(dueEntries, isNotEmpty);
   });
 
-  test('persists a generated device id', () async {
+  test('persists a generated anonymous device id', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_device_id.db',
+      databaseName:
+          'local_database_test_device_id_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
-    final first = await database.getOrCreateDeviceId(() => 'device_generated');
+    final first = await database.getOrCreateDeviceId(() => 'uuid_generated');
     final second = await database.getOrCreateDeviceId(() => 'device_other');
 
-    expect(first, 'device_generated');
-    expect(second, 'device_generated');
+    expect(first, 'anonymous_uuid_generated');
+    expect(second, 'anonymous_uuid_generated');
+  });
+
+  test('normalizes an existing raw device id to anonymous format', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_device_id_normalize.db',
+    );
+
+    await database.setSetting('device_id', 'raw_uuid');
+
+    final value = await database.getOrCreateDeviceId(() => 'unused_uuid');
+
+    expect(value, 'anonymous_raw_uuid');
   });
 
   test('persists and clears active user session', () async {
@@ -84,7 +98,8 @@ void main() {
     expect(cleared, isNull);
   });
 
-  test('returns the most recently learned word before due-review fallback', () async {
+  test('returns the most recently learned word before due-review fallback',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'local_database_test_recent_review.db',
     );
@@ -110,7 +125,8 @@ void main() {
   });
 
   test('persists logs across restart and supports filtering', () async {
-    final dbName = 'local_database_test_logs_${DateTime.now().microsecondsSinceEpoch}.db';
+    final dbName =
+        'local_database_test_logs_${DateTime.now().microsecondsSinceEpoch}.db';
     final first = await LocalDatabase.open(databaseName: dbName);
     await first.persistLogEntry(
       LogEntry(
@@ -120,7 +136,7 @@ void main() {
         event: 'api.request',
         message: 'Request started',
         traceId: 'trace_1',
-        context: const {'uri': '/v1/words/next'},
+        context: const {'uri': '/v1/learning/cards'},
       ),
     );
     await first.persistLogEntry(
@@ -250,7 +266,8 @@ void main() {
     expect(count, 2);
   });
 
-  test('lists active cached server ids and deletes local words by id', () async {
+  test('lists active cached server ids and deletes local words by id',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'local_database_test_active_cache_delete.db',
     );

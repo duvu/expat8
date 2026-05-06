@@ -121,8 +121,8 @@ Ví dụ:
 
 ```text
 v1
-GET
-/v1/words/next?limit=1&target_language=en
+POST
+/v1/learning/cards
 2026-05-04T10:30:00.000Z
 4b4194f3f1df4a7b9f0f77e1c13e4581
 mz4oQYJ6Xv6pY8...
@@ -331,8 +331,8 @@ Nên log structured event tối thiểu:
 {
   "event": "app_credential_rejected",
   "reason_class": "invalid_request",
-  "path": "/v1/words/next",
-  "method": "GET",
+  "path": "/v1/learning/cards",
+  "method": "POST",
   "app_id_present": true,
   "ip_hash": "hashed-ip",
   "timestamp": "2026-05-04T10:30:01.000Z"

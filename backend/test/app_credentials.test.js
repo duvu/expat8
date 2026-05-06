@@ -23,11 +23,11 @@ const baseConfig = {
 };
 
 test('canonicalizes query parameters by key and value', () => {
-  const url = new URL('http://localhost/v1/words/next?target_language=en&limit=1&limit=0');
+  const url = new URL('http://localhost/v1/learning/cards?target_language=en&limit=1&limit=0');
 
   assert.equal(
     canonicalPathWithSortedQuery(url),
-    '/v1/words/next?limit=0&limit=1&target_language=en'
+    '/v1/learning/cards?limit=0&limit=1&target_language=en'
   );
 });
 
@@ -57,11 +57,11 @@ test('hashes body and signs canonical requests', () => {
 
 test('verifies valid credentials and rejects tampering, expiry, unknown apps, and replay', () => {
   const now = new Date('2026-05-04T10:30:00.000Z');
-  const url = new URL('http://localhost/v1/words/next?limit=1&target_language=en');
-  const rawBody = Buffer.alloc(0);
+  const url = new URL('http://localhost/v1/learning/cards');
+  const rawBody = Buffer.from('{"device_id":"anonymous_test","limit":10}');
   const nonceCache = new InMemoryNonceCache();
   const headers = signedHeaders({
-    method: 'GET',
+    method: 'POST',
     url,
     rawBody,
     timestamp: now.toISOString(),
@@ -70,7 +70,7 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
 
   assert.deepEqual(
     verifyAppCredentialRequest({
-      method: 'GET',
+      method: 'POST',
       url,
       headers,
       rawBody,
@@ -83,7 +83,7 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
 
   assert.equal(
     verifyAppCredentialRequest({
-      method: 'GET',
+      method: 'POST',
       url,
       headers,
       rawBody,
@@ -96,10 +96,10 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
 
   assert.equal(
     verifyAppCredentialRequest({
-      method: 'GET',
-      url: new URL('http://localhost/v1/words/next?limit=2&target_language=en'),
+      method: 'POST',
+      url: new URL('http://localhost/v1/learning/cards?limit=2'),
       headers: signedHeaders({
-        method: 'GET',
+        method: 'POST',
         url,
         rawBody,
         timestamp: now.toISOString(),
@@ -115,10 +115,10 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
 
   assert.equal(
     verifyAppCredentialRequest({
-      method: 'GET',
+      method: 'POST',
       url,
       headers: signedHeaders({
-        method: 'GET',
+        method: 'POST',
         url,
         rawBody,
         timestamp: '2026-05-04T10:20:00.000Z',
@@ -134,11 +134,11 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
 
   assert.equal(
     verifyAppCredentialRequest({
-      method: 'GET',
+      method: 'POST',
       url,
       headers: {
         ...signedHeaders({
-          method: 'GET',
+          method: 'POST',
           url,
           rawBody,
           timestamp: now.toISOString(),

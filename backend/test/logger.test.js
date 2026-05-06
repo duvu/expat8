@@ -11,15 +11,15 @@ test('emits structured json logs with required fields', () => {
     stream: { write: (line) => chunks.push(line) }
   });
 
-  logger.info('request_started', { method: 'GET', path: '/v1/words/next' });
+  logger.info('request_started', { method: 'POST', path: '/v1/learning/cards' });
 
   assert.equal(chunks.length, 1);
   const parsed = JSON.parse(chunks[0]);
   assert.equal(parsed.level, 'info');
   assert.equal(parsed.event, 'request_started');
   assert.equal(parsed.component, 'test');
-  assert.equal(parsed.method, 'GET');
-  assert.equal(parsed.path, '/v1/words/next');
+  assert.equal(parsed.method, 'POST');
+  assert.equal(parsed.path, '/v1/learning/cards');
   assert.ok(typeof parsed.timestamp === 'string');
 });
 

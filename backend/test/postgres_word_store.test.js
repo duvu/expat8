@@ -9,13 +9,17 @@ test('postgres store persists words, parses topics, and prevents duplicates', as
 
   const first = await store.insertWord(wordInput({ term: 'Reliable', topics: ['work', 'people'] }));
   const second = await store.insertWord(wordInput({ term: ' reliable ', topics: ['duplicate'] }));
-  const words = await store.findNewWords({ targetLanguage: 'en', limit: 10 });
+  const batch = await store.learningCards({
+    deviceId: 'anonymous_pg_words',
+    targetLanguage: 'en',
+    limit: 10
+  });
 
   assert.equal(first.inserted, true);
   assert.equal(second.inserted, false);
   assert.equal(first.word.id, second.word.id);
   assert.deepEqual(first.word.topics, ['work', 'people']);
-  assert.deepEqual(words.map((word) => word.id), [first.word.id]);
+  assert.deepEqual(batch.items.map((card) => card.word.id), [first.word.id]);
 });
 
 test('postgres store syncs study events idempotently', async () => {
@@ -44,7 +48,7 @@ test('postgres store syncs study events idempotently', async () => {
   assert.equal(first.proficiency.level, 'A1');
 });
 
-test('postgres store excludes the current word when loading new words', async () => {
+test('postgres store excludes active cache claims when loading learning cards', async () => {
   const store = new PostgresWordStore({ pool: new FakePool() });
 
   const first = await store.insertWord(
@@ -54,13 +58,19 @@ test('postgres store excludes the current word when loading new words', async ()
     wordInput({ id: 'word_2', term: 'expand', created_at: '2026-05-04T15:11:22.234Z' })
   );
 
-  const words = await store.findNewWords({
-    targetLanguage: 'en',
-    limit: 1,
-    excludeWordIds: [second.word.id]
+  await store.addCachedWordIds({
+    deviceId: 'anonymous_pg_cache',
+    wordIds: [second.word.id],
+    observedAt: '2026-05-05T00:00:00.000Z'
   });
 
-  assert.deepEqual(words.map((word) => word.id), [first.word.id]);
+  const batch = await store.learningCards({
+    deviceId: 'anonymous_pg_cache',
+    targetLanguage: 'en',
+    limit: 1
+  });
+
+  assert.deepEqual(batch.items.map((card) => card.word.id), [first.word.id]);
 });
 
 test('postgres store levels up after five consecutive too_easy ratings', async () => {
@@ -128,14 +138,14 @@ test('postgres store registers users, resolves sessions, revokes sessions, and e
     }
   });
 
-  const words = await store.findNewWords({
+  const batch = await store.learningCards({
     targetLanguage: 'en',
     limit: 1,
     deviceId: 'device_identity',
     userId: registered.user.id
   });
 
-  assert.deepEqual(words.map((word) => word.id), [older.word.id]);
+  assert.deepEqual(batch.items.map((card) => card.word.id), [older.word.id]);
 
   const revoked = await store.revokeUserSession({ sessionToken: signedIn.sessionToken });
   const afterRevoke = await store.resolveUserSession({ sessionToken: signedIn.sessionToken });
@@ -185,6 +195,7 @@ class FakePool {
     this.studyEvents = new Map();
     this.userProficiencies = new Map();
     this.userWordStates = new Map();
+    this.userCachedWords = new Map();
     this.users = new Map();
     this.sessions = new Map();
   }
@@ -221,31 +232,6 @@ class FakePool {
 
     if (
       normalizedSql.startsWith('SELECT * FROM words') &&
-      normalizedSql.includes('ORDER BY created_at DESC')
-    ) {
-      const difficulty = typeof params[1] === 'string' && /^A\d|B\d|C\d$/.test(params[1])
-        ? params[1]
-        : null;
-      const excludeWordIds = Array.isArray(params[1])
-        ? params[1]
-        : Array.isArray(params[2])
-          ? params[2]
-          : [];
-      const learnedOwnerId = findLearnedOwnerId(normalizedSql, params);
-      const limit = params.at(-1);
-      return {
-        rows: [...this.words.values()]
-          .filter((word) => word.language === params[0])
-          .filter((word) => !difficulty || word.difficulty === difficulty)
-          .filter((word) => !excludeWordIds.includes(word.id))
-          .filter((word) => !learnedOwnerId || !this.hasLearnedWord({ normalizedSql, learnedOwnerId, wordId: word.id }))
-          .sort((a, b) => b.created_at.localeCompare(a.created_at))
-          .slice(0, limit)
-      };
-    }
-
-    if (
-      normalizedSql.startsWith('SELECT * FROM words') &&
       normalizedSql.includes('ORDER BY updated_at DESC')
     ) {
       return {
@@ -253,6 +239,55 @@ class FakePool {
           .filter((word) => word.language === params[0])
           .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
           .slice(0, params[1])
+      };
+    }
+
+    if (normalizedSql === 'SELECT * FROM words WHERE language = $1') {
+      return {
+        rows: [...this.words.values()].filter((word) => word.language === params[0])
+      };
+    }
+
+    if (normalizedSql.startsWith('SELECT id FROM words WHERE id = ANY')) {
+      return {
+        rows: params[0]
+          .filter((wordId) => this.words.has(wordId))
+          .map((id) => ({ id }))
+      };
+    }
+
+    if (normalizedSql.startsWith('DELETE FROM user_cached_words')) {
+      const ownerKind = normalizedSql.includes('user_id = $1') ? 'user' : 'device';
+      for (const [key, row] of this.userCachedWords.entries()) {
+        if (
+          (ownerKind === 'user' && row.user_id === params[0]) ||
+          (ownerKind === 'device' && row.device_id === params[0] && row.user_id === null)
+        ) {
+          this.userCachedWords.delete(key);
+        }
+      }
+      return { rows: [] };
+    }
+
+    if (normalizedSql.startsWith('INSERT INTO user_cached_words')) {
+      const row = cachedWordRowFromParams(params);
+      const key = row.user_id
+        ? `user:${row.user_id}:${row.word_id}`
+        : `device:${row.device_id}:${row.word_id}`;
+      this.userCachedWords.set(key, row);
+      return { rows: [] };
+    }
+
+    if (normalizedSql.startsWith('SELECT word_id FROM user_cached_words')) {
+      const ownerKind = normalizedSql.includes('WHERE user_id = $1') ? 'user' : 'device';
+      return {
+        rows: [...this.userCachedWords.values()]
+          .filter((row) =>
+            ownerKind === 'user'
+              ? row.user_id === params[0]
+              : row.device_id === params[0] && row.user_id === null
+          )
+          .map((row) => ({ word_id: row.word_id }))
       };
     }
 
@@ -284,6 +319,30 @@ class FakePool {
       }
       this.userWordStates.set(key, row);
       return { rows: [] };
+    }
+
+    if (
+      normalizedSql.startsWith('SELECT * FROM user_word_states') &&
+      normalizedSql.includes('(user_id = $1 OR (device_id = $2 AND user_id IS NULL))')
+    ) {
+      return {
+        rows: [...this.userWordStates.values()]
+          .filter((state) => state.language === params[2])
+          .filter((state) => state.user_id === params[0] || (state.device_id === params[1] && state.user_id === null))
+      };
+    }
+
+    if (normalizedSql.startsWith('SELECT * FROM user_word_states')) {
+      const ownerKind = normalizedSql.includes('WHERE user_id = $1') ? 'user' : 'device';
+      return {
+        rows: [...this.userWordStates.values()]
+          .filter((state) => state.language === params[1])
+          .filter((state) =>
+            ownerKind === 'user'
+              ? state.user_id === params[0]
+              : state.device_id === params[0] && state.user_id === null
+          )
+      };
     }
 
     if (
@@ -380,12 +439,6 @@ class FakePool {
     throw new Error(`Unexpected SQL: ${normalizedSql}`);
   }
 
-  hasLearnedWord({ normalizedSql, learnedOwnerId, wordId }) {
-    const ownerField = normalizedSql.includes('WHERE user_id = $') ? 'user_id' : 'device_id';
-    return [...this.studyEvents.values()].some(
-      (event) => event[ownerField] === learnedOwnerId && event.word_id === wordId
-    );
-  }
 }
 
 function wordRowFromParams(params) {
@@ -478,6 +531,17 @@ function wordStateRowFromParams(params) {
   };
 }
 
+function cachedWordRowFromParams(params) {
+  const [device_id, user_id, word_id, observed_at, updated_at] = params;
+  return {
+    device_id,
+    user_id,
+    word_id,
+    observed_at,
+    updated_at
+  };
+}
+
 function proficiencyRowFromParams(params) {
   const [id, user_id, device_id, language, level, created_at, updated_at] = params;
   return { id, user_id, device_id, language, level, created_at, updated_at };
@@ -503,13 +567,6 @@ function proficiencyKeyFromQuery(normalizedSql, params) {
   return normalizedSql.includes('WHERE user_id = $1')
     ? `user:${params[0]}:${params[1]}`
     : `device:${params[0]}:${params[1]}`;
-}
-
-function findLearnedOwnerId(normalizedSql, params) {
-  if (!normalizedSql.includes('SELECT word_id FROM study_events')) {
-    return null;
-  }
-  return params[params.length - 2];
 }
 
 function wordInput(overrides = {}) {

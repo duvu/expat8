@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 
 import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
-import { normalizeDifficultyLevel, InvalidStudyRatingError } from './proficiency.js';
+import { InvalidStudyRatingError } from './proficiency.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -134,53 +134,29 @@ function createV1Router({ store, generationService: _generationService, config }
     })
   );
 
-  router.get(
-    '/words/next',
-    asyncHandler(async (request, response) => {
-      const userSession = await resolveOptionalUserSession({ request, response, store });
-      if (userSession === false) {
-        return;
-      }
-      const limit = clampLimit(request.query.limit, 1, 20);
-      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
-      const proficiencyLevel = normalizeOptionalProficiencyLevel(request.query.proficiency_level);
-      const deviceId = request.query.device_id ?? null;
-      const excludeServerWordIds = normalizeExcludedWordIds(request.query.exclude_server_word_id);
-      const words = await store.findNewWords({
-        targetLanguage,
-        limit,
-        excludeWordIds: excludeServerWordIds,
-        proficiencyLevel,
-        deviceId,
-        userId: userSession?.user.id ?? null
-      });
-      request.log?.debug('words_next_served', {
-        target_language: targetLanguage,
-        limit,
-        item_count: words.length
-      });
-      response.json({ items: words.map(toApiWord) });
-    })
-  );
-
-  router.get(
+  router.post(
     '/learning/cards',
     asyncHandler(async (request, response) => {
       const userSession = await resolveOptionalUserSession({ request, response, store });
       if (userSession === false) {
         return;
       }
-      const deviceId = request.query.device_id;
-      if (!deviceId || typeof deviceId !== 'string') {
+      const body = request.body ?? {};
+      if (
+        !body.device_id ||
+        typeof body.device_id !== 'string' ||
+        hasClientWordExclusions(body)
+      ) {
         return response.status(400).json({ error: 'bad_request' });
       }
-      const limit = clampLimit(request.query.limit, 1, 50);
-      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
+      const limit = clampLimit(body.limit ?? 10, 1, 10);
+      const targetLanguage = body.target_language ?? config.defaultTargetLanguage;
       const result = await store.learningCards({
-        deviceId,
+        deviceId: body.device_id,
         userId: userSession?.user.id ?? null,
         targetLanguage,
         limit,
+        cardMode: normalizeCardMode(body.card_mode),
         now: new Date().toISOString()
       });
       return response.json({
@@ -333,13 +309,6 @@ function createV1Router({ store, generationService: _generationService, config }
   return router;
 }
 
-function normalizeOptionalProficiencyLevel(value) {
-  if (value === undefined || value === null || value === '') {
-    return null;
-  }
-  return normalizeDifficultyLevel(value);
-}
-
 async function resolveOptionalUserSession({ request, response, store }) {
   const token = bearerToken(request);
   if (!token) {
@@ -367,13 +336,6 @@ function userSessionResponse({ user, sessionToken }) {
     display_name: user.display_name,
     session_token: sessionToken
   };
-}
-
-function normalizeExcludedWordIds(value) {
-  if (Array.isArray(value)) {
-    return value.filter((item) => typeof item === 'string' && item.length > 0);
-  }
-  return typeof value === 'string' && value.length > 0 ? [value] : [];
 }
 
 function requestContextMiddleware({ logger }) {
@@ -544,6 +506,25 @@ function asyncHandler(handler) {
   return (request, response, next) => {
     Promise.resolve(handler(request, response, next)).catch(next);
   };
+}
+
+function hasClientWordExclusions(body) {
+  return Object.keys(body).some((key) =>
+    [
+      'exclude_server_word_id',
+      'exclude_server_word_ids',
+      'excludeServerWordId',
+      'excludeServerWordIds',
+      'current_word_id',
+      'current_server_word_id'
+    ].includes(key)
+  );
+}
+
+function normalizeCardMode(value) {
+  return value === 'new' || value === undefined || value === null || value === ''
+    ? 'new'
+    : String(value);
 }
 
 function clampLimit(raw, min, max) {

@@ -59,7 +59,8 @@ void main() {
     );
   });
 
-  test('reports local fallback source when backend fails but local word exists', () async {
+  test('reports local fallback source when backend fails but local word exists',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_fallback_result.db',
     );
@@ -76,7 +77,8 @@ void main() {
     expect(result.source, WordLookupSource.localFallback);
   });
 
-  test('reports miss source when backend fails and no local word exists', () async {
+  test('reports miss source when backend fails and no local word exists',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_fallback_miss.db',
     );
@@ -89,11 +91,12 @@ void main() {
 
     expect(result.word, isNull);
     expect(result.source, WordLookupSource.none);
-    expect(result.message, 'Could not reach the word feed and no local new word is available.');
+    expect(result.message,
+        'Could not reach the word feed and no local new word is available.');
     expect(result.error, isA<BackendApiException>());
   });
 
-  test('passes excluded server word id to backend when requesting another new word', () async {
+  test('requests learning card batch without server word exclusions', () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_exclusion.db',
     );
@@ -103,12 +106,14 @@ void main() {
       apiClient: apiClient,
     );
 
-    await repository.getNewWordWithFallback(excludeServerWordId: 'word_1');
+    await repository.getNewWordWithFallback(deviceId: 'anonymous_repo');
 
-    expect(apiClient.lastExcludedServerWordIds, contains('word_1'));
+    expect(apiClient.lastLearningCardsDeviceId, 'anonymous_repo');
+    expect(apiClient.lastLearningCardsLimit, 10);
   });
 
-  test('returns server proficiency after immediate rating submission', () async {
+  test('returns server proficiency after immediate rating submission',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_rating.db',
     );
@@ -130,9 +135,12 @@ void main() {
     expect(proficiency?.level, 'A2');
   });
 
-  test('easy rating queues study event, deletes local word, and syncs cache inventory', () async {
+  test(
+      'easy rating queues study event, deletes local word, and syncs cache inventory',
+      () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_easy_delete_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_easy_delete_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient(failSubmit: true);
     final repository = WordRepository(
@@ -161,7 +169,8 @@ void main() {
 
   test('syncs cache inventory from local active words', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_inventory_sync_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_inventory_sync_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(database: database, apiClient: apiClient);
@@ -171,10 +180,13 @@ void main() {
     await repository.syncCacheInventory(deviceId: 'device_repo');
 
     expect(apiClient.lastSyncedDeviceId, 'device_repo');
-    expect(apiClient.lastSyncedCachedServerWordIds, containsAll(['cached_1', 'cached_2']));
+    expect(apiClient.lastSyncedCachedServerWordIds,
+        containsAll(['cached_1', 'cached_2']));
   });
 
-  test('registers user, persists session, and sends session token on learning requests', () async {
+  test(
+      'registers user, persists session, and sends session token on learning requests',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_user_session.db',
     );
@@ -195,7 +207,9 @@ void main() {
     expect(apiClient.lastSessionToken, 'session_recording');
   });
 
-  test('clears local session on sign out and keeps anonymous learning available', () async {
+  test(
+      'clears local session on sign out and keeps anonymous learning available',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_sign_out.db',
     );
@@ -251,7 +265,8 @@ void main() {
 
   test('exports logs as JSONL payload', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_export_logs_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_export_logs_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     await database.persistLogEntry(
       LogEntry(
@@ -269,13 +284,15 @@ void main() {
       logger: const NoopLogger(),
     );
 
-    final exported = await repository.exportLogs(minimumLevel: AppLogLevel.warning);
+    final exported =
+        await repository.exportLogs(minimumLevel: AppLogLevel.warning);
 
     expect(exported.count, 1);
     expect(exported.payload.contains('api.error'), true);
   });
 
-  test('checkAndRunFirstInstallPrefetch skips when prefetch already done', () async {
+  test('checkAndRunFirstInstallPrefetch skips when prefetch already done',
+      () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_prefetch_skip_$ts.db',
@@ -294,7 +311,9 @@ void main() {
     expect(apiClient.fetchRecentWordsCalled, false);
   });
 
-  test('checkAndRunFirstInstallPrefetch completes without error when not yet done', () async {
+  test(
+      'checkAndRunFirstInstallPrefetch completes without error when not yet done',
+      () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_prefetch_run_$ts.db',
@@ -334,7 +353,8 @@ void main() {
     expect(apiClient.fetchRecentWordsCalled, false);
   });
 
-  test('recordWordStudied increments words_studied counter in settings', () async {
+  test('recordWordStudied increments words_studied counter in settings',
+      () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_proactive_trigger_$ts.db',
@@ -354,28 +374,26 @@ void main() {
       await repository.recordWordStudied();
     }
 
-    final raw = await database.getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
+    final raw = await database
+        .getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
     expect(int.parse(raw!), 3);
   });
 }
 
 class _FailingApiClient extends BackendApiClient {
   _FailingApiClient()
-    : super(
-        baseUrl: 'http://unused',
-        timeout: Duration.zero,
-        appId: 'test-app',
-        appSecret: 'test-secret',
-      );
+      : super(
+          baseUrl: 'http://unused',
+          timeout: Duration.zero,
+          appId: 'test-app',
+          appSecret: 'test-secret',
+        );
 
   @override
-  Future<List<VocabularyWord>> fetchNewWords({
-    int limit = 1,
-    String sourceLanguage = 'vi',
+  Future<LearningCardBatch> fetchLearningCards({
+    required String deviceId,
+    int limit = 20,
     String targetLanguage = 'en',
-    List<String> excludeServerWordIds = const [],
-    String? proficiencyLevel,
-    String? deviceId,
     String? sessionToken,
   }) {
     throw BackendApiException('forced failure');
@@ -384,35 +402,21 @@ class _FailingApiClient extends BackendApiClient {
 
 class _RecordingApiClient extends BackendApiClient {
   _RecordingApiClient({this.failSubmit = false})
-    : super(
-        baseUrl: 'http://unused',
-        timeout: Duration.zero,
-        appId: 'test-app',
-        appSecret: 'test-secret',
-      );
+      : super(
+          baseUrl: 'http://unused',
+          timeout: Duration.zero,
+          appId: 'test-app',
+          appSecret: 'test-secret',
+        );
 
   final bool failSubmit;
-  List<String> lastExcludedServerWordIds = const [];
+  String? lastLearningCardsDeviceId;
+  int? lastLearningCardsLimit;
   String? lastSessionToken;
   bool signOutCalled = false;
   bool fetchRecentWordsCalled = false;
   String? lastSyncedDeviceId;
   List<String> lastSyncedCachedServerWordIds = const [];
-
-  @override
-  Future<List<VocabularyWord>> fetchNewWords({
-    int limit = 1,
-    String sourceLanguage = 'vi',
-    String targetLanguage = 'en',
-    List<String> excludeServerWordIds = const [],
-    String? proficiencyLevel,
-    String? deviceId,
-    String? sessionToken,
-  }) async {
-    lastExcludedServerWordIds = excludeServerWordIds;
-    lastSessionToken = sessionToken;
-    return [];
-  }
 
   @override
   Future<List<VocabularyWord>> fetchRecentWords({
@@ -449,6 +453,8 @@ class _RecordingApiClient extends BackendApiClient {
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
+    lastLearningCardsDeviceId = deviceId;
+    lastLearningCardsLimit = limit;
     lastSessionToken = sessionToken;
     return const LearningCardBatch(
       items: [],
@@ -555,7 +561,8 @@ VocabularyWord _word(String id) {
   );
 }
 
-AppConfig _testConfig({int proactiveThreshold = 100, int proactiveMinNew = 15}) {
+AppConfig _testConfig(
+    {int proactiveThreshold = 100, int proactiveMinNew = 15}) {
   return AppConfig(
     backendBaseUrl: 'http://unused',
     newWordTimeout: Duration.zero,

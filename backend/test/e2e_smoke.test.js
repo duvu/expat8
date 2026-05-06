@@ -40,11 +40,21 @@ class SmokeLocalClient {
   }
 
   async fetchNewWord() {
-    const url = `${this.baseUrl}/v1/words/next?limit=1`;
-    const response = await fetch(url, signedFetchOptions(url));
+    const url = `${this.baseUrl}/v1/learning/cards`;
+    const options = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: this.deviceId,
+        target_language: 'en',
+        limit: 10,
+        card_mode: 'new'
+      })
+    };
+    const response = await fetch(url, signedFetchOptions(url, options));
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.items.length, 1);
+    assert.ok(body.items.length >= 1);
     return body.items[0];
   }
 

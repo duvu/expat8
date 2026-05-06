@@ -99,7 +99,6 @@ class LearningSessionController extends ChangeNotifier {
     notifyListeners();
 
     final now = DateTime.now().toUtc();
-    final excludedServerWordId = currentWord?.serverWordId;
     VocabularyWord? word;
     CardKind? actualKind;
 
@@ -114,8 +113,6 @@ class LearningSessionController extends ChangeNotifier {
       },
     );
     final result = await repository.getNewWordWithFallbackResult(
-      excludeServerWordId: excludedServerWordId,
-      proficiencyLevel: proficiency.level,
       deviceId: _deviceId,
     );
     word = result.word;
@@ -127,7 +124,8 @@ class LearningSessionController extends ChangeNotifier {
     _showWord(
       word,
       actualKind,
-      emptyMessage: result.message ?? 'No learning card is available. Check connection and try again.',
+      emptyMessage: result.message ??
+          'No learning card is available. Check connection and try again.',
     );
   }
 
@@ -139,7 +137,6 @@ class LearningSessionController extends ChangeNotifier {
     statusMessage = null;
     notifyListeners();
 
-    final excludedServerWordId = currentWord?.serverWordId;
     final now = DateTime.now().toUtc();
     _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
     await _logger.info(
@@ -153,10 +150,8 @@ class LearningSessionController extends ChangeNotifier {
     CardKind? actualKind = word == null ? null : CardKind.review;
     final newWordResult = word == null
         ? await repository.getNewWordWithFallbackResult(
-      excludeServerWordId: excludedServerWordId,
-      proficiencyLevel: proficiency.level,
-      deviceId: _deviceId,
-    )
+            deviceId: _deviceId,
+          )
         : null;
     if (newWordResult != null) {
       _trackNewWordLookup(newWordResult);
@@ -220,8 +215,10 @@ class LearningSessionController extends ChangeNotifier {
     if (updatedProficiency != null) {
       final previousLevel = proficiency.level;
       proficiency = updatedProficiency;
-      if (updatedProficiency.levelChanged && updatedProficiency.level != previousLevel) {
-        _levelChangeMessage = 'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
+      if (updatedProficiency.levelChanged &&
+          updatedProficiency.level != previousLevel) {
+        _levelChangeMessage =
+            'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
         await _logger.info(
           category: AppLogCategory.session,
           event: 'session.proficiency.changed',

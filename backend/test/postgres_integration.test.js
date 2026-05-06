@@ -73,8 +73,17 @@ test('API routes work with postgres store when a test database is available', pg
   t.after(() => server.close());
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en`);
-  assert.equal(next.items.length, 1);
+  const batch = await fetchJson(`${baseUrl}/v1/learning/cards`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_api_pg',
+      target_language: 'en',
+      limit: 10,
+      card_mode: 'new'
+    })
+  });
+  assert.equal(batch.items.length, 1);
 
   const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
     method: 'POST',
@@ -84,7 +93,7 @@ test('API routes work with postgres store when a test database is available', pg
       events: [
         {
           client_event_id: 'evt_api_pg_1',
-          server_word_id: next.items[0].server_word_id,
+          server_word_id: batch.items[0].server_word_id,
           rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
         }
@@ -97,7 +106,7 @@ test('API routes work with postgres store when a test database is available', pg
 });
 
 async function resetSchema(pool) {
-  await pool.query('DROP TABLE IF EXISTS user_word_states, user_proficiency, study_events, words CASCADE');
+  await pool.query('DROP TABLE IF EXISTS user_cached_words, user_word_states, user_proficiency, study_events, words CASCADE');
   await initializeDatabaseSchema({ pool });
 }
 

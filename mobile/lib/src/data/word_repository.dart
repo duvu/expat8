@@ -58,7 +58,8 @@ class WordRepository {
   /// Checks if the daily refresh is due today; if so, runs it fire-and-forget.
   Future<void> checkAndRunDailyRefresh() async {
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    final lastRefresh = await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
+    final lastRefresh =
+        await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
     if (lastRefresh == today) {
       return;
     }
@@ -71,7 +72,8 @@ class WordRepository {
   /// Records that a word was studied, and triggers a proactive refresh if the
   /// unstudied new-word count drops below the configured threshold.
   Future<void> recordWordStudied() async {
-    final raw = await database.getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
+    final raw = await database
+        .getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
     final count = (int.tryParse(raw ?? '0') ?? 0) + 1;
     await database.setSetting(
       LocalDatabase.keyWordsStudiedSinceLastRefresh,
@@ -80,8 +82,8 @@ class WordRepository {
     if (count % _config.vocabProactiveThreshold == 0) {
       final unstudied = await database.countUnstudiedNewWords();
       if (unstudied < _config.vocabProactiveMinNew) {
-        final needed = _config.vocabProactiveMinNew - unstudied;
-        unawaited(_runBackendManagedRefill(limit: needed));
+        unawaited(
+            _runBackendManagedRefill(limit: _config.vocabProactiveMinNew));
       }
     }
   }
@@ -192,74 +194,43 @@ class WordRepository {
   }
 
   Future<VocabularyWord?> getNewWordWithFallback({
-    String? excludeServerWordId,
-    String? proficiencyLevel,
     String? deviceId,
   }) async {
-    return (await getNewWordWithFallbackResult(
-      excludeServerWordId: excludeServerWordId,
-      proficiencyLevel: proficiencyLevel,
-      deviceId: deviceId,
-    ))
-        .word;
+    return (await getNewWordWithFallbackResult(deviceId: deviceId)).word;
   }
 
   Future<WordLookupResult> getNewWordWithFallbackResult({
-    String? excludeServerWordId,
-    String? proficiencyLevel,
     String? deviceId,
   }) async {
     try {
-      if (deviceId != null) {
-        final unstudiedCount = await database.countUnstudiedNewWords();
-        if (unstudiedCount < _config.vocabProactiveMinNew) {
-          final refilled = await refillLearningCards(
-            deviceId: deviceId,
-            limit: _config.vocabProactiveMinNew,
-          );
-          if (refilled.isNotEmpty) {
-            final localWord = await database.nextNewWord();
-            if (localWord != null) {
-              return WordLookupResult(
-                word: localWord,
-                source: WordLookupSource.backend,
-              );
-            }
-          }
-        }
+      final resolvedDeviceId = deviceId ?? await getOrCreateDeviceId();
+      final unstudiedCount = await database.countUnstudiedNewWords();
+      var usedBackendRefill = false;
+      if (unstudiedCount < _config.vocabProactiveMinNew) {
+        final refilled = await refillLearningCards(
+          deviceId: resolvedDeviceId,
+          limit: _config.vocabProactiveMinNew,
+        );
+        usedBackendRefill = refilled.isNotEmpty;
       }
-      final excludeServerWordIds = await database.recentServerWordIds();
-      if (excludeServerWordId != null &&
-          excludeServerWordId.isNotEmpty &&
-          !excludeServerWordIds.contains(excludeServerWordId)) {
-        excludeServerWordIds.insert(0, excludeServerWordId);
-      }
-      final session = await database.loadUserSession();
-      final words = await apiClient.fetchNewWords(
-        limit: 1,
-        excludeServerWordIds: excludeServerWordIds,
-        proficiencyLevel: proficiencyLevel,
-        deviceId: deviceId,
-        sessionToken: session?.sessionToken,
-      );
-      if (words.isNotEmpty) {
-        await database.upsertWord(words.first);
-        await database.pruneToMostRecent();
+      final localWord = await database.nextNewWord();
+      if (localWord != null) {
         await _logger.info(
           category: AppLogCategory.api,
           event: 'new_word.backend.success',
-          message: 'Fetched new word from backend.',
+          message: 'Selected new word from unified backend refill cache.',
           context: {
-            'local_id': words.first.localId,
-            'server_word_id': words.first.serverWordId,
+            'local_id': localWord.localId,
+            'server_word_id': localWord.serverWordId,
           },
         );
         return WordLookupResult(
-          word: words.first,
-          source: WordLookupSource.backend,
+          word: localWord,
+          source: usedBackendRefill
+              ? WordLookupSource.backend
+              : WordLookupSource.localFallback,
         );
       }
-      final localWord = await database.nextNewWord();
       await _logger.warning(
         category: AppLogCategory.api,
         event: 'new_word.backend.empty',
@@ -273,7 +244,9 @@ class WordRepository {
         source: localWord == null
             ? WordLookupSource.none
             : WordLookupSource.localFallback,
-        message: localWord == null ? 'No backend or local new word was available.' : null,
+        message: localWord == null
+            ? 'No backend or local new word was available.'
+            : null,
       );
     } catch (error) {
       // Local fallback is the product behavior for offline, failed, or timed-out
@@ -320,13 +293,18 @@ class WordRepository {
           'local_id': recent.localId,
         },
       );
-      return WordLookupResult(word: recent, source: WordLookupSource.recentReview);
+      return WordLookupResult(
+          word: recent, source: WordLookupSource.recentReview);
     }
     final dueReview = await database.nextDueReviewWord(now);
     return WordLookupResult(
       word: dueReview,
-      source: dueReview == null ? WordLookupSource.none : WordLookupSource.dueReview,
-      message: dueReview == null ? 'No recent or due review word is available.' : null,
+      source: dueReview == null
+          ? WordLookupSource.none
+          : WordLookupSource.dueReview,
+      message: dueReview == null
+          ? 'No recent or due review word is available.'
+          : null,
     );
   }
 
@@ -346,7 +324,8 @@ class WordRepository {
     );
   }
 
-  Future<CacheInventoryResult> syncCacheInventory({required String deviceId}) async {
+  Future<CacheInventoryResult> syncCacheInventory(
+      {required String deviceId}) async {
     final session = await database.loadUserSession();
     final serverWordIds = await database.activeCachedServerWordIds();
     final result = await apiClient.syncCacheInventory(
@@ -370,12 +349,12 @@ class WordRepository {
 
   Future<List<VocabularyWord>> refillLearningCards({
     required String deviceId,
-    int limit = 20,
+    int limit = 10,
   }) async {
     final session = await database.loadUserSession();
     final batch = await apiClient.fetchLearningCards(
       deviceId: deviceId,
-      limit: limit,
+      limit: limit.clamp(1, 10).toInt(),
       sessionToken: session?.sessionToken,
     );
     for (final word in batch.items) {
@@ -435,7 +414,8 @@ class WordRepository {
         },
       );
     } else {
-      await database.updateWordAfterRating(word: word, rating: rating, now: now);
+      await database.updateWordAfterRating(
+          word: word, rating: rating, now: now);
     }
     await recordWordStudied();
     try {
@@ -551,7 +531,8 @@ class WordRepository {
       '${Directory.systemTemp.path}/expat8_logs_${DateTime.now().millisecondsSinceEpoch}.jsonl',
     );
     await file.writeAsString(payload);
-    return LogExportResult(path: file.path, payload: payload, count: logs.length);
+    return LogExportResult(
+        path: file.path, payload: payload, count: logs.length);
   }
 }
 

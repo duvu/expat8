@@ -9,9 +9,9 @@ void main() {
       level: AppLogLevel.warning,
       category: AppLogCategory.api,
       event: 'api.timeout',
-      message: 'Timeout while requesting next word',
+      message: 'Timeout while requesting learning cards',
       traceId: 'trace_1',
-      context: const {'status_code': 504, 'endpoint': '/v1/words/next'},
+      context: const {'status_code': 504, 'endpoint': '/v1/learning/cards'},
     );
 
     final restored = LogEntry.fromJson(entry.toJson());

@@ -48,3 +48,11 @@ ON user_cached_words(device_id, updated_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_user_cached_words_user
 ON user_cached_words(user_id, updated_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_cached_words_device_word
+ON user_cached_words(device_id, word_id)
+WHERE user_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_cached_words_user_word
+ON user_cached_words(user_id, word_id)
+WHERE user_id IS NOT NULL;
