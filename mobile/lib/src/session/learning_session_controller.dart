@@ -233,6 +233,15 @@ class LearningSessionController extends ChangeNotifier {
       emptyMessage: result.message ??
           'No learning card is available. Check connection and try again.',
     );
+    if (word != null && actualKind == CardKind.newWord) {
+      unawaited(
+        repository.markWordAsLearning(
+          word: word,
+          now: DateTime.now().toUtc(),
+        ),
+      );
+    }
+    _triggerPrefetchIfNeeded();
   }
 
   Future<void> showRecentReview() async {
@@ -272,6 +281,7 @@ class LearningSessionController extends ChangeNotifier {
           reviewResult.message ??
           'No review or new card is available. Try again later.',
     );
+    _triggerPrefetchIfNeeded();
   }
 
   void _showWord(
@@ -349,7 +359,7 @@ class LearningSessionController extends ChangeNotifier {
   void _triggerPrefetchIfNeeded() {
     if (_prefetchInFlight) return;
     repository.database.countUnstudiedNewWords().then((count) {
-      if (count <= 3 && !_prefetchInFlight) {
+      if (count < 100 && !_prefetchInFlight) {
         _prefetchInFlight = true;
         unawaited(
           repository.prefetchBatch().then((_) {

@@ -193,6 +193,68 @@ void main() {
       'Could not reach the word feed and no local new word is available.',
     );
   });
+
+  test(
+      'showNewWord triggers prefetch when unstudied count is below threshold',
+      () async {
+    // Seed the database with 5 new words (well below threshold of 100).
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_test_prefetch_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final now = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 5; i++) {
+      await database.upsertWord(_word('seed_$i'));
+    }
+    final prefetchCalled = Completer<void>();
+    final apiClient = _ControllerApiClient(
+      onFetchLearningCards: () => prefetchCalled.complete(),
+    );
+    final controller = LearningSessionController(
+      repository: WordRepository(database: database, apiClient: apiClient),
+    );
+
+    await controller.showNewWord();
+
+    // Allow the async prefetch callback to fire.
+    await prefetchCalled.future.timeout(const Duration(seconds: 3));
+    expect(prefetchCalled.isCompleted, isTrue);
+  });
+
+  test('consecutive showNewWord calls show distinct words', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_test_distinct_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    // Seed 3 new words with distinct timestamps so order is deterministic.
+    for (var i = 0; i < 3; i++) {
+      await database.upsertWord(
+        _wordAt('seed_distinct_$i', base.add(Duration(seconds: i))),
+      );
+    }
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
+      ),
+    );
+
+    await controller.showNewWord();
+    final first = controller.currentWord?.localId;
+
+    await controller.showNewWord();
+    final second = controller.currentWord?.localId;
+
+    await controller.showNewWord();
+    final third = controller.currentWord?.localId;
+
+    expect(first, isNotNull);
+    expect(second, isNotNull);
+    expect(third, isNotNull);
+    expect({first, second, third}.length, 3,
+        reason: 'Each swipe should reveal a distinct new word');
+  });
 }
 
 int _databaseCounter = 0;
@@ -209,6 +271,7 @@ class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
     this.fetchLearningCardsError,
+    this.onFetchLearningCards,
   }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
@@ -220,6 +283,7 @@ class _ControllerApiClient extends BackendApiClient {
   Object? signInError;
   Object? signOutError;
   Object? fetchLearningCardsError;
+  void Function()? onFetchLearningCards;
 
   @override
   Future<LearningCardBatch> fetchLearningCards({
@@ -228,6 +292,7 @@ class _ControllerApiClient extends BackendApiClient {
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
+    onFetchLearningCards?.call();
     final error = fetchLearningCardsError;
     if (error != null) {
       throw error;
@@ -313,4 +378,8 @@ VocabularyWord _word(String id) {
     createdAt: now,
     updatedAt: now,
   );
+}
+
+VocabularyWord _wordAt(String id, DateTime at) {
+  return _word(id).copyWith(createdAt: at, updatedAt: at);
 }

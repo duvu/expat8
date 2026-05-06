@@ -412,8 +412,193 @@ void main() {
     expect(updated.nextReviewAt, isNotNull);
     expect(updated.nextReviewAt!.isAfter(now), true);
   });
-}
 
+  // ── pruneToCapSmartly tests ─────────────────────────────────────────────
+
+  test('pruneToCapSmartly removes mastered words first (pass 1)', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_prune_smart_mastered_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+
+    // 900 new words
+    for (var i = 0; i < 900; i++) {
+      await database
+          .upsertWord(_word('new_$i', base.add(Duration(minutes: i))));
+    }
+    // 150 mastered words – their presence should be pruned down to make room
+    for (var i = 0; i < 150; i++) {
+      await database.upsertWord(
+        _word('mastered_$i', base.add(Duration(minutes: 900 + i))).copyWith(
+          status: WordStatus.mastered,
+          lastSeenAt: base.add(Duration(minutes: i)), // earliest first
+        ),
+      );
+    }
+    // Total = 1050, need to remove 50
+
+    final removed = await database.pruneToCapSmartly(maxWords: 1000);
+
+    expect(removed, 50);
+    // All mastered words with lowest lastSeen indices should have been removed
+    final activeIds = await database.activeCachedServerWordIds(limit: 1100);
+    expect(activeIds.length, 1000);
+    // The 50 least-recently-seen mastered words (mastered_0..49) should be gone
+    for (var i = 0; i < 50; i++) {
+      expect(activeIds.contains('mastered_$i'), isFalse);
+    }
+    // mastered_50..149 should still be present
+    for (var i = 50; i < 150; i++) {
+      expect(activeIds.contains('mastered_$i'), isTrue);
+    }
+  });
+
+  test('pruneToCapSmartly removes far-review words second (pass 2)', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_prune_smart_farreview_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+    final farFuture = base.add(const Duration(days: 90));
+    final nearFuture = base.add(const Duration(days: 7));
+
+    // 950 new words
+    for (var i = 0; i < 950; i++) {
+      await database
+          .upsertWord(_word('new_$i', base.add(Duration(minutes: i))));
+    }
+    // 50 review words due very soon (should NOT be pruned)
+    for (var i = 0; i < 50; i++) {
+      await database.upsertWord(
+        _word('near_review_$i', base.add(Duration(minutes: 950 + i))).copyWith(
+          status: WordStatus.review,
+          nextReviewAt: nearFuture,
+        ),
+      );
+    }
+    // 80 review words far in the future (should be pruned)
+    for (var i = 0; i < 80; i++) {
+      await database.upsertWord(
+        _word('far_review_$i', base.add(Duration(minutes: 1000 + i))).copyWith(
+          status: WordStatus.review,
+          nextReviewAt: farFuture.add(Duration(days: i)),
+        ),
+      );
+    }
+    // Total = 1080, need to remove 80; no mastered → pass 2 handles far review
+
+    final removed = await database.pruneToCapSmartly(maxWords: 1000);
+
+    expect(removed, 80);
+    final activeIds = await database.activeCachedServerWordIds(limit: 1200);
+    expect(activeIds.length, 1000);
+    // Near-review words must be kept
+    for (var i = 0; i < 50; i++) {
+      expect(activeIds.contains('near_review_$i'), isTrue);
+    }
+    // All far-review words should have been removed
+    for (var i = 0; i < 80; i++) {
+      expect(activeIds.contains('far_review_$i'), isFalse);
+    }
+  });
+
+  test('pruneToCapSmartly skips words with pending sync events', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_prune_smart_pending_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+
+    // 990 new words
+    for (var i = 0; i < 990; i++) {
+      await database
+          .upsertWord(_word('new_$i', base.add(Duration(minutes: i))));
+    }
+    // 20 mastered words, 10 of which have pending study events
+    for (var i = 0; i < 20; i++) {
+      await database.upsertWord(
+        _word('mastered_$i', base.add(Duration(minutes: 1000 + i))).copyWith(
+          status: WordStatus.mastered,
+          lastSeenAt: base.add(Duration(minutes: i)),
+        ),
+      );
+    }
+    // Insert pending study events for mastered_0..9
+    for (var i = 0; i < 10; i++) {
+      await database.insertStudyEvent(
+        StudyEvent(
+          clientEventId: 'evt_pending_$i',
+          localWordId: 'mastered_$i',
+          serverWordId: 'mastered_$i',
+          rating: StudyRating.easy,
+          occurredAt: base,
+          syncStatus: SyncStatus.pending,
+        ),
+      );
+    }
+    // Total = 1010, need to remove 10
+    // mastered_0..9 have pending events → skip; mastered_10..19 can be removed
+
+    final removed = await database.pruneToCapSmartly(maxWords: 1000);
+
+    expect(removed, 10);
+    final activeIds = await database.activeCachedServerWordIds(limit: 1100);
+    expect(activeIds.length, 1000);
+    // Words with pending events must be kept
+    for (var i = 0; i < 10; i++) {
+      expect(activeIds.contains('mastered_$i'), isTrue);
+    }
+    // Words without pending events should have been removed
+    for (var i = 10; i < 20; i++) {
+      expect(activeIds.contains('mastered_$i'), isFalse);
+    }
+  });
+
+  // ── markWordAsLearning tests ─────────────────────────────────────────────
+
+  test('markWordAsLearning transitions status and sets timestamps', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_mark_learning_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime(2024, 1, 1, 12, 0, 0).toUtc();
+    final word = _word('word_1', base);
+    await database.addBatch([word]);
+
+    await database.markWordAsLearning(word: word, now: base);
+
+    // word_1 should no longer appear in the newWord pool
+    final newWord = await database.nextNewWord();
+    expect(newWord, isNull);
+
+    // word_1 should appear in review after 24h
+    final reviewWord = await database.nextDueReviewWord(
+      base.add(const Duration(hours: 25)),
+    );
+    expect(reviewWord?.localId, equals('word_1'));
+  });
+
+  test('nextNewWord skips word after markWordAsLearning', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_skip_advanced_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime(2024, 1, 1, 12, 0, 0).toUtc();
+    final word1 = _word('word_1', base);
+    final word2 = _word('word_2', base.add(const Duration(seconds: 1)));
+    await database.addBatch([word1, word2]);
+
+    // Get the first word returned and advance it
+    final first = await database.nextNewWord();
+    expect(first, isNotNull);
+    await database.markWordAsLearning(word: first!, now: base);
+
+    // Next nextNewWord should be the other word
+    final second = await database.nextNewWord();
+    expect(second?.localId, isNot(equals(first.localId)));
+  });
+}
 VocabularyWord _word(String id, DateTime updatedAt) {
   return VocabularyWord(
     localId: id,

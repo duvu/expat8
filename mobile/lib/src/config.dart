@@ -44,7 +44,7 @@ class AppConfig {
       ),
       vocabPrefetchLimit: int.fromEnvironment(
         'VOCAB_PREFETCH_LIMIT',
-        defaultValue: 10,
+        defaultValue: 100,
       ),
       vocabDailyRefreshCount: int.fromEnvironment(
         'VOCAB_DAILY_REFRESH_COUNT',

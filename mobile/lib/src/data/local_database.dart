@@ -488,6 +488,29 @@ class LocalDatabase {
     _localWords.put(existing);
   }
 
+  /// Transitions a [newWord] word to [learning] status on first display.
+  ///
+  /// Schedules a review in 24 hours so the word enters the SRS cycle.
+  /// Safe to call fire-and-forget — no-op if word not found.
+  Future<void> markWordAsLearning({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) return;
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WordStatus.learning.name;
+    existing.lastSeenAtMs = nowMs;
+    existing.nextReviewAtMs =
+        now.toUtc().add(const Duration(hours: 24)).millisecondsSinceEpoch;
+    existing.updatedAtMs = nowMs;
+    _localWords.put(existing);
+  }
+
   Future<void> insertStudyEvent(StudyEvent event) async {
     final payload = jsonEncode(event.toSyncJson());
 
@@ -616,7 +639,90 @@ class LocalDatabase {
     for (final word in words) {
       await upsertWord(word);
     }
-    await pruneToMostRecent(maxWords: 1000);
+    await pruneToCapSmartly(maxWords: 1000);
+  }
+
+  /// Prunes the local word store to [maxWords] using smart priority ordering:
+  ///
+  /// Pass 1: Remove [mastered] words (least-recently-seen first).
+  /// Pass 2: Remove [review] words with nextReviewAt > 30 days from now
+  ///         (farthest-first).
+  /// Pass 3: Fallback — remove oldest words by createdAt.
+  ///
+  /// Words with pending (unsynced) study events are skipped in all passes.
+  Future<int> pruneToCapSmartly({int maxWords = 1000}) async {
+    final all = _localWords.getAll();
+    if (all.length <= maxWords) return 0;
+
+    // Build set of localIds that have pending sync events.
+    final pendingLocalIds = _studyEvents
+        .query(StudyEventEntity_.syncStatus.equals(SyncStatus.pending.name))
+        .build()
+        .find()
+        .map((e) => e.localWordId)
+        .toSet();
+
+    bool hasPending(LocalWordEntity e) => pendingLocalIds.contains(e.localId);
+
+    var removed = 0;
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final thirtyDaysMs = const Duration(days: 30).inMilliseconds;
+
+    // Pass 1: mastered words, least-recently-seen first.
+    if (all.length - removed > maxWords) {
+      final mastered = all
+          .where((e) =>
+              e.status == WordStatus.mastered.name && !hasPending(e))
+          .toList()
+        ..sort((a, b) {
+          final aTs = a.lastSeenAtMs ?? 0;
+          final bTs = b.lastSeenAtMs ?? 0;
+          return aTs.compareTo(bTs); // ascending: least-recently-seen first
+        });
+      for (final row in mastered) {
+        if (all.length - removed <= maxWords) break;
+        _localWords.remove(row.id);
+        removed += 1;
+      }
+    }
+
+    // Pass 2: review words with nextReviewAt far in the future (> 30 days).
+    if (all.length - removed > maxWords) {
+      final farReview = all
+          .where((e) =>
+              e.status == WordStatus.review.name &&
+              !hasPending(e) &&
+              (e.nextReviewAtMs != null &&
+                  e.nextReviewAtMs! > nowMs + thirtyDaysMs))
+          .toList()
+        ..sort((a, b) {
+          final aTs = a.nextReviewAtMs ?? 0;
+          final bTs = b.nextReviewAtMs ?? 0;
+          return bTs.compareTo(aTs); // descending: farthest first
+        });
+      for (final row in farReview) {
+        if (all.length - removed <= maxWords) break;
+        _localWords.remove(row.id);
+        removed += 1;
+      }
+    }
+
+    // Pass 3: fallback — oldest by createdAt, skipping pending.
+    if (all.length - removed > maxWords) {
+      final oldest = all
+          .where((e) => !hasPending(e))
+          .toList()
+        ..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
+      for (final row in oldest) {
+        if (all.length - removed <= maxWords) break;
+        // Skip rows already removed in earlier passes.
+        if (_localWords.get(row.id) == null) continue;
+        _localWords.remove(row.id);
+        removed += 1;
+      }
+    }
+
+    return removed;
   }
 
   Future<int> pruneToMostRecent({int maxWords = 1000}) async {

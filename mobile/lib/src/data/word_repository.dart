@@ -554,6 +554,17 @@ class WordRepository {
     }
   }
 
+  /// Transitions a newly displayed [newWord] to [learning] status.
+  ///
+  /// Called fire-and-forget from the controller after a word is shown so the
+  /// word pool advances and the same word is not shown again on the next swipe.
+  Future<void> markWordAsLearning({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    await database.markWordAsLearning(word: word, now: now);
+  }
+
   Future<void> syncPendingEvents({
     required String deviceId,
     DateTime? now,

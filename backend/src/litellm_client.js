@@ -10,7 +10,7 @@ export class LiteLLMClient {
   async generateVocabulary({
     sourceLanguage = 'vi',
     targetLanguage = 'en',
-    limit = 5,
+    limit = 100,
     avoidTerms = [],
     difficultyLevel = 'A1'
   }) {
