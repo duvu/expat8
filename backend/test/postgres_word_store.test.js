@@ -48,6 +48,46 @@ test('postgres store syncs study events idempotently', async () => {
   assert.equal(first.proficiency.level, 'A1');
 });
 
+test('postgres store returns current proficiency for an empty study-event batch', async () => {
+  const store = new PostgresWordStore({ pool: new FakePool() });
+
+  const result = await store.syncStudyEvents({
+    deviceId: 'device_empty_pg_sync',
+    events: []
+  });
+
+  assert.deepEqual(result.accepted_event_ids, []);
+  assert.deepEqual(result.rejected_events, []);
+  assert.equal(result.proficiency.level, 'A1');
+});
+
+test('postgres store returns current proficiency when all study events are rejected', async () => {
+  const pool = new FakePool();
+  const store = new PostgresWordStore({ pool });
+
+  const result = await store.syncStudyEvents({
+    deviceId: 'device_rejected_pg_sync',
+    events: [
+      {
+        client_event_id: 'evt_rejected_pg',
+        server_word_id: 'word_1',
+        rating: 'remembered',
+        occurred_at: '2026-05-04T10:30:00.000Z'
+      }
+    ]
+  });
+
+  assert.deepEqual(result.accepted_event_ids, []);
+  assert.deepEqual(result.rejected_events, [
+    {
+      client_event_id: 'evt_rejected_pg',
+      reason: 'invalid_rating'
+    }
+  ]);
+  assert.equal(result.proficiency.level, 'A1');
+  assert.equal(pool.studyEvents.size, 0);
+});
+
 test('postgres store excludes active cache claims when loading learning cards', async () => {
   const store = new PostgresWordStore({ pool: new FakePool() });
 
@@ -73,6 +113,26 @@ test('postgres store excludes active cache claims when loading learning cards', 
   assert.deepEqual(batch.items.map((card) => card.word.id), [first.word.id]);
 });
 
+test('postgres store claims cached words when cache unique indexes are missing', async () => {
+  const pool = new MissingCacheConflictTargetPool();
+  const store = new PostgresWordStore({ pool });
+  const word = await store.insertWord(wordInput({ id: 'word_cache_index_gap' }));
+
+  await store.addCachedWordIds({
+    deviceId: 'anonymous_index_gap',
+    wordIds: [word.word.id],
+    observedAt: '2026-05-05T00:00:00.000Z'
+  });
+  await store.addCachedWordIds({
+    deviceId: 'device_index_gap',
+    userId: 'user_index_gap',
+    wordIds: [word.word.id],
+    observedAt: '2026-05-05T00:01:00.000Z'
+  });
+
+  assert.equal(pool.userCachedWords.size, 2);
+});
+
 test('postgres store levels up after five consecutive too_easy ratings', async () => {
   const store = new PostgresWordStore({ pool: new FakePool() });
 
@@ -92,6 +152,38 @@ test('postgres store levels up after five consecutive too_easy ratings', async (
       assert.equal(result.proficiency.level_changed, true);
     }
   }
+});
+
+test('postgres store initializes proficiency with explicit anonymous and signed-in ownership', async () => {
+  const pool = new FakePool();
+  const store = new PostgresWordStore({ pool });
+
+  const anonymous = await store.getOrInitializeProficiency({
+    deviceId: 'device_profile',
+    language: 'en'
+  });
+  const anonymousRetry = await store.getOrInitializeProficiency({
+    deviceId: 'device_profile',
+    language: 'en'
+  });
+  const signedIn = await store.getOrInitializeProficiency({
+    deviceId: 'device_profile',
+    userId: 'user_profile',
+    language: 'en'
+  });
+  const signedInRetry = await store.getOrInitializeProficiency({
+    deviceId: 'second_device_profile',
+    userId: 'user_profile',
+    language: 'en'
+  });
+
+  assert.equal(anonymous.user_id, null);
+  assert.equal(anonymous.device_id, 'device_profile');
+  assert.equal(anonymousRetry.id, anonymous.id);
+  assert.equal(signedIn.user_id, 'user_profile');
+  assert.equal(signedIn.device_id, 'device_profile');
+  assert.equal(signedInRetry.id, signedIn.id);
+  assert.equal(pool.userProficiencies.size, 2);
 });
 
 test('postgres store registers users, resolves sessions, revokes sessions, and excludes learned words by user', async () => {
@@ -269,6 +361,21 @@ class FakePool {
       return { rows: [] };
     }
 
+    if (normalizedSql.startsWith('UPDATE user_cached_words')) {
+      const ownerKind = normalizedSql.includes('WHERE user_id = $2') ? 'user' : 'device';
+      const key = ownerKind === 'user'
+        ? `user:${params[1]}:${params[2]}`
+        : `device:${params[0]}:${params[2]}`;
+      const existing = this.userCachedWords.get(key);
+      if (!existing) {
+        return { rows: [], rowCount: 0 };
+      }
+      existing.device_id = params[0];
+      existing.observed_at = params[3];
+      existing.updated_at = params[4];
+      return { rows: [], rowCount: 1 };
+    }
+
     if (normalizedSql.startsWith('INSERT INTO user_cached_words')) {
       const row = cachedWordRowFromParams(params);
       const key = row.user_id
@@ -439,6 +546,19 @@ class FakePool {
     throw new Error(`Unexpected SQL: ${normalizedSql}`);
   }
 
+}
+
+class MissingCacheConflictTargetPool extends FakePool {
+  async query(sql, params = []) {
+    const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+    if (
+      normalizedSql.startsWith('INSERT INTO user_cached_words') &&
+      normalizedSql.includes('ON CONFLICT (')
+    ) {
+      throw new Error('there is no unique or exclusion constraint matching the ON CONFLICT specification');
+    }
+    return super.query(sql, params);
+  }
 }
 
 function wordRowFromParams(params) {

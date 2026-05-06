@@ -48,6 +48,76 @@ void main() {
     expect(body.containsKey('exclude_server_word_id'), false);
   });
 
+  test('uses distinct high-entropy app credential nonces concurrently',
+      () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      return http.Response(
+        jsonEncode({
+          'target_mix': {'new': 10, 'review': 0},
+          'actual_mix': {'new': 0, 'review': 0},
+          'items': [],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://expat8.x51.vn',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'expat8-mobile-secret',
+      httpClient: client,
+    );
+
+    await Future.wait([
+      apiClient.fetchLearningCards(deviceId: 'device_1', limit: 10),
+      apiClient.fetchLearningCards(deviceId: 'device_1', limit: 10),
+    ]);
+
+    final nonces =
+        requests.map((request) => request.headers['x-expat8-nonce']).toList();
+    expect(nonces.toSet().length, 2);
+    expect(nonces, everyElement(isNot(matches(RegExp(r'^mobile_\d+$')))));
+  });
+
+  test('fetchRecentWords sends only supported bootstrap query parameters',
+      () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response(
+        jsonEncode({'items': []}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://expat8.x51.vn',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'expat8-mobile-secret',
+      httpClient: client,
+    );
+
+    await apiClient.fetchRecentWords(
+      limit: 500,
+      targetLanguage: 'en',
+      sourceLanguage: 'vi',
+      deviceId: 'device_ignored',
+      excludeIds: const ['word_ignored'],
+    );
+
+    expect(captured.url.path, '/v1/words/recent');
+    expect(captured.url.queryParameters, {
+      'limit': '500',
+      'target_language': 'en',
+    });
+  });
+
   test('parses proficiency fetch response', () async {
     final client = MockClient((request) async {
       return http.Response(

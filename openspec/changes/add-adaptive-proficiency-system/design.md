@@ -1,5 +1,11 @@
 ## Context
 
+> Current-state note (2026-05-06): this design was written before user
+> sessions, ObjectBox storage, and backend-owned learning-card selection were
+> reconciled. Treat SQL/API examples for `/v1/words/next` as historical.
+> Current card loading uses `POST /v1/learning/cards`; proficiency state is
+> applied through that selection path.
+
 The app currently has no proficiency system. Users see words with a `difficulty` field (currently free-form strings like `beginner`, `B1`, `intermediate`) but cannot track their own level or filter content appropriately. Study events are recorded but contain no rating information. The CEFR framework (A1–C2) provides an industry-standard proficiency scale suitable for this purpose.
 
 **Current state**:
@@ -245,7 +251,9 @@ async function submitStudyEvent(deviceId, wordId, rating) {
 2. Add `rating` column to `study_events`
 3. Implement consecutive counter logic in `/v1/study-events` endpoint
 4. Create new `GET /v1/proficiency` endpoint
-5. Enhance `GET /v1/words/next` to accept `proficiency_level` parameter and filter results
+5. Historical/superseded: enhance `GET /v1/words/next` to accept
+   `proficiency_level`; current filtering should be understood through
+   `POST /v1/learning/cards`
 6. Test: Simulate 5 consecutive ratings; verify level changes
 7. Test: Verify word filtering by level
 

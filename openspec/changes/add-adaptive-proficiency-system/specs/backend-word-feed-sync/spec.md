@@ -1,11 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Backend provides new vocabulary feed
-The backend SHALL provide an API endpoint that returns new vocabulary items for the mobile app, filtering by the user's current proficiency level.
+The backend SHALL provide `POST /v1/learning/cards` to return backend-selected new vocabulary items for the mobile app, filtering by the learner's current proficiency level.
 
 #### Scenario: Mobile requests a new word with proficiency level
-- **WHEN** the mobile app calls the new-word feed endpoint with source language, target language, mode, limit, and proficiency_level parameters
-- **THEN** the backend returns vocabulary items matching the request parameters AND filtered to the specified proficiency level
+- **WHEN** the mobile app calls `POST /v1/learning/cards` with device context, target language, limit, and `card_mode: "new"`
+- **THEN** the backend returns vocabulary items matching the request and filtered to the learner's current proficiency level
 
 #### Scenario: Existing suitable words are available at user proficiency level
 - **WHEN** the backend has suitable stored words available at the user's proficiency level for a new-word request

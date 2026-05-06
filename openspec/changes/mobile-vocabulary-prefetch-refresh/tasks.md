@@ -1,5 +1,11 @@
 ## 1. App Settings Keys & LocalDatabase
 
+> Current-state note (2026-05-06): these tasks are historical. Do not implement
+> the `/v1/words/recent`/exclude-list pieces as written. Current implementation
+> uses ObjectBox, `LocalDatabase.addBatch()` for capped writes,
+> `POST /v1/learning/cards` for refill/top-up, and `PUT /v1/user-word-cache`
+> for duplicate-avoidance inventory.
+
 - [ ] 1.1 Thêm key constants `is_prefetch_done`, `last_daily_refresh_date`, `words_studied_since_last_refresh` vào `LocalDatabase` (hoặc constants file riêng)
 - [ ] 1.2 Thêm method `getSetting(String key)` và `setSetting(String key, String value)` vào `LocalDatabase` nếu chưa có generic key-value API
 - [ ] 1.3 Thêm method `countUnstudiedNewWords()` vào `LocalDatabase` trả về số từ chưa học trong local store

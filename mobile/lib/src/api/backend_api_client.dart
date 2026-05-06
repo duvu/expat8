@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -128,19 +129,12 @@ class BackendApiClient {
     String? deviceId,
   }) async {
     final traceId = _newTraceId();
-    final queryEntries = <MapEntry<String, String>>[
-      MapEntry('limit', '$limit'),
-      MapEntry('source_language', sourceLanguage),
-      MapEntry('target_language', targetLanguage),
-      if (deviceId != null) MapEntry('device_id', deviceId),
-    ];
-    final query = queryEntries
-        .map(
-          (entry) =>
-              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}',
-        )
-        .join('&');
-    final uri = Uri.parse('$baseUrl/v1/words/recent').replace(query: query);
+    final uri = Uri.parse('$baseUrl/v1/words/recent').replace(
+      queryParameters: {
+        'limit': '$limit',
+        'target_language': targetLanguage,
+      },
+    );
     await _logger.info(
       category: AppLogCategory.api,
       event: 'words_recent.request',
@@ -148,7 +142,6 @@ class BackendApiClient {
       traceId: traceId,
       context: {
         'limit': limit,
-        'exclude_count': excludeIds.length,
       },
     );
     late final http.Response response;
@@ -176,12 +169,8 @@ class BackendApiClient {
     _throwIfFailed(response, 'Recent words failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final items = body['items'] as List? ?? const [];
-    final excludeSet = excludeIds.toSet();
     return items
         .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
-        .where((word) =>
-            word.serverWordId == null ||
-            !excludeSet.contains(word.serverWordId))
         .toList();
   }
 
@@ -438,7 +427,7 @@ extension on BackendApiClient {
     String? sessionToken,
   }) {
     final timestamp = DateTime.now().toUtc().toIso8601String();
-    final nonce = 'mobile_${DateTime.now().microsecondsSinceEpoch}';
+    final nonce = _newNonce();
     final rawBody = body ?? Uint8List(0);
     final contentSha256 = _hashBody(rawBody);
     final canonicalRequest = _buildCanonicalRequest(
@@ -458,6 +447,12 @@ extension on BackendApiClient {
       'x-expat8-signature': signature,
       if (sessionToken != null) 'authorization': 'Bearer $sessionToken',
     };
+  }
+
+  String _newNonce() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return 'mobile_${base64Url.encode(bytes).replaceAll('=', '')}';
   }
 
   String _hashBody(Uint8List rawBody) {

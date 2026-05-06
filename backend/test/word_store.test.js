@@ -39,6 +39,45 @@ test('syncs study events idempotently', () => {
   assert.equal(first.proficiency.level, 'A1');
 });
 
+test('syncing an empty study-event batch returns current proficiency', () => {
+  const store = new WordStore({ seed: false });
+
+  const result = store.syncStudyEvents({
+    deviceId: 'device_empty_sync',
+    events: []
+  });
+
+  assert.deepEqual(result.accepted_event_ids, []);
+  assert.deepEqual(result.rejected_events, []);
+  assert.equal(result.proficiency.level, 'A1');
+});
+
+test('syncing only rejected study events returns current proficiency', () => {
+  const store = new WordStore({ seed: false });
+
+  const result = store.syncStudyEvents({
+    deviceId: 'device_rejected_sync',
+    events: [
+      {
+        client_event_id: 'evt_rejected',
+        server_word_id: 'word_1',
+        rating: 'remembered',
+        occurred_at: '2026-05-04T10:30:00.000Z'
+      }
+    ]
+  });
+
+  assert.deepEqual(result.accepted_event_ids, []);
+  assert.deepEqual(result.rejected_events, [
+    {
+      client_event_id: 'evt_rejected',
+      reason: 'invalid_rating'
+    }
+  ]);
+  assert.equal(result.proficiency.level, 'A1');
+  assert.equal(store.studyEventsByClientId.size, 0);
+});
+
 test('stores repeated study attempts and projects the latest word state', () => {
   const store = new WordStore({ seed: false });
   store.insertWord(wordInput({ id: 'state_word', term: 'stateful' }));

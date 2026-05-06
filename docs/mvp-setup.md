@@ -6,9 +6,6 @@
 - Node.js 22 or newer for the backend.
 - Optional LiteLLM server for live AI vocabulary generation.
 
-Local SQLite-backed Flutter tests require the native SQLite library to be
-available on the host.
-
 ## Backend
 
 ```bash
@@ -124,37 +121,24 @@ flutter test
 flutter run --dart-define=BACKEND_BASE_URL=http://localhost:8787 --dart-define=NEW_WORD_TIMEOUT_SECONDS=5
 ```
 
-On Linux, `sqflite_common_ffi` needs a host `libsqlite3.so`. Prefer installing
-the development package:
-
-```bash
-sudo apt install libsqlite3-dev
-```
-
-If the host only exposes `libsqlite3.so.0`, use a local shim for test runs:
-
-```bash
-mkdir -p /tmp/expat8-sqlite-lib
-ln -sf /lib/x86_64-linux-gnu/libsqlite3.so.0 /tmp/expat8-sqlite-lib/libsqlite3.so
-LD_LIBRARY_PATH=/tmp/expat8-sqlite-lib flutter test
-```
-
-The app uses a local SQLite database via `sqflite` and stores vocabulary, study
-events, and sync queue entries locally before sync.
+The app uses ObjectBox local persistence and stores vocabulary, study events,
+settings, sync queue entries, and logs locally before sync. Linux test runs need
+the ObjectBox native library available at `mobile/lib/libobjectbox.so`; see
+`docs/release-notes.md` for the download note.
 
 Vocabulary refill is backend-managed:
 
 - Mobile syncs the active local `server_word_id` inventory with
   `PUT /v1/user-word-cache`.
 - Mobile can request backend-selected refill batches through
-  `GET /v1/learning/cards`.
-- Backend batches target 15% new cards and 85% review cards, then report the
-  actual mix in response metadata.
+  `POST /v1/learning/cards` with `card_mode: "new"`.
+- Backend batches currently return new cards for this flow and report target
+  and actual mix metadata.
 - `easy` writes the study event first, removes the word from `local_words`,
   syncs cache inventory, and lets the next local/backend refill supply a
   replacement.
-- The older mobile prefetch/daily refresh code remains a fallback/offline cache
-  mechanism, but freshness is now owned by backend scheduler generation.
+- Startup prefetch, daily refresh, proactive refresh, and on-demand refill all
+  use the same backend-selected card path and capped ObjectBox write path.
 
 The mobile app supports optional registration/sign-in. Anonymous learning uses
 the persisted `device_id`; signed-in learning keeps that `device_id` and adds a
@@ -187,7 +171,7 @@ Swipe behavior:
 
 Backend tests include a service-level smoke test that simulates:
 
-- Fetching learning cards from `/v1/learning/cards`.
+- Fetching learning cards from `POST /v1/learning/cards`.
 - Saving it into a client-side local cache.
 - Rating the word and adding a study event to a sync queue.
 - Posting the event to `/v1/study-events/sync`.
@@ -221,10 +205,8 @@ chain by default; TLS trust failures are reported as smoke failures.
 - The backend uses PostgreSQL when `DATABASE_URL` is set. Unit tests still use an in-memory store by default, and PostgreSQL integration tests run when `TEST_DATABASE_URL` is provided.
 - Nonce replay protection is in-memory for the current single-instance backend.
   Multi-instance deployments need a shared nonce store such as Redis.
-- Flutter SQLite tests need host SQLite native libraries. If `flutter test`
-  reports `Failed to load dynamic library 'libsqlite3.so'`, install
-  `libsqlite3-dev` or run tests with the documented local `LD_LIBRARY_PATH`
-  shim before running SQLite-backed tests.
+- Flutter tests that touch local persistence require the ObjectBox native
+  library for the host platform.
 - No pronunciation audio or speech scoring is included.
 - AI generation runs outside mobile request handling. Scheduler failures are
   logged without secrets/user payloads and retried later; mobile card responses

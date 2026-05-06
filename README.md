@@ -13,12 +13,16 @@ The current app/backend flow includes an adaptive CEFR proficiency ladder:
 - Backend downgrades proficiency after 5 consecutive `hard` ratings
 - `/v1/learning/cards` is the single card-loading endpoint and returns
   backend-selected batches using learner state
+- The mobile app stores local vocabulary, study events, settings, sync queue
+  entries, and logs in ObjectBox.
+- All mobile `/v1/*` calls are signed with app credential headers; optional
+  user sessions ride inside that app-credential layer.
 
 See `contracts/api.md` for the request and response shapes.
 
 ## Structure
 
-- `mobile/`: Flutter app source for Android and iOS.
+- `mobile/`: Flutter app source for Android and iOS using ObjectBox local storage.
 - `backend/`: Node.js backend service using ExpressJS and `node:test`.
 - `contracts/`: mobile-backend API contracts.
 - `docs/`: product and technical documentation.
@@ -35,6 +39,11 @@ flutter run \
 	--dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
 	--dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
 ```
+
+Mobile card loading uses `POST /v1/learning/cards` with `card_mode: "new"`.
+The backend owns duplicate avoidance through learner state and
+`PUT /v1/user-word-cache`; mobile no longer sends exclusion lists for card
+refill.
 
 Backend environment:
 

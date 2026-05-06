@@ -260,34 +260,39 @@ export class PostgresWordStore {
       const stored = distinctIds.filter((wordId) => knownIds.has(wordId)).slice(0, 1000);
       const now = new Date().toISOString();
       for (const wordId of stored) {
+        const params = [deviceId, userId, wordId, observedAt, now];
+        const updateResult = userId
+          ? await client.query(
+              `UPDATE user_cached_words
+              SET
+                device_id = $1,
+                observed_at = $4,
+                updated_at = $5
+              WHERE user_id = $2 AND word_id = $3`,
+              params
+            )
+          : await client.query(
+              `UPDATE user_cached_words
+              SET
+                observed_at = $3,
+                updated_at = $4
+              WHERE device_id = $1 AND user_id IS NULL AND word_id = $2`,
+              [deviceId, wordId, observedAt, now]
+            );
+        if (updateResult.rowCount > 0) {
+          continue;
+        }
         await client.query(
-          userId
-            ? `INSERT INTO user_cached_words (
-                device_id,
-                user_id,
-                word_id,
-                observed_at,
-                updated_at
-              )
-              VALUES ($1, $2, $3, $4, $5)
-              ON CONFLICT (user_id, word_id) WHERE user_id IS NOT NULL
-              DO UPDATE SET
-                device_id = EXCLUDED.device_id,
-                observed_at = EXCLUDED.observed_at,
-                updated_at = EXCLUDED.updated_at`
-            : `INSERT INTO user_cached_words (
-                device_id,
-                user_id,
-                word_id,
-                observed_at,
-                updated_at
-              )
-              VALUES ($1, $2, $3, $4, $5)
-              ON CONFLICT (device_id, word_id) WHERE user_id IS NULL
-              DO UPDATE SET
-                observed_at = EXCLUDED.observed_at,
-                updated_at = EXCLUDED.updated_at`,
-          [deviceId, userId, wordId, observedAt, now]
+          `INSERT INTO user_cached_words (
+            device_id,
+            user_id,
+            word_id,
+            observed_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING`,
+          params
         );
       }
       return {
@@ -324,7 +329,7 @@ export class PostgresWordStore {
   }
 
   async learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 10, now = new Date().toISOString() }) {
-    const cappedLimit = Math.max(1, Math.min(limit, 10));
+    const cappedLimit = Math.max(1, Math.min(limit, 100));
     const [wordsResult, cachedIds, stateResult] = await Promise.all([
       this.pool.query(`SELECT * FROM words WHERE language = $1`, [targetLanguage]),
       this.#cachedWordIdsForSelection({ deviceId, userId }),
@@ -369,7 +374,7 @@ export class PostgresWordStore {
     const startedAt = Date.now();
     const accepted = [];
     const rejected = [];
-    let latestResult = await this.getProficiency({ deviceId, userId, language });
+    let latestProficiency = await this.getProficiency({ deviceId, userId, language });
 
     for (const event of events) {
       if (!event.client_event_id || !event.rating || !event.occurred_at) {
@@ -380,7 +385,8 @@ export class PostgresWordStore {
         continue;
       }
       try {
-        latestResult = await this.recordStudyEvent({ deviceId, userId, event, language });
+        const result = await this.recordStudyEvent({ deviceId, userId, event, language });
+        latestProficiency = result.proficiency;
       } catch (error) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
@@ -400,7 +406,7 @@ export class PostgresWordStore {
     return {
       accepted_event_ids: accepted,
       rejected_events: rejected,
-      proficiency: latestResult.proficiency
+      proficiency: latestProficiency
     };
   }
 
@@ -652,7 +658,9 @@ export class PostgresWordStore {
     }
 
     const now = new Date().toISOString();
-    const profileDeviceId = userId ? `user:${userId}` : deviceId;
+    const conflictTarget = userId
+      ? '(user_id, language) WHERE user_id IS NOT NULL'
+      : '(device_id, language) WHERE user_id IS NULL';
     const inserted = await client.query(
       `INSERT INTO user_proficiency (
         id,
@@ -664,12 +672,12 @@ export class PostgresWordStore {
         updated_at
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (device_id, language) DO UPDATE SET updated_at = user_proficiency.updated_at
+      ON CONFLICT ${conflictTarget} DO UPDATE SET updated_at = user_proficiency.updated_at
       RETURNING *`,
       [
         createId('proficiency'),
         userId,
-        profileDeviceId,
+        deviceId,
         language,
         DEFAULT_PROFICIENCY_LEVEL,
         now,

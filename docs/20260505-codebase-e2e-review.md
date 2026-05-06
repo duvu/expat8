@@ -1,5 +1,10 @@
 # Expat8 — End-to-End Codebase Review
 
+> Historical note (2026-05-06): this review predates the ObjectBox-only mobile
+> storage reset and the final `POST /v1/learning/cards` contract. Mentions of
+> SQLite, sqflite, or older card/feed routes describe the reviewed state, not
+> the current source of truth.
+
 **Ngày**: 2026-05-05  
 **Phạm vi**: Toàn bộ luồng Register, Sign-in, Sign-out; kiến trúc tổng thể mobile + backend  
 **Trạng thái**: Updated — register error investigated và confirmed

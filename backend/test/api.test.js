@@ -8,12 +8,12 @@ import { loadTestConfig, signedFetchOptions } from './support/app_credential_hel
 
 test('serves unified learning cards, recent words, and idempotent sync', async (t) => {
   const store = new WordStore({ seed: false });
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 120; index += 1) {
     store.insertWord(wordInput({
       id: `word_batch_${index}`,
       term: `batch ${index}`,
-      created_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`,
-      updated_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`
+      created_at: `2026-05-04T10:${(index % 60).toString().padStart(2, '0')}:00.000Z`,
+      updated_at: `2026-05-04T10:${(index % 60).toString().padStart(2, '0')}:00.000Z`
     }));
   }
   const server = http.createServer(
@@ -31,12 +31,12 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
   const batch = await postLearningCards(baseUrl, {
     device_id: 'anonymous_device_1',
     target_language: 'en',
-    limit: 10,
+    limit: 100,
     card_mode: 'new'
   });
-  assert.equal(batch.items.length, 10);
-  assert.deepEqual(batch.target_mix, { new: 10, review: 0 });
-  assert.deepEqual(batch.actual_mix, { new: 10, review: 0 });
+  assert.equal(batch.items.length, 100);
+  assert.deepEqual(batch.target_mix, { new: 100, review: 0 });
+  assert.deepEqual(batch.actual_mix, { new: 100, review: 0 });
   assert.ok(batch.items.every((item) => item.language === 'en'));
 
   const excluded = await fetch(`${baseUrl}/v1/learning/cards`, signedFetchOptions(`${baseUrl}/v1/learning/cards`, {
@@ -54,10 +54,10 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
   const secondBatch = await postLearningCards(baseUrl, {
     device_id: 'anonymous_device_1',
     target_language: 'en',
-    limit: 10,
+    limit: 100,
     card_mode: 'new'
   });
-  assert.equal(secondBatch.items.length, 2);
+  assert.equal(secondBatch.items.length, 20);
   const firstIds = new Set(batch.items.map((item) => item.server_word_id));
   assert.ok(secondBatch.items.every((item) => !firstIds.has(item.server_word_id)));
 
@@ -106,13 +106,87 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
   assert.equal(proficiency.level, 'A1');
 });
 
-test('does not call AI generation when database inventory is empty', async (t) => {
+test('rejects unsupported learning card modes before store selection', async (t) => {
   const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_card_mode', term: 'mode' }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const url = `${baseUrl}/v1/learning/cards`;
+  const response = await fetch(url, signedFetchOptions(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'anonymous_card_mode',
+      target_language: 'en',
+      limit: 10,
+      card_mode: 'review'
+    })
+  }));
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'bad_request' });
+});
+
+test('recent words only honor documented bootstrap query parameters', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({
+    id: 'word_recent_en',
+    term: 'recent en',
+    language: 'en',
+    updated_at: '2026-05-04T10:00:00.000Z'
+  }));
+  store.insertWord(wordInput({
+    id: 'word_recent_ja',
+    term: 'recent ja',
+    language: 'ja',
+    updated_at: '2026-05-04T11:00:00.000Z'
+  }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const recent = await fetchJson(
+    `${baseUrl}/v1/words/recent?limit=1&target_language=en&source_language=vi&device_id=ignored&exclude_server_word_id=word_recent_en`
+  );
+
+  assert.deepEqual(recent.items.map((item) => item.server_word_id), ['word_recent_en']);
+});
+
+test('calls AI generation when word pool is empty and returns generated words', async (t) => {
+  const store = new WordStore({ seed: false });
+  const generatedWords = [];
   const generationService = {
     calls: 0,
-    async generateAndStore() {
+    async generateAndStore({ targetLanguage, limit }) {
       this.calls += 1;
-      throw new Error('AI generation must not run in the mobile request path');
+      for (let index = 0; index < limit; index += 1) {
+        const word = wordInput({
+          id: `gen_${index}`,
+          term: `generated ${index}`,
+          language: targetLanguage,
+          created_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`,
+          updated_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`
+        });
+        const { word: inserted } = store.insertWord(word);
+        generatedWords.push(inserted);
+      }
+      return generatedWords;
     }
   };
   const server = http.createServer(
@@ -133,8 +207,9 @@ test('does not call AI generation when database inventory is empty', async (t) =
     card_mode: 'new'
   });
 
-  assert.deepEqual(next.items, []);
-  assert.equal(generationService.calls, 0);
+  assert.equal(generationService.calls, 1);
+  assert.equal(next.items.length, 10);
+  assert.ok(next.items.every((item) => item.language === 'en'));
 });
 
 test('serves backend-selected learning cards as ten new cards and records active claims', async (t) => {
@@ -721,7 +796,9 @@ test('protects v1 routes with app credentials while leaving health open', async 
     body: cardBody
   }));
   assert.equal(valid.status, 200);
-  assert.equal(store.learningCardsCalls, 1);
+  // learningCards is called twice when shortfall triggers generation: once to
+  // detect the gap, and once after generateAndStore to build the final response.
+  assert.equal(store.learningCardsCalls, 2);
 
   const tampered = await fetch(
     cardUrl,

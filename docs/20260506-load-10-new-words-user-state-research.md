@@ -1,5 +1,10 @@
 # Research: Load 10 New Words With Backend-Owned User State
 
+> Historical note (2026-05-06): this explore-mode research intentionally
+> records intermediate findings. Current behavior is `POST /v1/learning/cards`
+> with backend-owned duplicate avoidance and ObjectBox local storage; use
+> `contracts/api.md` for the live API contract.
+
 Ngay 2026-05-06. Tai lieu nay la ket qua explore mode: chi nghien cuu codebase va de xuat huong thiet ke, chua implement.
 
 ## Yeu Cau Dang Xet

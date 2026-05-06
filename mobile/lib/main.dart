@@ -1,7 +1,6 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'src/api/backend_api_client.dart';
 import 'src/config.dart';
@@ -13,10 +12,6 @@ import 'src/ui/learning_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (kIsWeb) {
-    databaseFactory = databaseFactoryFfiWeb;
-  }
 
   final config = AppConfig.fromEnvironment();
   final database = await LocalDatabase.open();
@@ -51,8 +46,14 @@ Future<void> main() async {
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
     await repository.syncCacheInventory(deviceId: deviceId);
-    await repository.checkAndRunFirstInstallPrefetch();
-    await repository.checkAndRunDailyRefresh();
+    // Await initial prefetch synchronously if the local cache is empty so the
+    // learning screen has words available immediately on first launch.
+    final unlearnedCount = await repository.database.countUnstudiedNewWords();
+    if (unlearnedCount < 10) {
+      await repository.prefetchBatch();
+    }
+    unawaited(repository.checkAndRunFirstInstallPrefetch());
+    unawaited(repository.checkAndRunDailyRefresh());
   } catch (error) {
     await logger.warning(
       category: AppLogCategory.app,

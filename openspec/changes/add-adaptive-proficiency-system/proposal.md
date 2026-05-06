@@ -1,5 +1,11 @@
 ## Why
 
+> Current-state note (2026-05-06): this proposal predates the removal of
+> `/v1/words/next`. Current card loading uses `POST /v1/learning/cards`; the
+> backend derives proficiency from study events and uses learner state during
+> card selection. References below to enhancing `GET /v1/words/next` are
+> historical and superseded.
+
 The app currently lacks a proficiency system. Users cannot see their level, content cannot be filtered by difficulty, and there's no way to measure learner progress. We need an **adaptive system that automatically detects proficiency level** based on study behavior—specifically, consecutive correct/incorrect ratings—without requiring users to self-assess or manually select a level. This removes friction, provides accurate difficulty matching, and adapts as learners grow.
 
 ## What Changes
@@ -38,7 +44,8 @@ The app currently lacks a proficiency system. Users cannot see their level, cont
 **Backend APIs**:
 - Enhanced `POST /v1/study-events`: Now accepts `rating` field; response includes proficiency change status
 - New `GET /v1/proficiency`: Returns current proficiency level for a device
-- Enhanced `GET /v1/words/next`: Now accepts `proficiency_level` parameter; filters words to matching difficulty
+- Superseded historical item: `GET /v1/words/next` filtering. Current
+  selection happens through `POST /v1/learning/cards`.
 
 **Mobile UI**:
 - New proficiency display widget in top-right corner of learning screen

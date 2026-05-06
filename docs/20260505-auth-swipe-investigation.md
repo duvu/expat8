@@ -1,5 +1,9 @@
 # Investigation: register/login không phản hồi và swipe không đổi từ
 
+> Historical note (2026-05-06): this investigation captures the code state at
+> the time it was written. Current implementation details may differ; use
+> `contracts/api.md`, `README.md`, and `docs/mvp-setup.md` for live behavior.
+
 Ngày điều tra: 2026-05-05  
 Phạm vi: mobile Flutter, backend identity/feed API, OpenSpec change `add-user-identity-swipe-navigation`.
 

@@ -4,15 +4,9 @@ import 'package:expat8_language_app/src/models/study_event.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
 
   test('persists words and prunes to 1000 most recent', () async {
     final database = await LocalDatabase.open(
@@ -151,6 +145,7 @@ void main() {
       ),
     );
 
+    await first.close();
     final second = await LocalDatabase.open(databaseName: dbName);
     final filtered = await second.queryLogs(
       minimumLevel: AppLogLevel.warning,
@@ -282,6 +277,140 @@ void main() {
     expect(beforeDelete, containsAll(['server_1', 'server_2']));
     expect(deleted, true);
     expect(afterDelete, ['server_2']);
+  });
+  test('addBatch prunes to 990 before inserting when count is at 995',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_add_batch_prune.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+
+    // Insert 995 words with distinct timestamps so pruning order is deterministic
+    for (var i = 0; i < 995; i++) {
+      await database
+          .upsertWord(_word('existing_$i', base.add(Duration(minutes: i))));
+    }
+
+    final batch = List.generate(
+      10,
+      (i) => _word('new_batch_$i', base.add(Duration(minutes: 1000 + i))),
+    );
+    await database.addBatch(batch);
+
+    final total = await database.countUnstudiedNewWords();
+    expect(total, lessThanOrEqualTo(1000));
+    // The newest 10 batch words must be present
+    for (final word in batch) {
+      expect(await database.nextNewWord(), isNotNull);
+    }
+  });
+
+  test('addBatch inserts all words without pruning when count is low',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_add_batch_no_prune.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+
+    for (var i = 0; i < 5; i++) {
+      await database
+          .upsertWord(_word('existing_$i', base.add(Duration(minutes: i))));
+    }
+
+    final batch = List.generate(
+      10,
+      (i) => _word('batch_$i', base.add(Duration(minutes: 100 + i))),
+    );
+    await database.addBatch(batch);
+
+    final total = await database.countUnstudiedNewWords();
+    expect(total, 15);
+  });
+
+  test('addBatch caps total at 1000 when adding 100 words to 950 existing',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_add_batch_950_100_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+
+    for (var i = 0; i < 950; i++) {
+      await database
+          .upsertWord(_word('existing_950_$i', base.add(Duration(minutes: i))));
+    }
+
+    final batch = List.generate(
+      100,
+      (i) => _word('new_950_batch_$i', base.add(Duration(minutes: 1000 + i))),
+    );
+    await database.addBatch(batch);
+
+    final activeIds = await database.activeCachedServerWordIds(limit: 1100);
+    expect(activeIds.length, 1000);
+    expect(activeIds, containsAll(batch.map((word) => word.serverWordId)));
+  });
+
+  test('addBatch caps total at 1000 when adding 100 words to 990 existing',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_add_batch_990_100_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 4);
+
+    for (var i = 0; i < 990; i++) {
+      await database
+          .upsertWord(_word('existing_990_$i', base.add(Duration(minutes: i))));
+    }
+
+    final batch = List.generate(
+      100,
+      (i) => _word('new_990_batch_$i', base.add(Duration(minutes: 1000 + i))),
+    );
+    await database.addBatch(batch);
+
+    final activeIds = await database.activeCachedServerWordIds(limit: 1100);
+    expect(activeIds.length, 1000);
+    expect(activeIds, containsAll(batch.map((word) => word.serverWordId)));
+  });
+
+  test('markWordRememberedLowFrequency schedules far review as mastered',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_mark_remembered.db',
+    );
+    final now = DateTime.utc(2026, 5, 4, 10, 0);
+    final word = _word('remembered_1', now);
+    await database.upsertWord(word);
+
+    await database.markWordRememberedLowFrequency(word: word, now: now);
+
+    final updated = await database.recentlyLearnedReviewWord();
+    expect(updated, isNotNull);
+    expect(updated!.status, WordStatus.mastered);
+    expect(updated.nextReviewAt, isNotNull);
+    expect(
+        updated.nextReviewAt!.isAfter(now.add(const Duration(days: 9))), true);
+  });
+
+  test('markWordDifficultForRelearn schedules near-term relearn as learning',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_mark_difficult.db',
+    );
+    final now = DateTime.utc(2026, 5, 4, 10, 0);
+    final word = _word('difficult_1', now);
+    await database.upsertWord(word);
+
+    await database.markWordDifficultForRelearn(word: word, now: now);
+
+    final updated = await database
+        .nextDifficultRelearnWord(now.add(const Duration(hours: 1)));
+    expect(updated, isNotNull);
+    expect(updated!.status, WordStatus.learning);
+    expect(updated.nextReviewAt, isNotNull);
+    expect(updated.nextReviewAt!.isAfter(now), true);
   });
 }
 

@@ -191,8 +191,10 @@ Fields:
 - `device_id`: required stable anonymous or device identifier. Anonymous mobile
   clients use `anonymous_<uuid-v4>`.
 - `target_language`: optional target language code, default `en`.
-- `limit`: optional maximum returned cards, capped at `10`.
-- `card_mode`: optional mode. `new` is the supported value for this flow.
+- `limit`: optional maximum returned cards, capped at `100`.
+- `card_mode`: optional mode. `new` is the only supported value for this flow.
+  Missing, `null`, or empty values are treated as `new`. Any other value
+  returns `400 { "error": "bad_request" }`.
 
 Response:
 
@@ -241,8 +243,12 @@ persisted as active cache/claim inventory before the response is completed.
 Query parameters:
 
 - `limit`: maximum returned words, capped at `1000`
-- `source_language`: source language code
-- `target_language`: target language code
+- `target_language`: optional target language code, default `en`
+
+This endpoint is read-only bootstrap/diagnostic support. It does not accept
+`device_id`, source-language, current-word, or exclusion-list parameters.
+Learner-specific duplicate avoidance belongs to `POST /v1/learning/cards` and
+`PUT /v1/user-word-cache`.
 
 Response:
 

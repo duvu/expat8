@@ -194,7 +194,7 @@ export class WordStore {
   }
 
   learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 10, now = new Date().toISOString() }) {
-    const cappedLimit = Math.max(1, Math.min(limit, 10));
+    const cappedLimit = Math.max(1, Math.min(limit, 100));
     const ownerKeys = this.#selectionOwnerKeys({ deviceId, userId });
     const cachedWordIds = this.#cachedWordIdsForOwnerKeys(ownerKeys);
     const stateWordIds = new Set(
@@ -229,7 +229,7 @@ export class WordStore {
   syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
     const accepted = [];
     const rejected = [];
-    let latestResult = this.getProficiency({ deviceId, userId, language });
+    let latestProficiency = this.getProficiency({ deviceId, userId, language });
 
     for (const event of events) {
       if (!event.client_event_id || !event.rating || !event.occurred_at) {
@@ -240,16 +240,13 @@ export class WordStore {
         continue;
       }
       try {
-        latestResult = this.recordStudyEvent({ deviceId, userId, event, language });
+        const result = this.recordStudyEvent({ deviceId, userId, event, language });
+        latestProficiency = result.proficiency;
       } catch (error) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
           reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
         });
-        continue;
-      }
-      if (latestResult.idempotent) {
-        accepted.push(event.client_event_id);
         continue;
       }
       accepted.push(event.client_event_id);
@@ -258,7 +255,7 @@ export class WordStore {
     return {
       accepted_event_ids: accepted,
       rejected_events: rejected,
-      proficiency: latestResult.proficiency
+      proficiency: latestProficiency
     };
   }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../api/backend_api_client.dart';
@@ -28,6 +30,7 @@ class LearningSessionController extends ChangeNotifier {
   VocabularyWord? currentWord;
   bool isLoading = false;
   bool isAuthInProgress = false;
+  bool _prefetchInFlight = false;
   String? statusMessage;
   String? authSuccessMessage;
   String? authErrorMessage;
@@ -87,6 +90,109 @@ class LearningSessionController extends ChangeNotifier {
   }
 
   Future<void> nextCard() async {
+    await _showBiasedCard(newWordPercent: 30, reviewPercent: 70);
+  }
+
+  Future<void> onSwipeRightToLeft() async {
+    _telemetry.track(TelemetryEvent.newWordSwipeRequested);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.gesture.right_to_left',
+      message: 'Swipe right-to-left received.',
+    );
+    await _showBiasedCard(newWordPercent: 85, reviewPercent: 15);
+  }
+
+  Future<void> onSwipeLeftToRight() async {
+    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.gesture.left_to_right',
+      message: 'Swipe left-to-right received.',
+    );
+    await _showBiasedCard(newWordPercent: 15, reviewPercent: 85);
+  }
+
+  Future<void> onSwipeBottomToTop() async {
+    final word = currentWord;
+    if (word == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markRememberedLowFrequency(
+        word: word,
+        now: DateTime.now().toUtc(),
+        deviceId: _deviceId!,
+      );
+      await _logger.info(
+        category: AppLogCategory.session,
+        event: 'session.gesture.bottom_to_top',
+        message: 'Marked current word as remembered with low relearn frequency.',
+        context: {'word_id': word.serverWordId ?? word.localId},
+      );
+      _triggerPrefetchIfNeeded();
+      await nextCard();
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.gesture.bottom_to_top.failed',
+        message: 'Remembered gesture update failed.',
+        context: {'error': '$error'},
+      );
+    }
+  }
+
+  Future<void> onSwipeTopToBottom() async {
+    final word = currentWord;
+    if (word == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markAsDifficultForRelearn(
+        word: word,
+        now: DateTime.now().toUtc(),
+        deviceId: _deviceId!,
+      );
+      await _logger.info(
+        category: AppLogCategory.session,
+        event: 'session.gesture.top_to_bottom',
+        message: 'Marked current word as difficult for relearn group.',
+        context: {'word_id': word.serverWordId ?? word.localId},
+      );
+      _triggerPrefetchIfNeeded();
+      await nextCard();
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.gesture.top_to_bottom.failed',
+        message: 'Difficult gesture update failed.',
+        context: {'error': '$error'},
+      );
+    }
+  }
+
+  Future<void> _showBiasedCard({
+    required int newWordPercent,
+    required int reviewPercent,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final selection = now.millisecond % 100;
+    if (selection < reviewPercent) {
+      final difficult = await repository.getDifficultRelearnWord(now);
+      if (difficult != null) {
+        _showWord(difficult, CardKind.review,
+            emptyMessage: 'No review card is available.');
+        return;
+      }
+      await showRecentReview();
+      return;
+    }
+    if (selection < (reviewPercent + newWordPercent)) {
+      await showNewWord();
+      return;
+    }
     await showNewWord();
   }
 
@@ -234,7 +340,26 @@ class LearningSessionController extends ChangeNotifier {
       'rating': rating.name,
       'word_id': word.serverWordId ?? word.localId,
     });
+    // Low-watermark background prefetch: if the unlearned cache is running low,
+    // trigger a background refill without blocking the UI.
+    _triggerPrefetchIfNeeded();
     await nextCard();
+  }
+
+  void _triggerPrefetchIfNeeded() {
+    if (_prefetchInFlight) return;
+    repository.database.countUnstudiedNewWords().then((count) {
+      if (count <= 3 && !_prefetchInFlight) {
+        _prefetchInFlight = true;
+        unawaited(
+          repository.prefetchBatch().then((_) {
+            _prefetchInFlight = false;
+          }).catchError((_) {
+            _prefetchInFlight = false;
+          }),
+        );
+      }
+    }).catchError((_) {});
   }
 
   Future<void> register({

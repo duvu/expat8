@@ -8,15 +8,9 @@ import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
 
   test('registration success exposes feedback and active user', () async {
     final controller = LearningSessionController(

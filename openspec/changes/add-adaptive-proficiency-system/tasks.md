@@ -1,5 +1,10 @@
 ## 1. Database Schema & Persistence
 
+> Current-state note (2026-05-06): completed `/v1/words/next` tasks in this
+> file are historical records. The live card-loading path is
+> `POST /v1/learning/cards`, and proficiency-aware selection should be
+> understood through that endpoint plus study-event/proficiency state.
+
 - [x] 1.1 Create `user_proficiency` table in `backend/db/schema.sql` with columns: id, device_id, language, level, created_at, updated_at
 - [x] 1.2 Add unique constraint on (device_id, language) to `user_proficiency` table
 - [x] 1.3 Add `rating` column (VARCHAR) to `study_events` table to store difficulty ratings (easy, too_easy, hard, too_hard)
@@ -74,7 +79,7 @@
 
 ## 7. Backend API: Word Filtering by Proficiency
 
-- [x] 7.1 Modify `GET /v1/words/next` route to accept optional `proficiency_level` parameter (A1–C2)
+- [x] 7.1 Historical/superseded: modify `GET /v1/words/next` route to accept optional `proficiency_level` parameter (current selection path is `POST /v1/learning/cards`)
 - [x] 7.2 Enhance `findNewWords(targetLanguage, excludeWordIds, proficiencyLevel)` signature in word store
 - [x] 7.3 Implement filtering in in-memory store: filter by `difficulty_level === proficiencyLevel`
 - [x] 7.4 Implement filtering in PostgreSQL store: add WHERE clause `AND difficulty_level = $param`
@@ -142,7 +147,7 @@
 ## 13. Mobile: Integration with Word Fetching
 
 - [x] 13.1 Modify `getNewWordWithFallback()` in `word_repository.dart` to include `proficiency_level` parameter
-- [x] 13.2 Call `GET /v1/words/next?proficiency_level=<current_level>&...` when fetching next word
+- [x] 13.2 Historical/superseded: call `GET /v1/words/next?proficiency_level=<current_level>&...` when fetching next word (current mobile refill uses `POST /v1/learning/cards`)
 - [x] 13.3 Verify word filtering works after level change (next word should be at new level)
 - [ ] 13.4 Test fallback behavior: if no exact-level words, app receives adjacent-level word
 
@@ -162,7 +167,7 @@
 - [x] 15.1 Update `contracts/api.md` with new/modified endpoints:
   - `GET /v1/proficiency`
   - Enhanced `POST /v1/study-events` with rating and proficiency response
-  - Enhanced `GET /v1/words/next` with proficiency_level parameter
+  - Historical/superseded: enhanced `GET /v1/words/next` with proficiency_level parameter; current path is `POST /v1/learning/cards`
 - [ ] 15.2 Update backend README with proficiency system overview
 - [x] 15.3 Document CEFR level mapping and fallback strategy
 - [x] 15.4 Document device initialization behavior (default A1)

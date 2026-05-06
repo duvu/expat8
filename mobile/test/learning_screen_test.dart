@@ -4,15 +4,9 @@ import 'package:expat8_language_app/src/ui/learning_screen.dart';
 import 'package:expat8_language_app/src/ui/vocabulary_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
 
   testWidgets('renders vocabulary card content', (tester) async {
     await tester.pumpWidget(
@@ -29,7 +23,7 @@ void main() {
     expect(find.text('She is a reliable teammate.'), findsOneWidget);
   });
 
-  testWidgets('shows top-right proficiency label and four equal-width rating buttons', (tester) async {
+  testWidgets('shows top-right proficiency label', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -38,30 +32,16 @@ void main() {
               ProficiencyLevelLabel(level: 'B1'),
             ],
           ),
-          body: RatingButtonBar(
-            onEasy: () {},
-            onTooEasy: () {},
-            onHard: () {},
-            onTooHard: () {},
-          ),
+          body: const SizedBox.shrink(),
         ),
       ),
     );
 
     expect(find.text('Level B1'), findsOneWidget);
-    expect(find.text('Easy'), findsOneWidget);
-    expect(find.text('Too Easy'), findsOneWidget);
-    expect(find.text('Hard'), findsOneWidget);
-    expect(find.text('Too Hard'), findsOneWidget);
-
-    final easyWidth = tester.getSize(find.widgetWithText(FilledButton, 'Easy')).width;
-    final tooEasyWidth = tester.getSize(find.widgetWithText(FilledButton, 'Too Easy')).width;
-    final hardWidth = tester.getSize(find.widgetWithText(FilledButton, 'Hard')).width;
-    final tooHardWidth = tester.getSize(find.widgetWithText(FilledButton, 'Too Hard')).width;
-
-    expect((easyWidth - tooEasyWidth).abs(), lessThan(1));
-    expect((easyWidth - hardWidth).abs(), lessThan(1));
-    expect((easyWidth - tooHardWidth).abs(), lessThan(1));
+    expect(find.text('Easy'), findsNothing);
+    expect(find.text('Too Easy'), findsNothing);
+    expect(find.text('Hard'), findsNothing);
+    expect(find.text('Too Hard'), findsNothing);
   });
 
   testWidgets('drawer shows vocabulary and anonymous identity actions', (tester) async {
@@ -127,14 +107,18 @@ void main() {
   });
 
   testWidgets('horizontal card gestures route right-to-left and left-to-right intents', (tester) async {
-    var newWordCount = 0;
-    var recentReviewCount = 0;
+    var rightToLeftCount = 0;
+    var leftToRightCount = 0;
+    var bottomToTopCount = 0;
+    var topToBottomCount = 0;
 
     await tester.pumpWidget(
       MaterialApp(
         home: LearningCardGestureSurface(
-          onNewWordSwipe: () async => newWordCount += 1,
-          onRecentReviewSwipe: () async => recentReviewCount += 1,
+          onSwipeRightToLeft: () async => rightToLeftCount += 1,
+          onSwipeLeftToRight: () async => leftToRightCount += 1,
+          onSwipeBottomToTop: () async => bottomToTopCount += 1,
+          onSwipeTopToBottom: () async => topToBottomCount += 1,
           child: const SizedBox(width: 300, height: 300),
         ),
       ),
@@ -145,57 +129,39 @@ void main() {
     await tester.fling(find.byType(LearningCardGestureSurface), const Offset(300, 0), 1200);
     await tester.pumpAndSettle();
 
-    expect(newWordCount, 1);
-    expect(recentReviewCount, 1);
+    expect(rightToLeftCount, 1);
+    expect(leftToRightCount, 1);
+    expect(bottomToTopCount, 0);
+    expect(topToBottomCount, 0);
   });
 
-  testWidgets('slow horizontal drags route to the same swipe intents', (tester) async {
-    var newWordCount = 0;
-    var recentReviewCount = 0;
+  testWidgets('vertical card gestures route bottom-to-top and top-to-bottom intents', (tester) async {
+    var rightToLeftCount = 0;
+    var leftToRightCount = 0;
+    var bottomToTopCount = 0;
+    var topToBottomCount = 0;
 
     await tester.pumpWidget(
       MaterialApp(
         home: LearningCardGestureSurface(
-          onNewWordSwipe: () async => newWordCount += 1,
-          onRecentReviewSwipe: () async => recentReviewCount += 1,
+          onSwipeRightToLeft: () async => rightToLeftCount += 1,
+          onSwipeLeftToRight: () async => leftToRightCount += 1,
+          onSwipeBottomToTop: () async => bottomToTopCount += 1,
+          onSwipeTopToBottom: () async => topToBottomCount += 1,
           child: const SizedBox(width: 300, height: 300),
         ),
       ),
     );
 
-    await tester.drag(find.byType(LearningCardGestureSurface), const Offset(-120, 0));
+    await tester.fling(find.byType(LearningCardGestureSurface), const Offset(0, -320), 1200);
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(LearningCardGestureSurface), const Offset(120, 0));
+    await tester.fling(find.byType(LearningCardGestureSurface), const Offset(0, 320), 1200);
     await tester.pumpAndSettle();
 
-    expect(newWordCount, 1);
-    expect(recentReviewCount, 1);
-  });
-
-  testWidgets('learning action bar exposes new word and review actions', (tester) async {
-    var newWordCount = 0;
-    var reviewCount = 0;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: LearningActionBar(
-            isLoading: false,
-            onNewWord: () async => newWordCount += 1,
-            onReview: () async => reviewCount += 1,
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Swipe left for a new word. Swipe right for review.'), findsOneWidget);
-    await tester.tap(find.text('New Word'));
-    await tester.pump();
-    await tester.tap(find.text('Review'));
-    await tester.pump();
-
-    expect(newWordCount, 1);
-    expect(reviewCount, 1);
+    expect(rightToLeftCount, 0);
+    expect(leftToRightCount, 0);
+    expect(bottomToTopCount, 1);
+    expect(topToBottomCount, 1);
   });
 
   testWidgets('drawer disables auth actions while auth is in progress', (tester) async {
@@ -311,29 +277,22 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
-  testWidgets('learning action bar disables buttons while loading', (tester) async {
-    var newWordCount = 0;
-    var reviewCount = 0;
-
+  testWidgets('gesture surface does not render action buttons', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: LearningActionBar(
-            isLoading: true,
-            onNewWord: () async => newWordCount += 1,
-            onReview: () async => reviewCount += 1,
+          body: LearningCardGestureSurface(
+            onSwipeRightToLeft: () async {},
+            onSwipeLeftToRight: () async {},
+            onSwipeBottomToTop: () async {},
+            onSwipeTopToBottom: () async {},
+            child: const SizedBox(width: 300, height: 300),
           ),
         ),
       ),
     );
 
-    final buttonFinder = find.byWidgetPredicate((widget) => widget is OutlinedButton);
-    final newWordButton = tester.widget<OutlinedButton>(buttonFinder.at(0));
-    final reviewButton = tester.widget<OutlinedButton>(buttonFinder.at(1));
-    expect(newWordButton.onPressed, isNull);
-    expect(reviewButton.onPressed, isNull);
-    expect(newWordCount, 0);
-    expect(reviewCount, 0);
+    expect(find.byType(OutlinedButton), findsNothing);
   });
 }
 

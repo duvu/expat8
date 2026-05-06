@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/config.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
@@ -7,16 +9,11 @@ import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/study_event.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
 
   test('falls back to local new words when backend fails', () async {
     final database = await LocalDatabase.open(
@@ -57,6 +54,124 @@ void main() {
       entries.any((entry) => entry.event == 'new_word.backend.error'),
       true,
     );
+  });
+
+  test('logs local cache hit without labeling it backend success', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_local_hit_log_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final localWord = _word('local_hit_word');
+    await database.upsertWord(localWord);
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      logger: logger,
+      config: _testConfig(proactiveMinNew: 1),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(
+      deviceId: 'device_local_hit',
+    );
+
+    expect(result.word?.localId, localWord.localId);
+    expect(entries.any((entry) => entry.event == 'new_word.local.hit'), true);
+    expect(
+      entries.any((entry) => entry.event == 'new_word.backend.success'),
+      false,
+    );
+  });
+
+  test('logs backend refill hit separately from local cache hits', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_refill_hit_log_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(
+        learningCardItems: [_word('refill_hit_word')],
+      ),
+      logger: logger,
+      config: _testConfig(proactiveMinNew: 10),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(
+      deviceId: 'device_refill_hit',
+    );
+
+    expect(result.word?.localId, 'refill_hit_word');
+    expect(entries.any((entry) => entry.event == 'new_word.refill.hit'), true);
+  });
+
+  test('logs empty backend refill without misleading fallback_hit context',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_refill_empty_log_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      logger: logger,
+      config: _testConfig(proactiveMinNew: 10),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(
+      deviceId: 'device_refill_empty',
+    );
+
+    final emptyEvent = entries.singleWhere(
+      (entry) => entry.event == 'new_word.refill.empty',
+    );
+    expect(result.word, isNull);
+    expect(emptyEvent.context.containsKey('fallback_hit'), false);
+  });
+
+  test('logs backend-error fallback source without fallback_hit context',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_error_fallback_log_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final localWord = _word('error_fallback_word');
+    await database.upsertWord(localWord);
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _FailingApiClient(),
+      logger: logger,
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(
+      deviceId: 'device_error_fallback',
+    );
+
+    final errorEvent = entries.singleWhere(
+      (entry) => entry.event == 'new_word.backend.error',
+    );
+    expect(result.word?.localId, localWord.localId);
+    expect(errorEvent.context['fallback_source'], 'local');
+    expect(errorEvent.context.containsKey('fallback_hit'), false);
   });
 
   test('reports local fallback source when backend fails but local word exists',
@@ -353,6 +468,52 @@ void main() {
     expect(apiClient.fetchRecentWordsCalled, false);
   });
 
+  test(
+      'checkAndRunDailyRefresh requests 100-card top-up when unlearned is below 100',
+      () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_daily_topup_$ts.db',
+    );
+    for (var i = 0; i < 20; i++) {
+      await database.upsertWord(_word('daily_topup_$i'));
+    }
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+    repository.initRefreshWorker('device_test');
+
+    await repository.checkAndRunDailyRefresh();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(apiClient.lastLearningCardsLimit, 100);
+  });
+
+  test('checkAndRunDailyRefresh skips top-up when unlearned is at least 100',
+      () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_daily_no_topup_$ts.db',
+    );
+    for (var i = 0; i < 120; i++) {
+      await database.upsertWord(_word('daily_no_topup_$i'));
+    }
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+    repository.initRefreshWorker('device_test');
+
+    await repository.checkAndRunDailyRefresh();
+
+    expect(apiClient.lastLearningCardsLimit, isNull);
+  });
+
   test('recordWordStudied increments words_studied counter in settings',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
@@ -378,6 +539,73 @@ void main() {
         .getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
     expect(int.parse(raw!), 3);
   });
+
+  test('_prefetchInFlight debounces concurrent low-watermark prefetch triggers',
+      () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'controller_test_debounce_$ts.db',
+    );
+    // Insert exactly 3 words — at the <= 3 watermark threshold
+    for (var i = 0; i < 3; i++) {
+      await database.upsertWord(_word('debounce_word_$i'));
+    }
+
+    final prefetchCompleter = Completer<void>();
+    var prefetchCallCount = 0;
+
+    final slowRepository = _SlowPrefetchRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      onPrefetch: () {
+        prefetchCallCount += 1;
+        return prefetchCompleter.future;
+      },
+    );
+    slowRepository.initRefreshWorker('device_debounce');
+
+    final controller = LearningSessionController(repository: slowRepository);
+
+    // Trigger the low-watermark logic directly by calling
+    // _triggerPrefetchIfNeeded twice before the first prefetch resolves.
+    // We do this by inserting a "current" word and calling rateCurrent.
+    await database.upsertWord(_word('current_word'));
+    await controller.showNewWord();
+
+    // First rateCurrent call: triggers prefetchBatch (prefetchCallCount → 1)
+    // Don't await — keeps the slow prefetch in flight
+    unawaited(controller.rateCurrent(StudyRating.hard));
+
+    // Drain microtasks so _triggerPrefetchIfNeeded runs and sets _prefetchInFlight
+    await Future<void>.delayed(Duration.zero);
+
+    // Second trigger while first is still in flight should be suppressed
+    controller.rateCurrent(StudyRating.hard);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(prefetchCallCount, lessThanOrEqualTo(1),
+        reason: '_prefetchInFlight should prevent concurrent prefetch calls');
+
+    // Release the first prefetch
+    prefetchCompleter.complete();
+    await Future<void>.delayed(Duration.zero);
+  });
+}
+
+class _SlowPrefetchRepository extends WordRepository {
+  _SlowPrefetchRepository({
+    required super.database,
+    required super.apiClient,
+    required Future<void> Function() onPrefetch,
+  }) : _onPrefetch = onPrefetch;
+
+  final Future<void> Function() _onPrefetch;
+
+  @override
+  Future<List<VocabularyWord>> prefetchBatch({int batchSize = 100}) async {
+    await _onPrefetch();
+    return const [];
+  }
 }
 
 class _FailingApiClient extends BackendApiClient {
@@ -401,8 +629,10 @@ class _FailingApiClient extends BackendApiClient {
 }
 
 class _RecordingApiClient extends BackendApiClient {
-  _RecordingApiClient({this.failSubmit = false})
-      : super(
+  _RecordingApiClient({
+    this.failSubmit = false,
+    this.learningCardItems = const [],
+  }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
           appId: 'test-app',
@@ -410,6 +640,7 @@ class _RecordingApiClient extends BackendApiClient {
         );
 
   final bool failSubmit;
+  final List<VocabularyWord> learningCardItems;
   String? lastLearningCardsDeviceId;
   int? lastLearningCardsLimit;
   String? lastSessionToken;
@@ -456,10 +687,13 @@ class _RecordingApiClient extends BackendApiClient {
     lastLearningCardsDeviceId = deviceId;
     lastLearningCardsLimit = limit;
     lastSessionToken = sessionToken;
-    return const LearningCardBatch(
-      items: [],
-      targetMix: LearningCardMix(newCount: 0, reviewCount: 0),
-      actualMix: LearningCardMix(newCount: 0, reviewCount: 0),
+    return LearningCardBatch(
+      items: learningCardItems.take(limit).toList(),
+      targetMix: LearningCardMix(newCount: limit, reviewCount: 0),
+      actualMix: LearningCardMix(
+        newCount: learningCardItems.take(limit).length,
+        reviewCount: 0,
+      ),
     );
   }
 

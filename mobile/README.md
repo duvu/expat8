@@ -1,16 +1,35 @@
-# expat8_language_app
+# Expat8 Mobile App
 
-A new Flutter project.
+Flutter client for the Expat8 vocabulary learning MVP.
 
-## Getting Started
+## Current Architecture
 
-This project is a starting point for a Flutter application.
+- Local persistence uses ObjectBox through `LocalDatabase`.
+- The app signs every `/v1/*` backend request with app credential headers.
+- Anonymous users persist an `anonymous_<uuid>` device id locally.
+- Signed-in users add a bearer session token while keeping the same device id
+  for offline/cache context.
+- Card refill uses `POST /v1/learning/cards` with `card_mode: "new"`.
+- Duplicate avoidance is backend-owned through learner state and
+  `PUT /v1/user-word-cache`; the mobile app does not send word exclusion lists
+  for refill.
 
-A few resources to get you started if this is your first Flutter project:
+## Development
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+flutter pub get
+flutter test
+flutter run \
+  --dart-define=BACKEND_BASE_URL=http://localhost:8787 \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+ObjectBox native libraries are required for desktop/unit-test runs. In this
+repo, Linux test runs expect `mobile/lib/libobjectbox.so` to be present.
+
+After editing ObjectBox entities, regenerate bindings:
+
+```bash
+flutter pub run build_runner build --delete-conflicting-outputs
+```

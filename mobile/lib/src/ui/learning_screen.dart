@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/study_event.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
 import 'logs_screen.dart';
@@ -87,10 +86,12 @@ class _LearningScreenState extends State<LearningScreen> {
       ),
       body: LearningCardGestureSurface(
         isEnabled: !controller.isLoading,
-        onNewWordSwipe: controller.showNewWord,
-        onRecentReviewSwipe: controller.showRecentReview,
+        onSwipeRightToLeft: controller.onSwipeRightToLeft,
+        onSwipeLeftToRight: controller.onSwipeLeftToRight,
+        onSwipeBottomToTop: controller.onSwipeBottomToTop,
+        onSwipeTopToBottom: controller.onSwipeTopToBottom,
         child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics: const NeverScrollableScrollPhysics(),
           children: [
             const SizedBox(height: 24),
             if (controller.isLoading)
@@ -104,27 +105,13 @@ class _LearningScreenState extends State<LearningScreen> {
               ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: LearningActionBar(
-                isLoading: controller.isLoading,
-                onNewWord: controller.showNewWord,
-                onReview: controller.showRecentReview,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: RatingButtonBar(
-                onEasy: controller.currentWord == null || controller.isLoading
-                    ? null
-                    : () => controller.rateCurrent(StudyRating.easy),
-                onTooEasy: controller.currentWord == null || controller.isLoading
-                    ? null
-                    : () => controller.rateCurrent(StudyRating.tooEasy),
-                onHard: controller.currentWord == null || controller.isLoading
-                    ? null
-                    : () => controller.rateCurrent(StudyRating.hard),
-                onTooHard: controller.currentWord == null || controller.isLoading
-                    ? null
-                    : () => controller.rateCurrent(StudyRating.tooHard),
+              child: Text(
+                'Swipe Right->Left: next card (15% learned review). '
+                'Swipe Left->Right: review flow (15% new).\n'
+                'Swipe Bottom->Top: remembered (10% relearn). '
+                'Swipe Top->Bottom: difficult (relearn group).',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
           ],
@@ -174,16 +161,20 @@ class _LearningScreenState extends State<LearningScreen> {
 
 class LearningCardGestureSurface extends StatefulWidget {
   const LearningCardGestureSurface({
-    required this.onNewWordSwipe,
-    required this.onRecentReviewSwipe,
+    required this.onSwipeRightToLeft,
+    required this.onSwipeLeftToRight,
+    required this.onSwipeBottomToTop,
+    required this.onSwipeTopToBottom,
     required this.child,
     this.isEnabled = true,
     super.key,
   });
 
   final bool isEnabled;
-  final Future<void> Function() onNewWordSwipe;
-  final Future<void> Function() onRecentReviewSwipe;
+  final Future<void> Function() onSwipeRightToLeft;
+  final Future<void> Function() onSwipeLeftToRight;
+  final Future<void> Function() onSwipeBottomToTop;
+  final Future<void> Function() onSwipeTopToBottom;
   final Widget child;
 
   @override
@@ -191,29 +182,38 @@ class LearningCardGestureSurface extends StatefulWidget {
 }
 
 class _LearningCardGestureSurfaceState extends State<LearningCardGestureSurface> {
-  double _horizontalDragDelta = 0;
+  Offset _panDelta = Offset.zero;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: (_) => _horizontalDragDelta = 0,
-      onHorizontalDragUpdate: (details) {
-        _horizontalDragDelta += details.primaryDelta ?? 0;
+      onPanStart: (_) => _panDelta = Offset.zero,
+      onPanUpdate: (details) {
+        _panDelta += details.delta;
       },
-      onHorizontalDragEnd: (details) {
+      onPanEnd: (details) {
         if (!widget.isEnabled) {
-          _horizontalDragDelta = 0;
+          _panDelta = Offset.zero;
           return;
         }
-        final velocity = details.primaryVelocity ?? 0;
-        final delta = _horizontalDragDelta;
-        _horizontalDragDelta = 0;
-        // Product semantics: right-to-left requests a new word; left-to-right requests review.
-        if (velocity < -200 || delta < -80) {
-          widget.onNewWordSwipe();
-        } else if (velocity > 200 || delta > 80) {
-          widget.onRecentReviewSwipe();
+        final dx = _panDelta.dx;
+        final dy = _panDelta.dy;
+        final vel = details.velocity.pixelsPerSecond;
+        _panDelta = Offset.zero;
+        // Determine primary axis from whichever had more movement.
+        if (dx.abs() >= dy.abs()) {
+          if (vel.dx < -200 || dx < -80) {
+            widget.onSwipeRightToLeft();
+          } else if (vel.dx > 200 || dx > 80) {
+            widget.onSwipeLeftToRight();
+          }
+        } else {
+          if (vel.dy < -200 || dy < -80) {
+            widget.onSwipeBottomToTop();
+          } else if (vel.dy > 200 || dy > 80) {
+            widget.onSwipeTopToBottom();
+          }
         }
       },
       child: widget.child,
@@ -488,130 +488,3 @@ class ProficiencyLevelLabel extends StatelessWidget {
   }
 }
 
-class LearningActionBar extends StatelessWidget {
-  const LearningActionBar({
-    required this.isLoading,
-    required this.onNewWord,
-    required this.onReview,
-    super.key,
-  });
-
-  final bool isLoading;
-  final Future<void> Function() onNewWord;
-  final Future<void> Function() onReview;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'Swipe left for a new word. Swipe right for review.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: isLoading ? null : () => onNewWord(),
-                icon: const Icon(Icons.chevron_left),
-                label: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text('New Word'),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: isLoading ? null : () => onReview(),
-                icon: const Icon(Icons.chevron_right),
-                label: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text('Review'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class RatingButtonBar extends StatelessWidget {
-  const RatingButtonBar({
-    required this.onEasy,
-    required this.onTooEasy,
-    required this.onHard,
-    required this.onTooHard,
-    super.key,
-  });
-
-  final VoidCallback? onEasy;
-  final VoidCallback? onTooEasy;
-  final VoidCallback? onHard;
-  final VoidCallback? onTooHard;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _RatingButton(
-            label: 'Easy',
-            onPressed: onEasy,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _RatingButton(
-            label: 'Too Easy',
-            onPressed: onTooEasy,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _RatingButton(
-            label: 'Hard',
-            onPressed: onHard,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _RatingButton(
-            label: 'Too Hard',
-            onPressed: onTooHard,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RatingButton extends StatelessWidget {
-  const _RatingButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      child: SizedBox(
-        height: 56,
-        child: FilledButton(
-          onPressed: onPressed,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(label, maxLines: 1),
-          ),
-        ),
-      ),
-    );
-  }
-}

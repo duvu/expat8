@@ -70,7 +70,7 @@ export function createApp({
   return app;
 }
 
-function createV1Router({ store, generationService: _generationService, config }) {
+function createV1Router({ store, generationService, config }) {
   const router = express.Router();
 
   router.post(
@@ -149,16 +149,32 @@ function createV1Router({ store, generationService: _generationService, config }
       ) {
         return response.status(400).json({ error: 'bad_request' });
       }
-      const limit = clampLimit(body.limit ?? 10, 1, 10);
+      if (normalizeCardMode(body.card_mode) !== 'new') {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const limit = clampLimit(body.limit ?? 10, 1, 100);
       const targetLanguage = body.target_language ?? config.defaultTargetLanguage;
-      const result = await store.learningCards({
+      let result = await store.learningCards({
         deviceId: body.device_id,
         userId: userSession?.user.id ?? null,
         targetLanguage,
         limit,
-        cardMode: normalizeCardMode(body.card_mode),
         now: new Date().toISOString()
       });
+      const shortfall = limit - result.items.length;
+      if (shortfall > 0 && generationService != null) {
+        await generationService.generateAndStore({
+          targetLanguage,
+          limit: shortfall,
+        });
+        result = await store.learningCards({
+          deviceId: body.device_id,
+          userId: userSession?.user.id ?? null,
+          targetLanguage,
+          limit,
+          now: new Date().toISOString()
+        });
+      }
       return response.json({
         target_mix: result.target_mix,
         actual_mix: result.actual_mix,

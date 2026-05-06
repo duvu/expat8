@@ -1,5 +1,12 @@
 ## Context
 
+> Current-state note (2026-05-06): this design predates the ObjectBox reset and
+> backend-owned card selection. The live architecture uses ObjectBox-backed
+> `LocalDatabase`, `POST /v1/learning/cards` for refill/top-up, and
+> `PUT /v1/user-word-cache` for duplicate-avoidance inventory. `/v1/words/next`
+> has been removed. The sections below are retained as historical design
+> context and should not be implemented literally.
+
 App hiện tại lấy từ mới theo cơ chế **on-demand**: mỗi khi người dùng cần từ mới, `WordRepository.nextNewWord()` truy vấn local DB; nếu không có, gọi backend `/v1/words/next`. Cơ chế này hoạt động nhưng có hai vấn đề:
 
 1. **Trải nghiệm phụ thuộc mạng**: Người dùng mới cài chưa có từ nào trong local DB → mỗi từ đầu tiên đều phải chờ backend.
@@ -36,9 +43,12 @@ App hiện tại lấy từ mới theo cơ chế **on-demand**: mỗi khi ngư�
 
 **Thay thế đã cân nhắc:** Mở rộng `SyncWorker` — bị loại vì làm phức tạp class đang đơn giản.
 
-### D2: Prefetch sử dụng endpoint bootstrap `/v1/words/recent?limit=1000`
+### D2: Superseded — prefetch/refill now uses `POST /v1/learning/cards`
 
-Backend đã có endpoint trả về tối đa 1000 từ gần nhất. Dùng lại endpoint này tránh thay đổi backend. Từ đã có trong local (dựa trên `server_word_id`) được bỏ qua khi insert (upsert).
+Current implementation uses backend-selected learning-card batches and cache
+inventory for first-install prefetch, daily refresh, proactive refresh, and
+on-demand refill. `/v1/words/recent` remains read-only bootstrap/diagnostic
+support and does not accept learner-specific exclusions.
 
 **Thay thế đã cân nhắc:** Tạo endpoint bulk riêng — không cần thiết khi endpoint hiện tại đáp ứng đủ.
 
@@ -57,11 +67,12 @@ Lưu `last_daily_refresh_date` (ISO date string) trong bảng `app_settings`. Kh
 - Upsert vào local DB, gọi `pruneToMostRecent(maxWords: 1000)`
 - Update `last_daily_refresh_date`
 
-### D5: Exclude list khi fetch từ backend
+### D5: Superseded — duplicate avoidance is backend-owned
 
-Dùng `recentServerWordIds(limit: 1000)` đã có trong `LocalDatabase` để lấy danh sách `server_word_id` đã có, truyền vào API request dưới dạng `exclude_ids`. Backend endpoint `/v1/words/next` đã hỗ trợ `exclude` parameter.
-
-Nếu backend không hỗ trợ bulk exclude, app lọc phía client khi upsert (upsert idempotent theo `server_word_id`).
+Mobile syncs active local `server_word_id` inventory to
+`PUT /v1/user-word-cache`. Card selection and duplicate avoidance happen in
+the backend on `POST /v1/learning/cards`; mobile does not send exclusion lists
+for refill/top-up.
 
 ## Risks / Trade-offs
 
@@ -79,5 +90,6 @@ Nếu backend không hỗ trợ bulk exclude, app lọc phía client khi upsert 
 
 ## Open Questions
 
-- Backend `/v1/words/next` có hỗ trợ `exclude_ids` list dài (up to 1000 IDs) không? Nếu không, cần thêm endpoint hoặc dùng `after_id` cursor.
+- Resolved: do not use `/v1/words/next` or long `exclude_ids`; use
+  `/v1/learning/cards` and cache inventory.
 - `VocabularyRefreshWorker` có cần chạy khi app ở background (dùng `workmanager` package) hay chỉ chạy khi app foreground?

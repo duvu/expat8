@@ -1,5 +1,10 @@
 # Backend Vocabulary Generation and Selection Design
 
+> Historical note (2026-05-06): this design documents the transition away from
+> AI generation in the mobile request path. Current card loading uses
+> `POST /v1/learning/cards`; `/v1/words/next` references are retained only as
+> historical design context.
+
 ## Purpose
 
 Tài liệu này mô tả hướng cập nhật backend để tách riêng hai quá trình đang bị trộn lẫn:
