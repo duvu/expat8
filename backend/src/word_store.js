@@ -1,8 +1,9 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
-  DEFAULT_PROFICIENCY_LEVEL,
   decrementLevel,
+  getDefaultProficiencyLevel,
+  getProficiencyProfile,
   incrementLevel,
   isProgressionRating,
   normalizeDifficultyLevel,
@@ -395,8 +396,8 @@ export class WordStore {
 
     const previousLevel = proficiency.level;
     const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel)
-      : decrementLevel(previousLevel);
+      ? incrementLevel(previousLevel, { language })
+      : decrementLevel(previousLevel, { language });
 
     proficiency.level = nextLevel;
     proficiency.updated_at = new Date().toISOString();
@@ -413,9 +414,12 @@ export class WordStore {
     const consecutiveCount = currentRatingType
       ? this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType })
       : 0;
+    const profile = getProficiencyProfile({ language });
 
     return {
+      scale: profile.scale,
       level: proficiency.level,
+      level_index: profile.levels.indexOf(proficiency.level),
       level_changed: levelChanged,
       previous_level: previousLevel,
       triggered_by: triggeredBy,
@@ -439,7 +443,7 @@ export class WordStore {
       user_id: userId,
       device_id: deviceId,
       language,
-      level: DEFAULT_PROFICIENCY_LEVEL,
+      level: getDefaultProficiencyLevel({ language }),
       created_at: now,
       updated_at: now
     };

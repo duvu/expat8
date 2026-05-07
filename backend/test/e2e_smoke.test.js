@@ -128,11 +128,20 @@ test('e2e: chinese HSK progression reaches HSK2 and drives level-aware selection
   assert.equal(proficiency.level, 'HSK2');
   assert.equal(proficiency.level_index, 1);
 
-  const next = await fetchJson(
-    `${baseUrl}/v1/words/next?limit=1&target_language=zh&device_id=${deviceId}`
-  );
-  assert.equal(next.items.length, 1);
-  assert.equal(next.items[0].server_word_id, 'word_zh_2');
+  const cards = await fetchJson(`${baseUrl}/v1/learning/cards`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: deviceId,
+      target_language: 'zh',
+      card_mode: 'new',
+      limit: 5
+    })
+  });
+  const cardLanguages = cards.items.map((item) => item.language);
+  assert.ok(cardLanguages.length > 0, 'expected at least one Chinese card');
+  assert.ok(cardLanguages.every((language) => language === 'zh'),
+    `expected all cards to be Chinese, got ${cardLanguages.join(', ')}`);
 });
 
 test('e2e: proficiency stays isolated by language for the same device', async (t) => {

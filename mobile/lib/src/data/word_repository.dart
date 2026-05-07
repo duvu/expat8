@@ -334,26 +334,33 @@ class WordRepository {
     int limit = 10,
     String language = 'en',
   }) async {
+    if (limit <= 0) return const [];
     final session = await database.loadUserSession();
-    final batch = await apiClient.fetchLearningCards(
-      deviceId: deviceId,
-      limit: limit.clamp(1, 100).toInt(),
-      targetLanguage: language,
-      sessionToken: session?.sessionToken,
-    );
-    await database.addBatch(batch.items);
+    const apiBatchCap = 100;
+    final allItems = <VocabularyWord>[];
+    while (allItems.length < limit) {
+      final batchLimit = (limit - allItems.length).clamp(1, apiBatchCap).toInt();
+      final batch = await apiClient.fetchLearningCards(
+        deviceId: deviceId,
+        limit: batchLimit,
+        targetLanguage: language,
+        sessionToken: session?.sessionToken,
+      );
+      if (batch.items.isEmpty) break;
+      allItems.addAll(batch.items);
+    }
+    await database.addBatch(allItems);
     await syncCacheInventory(deviceId: deviceId);
     await _logger.info(
       category: AppLogCategory.api,
       event: 'learning_cards.refill',
       message: 'Refilled local cache from backend-selected cards.',
       context: {
-        'fetched_count': batch.items.length,
-        'new_count': batch.actualMix.newCount,
-        'review_count': batch.actualMix.reviewCount,
+        'requested_limit': limit,
+        'fetched_count': allItems.length,
       },
     );
-    return batch.items;
+    return allItems;
   }
 
   Future<ProficiencyState?> recordRating({

@@ -1,8 +1,9 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
-  DEFAULT_PROFICIENCY_LEVEL,
   decrementLevel,
+  getDefaultProficiencyLevel,
+  getProficiencyProfile,
   incrementLevel,
   isProgressionRating,
   normalizeDifficultyLevel,
@@ -679,7 +680,7 @@ export class PostgresWordStore {
         userId,
         deviceId,
         language,
-        DEFAULT_PROFICIENCY_LEVEL,
+        getDefaultProficiencyLevel({ language }),
         now,
         now
       ]
@@ -693,10 +694,11 @@ export class PostgresWordStore {
       return null;
     }
 
-    const previousLevel = normalizeDifficultyLevel(currentLevel) ?? DEFAULT_PROFICIENCY_LEVEL;
+    const previousLevel = normalizeDifficultyLevel(currentLevel, { language })
+      ?? getDefaultProficiencyLevel({ language });
     const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel)
-      : decrementLevel(previousLevel);
+      ? incrementLevel(previousLevel, { language })
+      : decrementLevel(previousLevel, { language });
 
     await client.query(
       `UPDATE user_proficiency
@@ -726,9 +728,12 @@ export class PostgresWordStore {
     const consecutiveCount = currentRatingType
       ? await this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType, client })
       : 0;
+    const profile = getProficiencyProfile({ language });
 
     return {
+      scale: profile.scale,
       level: proficiency.level,
+      level_index: profile.levels.indexOf(proficiency.level),
       level_changed: levelChanged,
       previous_level: previousLevel,
       triggered_by: triggeredBy,

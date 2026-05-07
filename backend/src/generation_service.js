@@ -1,5 +1,8 @@
 import { normalizeTerm } from './normalize.js';
-import { normalizeDifficultyLevel } from './proficiency.js';
+import {
+  getDefaultProficiencyLevel,
+  normalizeDifficultyLevel
+} from './proficiency.js';
 import { validateVocabularyItem } from './vocabulary_validator.js';
 
 export class VocabularyGenerationService {
@@ -14,8 +17,10 @@ export class VocabularyGenerationService {
     targetLanguage = 'en',
     limit = 100,
     avoidTerms = [],
-    difficultyLevel = 'B1'
+    difficultyLevel
   }) {
+    const resolvedDifficulty =
+      difficultyLevel ?? getDefaultProficiencyLevel({ language: targetLanguage });
     const accepted = [];
     const blockedTerms = new Set(
       avoidTerms.map((term) => normalizeTerm(String(term)))
@@ -25,7 +30,7 @@ export class VocabularyGenerationService {
       target_language: targetLanguage,
       source_language: sourceLanguage,
       requested_count: limit,
-      difficulty_level: difficultyLevel
+      difficulty_level: resolvedDifficulty
     });
 
     for (let attempt = 0; attempt < 3 && accepted.length < limit; attempt += 1) {
@@ -36,7 +41,7 @@ export class VocabularyGenerationService {
           targetLanguage,
           limit: limit - accepted.length,
           avoidTerms: [...blockedTerms],
-          difficultyLevel
+          difficultyLevel: resolvedDifficulty
         });
       } catch (error) {
         this.logger.warn?.('ai_generation_failed', {
