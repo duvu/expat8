@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../data/word_repository.dart';
 import '../logging/logger.dart';
+import 'log_share_service.dart';
 
 class LogsScreen extends StatefulWidget {
-  const LogsScreen({required this.repository, super.key});
+  const LogsScreen({
+    required this.repository,
+    this.shareService = const PlatformLogShareService(),
+    super.key,
+  });
 
   final WordRepository repository;
+  final LogShareService shareService;
 
   @override
   State<LogsScreen> createState() => _LogsScreenState();
@@ -43,20 +49,59 @@ class _LogsScreenState extends State<LogsScreen> {
 
   Future<void> _exportLogs() async {
     setState(() => _isExporting = true);
-    final result = await widget.repository.exportLogs(
-      minimumLevel: _minimumLevel,
-      category: _category,
-      limit: 2000,
-    );
-    if (!mounted) {
-      return;
+    try {
+      final result = await widget.repository.exportLogs(
+        minimumLevel: _minimumLevel,
+        category: _category,
+        limit: 2000,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result.count == 0) {
+        _showSnackBar('No logs to export for selected filters.');
+        return;
+      }
+      final shareResult = await widget.shareService.share(
+        result,
+        sharePositionOrigin: _sharePositionOrigin(),
+      );
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar(_shareMessage(shareResult, result.count));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar('Failed to share logs: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
     }
-    setState(() => _isExporting = false);
-    final path = result.path ?? 'in-memory payload';
+  }
+
+  Rect? _sharePositionOrigin() {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+    return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+  }
+
+  String _shareMessage(LogShareOutcome result, int count) {
+    return switch (result.status) {
+      LogShareStatus.success => 'Shared $count logs.',
+      LogShareStatus.dismissed => 'Log share dismissed.',
+      LogShareStatus.unavailable =>
+        'Log sharing is unavailable on this device.',
+    };
+  }
+
+  void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Exported ${result.count} logs to $path'),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -93,7 +138,8 @@ class _LogsScreenState extends State<LogsScreen> {
                 Expanded(
                   child: DropdownButtonFormField<AppLogLevel>(
                     value: _minimumLevel,
-                    decoration: const InputDecoration(labelText: 'Minimum Level'),
+                    decoration:
+                        const InputDecoration(labelText: 'Minimum Level'),
                     items: AppLogLevel.values
                         .map(
                           (value) => DropdownMenuItem(
@@ -149,7 +195,9 @@ class _LogsScreenState extends State<LogsScreen> {
                           final entry = _entries[index];
                           final subtitle = [
                             '${entry.timestamp.toLocal()} | ${entry.category.name} | ${entry.event}',
-                            entry.context.isEmpty ? null : entry.context.toString(),
+                            entry.context.isEmpty
+                                ? null
+                                : entry.context.toString(),
                           ].whereType<String>().join('\n');
                           return ListTile(
                             dense: true,

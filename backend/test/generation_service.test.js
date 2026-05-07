@@ -130,6 +130,7 @@ test('rejects Chinese generation items with non-HSK difficulty values', async ()
 
 test('rejects Chinese generation items with invalid pronunciation metadata', async () => {
   const store = new WordStore({ seed: false });
+  const warnings = [];
   const service = new VocabularyGenerationService({
     store,
     liteLLMClient: {
@@ -145,7 +146,11 @@ test('rejects Chinese generation items with invalid pronunciation metadata', asy
         ]
       })
     },
-    logger: { warn() {} }
+    logger: {
+      warn(event, context) {
+        warnings.push({ event, context });
+      }
+    }
   });
 
   const accepted = await service.generateAndStore({
@@ -155,6 +160,50 @@ test('rejects Chinese generation items with invalid pronunciation metadata', asy
   });
 
   assert.equal(accepted.length, 0);
+  assert.deepEqual(warnings[0], {
+    event: 'ai_generation_item_rejected',
+    context: {
+      reason: 'invalid_chinese_pinyin',
+      term: 'xuexi'
+    }
+  });
+});
+
+test('stores Chinese generation item with pinyin and no IPA', async () => {
+  const store = new WordStore({ seed: false });
+  const warnings = [];
+  const service = new VocabularyGenerationService({
+    store,
+    liteLLMClient: {
+      generateVocabulary: async () => JSON.stringify({
+        items: [
+          wordInput({
+            language: 'zh',
+            term: '资格',
+            difficulty: 'HSK2',
+            vietnamese_pronunciation: 'zi ge',
+            ipa: '',
+            example: '我有这个资格。'
+          })
+        ]
+      })
+    },
+    logger: {
+      warn(event, context) {
+        warnings.push({ event, context });
+      }
+    }
+  });
+
+  const accepted = await service.generateAndStore({
+    limit: 1,
+    targetLanguage: 'zh',
+    difficultyLevel: 'HSK2'
+  });
+
+  assert.equal(accepted.length, 1);
+  assert.equal(accepted[0].term, '资格');
+  assert.deepEqual(warnings, []);
 });
 
 function wordInput(overrides = {}) {

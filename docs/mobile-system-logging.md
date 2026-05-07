@@ -7,12 +7,14 @@ Tai lieu nay mo ta cach dung logging subsystem tren mobile app de debug va trace
 App ho tro cac bien `--dart-define` sau:
 - `APP_LOG_LEVEL`: muc log toi thieu (`debug`, `info`, `warning`, `error`)
 - `APP_LOG_MAX_ENTRIES`: so ban ghi toi da giu lai trong local store
-- `APP_LOG_RETENTION_DAYS`: so ngay giu log truoc khi prune theo tuoi
+
+Retention theo tuoi duoc co dinh o 60 phut. Normal build khong ho tro cau hinh
+giu log lau hon moc nay.
 
 Gia tri mac dinh:
 - `APP_LOG_LEVEL=info`
 - `APP_LOG_MAX_ENTRIES=5000`
-- `APP_LOG_RETENTION_DAYS=7`
+- Log age retention: 60 phut
 
 Vi du chay debug:
 ```bash
@@ -40,10 +42,13 @@ flutter run -d emulator-5554 \
 
 ## Export log
 1. Trong man hinh `System Logs`, bam icon `Export logs`
-2. App tao file JSONL da sanitize
-3. Snackbar hien so luong ban ghi va duong dan file
+2. App tao file text `.txt` da sanitize trong temp storage
+3. Native share sheet mo ra de gui file qua app co san tren thiet bi, vi du Zalo,
+   Telegram, email, Messages, hoac cloud drive
+4. Snackbar hien trang thai no-log, share thanh cong, bi dong, hoac unavailable
 
 Ghi chu:
+- Neu khong co log nao khop filter hien tai, app khong mo empty share sheet.
 - Neu chay tren web test mode, export tra ve payload in-memory thay vi file path.
 
 ## Bao mat va redaction
@@ -59,9 +64,10 @@ Tat ca gia tri nhay cam duoc thay bang `[REDACTED]`.
 1. Tai hien loi tren may that
 2. Mo `Logs` va chon `warning` hoac `error`
 3. Kiem tra `trace_id`, `event`, `category` theo timeline
-4. Export JSONL va gui cho team ky thuat
+4. Export file text va gui cho team ky thuat qua share sheet
 5. Neu can trace sau hon, chay lai voi `APP_LOG_LEVEL=debug`
 
 ## Luu y van hanh
-- Logging da co retention theo tuoi + so luong ban ghi de tranh phinh bo nho
+- Logging chi giu log trong 60 phut va gioi han them theo so luong ban ghi de
+  tranh phinh bo nho
 - Neu gap van de hieu nang, giam level ve `warning` trong production

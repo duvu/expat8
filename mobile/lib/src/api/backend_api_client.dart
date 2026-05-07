@@ -48,16 +48,39 @@ class BackendApiClient {
         'uri': uri.toString(),
       },
     );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'proficiency.timeout',
+        message: 'Proficiency request timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
     await _logger.info(
       category: AppLogCategory.api,
       event: 'proficiency.response',
@@ -65,6 +88,7 @@ class BackendApiClient {
       traceId: traceId,
       context: {
         'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
       },
     );
     _throwIfFailed(response, 'Proficiency fetch failed');
@@ -127,6 +151,7 @@ class BackendApiClient {
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/learning/cards');
     final payload = jsonEncode({
       'device_id': deviceId,
@@ -134,21 +159,68 @@ class BackendApiClient {
       'target_language': targetLanguage,
       'card_mode': 'new',
     });
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: sessionToken,
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'learning_cards.request',
+      message: 'Requesting learning cards from backend.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'limit': limit,
+        'target_language': targetLanguage,
+        'timeout_ms': timeout.inMilliseconds,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+                sessionToken: sessionToken,
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'learning_cards.timeout',
+        message: 'Learning-card request timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'limit': limit,
+          'target_language': targetLanguage,
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'learning_cards.response',
+      message: 'Received learning-card response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
     _throwIfFailed(response, 'Learning-card batch failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final items = body['items'] as List? ?? const [];
@@ -171,6 +243,7 @@ class BackendApiClient {
     DateTime? observedAt,
     String? sessionToken,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/user-word-cache');
     final payload = jsonEncode({
       'device_id': deviceId,
@@ -178,21 +251,66 @@ class BackendApiClient {
       'observed_at':
           (observedAt ?? DateTime.now().toUtc()).toUtc().toIso8601String(),
     });
-    final response = await _httpClient
-        .put(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'PUT',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: sessionToken,
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.sync,
+      event: 'cache_inventory.request',
+      message: 'Syncing user cache inventory to backend.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'server_word_ids_count': serverWordIds.length,
+        'timeout_ms': timeout.inMilliseconds,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .put(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'PUT',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+                sessionToken: sessionToken,
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'cache_inventory.timeout',
+        message: 'Cache inventory sync timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'server_word_ids_count': serverWordIds.length,
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+    await _logger.info(
+      category: AppLogCategory.sync,
+      event: 'cache_inventory.response',
+      message: 'Received cache inventory response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
     _throwIfFailed(response, 'Cache inventory sync failed');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return CacheInventoryResult(
@@ -266,6 +384,7 @@ class BackendApiClient {
     String? displayName,
     String? deviceId,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/users/register');
     final payload = jsonEncode({
       'identifier': identifier,
@@ -273,20 +392,65 @@ class BackendApiClient {
       if (displayName != null) 'display_name': displayName,
       if (deviceId != null) 'device_id': deviceId,
     });
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.auth,
+      event: 'auth.register.request',
+      message: 'Submitting registration request.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'has_display_name': displayName != null,
+        'has_device_id': deviceId != null,
+        'timeout_ms': timeout.inMilliseconds,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.auth,
+        event: 'auth.register.timeout',
+        message: 'Registration request timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+    await _logger.info(
+      category: AppLogCategory.auth,
+      event: 'auth.register.response',
+      message: 'Received registration response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
     _throwIfFailed(response, 'Registration failed');
     return UserSession.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
@@ -297,49 +461,138 @@ class BackendApiClient {
     required String password,
     String? deviceId,
   }) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/users/sign-in');
     final payload = jsonEncode({
       'identifier': identifier,
       'password': password,
       if (deviceId != null) 'device_id': deviceId,
     });
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.auth,
+      event: 'auth.sign_in.request',
+      message: 'Submitting sign-in request.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'has_device_id': deviceId != null,
+        'timeout_ms': timeout.inMilliseconds,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.auth,
+        event: 'auth.sign_in.timeout',
+        message: 'Sign-in request timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+    await _logger.info(
+      category: AppLogCategory.auth,
+      event: 'auth.sign_in.response',
+      message: 'Received sign-in response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
     _throwIfFailed(response, 'Sign-in failed');
     return UserSession.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
   Future<void> signOut({required UserSession session}) async {
+    final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/users/sign-out');
     final payload = jsonEncode({});
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: session.sessionToken,
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.auth,
+      event: 'auth.sign_out.request',
+      message: 'Submitting sign-out request.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'timeout_ms': timeout.inMilliseconds,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+                sessionToken: session.sessionToken,
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.auth,
+        event: 'auth.sign_out.timeout',
+        message: 'Sign-out request timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+    await _logger.info(
+      category: AppLogCategory.auth,
+      event: 'auth.sign_out.response',
+      message: 'Received sign-out response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
     _throwIfFailed(response, 'Sign-out failed');
   }
 

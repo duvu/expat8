@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Define how the backend generates, validates, persists, and reuses AI-generated vocabulary for supported language profiles.
+## Requirements
 ### Requirement: Backend generates vocabulary through LiteLLM
 The backend SHALL use LiteLLM as the abstraction layer for AI vocabulary generation.
 
@@ -23,15 +24,31 @@ The backend SHALL request and process AI vocabulary output as structured JSON wi
 - **THEN** the backend requests output using HSK-aligned difficulty values and Chinese profile pronunciation expectations
 
 ### Requirement: Generated vocabulary is validated before persistence
-The backend MUST validate AI-generated vocabulary before saving or serving it using language-profile aware rules.
+The backend MUST validate AI-generated vocabulary before saving or serving it using language-profile aware pronunciation rules: English items require IPA, while Chinese items require pinyin and do not require IPA.
 
 #### Scenario: Difficulty level is invalid for language profile
 - **WHEN** a generated item includes a difficulty value that is not valid for the active language scale
 - **THEN** the backend rejects that item
 
-#### Scenario: Chinese pronunciation metadata is insufficient
-- **WHEN** a generated Chinese item lacks required pronunciation support defined by the Chinese profile
-- **THEN** the backend rejects that item or flags it for regeneration
+#### Scenario: English item has IPA pronunciation metadata
+- **WHEN** a generated English item has non-empty `ipa` and all other required metadata is valid
+- **THEN** the backend accepts the item pronunciation metadata
+
+#### Scenario: English item has empty IPA
+- **WHEN** a generated English item has empty `ipa`
+- **THEN** the backend rejects that item before persistence with an IPA-specific rejection reason
+
+#### Scenario: Chinese item has pinyin and no IPA
+- **WHEN** a generated Chinese item has empty `ipa` and valid pinyin in the existing `vietnamese_pronunciation` pronunciation slot
+- **THEN** the backend accepts the pronunciation metadata instead of rejecting the item as `missing_ipa`
+
+#### Scenario: Chinese item lacks pinyin
+- **WHEN** a generated Chinese item lacks valid pinyin in the existing `vietnamese_pronunciation` pronunciation slot
+- **THEN** the backend rejects that item or flags it for regeneration with a pinyin-specific rejection reason
+
+#### Scenario: Chinese item includes IPA but lacks pinyin
+- **WHEN** a generated Chinese item includes `ipa` but lacks valid pinyin in the existing `vietnamese_pronunciation` pronunciation slot
+- **THEN** the backend rejects that item because Chinese validation is based on pinyin, not IPA
 
 ### Requirement: Generated content includes Vietnamese learner support
 The backend SHALL generate vocabulary content that remains useful for Vietnamese learners across supported language profiles.
@@ -54,3 +71,4 @@ The backend SHALL persist accepted AI-generated vocabulary items for future requ
 #### Scenario: Later request can use generated inventory
 - **WHEN** a later new-word request can be satisfied by stored generated words
 - **THEN** the backend can return stored generated words without making a new AI call
+

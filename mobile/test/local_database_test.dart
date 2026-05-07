@@ -205,6 +205,45 @@ void main() {
     expect(remaining.single.event, 'new_event_2');
   });
 
+  test('prunes logs older than the 60-minute retention window', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_log_prune_60_minutes_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 10, 59, 59),
+        level: AppLogLevel.info,
+        category: AppLogCategory.app,
+        event: 'expired_event',
+        message: 'expired',
+        context: const {},
+      ),
+    );
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 11),
+        level: AppLogLevel.info,
+        category: AppLogCategory.app,
+        event: 'retained_event',
+        message: 'retained',
+        context: const {},
+      ),
+    );
+
+    final removed = await database.pruneLogs(
+      maxEntries: 5000,
+      maxAge: const Duration(minutes: 60),
+      now: DateTime.utc(2026, 5, 5, 12),
+    );
+    final remaining = await database.queryLogs(limit: 20);
+
+    expect(removed, 1);
+    expect(remaining.length, 1);
+    expect(remaining.single.event, 'retained_event');
+  });
+
   test('getSetting returns null for unknown key', () async {
     final database = await LocalDatabase.open(
       databaseName: 'local_database_test_get_setting_null.db',
@@ -599,6 +638,7 @@ void main() {
     expect(second?.localId, isNot(equals(first.localId)));
   });
 }
+
 VocabularyWord _word(String id, DateTime updatedAt) {
   return VocabularyWord(
     localId: id,

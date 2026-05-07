@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../api/backend_api_client.dart';
@@ -64,8 +65,7 @@ class WordRepository {
         limit: _config.vocabFirstInstallSize,
         eventTag: 'first_install',
       );
-      return TopUpResult(
-          action: TopUpAction.firstInstall, loaded: loaded);
+      return TopUpResult(action: TopUpAction.firstInstall, loaded: loaded);
     }
 
     if (total < _config.vocabPoolFullSize) {
@@ -200,7 +200,8 @@ class WordRepository {
     );
   }
 
-  Future<VocabularyWord?> getNewWordWithFallback({String language = 'en'}) async {
+  Future<VocabularyWord?> getNewWordWithFallback(
+      {String language = 'en'}) async {
     return (await getNewWordWithFallbackResult(language: language)).word;
   }
 
@@ -228,6 +229,26 @@ class WordRepository {
       event: 'new_word.local.empty',
       message: 'No local new word is available.',
     );
+    final reviewResult = await getReviewFallbackResult(
+      DateTime.now().toUtc(),
+      language: language,
+    );
+    if (reviewResult.word != null) {
+      await _logger.info(
+        category: AppLogCategory.api,
+        event: 'new_word.review.fallback',
+        message:
+            'No new word available, falling back to review or learned word.',
+        context: {
+          'local_id': reviewResult.word!.localId,
+          'source': reviewResult.source.name,
+        },
+      );
+      return WordLookupResult(
+        word: reviewResult.word,
+        source: reviewResult.source,
+      );
+    }
     return const WordLookupResult(
       word: null,
       source: WordLookupSource.none,
@@ -235,7 +256,8 @@ class WordRepository {
     );
   }
 
-  Future<VocabularyWord?> getReviewWord(DateTime now, {String language = 'en'}) {
+  Future<VocabularyWord?> getReviewWord(DateTime now,
+      {String language = 'en'}) {
     return database.nextDueReviewWord(now, language: language);
   }
 
@@ -244,10 +266,22 @@ class WordRepository {
     return database.nextDifficultRelearnWord(now, language: language);
   }
 
+  Future<WordLookupResult> getReviewFallbackResult(DateTime now,
+      {String language = 'en'}) async {
+    final difficult =
+        await database.nextDifficultRelearnWord(now, language: language);
+    if (difficult != null) {
+      return WordLookupResult(
+        word: difficult,
+        source: WordLookupSource.difficultRelearn,
+      );
+    }
+    return getRecentReviewWordResult(now, language: language);
+  }
+
   Future<WordLookupResult> getRecentReviewWordResult(DateTime now,
       {String language = 'en'}) async {
-    final recent =
-        await database.recentlyLearnedReviewWord(language: language);
+    final recent = await database.recentlyLearnedReviewWord(language: language);
     if (recent != null) {
       await _logger.debug(
         category: AppLogCategory.session,
@@ -533,16 +567,51 @@ class WordRepository {
       to: to,
       limit: limit,
     );
-    final payload = logs.map((entry) => entry.toJsonLine()).join('\n');
-    if (kIsWeb) {
-      return LogExportResult(path: null, payload: payload, count: logs.length);
+    final exportedAt = DateTime.now().toUtc();
+    final fileName = 'expat8_logs_${_fileTimestamp(exportedAt)}.txt';
+    final payload = _formatLogExportPayload(logs, exportedAt);
+    if (logs.isEmpty || kIsWeb) {
+      return LogExportResult(
+        path: null,
+        payload: payload,
+        count: logs.length,
+        fileName: fileName,
+      );
     }
-    final file = File(
-      '${Directory.systemTemp.path}/expat8_logs_${DateTime.now().millisecondsSinceEpoch}.jsonl',
-    );
+    final exportDir = await _resolveLogExportDirectory();
+    final file = File('${exportDir.path}${Platform.pathSeparator}$fileName');
     await file.writeAsString(payload);
     return LogExportResult(
-        path: file.path, payload: payload, count: logs.length);
+      path: file.path,
+      payload: payload,
+      count: logs.length,
+      fileName: fileName,
+    );
+  }
+
+  String _formatLogExportPayload(List<LogEntry> logs, DateTime exportedAt) {
+    final sanitizer = LogSanitizer();
+    final lines = [
+      '# Expat8 mobile logs',
+      '# Exported at: ${exportedAt.toIso8601String()}',
+      '# Entries: ${logs.length}',
+      ...logs.map((entry) => sanitizer.sanitize(entry).toJsonLine()),
+    ];
+    return '${lines.join('\n')}\n';
+  }
+
+  String _fileTimestamp(DateTime value) {
+    return value
+        .toUtc()
+        .toIso8601String()
+        .replaceAll(RegExp(r'[^0-9A-Za-z]+'), '_');
+  }
+
+  Future<Directory> _resolveLogExportDirectory() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return getTemporaryDirectory();
+    }
+    return Directory.systemTemp;
   }
 }
 
@@ -550,6 +619,7 @@ enum WordLookupSource {
   localFallback,
   recentReview,
   dueReview,
+  difficultRelearn,
   none,
 }
 
@@ -584,9 +654,13 @@ class LogExportResult {
     required this.path,
     required this.payload,
     required this.count,
+    required this.fileName,
+    this.mimeType = 'text/plain',
   });
 
   final String? path;
   final String payload;
   final int count;
+  final String fileName;
+  final String mimeType;
 }

@@ -23,3 +23,28 @@ When the user asks to deploy `expat8-backend`, always use this exact sequence:
 - Do **not** treat local compose in the source repo as production deploy.
 - Do **not** stop after local `expat8-backend-1` is healthy; deployment target is `expat8-backend` in `~/deployment/worker-z440`.
 - Prefer timestamp tags in format `YYYYMMDD.HHMM`.
+
+## Flutter Build (expat8 mobile)
+
+`BACKEND_BASE_URL` and other `--dart-define` values are **compiled into the binary** — changing them always requires a full rebuild. Do not attempt to patch or swap values at runtime.
+
+### Android Emulator Networking
+
+- Android emulator runs in an isolated virtual network and **cannot reach LAN/VPN IPs** (e.g. `10.x.x.x`).
+- Always use `https://expat8.x51.vn` as `BACKEND_BASE_URL` when building for the emulator.
+- LAN IPs (e.g. `10.113.213.9:18787`) only work on **physical devices** connected to the same network.
+
+### Standard build commands
+
+```bash
+# For emulator / public access
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ~/snap/flutter/common/flutter/bin/flutter build apk --release \
+  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret \
+  --dart-define=APP_LOG_LEVEL=info
+
+# Install on emulator
+~/Android/sdk/platform-tools/adb -s emulator-5554 install -r build/app/outputs/flutter-apk/app-release.apk
+~/Android/sdk/platform-tools/adb -s emulator-5554 shell am start -n com.example.expat8_language_app/.MainActivity
+```

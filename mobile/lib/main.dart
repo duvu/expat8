@@ -21,7 +21,7 @@ Future<void> main() async {
       await database.persistLogEntry(entry);
       await database.pruneLogs(
         maxEntries: config.logMaxEntries,
-        maxAge: Duration(days: config.logRetentionDays),
+        maxAge: config.logRetention,
       );
     },
   );
@@ -39,7 +39,8 @@ Future<void> main() async {
     logger: logger,
     config: config,
   );
-  final controller = LearningSessionController(repository: repository, logger: logger);
+  final controller =
+      LearningSessionController(repository: repository, logger: logger);
 
   // Block startup only when local cache is empty (first install or wiped data),
   // so the user always opens to a populated word feed. Otherwise the periodic

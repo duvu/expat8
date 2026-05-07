@@ -50,7 +50,8 @@ class _LearningScreenState extends State<LearningScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     });
   }
 
@@ -125,8 +126,8 @@ class _LearningScreenState extends State<LearningScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Text(
-                'Swipe Right->Left: next card (15% learned review). '
-                'Swipe Left->Right: review flow (15% new).\n'
+                'Swipe Right->Left: next card (15% new, 85% review). '
+                'Swipe Left->Right: review-first flow.\n'
                 'Swipe Bottom->Top: remembered (10% relearn). '
                 'Swipe Top->Bottom: difficult (relearn group).',
                 textAlign: TextAlign.center,
@@ -292,10 +293,12 @@ class LearningCardGestureSurface extends StatefulWidget {
   final Widget child;
 
   @override
-  State<LearningCardGestureSurface> createState() => _LearningCardGestureSurfaceState();
+  State<LearningCardGestureSurface> createState() =>
+      _LearningCardGestureSurfaceState();
 }
 
-class _LearningCardGestureSurfaceState extends State<LearningCardGestureSurface> {
+class _LearningCardGestureSurfaceState
+    extends State<LearningCardGestureSurface> {
   Offset _panDelta = Offset.zero;
 
   @override
@@ -415,7 +418,8 @@ class _DrawerUserInfo extends StatelessWidget {
     final title = displayName == null || displayName.isEmpty
         ? identifier ?? 'Signed in'
         : displayName;
-    final subtitle = identifier == null || identifier == title ? null : identifier;
+    final subtitle =
+        identifier == null || identifier == title ? null : identifier;
     return ListTile(
       leading: const Icon(Icons.account_circle_outlined),
       title: Text(title),
@@ -534,9 +538,8 @@ class _IdentityDialogState extends State<IdentityDialog> {
     final identifier = _identifierController.text.trim().toLowerCase();
     final password = _passwordController.text;
     final identifierError = _validateIdentifier(identifier);
-    final passwordError = password.length < 8
-        ? 'Password must be at least 8 characters.'
-        : null;
+    final passwordError =
+        password.length < 8 ? 'Password must be at least 8 characters.' : null;
 
     setState(() {
       _identifierError = identifierError;
@@ -615,4 +618,3 @@ class ProficiencyLevelLabel extends StatelessWidget {
     );
   }
 }
-

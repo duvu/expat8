@@ -8,7 +8,7 @@ class AppConfig {
     required this.supportedLearningLanguages,
     required this.logLevel,
     required this.logMaxEntries,
-    required this.logRetentionDays,
+    this.logRetention = defaultLogRetention,
     required this.vocabFirstInstallSize,
     required this.vocabPoolFullSize,
     required this.vocabHourlyTopUpSize,
@@ -23,7 +23,8 @@ class AppConfig {
         defaultValue: 'https://expat8.x51.vn',
       ),
       newWordTimeout: Duration(
-        seconds: int.fromEnvironment('NEW_WORD_TIMEOUT_SECONDS', defaultValue: 5),
+        seconds:
+        int.fromEnvironment('NEW_WORD_TIMEOUT_SECONDS', defaultValue: 12),
       ),
       appCredentialAppId: String.fromEnvironment(
         'APP_CREDENTIAL_APP_ID',
@@ -42,10 +43,6 @@ class AppConfig {
       logMaxEntries: int.fromEnvironment(
         'APP_LOG_MAX_ENTRIES',
         defaultValue: 5000,
-      ),
-      logRetentionDays: int.fromEnvironment(
-        'APP_LOG_RETENTION_DAYS',
-        defaultValue: 7,
       ),
       vocabFirstInstallSize: int.fromEnvironment(
         'VOCAB_FIRST_INSTALL_SIZE',
@@ -78,10 +75,12 @@ class AppConfig {
   final List<String> supportedLearningLanguages;
   final String logLevel;
   final int logMaxEntries;
-  final int logRetentionDays;
+  final Duration logRetention;
   final int vocabFirstInstallSize;
   final int vocabPoolFullSize;
   final int vocabHourlyTopUpSize;
   final int vocabRotationSize;
   final int vocabRotationUnstudiedThreshold;
+
+  static const Duration defaultLogRetention = Duration(minutes: 60);
 }

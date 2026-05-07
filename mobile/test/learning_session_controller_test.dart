@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
 import 'package:expat8_language_app/src/data/word_repository.dart';
+import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
@@ -227,6 +228,52 @@ void main() {
     expect(third, isNotNull);
     expect({first, second, third}.length, 3,
         reason: 'Each swipe should reveal a distinct new word');
+  });
+
+  test('new-word selection falls back to learned review card and logs path',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_learned_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.now().toUtc();
+    final learned = _wordAt('learned_fallback', base);
+    await database.upsertWord(learned);
+    await database.markWordAsLearning(word: learned, now: base);
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
+        logger: logger,
+      ),
+      logger: logger,
+    );
+
+    await controller.showNewWord();
+
+    expect(controller.currentWord?.localId, 'learned_fallback');
+    expect(
+      entries.any((entry) => entry.event == 'session.card_selection.start'),
+      true,
+    );
+    expect(
+      entries.any(
+        (entry) =>
+            entry.event == 'session.card_selection.fallback' &&
+            entry.context['from'] == 'new' &&
+            entry.context['to'] == 'review',
+      ),
+      true,
+    );
+    expect(
+      entries.any((entry) => entry.event == 'session.card_selection.selected'),
+      true,
+    );
   });
 }
 

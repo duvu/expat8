@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/config.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
@@ -123,6 +126,37 @@ void main() {
 
     expect(result.word, isNull);
     expect(entries.any((entry) => entry.event == 'new_word.local.empty'), true);
+  });
+
+  test('falls back to recently learned word when new pool is empty', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_learned_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.now().toUtc();
+    final learned = _word('learned_fallback', base);
+    await database.upsertWord(learned);
+    await database.markWordAsLearning(word: learned, now: base);
+    final entries = <LogEntry>[];
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (entry) async => entries.add(entry),
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      logger: logger,
+      config: _testConfig(),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult();
+
+    expect(result.word?.localId, 'learned_fallback');
+    expect(result.source, WordLookupSource.recentReview);
+    expect(
+      entries.any((entry) => entry.event == 'new_word.review.fallback'),
+      true,
+    );
   });
 
   test('logs local-hit when local word exists despite failing backend',
@@ -337,7 +371,7 @@ void main() {
     expect(entries.any((entry) => entry.event == 'sync.batch.retry'), true);
   });
 
-  test('exports logs as JSONL payload', () async {
+  test('exports logs as a sanitized UTF-8 text file with metadata', () async {
     final database = await LocalDatabase.open(
       databaseName:
           'word_repository_test_export_logs_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -348,8 +382,12 @@ void main() {
         level: AppLogLevel.error,
         category: AppLogCategory.api,
         event: 'api.error',
-        message: 'Request failed',
-        context: const {'status_code': 500},
+        message: 'Request failed with Bearer secret-token',
+        context: const {
+          'status_code': 500,
+          'app_secret': 'secret-value',
+          'nested': {'token': 'nested-token'},
+        },
       ),
     );
     final repository = WordRepository(
@@ -362,7 +400,40 @@ void main() {
         await repository.exportLogs(minimumLevel: AppLogLevel.warning);
 
     expect(exported.count, 1);
+    expect(exported.fileName, endsWith('.txt'));
+    expect(exported.mimeType, 'text/plain');
+    expect(exported.path, isNotNull);
+    expect(exported.payload.contains('# Expat8 mobile logs'), true);
     expect(exported.payload.contains('api.error'), true);
+    expect(exported.payload.contains('secret-token'), false);
+    expect(exported.payload.contains('secret-value'), false);
+    expect(exported.payload.contains('nested-token'), false);
+    final lines = exported.payload.split('\n');
+    final jsonLine = lines.firstWhere((line) => line.startsWith('{'));
+    final decoded = jsonDecode(jsonLine) as Map<String, dynamic>;
+    expect(decoded['context']['app_secret'], LogSanitizer.redacted);
+    expect(decoded['context']['nested']['token'], LogSanitizer.redacted);
+    expect(File(exported.path!).readAsStringSync(), exported.payload);
+  });
+
+  test('returns empty export metadata without creating a file', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_export_logs_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      logger: const NoopLogger(),
+    );
+
+    final exported =
+        await repository.exportLogs(minimumLevel: AppLogLevel.warning);
+
+    expect(exported.count, 0);
+    expect(exported.path, isNull);
+    expect(exported.fileName, endsWith('.txt'));
+    expect(exported.payload.contains('# Entries: 0'), true);
   });
 
   test('topUpInventoryIfNeeded loads first-install size when DB is empty',
@@ -416,7 +487,8 @@ void main() {
     expect(apiClient.lastLearningCardsLimit, 3);
   });
 
-  test('topUpInventoryIfNeeded does nothing when pool full and unstudied healthy',
+  test(
+      'topUpInventoryIfNeeded does nothing when pool full and unstudied healthy',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
@@ -682,7 +754,6 @@ AppConfig _testConfig({
     supportedLearningLanguages: const ['en', 'zh', 'vi'],
     logLevel: 'info',
     logMaxEntries: 100,
-    logRetentionDays: 1,
     vocabFirstInstallSize: firstInstallSize,
     vocabPoolFullSize: poolFullSize,
     vocabHourlyTopUpSize: hourlyTopUpSize,

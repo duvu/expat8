@@ -1,6 +1,5 @@
-## Purpose
-Define how the mobile learning session selects cards, handles gestures, updates local learning state, and renders language-native proficiency labels.
-## Requirements
+## MODIFIED Requirements
+
 ### Requirement: Swipe advances the learning session
 The mobile app SHALL provide a primary learning screen where horizontal swipes advance through a 15% new-card / 85% review-card session mix, vertical swipes update the current card's local learning state, and session navigation stays scoped to the active learning language and proficiency scale.
 
@@ -20,38 +19,7 @@ The mobile app SHALL provide a primary learning screen where horizontal swipes a
 - **WHEN** the user opens the app
 - **THEN** the app restores session state including active language and associated proficiency scale metadata before continuing the session
 
-### Requirement: Vocabulary card displays required learning content
-The mobile app SHALL display all required vocabulary fields on each card when the data is available.
-
-#### Scenario: Complete vocabulary card is shown
-- **WHEN** a vocabulary card is displayed
-- **THEN** the card includes the term, Vietnamese meaning, Vietnamese-friendly pronunciation, IPA, example sentence, and Vietnamese example translation
-
-#### Scenario: Optional part of speech is available
-- **WHEN** a vocabulary item includes part of speech
-- **THEN** the card displays the part of speech with the vocabulary term
-
-### Requirement: Review scheduling updates after ratings
-The mobile app SHALL allow the user to submit a memory rating and SHALL update local proficiency state from backend scale-native responses.
-
-#### Scenario: User rates a card
-- **WHEN** the user submits a rating for the current card
-- **THEN** the app records the rating and applies returned `proficiency.scale`, `proficiency.level`, and `proficiency.level_index` to session state
-
-#### Scenario: Proficiency level changes
-- **WHEN** the backend reports a level change after rating submission
-- **THEN** the app updates the displayed level label according to the returned scale without assuming CEFR-only semantics
-
-### Requirement: Mobile renders proficiency labels by language scale
-The mobile app SHALL render proficiency labels using language-native scale conventions.
-
-#### Scenario: English session label
-- **WHEN** the active learning language is English
-- **THEN** the app renders CEFR labels such as A1 through C2
-
-#### Scenario: Chinese session label
-- **WHEN** the active learning language is Chinese
-- **THEN** the app renders HSK labels such as HSK1 through HSK6
+## ADDED Requirements
 
 ### Requirement: Session targets fifteen percent new cards and eighty-five percent review cards
 The mobile app SHALL target 15% new-word cards and 85% review or learned-word cards across normal learning progression.
@@ -72,3 +40,8 @@ The mobile app SHALL target 15% new-word cards and 85% review or learned-word ca
 - **WHEN** no new, learned, due-review, difficult-relearn, or recent-review card is available for the active language
 - **THEN** the app may show an empty-card message explaining that no learning card is available
 
+## REMOVED Requirements
+
+### Requirement: Session targets three new words and seven review words
+**Reason**: The target mix has changed from 30% new cards to 15% new cards.
+**Migration**: Use `Session targets fifteen percent new cards and eighty-five percent review cards` for learning-session mix behavior.

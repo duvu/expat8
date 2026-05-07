@@ -57,5 +57,6 @@ test('builds HSK-oriented prompt for Chinese generation', async () => {
   const userPrompt = requestBody.messages.find((message) => message.role === 'user').content;
   assert.match(userPrompt, /Target proficiency scale is HSK/i);
   assert.match(userPrompt, /difficulty is one of HSK1\/HSK2\/HSK3\/HSK4\/HSK5\/HSK6/i);
+  assert.match(userPrompt, /Chinese does not use IPA/i);
   assert.match(userPrompt, /vietnamese_pronunciation MUST contain pinyin-style romanization/i);
 });

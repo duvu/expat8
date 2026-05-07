@@ -2,7 +2,7 @@ import 'package:expat8_language_app/src/session/card_selection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('targets three new cards in a ten-card window', () {
+  test('targets three new cards in a twenty-card window', () {
     final window = CardSelectionWindow();
 
     expect(window.preferredKind(), CardKind.newWord);
@@ -11,15 +11,17 @@ void main() {
     expect(window.preferredKind(), CardKind.newWord);
     window.record(CardKind.newWord);
     expect(window.preferredKind(), CardKind.review);
+    expect(window.windowSize, 20);
+    expect(window.targetNewCards, 3);
   });
 
-  test('keeps rolling ten-card history', () {
+  test('keeps rolling twenty-card history', () {
     final window = CardSelectionWindow();
 
-    for (var i = 0; i < 12; i++) {
+    for (var i = 0; i < 22; i++) {
       window.record(CardKind.review);
     }
 
-    expect(window.history.length, 10);
+    expect(window.history.length, 20);
   });
 }

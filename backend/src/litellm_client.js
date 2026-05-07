@@ -96,7 +96,7 @@ function buildPromptLines({
     return [
       `Generate ${limit} ${targetLanguage} vocabulary words for ${sourceLanguage} speakers learning ${targetLanguage}.`,
       `Target proficiency scale is HSK and target level is ${difficultyLevel}.`,
-      `Each item: term is a Chinese word/phrase (hanzi), language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, ipa may be empty for Chinese, vietnamese_pronunciation MUST contain pinyin-style romanization, example is a natural ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of ${difficultyLevels} and should equal ${difficultyLevel}, topics is an array of relevant topic strings.`,
+      `Each item: term is a Chinese word/phrase (hanzi), language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, Chinese does not use IPA so ipa MUST be empty, vietnamese_pronunciation MUST contain pinyin-style romanization, example is a natural ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of ${difficultyLevels} and should equal ${difficultyLevel}, topics is an array of relevant topic strings.`,
       avoidTerms.length > 0
         ? `Do not return any term from this forbidden list: ${avoidTerms.join(', ')}.`
         : 'Return terms that are different from previously generated results.',
