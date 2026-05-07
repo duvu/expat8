@@ -1,10 +1,9 @@
 import crypto from 'node:crypto';
 
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 
 import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
-import { normalizeDifficultyLevel, InvalidStudyRatingError } from './proficiency.js';
+import { InvalidStudyRatingError } from './proficiency.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -71,28 +70,11 @@ export function createApp({
   return app;
 }
 
-function createV1Router({ store, generationService: _generationService, config }) {
+function createV1Router({ store, generationService, config }) {
   const router = express.Router();
-
-  const registrationLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: config.authRateLimitRegister ?? 10,
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    handler: (_req, res) => res.status(429).json({ error: 'too_many_requests' })
-  });
-
-  const signInLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: config.authRateLimitSignIn ?? 20,
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    handler: (_req, res) => res.status(429).json({ error: 'too_many_requests' })
-  });
 
   router.post(
     '/users/register',
-    registrationLimiter,
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -117,7 +99,6 @@ function createV1Router({ store, generationService: _generationService, config }
 
   router.post(
     '/users/sign-in',
-    signInLimiter,
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -153,62 +134,47 @@ function createV1Router({ store, generationService: _generationService, config }
     })
   );
 
-  router.get(
-    '/words/next',
-    asyncHandler(async (request, response) => {
-      const userSession = await resolveOptionalUserSession({ request, response, store });
-      if (userSession === false) {
-        return;
-      }
-      const limit = clampLimit(request.query.limit, 1, 20);
-      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
-      if (!validateLanguage(targetLanguage, config.validLanguages, response)) return;
-      const proficiencyLevel = normalizeOptionalProficiencyLevel(
-        request.query.proficiency_level,
-        targetLanguage
-      );
-      const deviceId = request.query.device_id ?? null;
-      const excludeServerWordIds = normalizeExcludedWordIds(request.query.exclude_server_word_id);
-      const words = await store.findNewWords({
-        targetLanguage,
-        limit,
-        excludeWordIds: excludeServerWordIds,
-        proficiencyLevel,
-        deviceId,
-        userId: userSession?.user.id ?? null
-      });
-      request.log?.debug('words_next_served', {
-        target_language: targetLanguage,
-        limit,
-        requested_proficiency_level: request.query.proficiency_level ?? null,
-        resolved_proficiency_level: proficiencyLevel,
-        item_count: words.length
-      });
-      response.json({ items: words.map(toApiWord) });
-    })
-  );
-
-  router.get(
+  router.post(
     '/learning/cards',
     asyncHandler(async (request, response) => {
       const userSession = await resolveOptionalUserSession({ request, response, store });
       if (userSession === false) {
         return;
       }
-      const deviceId = request.query.device_id;
-      if (!deviceId || typeof deviceId !== 'string') {
+      const body = request.body ?? {};
+      if (
+        !body.device_id ||
+        typeof body.device_id !== 'string' ||
+        hasClientWordExclusions(body)
+      ) {
         return response.status(400).json({ error: 'bad_request' });
       }
-      const limit = clampLimit(request.query.limit, 1, 50);
-      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
-      if (!validateLanguage(targetLanguage, config.validLanguages, response)) return;
-      const result = await store.learningCards({
-        deviceId,
+      if (normalizeCardMode(body.card_mode) !== 'new') {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const limit = clampLimit(body.limit ?? 10, 1, 100);
+      const targetLanguage = body.target_language ?? config.defaultTargetLanguage;
+      let result = await store.learningCards({
+        deviceId: body.device_id,
         userId: userSession?.user.id ?? null,
         targetLanguage,
         limit,
         now: new Date().toISOString()
       });
+      const shortfall = limit - result.items.length;
+      if (shortfall > 0 && generationService != null) {
+        await generationService.generateAndStore({
+          targetLanguage,
+          limit: shortfall,
+        });
+        result = await store.learningCards({
+          deviceId: body.device_id,
+          userId: userSession?.user.id ?? null,
+          targetLanguage,
+          limit,
+          now: new Date().toISOString()
+        });
+      }
       return response.json({
         target_mix: result.target_mix,
         actual_mix: result.actual_mix,
@@ -226,9 +192,7 @@ function createV1Router({ store, generationService: _generationService, config }
     asyncHandler(async (request, response) => {
       const limit = clampLimit(request.query.limit, 1, 1000);
       const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
-      if (!validateLanguage(targetLanguage, config.validLanguages, response)) return;
-      const excludeServerWordIds = normalizeExcludedWordIds(request.query.exclude_server_word_id);
-      const words = await store.recentWords({ targetLanguage, limit, excludeServerWordIds });
+      const words = await store.recentWords({ targetLanguage, limit });
       response.json({ items: words.map(toApiWord) });
     })
   );
@@ -244,17 +208,12 @@ function createV1Router({ store, generationService: _generationService, config }
       if (!body.device_id || !body.client_event_id || !body.rating || !body.occurred_at) {
         return response.status(400).json({ error: 'bad_request' });
       }
-      if (Number.isNaN(Date.parse(body.occurred_at))) {
-        return response.status(400).json({ error: 'bad_request' });
-      }
-      const studyLanguage = body.language ?? config.defaultTargetLanguage;
-      if (!validateLanguage(studyLanguage, config.validLanguages, response)) return;
 
       try {
         const result = await store.recordStudyEvent({
           deviceId: body.device_id,
           userId: userSession?.user.id ?? null,
-          language: studyLanguage,
+          language: body.language ?? config.defaultTargetLanguage,
           event: {
             client_event_id: body.client_event_id,
             server_word_id: body.server_word_id ?? body.word_id ?? null,
@@ -264,34 +223,11 @@ function createV1Router({ store, generationService: _generationService, config }
             user_id: body.user_id ?? null
           }
         });
-        const compatibilityProficiency = toCompatibilityProficiency(
-          result.proficiency,
-          config.proficiencyCompatibilityMode
-        );
-        request.log?.info('study_event_accepted', {
-          device_id: body.device_id,
-          rating: body.rating,
-          occurred_at: body.occurred_at,
-          target_language: studyLanguage,
-          level_changed: Boolean(compatibilityProficiency?.level_changed),
-          proficiency_scale: compatibilityProficiency?.scale ?? null,
-          proficiency_level: compatibilityProficiency?.level ?? null,
-          proficiency_level_index: compatibilityProficiency?.level_index ?? null
-        });
-        if (compatibilityProficiency?.level_changed) {
-          request.log?.info('proficiency_level_changed', {
-            timestamp: new Date().toISOString(),
-            device_id: body.device_id,
-            old_level: compatibilityProficiency.previous_level ?? null,
-            new_level: compatibilityProficiency.level ?? null,
-            target_language: studyLanguage
-          });
-        }
         return response.json({
           success: true,
           event_id: result.eventId,
           idempotent: result.idempotent,
-          proficiency: compatibilityProficiency
+          proficiency: result.proficiency
         });
       } catch (error) {
         if (error instanceof InvalidStudyRatingError) {
@@ -328,33 +264,7 @@ function createV1Router({ store, generationService: _generationService, config }
           language: body.language ?? config.defaultTargetLanguage,
           events: Array.isArray(body.events) ? body.events : []
         });
-        const compatibilityProficiency = toCompatibilityProficiency(
-          result.proficiency,
-          config.proficiencyCompatibilityMode
-        );
-        request.log?.info('study_events_sync_accepted', {
-          device_id: body.device_id,
-          target_language: body.language ?? config.defaultTargetLanguage,
-          level_changed: Boolean(compatibilityProficiency?.level_changed),
-          accepted_count: result.accepted_event_ids?.length ?? 0,
-          rejected_count: result.rejected_events?.length ?? 0,
-          proficiency_scale: compatibilityProficiency?.scale ?? null,
-          proficiency_level: compatibilityProficiency?.level ?? null,
-          proficiency_level_index: compatibilityProficiency?.level_index ?? null
-        });
-        if (compatibilityProficiency?.level_changed) {
-          request.log?.info('proficiency_level_changed', {
-            timestamp: new Date().toISOString(),
-            device_id: body.device_id,
-            old_level: compatibilityProficiency.previous_level ?? null,
-            new_level: compatibilityProficiency.level ?? null,
-            target_language: body.language ?? config.defaultTargetLanguage
-          });
-        }
-        return response.json({
-          ...result,
-          proficiency: compatibilityProficiency
-        });
+        return response.json(result);
       } catch (error) {
         if (error instanceof InvalidStudyRatingError) {
           request.log?.warn('study_events_sync_rejected', { reason: 'invalid_rating' });
@@ -403,58 +313,16 @@ function createV1Router({ store, generationService: _generationService, config }
       if (!deviceId || typeof deviceId !== 'string') {
         return response.status(400).json({ error: 'bad_request' });
       }
-      if (!enforceSessionDeviceScope({ request, response, userSession, deviceId })) {
-        return;
-      }
-      const proficiencyLanguage = request.query.language ?? config.defaultTargetLanguage;
-      if (!validateLanguage(proficiencyLanguage, config.validLanguages, response)) return;
       const proficiency = await store.getProficiency({
         deviceId,
         userId: userSession?.user.id ?? null,
-        language: proficiencyLanguage
+        language: request.query.language ?? config.defaultTargetLanguage
       });
-      const compatibilityProficiency = toCompatibilityProficiency(
-        proficiency,
-        config.proficiencyCompatibilityMode
-      );
-      request.log?.info('proficiency_served', {
-        target_language: proficiencyLanguage,
-        proficiency_scale: compatibilityProficiency?.scale ?? null,
-        proficiency_level: compatibilityProficiency?.level ?? null,
-        proficiency_level_index: compatibilityProficiency?.level_index ?? null
-      });
-      return response.json({ device_id: deviceId, ...compatibilityProficiency });
+      return response.json({ device_id: deviceId, ...proficiency });
     })
   );
 
   return router;
-}
-
-function normalizeOptionalProficiencyLevel(value, language) {
-  if (value === undefined || value === null || value === '') {
-    return null;
-  }
-  return normalizeDifficultyLevel(value, { language });
-}
-
-function validateLanguage(lang, validLanguages, response) {
-  if (!validLanguages.has(lang)) {
-    response.status(400).json({ error: 'bad_request' });
-    return false;
-  }
-  return true;
-}
-
-function toCompatibilityProficiency(proficiency, mode = 'additive') {
-  if (!proficiency || mode === 'strict') {
-    return proficiency;
-  }
-  return {
-    ...proficiency,
-    proficiency_scale: proficiency.scale ?? null,
-    proficiency_level: proficiency.level ?? null,
-    proficiency_level_index: proficiency.level_index ?? null
-  };
 }
 
 async function resolveOptionalUserSession({ request, response, store }) {
@@ -477,22 +345,6 @@ function bearerToken(request) {
   return scheme?.toLowerCase() === 'bearer' && token ? token : null;
 }
 
-function enforceSessionDeviceScope({ request, response, userSession, deviceId }) {
-  if (!userSession) {
-    return true;
-  }
-  const sessionDeviceId = userSession.session?.device_id;
-  if (!sessionDeviceId || sessionDeviceId === deviceId) {
-    return true;
-  }
-  request.log?.warn('device_scope_forbidden', {
-    session_device_id: sessionDeviceId,
-    requested_device_id: deviceId
-  });
-  response.status(403).json({ error: 'forbidden_device_scope' });
-  return false;
-}
-
 function userSessionResponse({ user, sessionToken }) {
   return {
     user_id: user.id,
@@ -500,13 +352,6 @@ function userSessionResponse({ user, sessionToken }) {
     display_name: user.display_name,
     session_token: sessionToken
   };
-}
-
-function normalizeExcludedWordIds(value) {
-  if (Array.isArray(value)) {
-    return value.filter((item) => typeof item === 'string' && item.length > 0);
-  }
-  return typeof value === 'string' && value.length > 0 ? [value] : [];
 }
 
 function requestContextMiddleware({ logger }) {
@@ -677,6 +522,25 @@ function asyncHandler(handler) {
   return (request, response, next) => {
     Promise.resolve(handler(request, response, next)).catch(next);
   };
+}
+
+function hasClientWordExclusions(body) {
+  return Object.keys(body).some((key) =>
+    [
+      'exclude_server_word_id',
+      'exclude_server_word_ids',
+      'excludeServerWordId',
+      'excludeServerWordIds',
+      'current_word_id',
+      'current_server_word_id'
+    ].includes(key)
+  );
+}
+
+function normalizeCardMode(value) {
+  return value === 'new' || value === undefined || value === null || value === ''
+    ? 'new'
+    : String(value);
 }
 
 function clampLimit(raw, min, max) {

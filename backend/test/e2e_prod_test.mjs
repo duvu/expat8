@@ -5,6 +5,11 @@
 
 import crypto from 'node:crypto';
 
+if (process.env.RUN_PROD_E2E !== '1') {
+  console.log('Skipping production E2E test. Set RUN_PROD_E2E=1 to run it explicitly.');
+  process.exit(0);
+}
+
 const BASE_URL = process.env.BACKEND_URL ?? 'https://expat8.x51.vn';
 const APP_ID = process.env.APP_ID ?? 'expat8-mobile-app';
 const APP_SECRET = process.env.APP_SECRET ?? 'expat8-mobile-secret';
@@ -101,32 +106,54 @@ await test('GET /health returns 200 with ok:true', async () => {
 // 2. Auth required
 console.log('\n── 2. Authentication ───────────────────────────────────────────');
 await test('Unsigned request returns 400 bad_request', async () => {
-  const res = await fetch(`${BASE_URL}/v1/words/next?limit=1`);
+  const res = await fetch(`${BASE_URL}/v1/learning/cards`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: DEVICE_ID,
+      target_language: 'en',
+      limit: 10,
+      card_mode: 'new'
+    })
+  });
   assertEq(res.status, 400, `Expected 400, got ${res.status}`);
   const body = await res.json();
   assertEq(body.error, 'bad_request');
 });
 
 await test('Wrong secret returns 400 bad_request', async () => {
-  const url = `${BASE_URL}/v1/words/next?limit=1`;
+  const url = `${BASE_URL}/v1/learning/cards`;
+  const rawBody = JSON.stringify({
+    device_id: DEVICE_ID,
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   const headers = {
-    ...buildSignedHeaders('GET', url, ''),
+    'content-type': 'application/json',
+    ...buildSignedHeaders('POST', url, rawBody),
     'x-expat8-signature': 'v1=invalidsig'
   };
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { method: 'POST', headers, body: rawBody });
   assertEq(res.status, 400);
   const body = await res.json();
   assertEq(body.error, 'bad_request');
 });
 
-// 3. Words feed
-console.log('\n── 3. Words Feed ───────────────────────────────────────────────');
+// 3. Learning cards
+console.log('\n── 3. Learning Cards ───────────────────────────────────────────');
 let firstWord = null;
 
-await test('GET /v1/words/next returns items array', async () => {
-  const res = await apiRequest('GET', `/v1/words/next?limit=3&mode=new&device_id=${DEVICE_ID}`);
+await test('POST /v1/learning/cards returns items array', async () => {
+  const res = await apiRequest('POST', '/v1/learning/cards', {
+    device_id: DEVICE_ID,
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   assertEq(res.status, 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
   assert(Array.isArray(res.body.items), 'Expected items array');
+  assertEq(res.body.target_mix?.new, 10);
   if (res.body.items.length > 0) {
     firstWord = res.body.items[0];
     assertHas(firstWord, 'server_word_id');
@@ -144,12 +171,6 @@ await test('GET /v1/words/recent returns items array', async () => {
   assertEq(res.status, 200, `Expected 200, got ${res.status}`);
   assert(Array.isArray(res.body.items), 'Expected items array');
   console.log(`     → Got ${res.body.items.length} recent word(s)`);
-});
-
-await test('GET /v1/words/next with proficiency_level=B1 returns valid response', async () => {
-  const res = await apiRequest('GET', `/v1/words/next?limit=2&mode=new&device_id=${DEVICE_ID}&proficiency_level=B1`);
-  assertEq(res.status, 200, `Expected 200, got ${res.status}`);
-  assert(Array.isArray(res.body.items), 'Expected items array');
 });
 
 // 4. Study events
@@ -308,8 +329,13 @@ async function authedRequest(method, path, body) {
   return { status: res.status, body: json };
 }
 
-await test('GET /v1/words/next signed-in returns items', async () => {
-  const res = await authedRequest('GET', `/v1/words/next?limit=3&mode=new&device_id=${DEVICE_ID}`);
+await test('POST /v1/learning/cards signed-in returns items', async () => {
+  const res = await authedRequest('POST', '/v1/learning/cards', {
+    device_id: DEVICE_ID,
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   assertEq(res.status, 200, `Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
   assert(Array.isArray(res.body.items), 'Expected items array');
   console.log(`     → ${res.body.items.length} word(s) returned for signed-in user`);
@@ -337,12 +363,19 @@ await test('GET /v1/proficiency signed-in returns user_id', async () => {
 });
 
 await test('Invalid bearer token returns 4xx with session error', async () => {
-  const url = `${BASE_URL}/v1/words/next?limit=1&device_id=${DEVICE_ID}`;
+  const url = `${BASE_URL}/v1/learning/cards`;
+  const rawBody = JSON.stringify({
+    device_id: DEVICE_ID,
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   const headers = {
-    ...buildSignedHeaders('GET', url, ''),
+    'content-type': 'application/json',
+    ...buildSignedHeaders('POST', url, rawBody),
     'authorization': 'Bearer invalid_token_xyz'
   };
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { method: 'POST', headers, body: rawBody });
   assert(res.status >= 400 && res.status < 500, `Expected 4xx, got ${res.status}`);
   const body = await res.json();
   assert(body.error != null, `Expected an error code, got ${JSON.stringify(body)}`);
@@ -356,12 +389,19 @@ await test('POST /v1/users/sign-out invalidates session', async () => {
 });
 
 await test('Signed-out token no longer valid', async () => {
-  const url = `${BASE_URL}/v1/words/next?limit=1&device_id=${DEVICE_ID}`;
+  const url = `${BASE_URL}/v1/learning/cards`;
+  const rawBody = JSON.stringify({
+    device_id: DEVICE_ID,
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   const headers = {
-    ...buildSignedHeaders('GET', url, ''),
+    'content-type': 'application/json',
+    ...buildSignedHeaders('POST', url, rawBody),
     'authorization': `Bearer ${sessionToken}`
   };
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { method: 'POST', headers, body: rawBody });
   assert(res.status >= 400 && res.status < 500, `Expected 4xx after sign-out, got ${res.status}`);
   const body = await res.json();
   assert(body.error != null, `Expected an error code, got ${JSON.stringify(body)}`);

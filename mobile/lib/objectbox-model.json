@@ -1,0 +1,301 @@
+{
+  "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
+  "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
+  "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
+  "entities": [
+    {
+      "id": "1:3340211202052680839",
+      "lastPropertyId": "8:6491801115652478530",
+      "name": "AppLogEntity",
+      "properties": [
+        {
+          "id": "1:845055066740814255",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5847377801899736720",
+          "name": "timestampMs",
+          "indexId": "1:6191300927395045658",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "3:7377388880024789569",
+          "name": "level",
+          "indexId": "2:7513863851905780472",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:143948075617569385",
+          "name": "category",
+          "indexId": "3:4425557790247910166",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:4592707537784256094",
+          "name": "event",
+          "type": 9
+        },
+        {
+          "id": "6:97130024336644438",
+          "name": "message",
+          "type": 9
+        },
+        {
+          "id": "7:1126066632101733900",
+          "name": "traceId",
+          "type": 9
+        },
+        {
+          "id": "8:6491801115652478530",
+          "name": "contextJson",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "2:6168246856299936119",
+      "lastPropertyId": "3:6918187452517430412",
+      "name": "AppSettingEntity",
+      "properties": [
+        {
+          "id": "1:6789012644431816584",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4785677649717544553",
+          "name": "key",
+          "indexId": "4:5324061080787563317",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:6918187452517430412",
+          "name": "value",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "3:8516035737042230106",
+      "lastPropertyId": "18:437125655485656215",
+      "name": "LocalWordEntity",
+      "properties": [
+        {
+          "id": "1:7989027724147477812",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8277228887757568832",
+          "name": "localId",
+          "indexId": "5:7288440386876964350",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:731815490182437082",
+          "name": "serverWordId",
+          "indexId": "6:7832971388181166745",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:3243454725922913435",
+          "name": "term",
+          "type": 9
+        },
+        {
+          "id": "5:8870422477911700984",
+          "name": "language",
+          "type": 9
+        },
+        {
+          "id": "6:8703359030412233347",
+          "name": "meaningVi",
+          "type": 9
+        },
+        {
+          "id": "7:4746957429690680180",
+          "name": "partOfSpeech",
+          "type": 9
+        },
+        {
+          "id": "8:3173119652878193097",
+          "name": "ipa",
+          "type": 9
+        },
+        {
+          "id": "9:6154928956634931446",
+          "name": "vietnamesePronunciation",
+          "type": 9
+        },
+        {
+          "id": "10:2780256073354670570",
+          "name": "example",
+          "type": 9
+        },
+        {
+          "id": "11:4901705087076275622",
+          "name": "exampleVi",
+          "type": 9
+        },
+        {
+          "id": "12:803599193384346319",
+          "name": "difficulty",
+          "type": 9
+        },
+        {
+          "id": "13:8504748601961848488",
+          "name": "topicsJson",
+          "type": 9
+        },
+        {
+          "id": "14:8251074300126283887",
+          "name": "status",
+          "indexId": "7:8184121286975796185",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "15:901071489992355650",
+          "name": "lastSeenAtMs",
+          "indexId": "8:3425236340869465553",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "16:617905263441262378",
+          "name": "nextReviewAtMs",
+          "indexId": "9:8841299430443541294",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "17:8474386067916702066",
+          "name": "createdAtMs",
+          "indexId": "10:2775067309935092816",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "18:437125655485656215",
+          "name": "updatedAtMs",
+          "type": 6
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "4:5597746502529587288",
+      "lastPropertyId": "7:3549979123076235846",
+      "name": "StudyEventEntity",
+      "properties": [
+        {
+          "id": "1:8443910705140584466",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7151618397635527488",
+          "name": "clientEventId",
+          "indexId": "11:3826929843723604731",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:6106597315587673488",
+          "name": "localWordId",
+          "type": 9
+        },
+        {
+          "id": "4:7120067178825931438",
+          "name": "serverWordId",
+          "type": 9
+        },
+        {
+          "id": "5:2326854486458290231",
+          "name": "rating",
+          "type": 9
+        },
+        {
+          "id": "6:7301545010915554520",
+          "name": "occurredAtMs",
+          "type": 6
+        },
+        {
+          "id": "7:3549979123076235846",
+          "name": "syncStatus",
+          "indexId": "12:5120231743551883184",
+          "type": 9,
+          "flags": 2048
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "5:1182565041746058355",
+      "lastPropertyId": "6:4601925741032122636",
+      "name": "SyncQueueEntity",
+      "properties": [
+        {
+          "id": "1:8430649181488831598",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:9000703130567815539",
+          "name": "type",
+          "type": 9
+        },
+        {
+          "id": "3:7821784636335834819",
+          "name": "payload",
+          "type": 9
+        },
+        {
+          "id": "4:7145660166919742887",
+          "name": "retryCount",
+          "type": 6
+        },
+        {
+          "id": "5:6012074988658042269",
+          "name": "nextRetryAtMs",
+          "indexId": "13:1917521521677049276",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "6:4601925741032122636",
+          "name": "createdAtMs",
+          "indexId": "14:1997602164196919271",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "lastEntityId": "5:1182565041746058355",
+  "lastIndexId": "14:1997602164196919271",
+  "lastRelationId": "0:0",
+  "lastSequenceId": "0:0",
+  "modelVersion": 5,
+  "modelVersionParserMinimum": 5,
+  "retiredEntityUids": [],
+  "retiredIndexUids": [],
+  "retiredPropertyUids": [],
+  "retiredRelationUids": [],
+  "version": 1
+}

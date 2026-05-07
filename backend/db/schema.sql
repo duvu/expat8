@@ -54,13 +54,10 @@ CREATE TABLE user_proficiency (
   user_id TEXT,
   device_id TEXT NOT NULL,
   language TEXT NOT NULL DEFAULT 'en',
-  scale TEXT NOT NULL DEFAULT 'cefr',
   level TEXT NOT NULL,
-  level_index INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id),
-  UNIQUE(device_id, language)
+  FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 CREATE TABLE user_word_states (
@@ -116,8 +113,12 @@ CREATE INDEX idx_study_events_client_event_id ON study_events(client_event_id);
 CREATE INDEX idx_users_identifier ON users(identifier);
 CREATE INDEX idx_user_sessions_token_hash ON user_sessions(token_hash);
 CREATE INDEX idx_user_sessions_user ON user_sessions(user_id, created_at DESC);
-CREATE INDEX idx_user_proficiency_device_language ON user_proficiency(device_id, language);
-CREATE INDEX idx_user_proficiency_user_language ON user_proficiency(user_id, language);
+CREATE UNIQUE INDEX idx_user_proficiency_device_language
+  ON user_proficiency(device_id, language)
+  WHERE user_id IS NULL;
+CREATE UNIQUE INDEX idx_user_proficiency_user_language
+  ON user_proficiency(user_id, language)
+  WHERE user_id IS NOT NULL;
 CREATE INDEX idx_user_word_states_device ON user_word_states(device_id, updated_at DESC);
 CREATE INDEX idx_user_word_states_user ON user_word_states(user_id, updated_at DESC);
 CREATE UNIQUE INDEX idx_user_word_states_device_word ON user_word_states(device_id, word_id) WHERE user_id IS NULL;
@@ -125,4 +126,5 @@ CREATE UNIQUE INDEX idx_user_word_states_user_word ON user_word_states(user_id, 
 CREATE INDEX idx_generation_runs_language_date ON generation_runs(target_language, mode, run_date);
 CREATE INDEX idx_user_cached_words_device ON user_cached_words(device_id, updated_at DESC);
 CREATE INDEX idx_user_cached_words_user ON user_cached_words(user_id, updated_at DESC);
-CREATE INDEX idx_user_word_states_word_id ON user_word_states(word_id);
+CREATE UNIQUE INDEX idx_user_cached_words_device_word ON user_cached_words(device_id, word_id) WHERE user_id IS NULL;
+CREATE UNIQUE INDEX idx_user_cached_words_user_word ON user_cached_words(user_id, word_id) WHERE user_id IS NOT NULL;

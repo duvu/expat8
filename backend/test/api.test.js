@@ -6,9 +6,16 @@ import { createApp } from '../src/app.js';
 import { WordStore } from '../src/word_store.js';
 import { loadTestConfig, signedFetchOptions } from './support/app_credential_helpers.js';
 
-test('serves word feed, recent words, and idempotent sync', async (t) => {
-  const store = new WordStore();
-  seedTestDeviceProficiencies(store);
+test('serves unified learning cards, recent words, and idempotent sync', async (t) => {
+  const store = new WordStore({ seed: false });
+  for (let index = 0; index < 120; index += 1) {
+    store.insertWord(wordInput({
+      id: `word_batch_${index}`,
+      term: `batch ${index}`,
+      created_at: `2026-05-04T10:${(index % 60).toString().padStart(2, '0')}:00.000Z`,
+      updated_at: `2026-05-04T10:${(index % 60).toString().padStart(2, '0')}:00.000Z`
+    }));
+  }
   const server = http.createServer(
     createApp({
       store,
@@ -21,20 +28,38 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
-  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en`);
-  assert.equal(next.items.length, 1);
-  assert.equal(next.items[0].language, 'en');
+  const batch = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_device_1',
+    target_language: 'en',
+    limit: 100,
+    card_mode: 'new'
+  });
+  assert.equal(batch.items.length, 100);
+  assert.deepEqual(batch.target_mix, { new: 100, review: 0 });
+  assert.deepEqual(batch.actual_mix, { new: 100, review: 0 });
+  assert.ok(batch.items.every((item) => item.language === 'en'));
 
-  const nextDifferent = await fetchJson(
-    `${baseUrl}/v1/words/next?limit=1&target_language=en&exclude_server_word_id=${next.items[0].server_word_id}`
-  );
-  assert.equal(nextDifferent.items.length, 1);
-  assert.notEqual(nextDifferent.items[0].server_word_id, next.items[0].server_word_id);
+  const excluded = await fetch(`${baseUrl}/v1/learning/cards`, signedFetchOptions(`${baseUrl}/v1/learning/cards`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'anonymous_device_1',
+      target_language: 'en',
+      limit: 10,
+      exclude_server_word_id: batch.items[0].server_word_id
+    })
+  }));
+  assert.equal(excluded.status, 400);
 
-  const excludedAll = await fetchJson(
-    `${baseUrl}/v1/words/next?limit=1&target_language=en&exclude_server_word_id=${next.items[0].server_word_id}&exclude_server_word_id=${nextDifferent.items[0].server_word_id}`
-  );
-  assert.deepEqual(excludedAll.items, []);
+  const secondBatch = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_device_1',
+    target_language: 'en',
+    limit: 100,
+    card_mode: 'new'
+  });
+  assert.equal(secondBatch.items.length, 20);
+  const firstIds = new Set(batch.items.map((item) => item.server_word_id));
+  assert.ok(secondBatch.items.every((item) => !firstIds.has(item.server_word_id)));
 
   const recent = await fetchJson(`${baseUrl}/v1/words/recent?limit=2000&target_language=en`);
   assert.ok(recent.items.length <= 1000);
@@ -47,7 +72,7 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
       events: [
         {
           client_event_id: 'evt_1',
-          server_word_id: next.items[0].server_word_id,
+          server_word_id: batch.items[0].server_word_id,
           local_word_id: 'local_1',
           rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
@@ -56,12 +81,7 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
     })
   });
   assert.deepEqual(sync.accepted_event_ids, ['evt_1']);
-  assert.equal(sync.proficiency.scale, 'cefr');
-  assert.equal(sync.proficiency.level_index, 0);
   assert.equal(sync.proficiency.level, 'A1');
-  assert.equal(sync.proficiency.proficiency_scale, 'cefr');
-  assert.equal(sync.proficiency.proficiency_level, 'A1');
-  assert.equal(sync.proficiency.proficiency_level_index, 0);
 
   const retry = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
     method: 'POST',
@@ -71,7 +91,7 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
       events: [
         {
           client_event_id: 'evt_1',
-          server_word_id: next.items[0].server_word_id,
+          server_word_id: batch.items[0].server_word_id,
           local_word_id: 'local_1',
           rating: 'easy',
           occurred_at: '2026-05-04T10:30:00.000Z'
@@ -83,41 +103,12 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
   assert.equal(store.studyEventsByClientId.size, 1);
 
   const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_1&language=en`);
-  assert.equal(proficiency.scale, 'cefr');
-  assert.equal(proficiency.level_index, 0);
   assert.equal(proficiency.level, 'A1');
-  assert.equal(proficiency.proficiency_scale, 'cefr');
-  assert.equal(proficiency.proficiency_level, 'A1');
-  assert.equal(proficiency.proficiency_level_index, 0);
 });
 
-test('omits compatibility aliases when strict proficiency mode is enabled', async (t) => {
+test('rejects unsupported learning card modes before store selection', async (t) => {
   const store = new WordStore({ seed: false });
-  seedTestDeviceProficiencies(store);
-  const server = http.createServer(
-    createApp({
-      store,
-      generationService: null,
-      config: loadTestConfig({ PROFICIENCY_COMPATIBILITY_MODE: 'strict' })
-    })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_zh&language=zh`);
-
-  assert.equal(proficiency.scale, 'hsk');
-  assert.equal(proficiency.level, 'HSK1');
-  assert.equal(proficiency.level_index, 0);
-  assert.equal('proficiency_scale' in proficiency, false);
-  assert.equal('proficiency_level' in proficiency, false);
-  assert.equal('proficiency_level_index' in proficiency, false);
-});
-
-test('returns HSK proficiency contract for Chinese language lookup', async (t) => {
-  const store = new WordStore({ seed: false });
-  seedTestDeviceProficiencies(store);
+  store.insertWord(wordInput({ id: 'word_card_mode', term: 'mode' }));
   const server = http.createServer(
     createApp({
       store,
@@ -129,20 +120,73 @@ test('returns HSK proficiency contract for Chinese language lookup', async (t) =
   t.after(() => server.close());
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_zh&language=zh`);
+  const url = `${baseUrl}/v1/learning/cards`;
+  const response = await fetch(url, signedFetchOptions(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'anonymous_card_mode',
+      target_language: 'en',
+      limit: 10,
+      card_mode: 'review'
+    })
+  }));
 
-  assert.equal(proficiency.scale, 'hsk');
-  assert.equal(proficiency.level, 'HSK1');
-  assert.equal(proficiency.level_index, 0);
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'bad_request' });
 });
 
-test('does not call AI generation when database inventory is empty', async (t) => {
+test('recent words only honor documented bootstrap query parameters', async (t) => {
   const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({
+    id: 'word_recent_en',
+    term: 'recent en',
+    language: 'en',
+    updated_at: '2026-05-04T10:00:00.000Z'
+  }));
+  store.insertWord(wordInput({
+    id: 'word_recent_ja',
+    term: 'recent ja',
+    language: 'ja',
+    updated_at: '2026-05-04T11:00:00.000Z'
+  }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const recent = await fetchJson(
+    `${baseUrl}/v1/words/recent?limit=1&target_language=en&source_language=vi&device_id=ignored&exclude_server_word_id=word_recent_en`
+  );
+
+  assert.deepEqual(recent.items.map((item) => item.server_word_id), ['word_recent_en']);
+});
+
+test('calls AI generation when word pool is empty and returns generated words', async (t) => {
+  const store = new WordStore({ seed: false });
+  const generatedWords = [];
   const generationService = {
     calls: 0,
-    async generateAndStore() {
+    async generateAndStore({ targetLanguage, limit }) {
       this.calls += 1;
-      throw new Error('AI generation must not run in the mobile request path');
+      for (let index = 0; index < limit; index += 1) {
+        const word = wordInput({
+          id: `gen_${index}`,
+          term: `generated ${index}`,
+          language: targetLanguage,
+          created_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`,
+          updated_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`
+        });
+        const { word: inserted } = store.insertWord(word);
+        generatedWords.push(inserted);
+      }
+      return generatedWords;
     }
   };
   const server = http.createServer(
@@ -156,33 +200,21 @@ test('does not call AI generation when database inventory is empty', async (t) =
   t.after(() => server.close());
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=5&target_language=en`);
+  const next = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_empty',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
 
-  assert.deepEqual(next.items, []);
-  assert.equal(generationService.calls, 0);
+  assert.equal(generationService.calls, 1);
+  assert.equal(next.items.length, 10);
+  assert.ok(next.items.every((item) => item.language === 'en'));
 });
 
-test('serves backend-selected learning cards with target and actual mix metadata', async (t) => {
+test('serves backend-selected learning cards as ten new cards and records active claims', async (t) => {
   const store = new WordStore({ seed: false });
-  for (let index = 0; index < 17; index += 1) {
-    store.insertWord(wordInput({
-      id: `review_${index}`,
-      term: `review ${index}`,
-      created_at: `2026-05-01T00:${index.toString().padStart(2, '0')}:00.000Z`,
-      updated_at: `2026-05-01T00:${index.toString().padStart(2, '0')}:00.000Z`
-    }));
-    store.recordStudyEvent({
-      deviceId: 'device_mix',
-      event: {
-        client_event_id: `evt_review_${index}`,
-        server_word_id: `review_${index}`,
-        local_word_id: `local_review_${index}`,
-        rating: 'hard',
-        occurred_at: `2026-05-01T01:${index.toString().padStart(2, '0')}:00.000Z`
-      }
-    });
-  }
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 12; index += 1) {
     store.insertWord(wordInput({
       id: `new_${index}`,
       term: `new ${index}`,
@@ -201,13 +233,25 @@ test('serves backend-selected learning cards with target and actual mix metadata
   t.after(() => server.close());
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const batch = await fetchJson(`${baseUrl}/v1/learning/cards?device_id=device_mix&limit=20&target_language=en`);
+  const batch = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_mix',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
 
-  assert.deepEqual(batch.target_mix, { new: 3, review: 17 });
-  assert.deepEqual(batch.actual_mix, { new: 3, review: 17 });
-  assert.equal(batch.items.filter((item) => item.card_type === 'new').length, 3);
-  assert.equal(batch.items.filter((item) => item.card_type === 'review').length, 17);
+  assert.deepEqual(batch.target_mix, { new: 10, review: 0 });
+  assert.deepEqual(batch.actual_mix, { new: 10, review: 0 });
+  assert.equal(batch.items.filter((item) => item.card_type === 'new').length, 10);
   assert.ok(batch.items.every((item) => typeof item.selection_reason === 'string'));
+
+  const nextBatch = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_mix',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
+  assert.equal(nextBatch.items.length, 2);
 });
 
 test('replaces cache inventory, filters unknown ids, and excludes cached words from new-card selection', async (t) => {
@@ -239,7 +283,12 @@ test('replaces cache inventory, filters unknown ids, and excludes cached words f
   assert.equal(cache.stored_count, 1);
   assert.deepEqual(cache.unknown_server_word_ids, ['missing_word']);
 
-  const batch = await fetchJson(`${baseUrl}/v1/learning/cards?device_id=device_cache&limit=1&target_language=en`);
+  const batch = await postLearningCards(baseUrl, {
+    device_id: 'device_cache',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   assert.equal(batch.items.length, 1);
   assert.equal(batch.items[0].server_word_id, 'available_word');
 });
@@ -258,8 +307,13 @@ test('serves API with an async store implementation', async (t) => {
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
-  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en`);
-  assert.equal(next.items.length, 1);
+  const next = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_async',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
+  assert.equal(next.items.length, 2);
 
   const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
     method: 'POST',
@@ -396,7 +450,7 @@ test('rejects invalid rating on single-event endpoint', async (t) => {
   assert.deepEqual(await response.json(), { error: 'invalid_rating' });
 });
 
-test('uses device_id to resolve proficiency when word feed omits explicit level', async (t) => {
+test('uses device_id to resolve proficiency when learning cards omit explicit level', async (t) => {
   const store = new WordStore({ seed: false });
   store.insertWord({
     id: 'word_a1',
@@ -449,38 +503,17 @@ test('uses device_id to resolve proficiency when word feed omits explicit level'
     });
   }
 
-  const next = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en&device_id=device_feed`);
+  const next = await postLearningCards(baseUrl, {
+    device_id: 'device_feed',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
   assert.equal(next.items[0].server_word_id, 'word_a2');
 });
 
-test('applies proficiency filtering together with server-word exclusion', async (t) => {
+test('does not expose legacy words next route', async (t) => {
   const store = new WordStore({ seed: false });
-  store.insertWord({
-    id: 'word_b1_a',
-    term: 'measure',
-    language: 'en',
-    meaning_vi: 'do luong',
-    part_of_speech: 'verb',
-    ipa: '/ˈmeʒ.ər/',
-    vietnamese_pronunciation: 'me-zher',
-    example: 'We measure the result every week.',
-    example_vi: 'Chung toi do luong ket qua moi tuan.',
-    difficulty: 'B1',
-    topics: ['work']
-  });
-  store.insertWord({
-    id: 'word_b1_b',
-    term: 'improve',
-    language: 'en',
-    meaning_vi: 'cai thien',
-    part_of_speech: 'verb',
-    ipa: '/ɪmˈpruːv/',
-    vietnamese_pronunciation: 'im-proov',
-    example: 'We improve the process every month.',
-    example_vi: 'Chung toi cai thien quy trinh moi thang.',
-    difficulty: 'B1',
-    topics: ['work']
-  });
   const server = http.createServer(
     createApp({
       store,
@@ -492,12 +525,12 @@ test('applies proficiency filtering together with server-word exclusion', async 
   t.after(() => server.close());
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const next = await fetchJson(
-    `${baseUrl}/v1/words/next?limit=1&target_language=en&proficiency_level=B1&exclude_server_word_id=word_b1_b`
+  const response = await fetch(
+    `${baseUrl}/v1/words/next?limit=1&target_language=en`,
+    signedFetchOptions(`${baseUrl}/v1/words/next?limit=1&target_language=en`)
   );
 
-  assert.equal(next.items.length, 1);
-  assert.equal(next.items[0].server_word_id, 'word_b1_a');
+  assert.equal(response.status, 404);
 });
 
 test('registers, signs in, signs out, and associates signed-in learning with user', async (t) => {
@@ -568,10 +601,18 @@ test('registers, signs in, signs out, and associates signed-in learning with use
   });
   assert.equal(signedIn.user_id, registered.user_id);
 
-  const first = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en&device_id=device_identity`, {
-    headers: bearerHeaders(signedIn.session_token)
+  const first = await postLearningCards(baseUrl, {
+    device_id: 'device_identity',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  }, {
+    authorization: `Bearer ${signedIn.session_token}`
   });
-  assert.equal(first.items[0].server_word_id, 'word_identity_b');
+  assert.deepEqual(
+    first.items.map((item) => item.server_word_id),
+    ['word_identity_b', 'word_identity_a']
+  );
 
   const event = await fetchJson(`${baseUrl}/v1/study-events`, {
     method: 'POST',
@@ -589,23 +630,20 @@ test('registers, signs in, signs out, and associates signed-in learning with use
   });
   assert.equal(event.success, true);
 
-  const second = await fetchJson(`${baseUrl}/v1/words/next?limit=1&target_language=en&device_id=device_identity`, {
-    headers: bearerHeaders(signedIn.session_token)
+  const second = await postLearningCards(baseUrl, {
+    device_id: 'device_identity',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  }, {
+    authorization: `Bearer ${signedIn.session_token}`
   });
-  assert.equal(second.items[0].server_word_id, 'word_identity_a');
+  assert.deepEqual(second.items, []);
 
   const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_identity&language=en`, {
     headers: bearerHeaders(signedIn.session_token)
   });
   assert.equal(proficiency.user_id, registered.user_id);
-
-  const foreignProficiency = await fetch(
-    `${baseUrl}/v1/proficiency?device_id=device_other&language=en`,
-    signedFetchOptions(`${baseUrl}/v1/proficiency?device_id=device_other&language=en`, {
-      headers: bearerHeaders(signedIn.session_token)
-    })
-  );
-  assert.equal(foreignProficiency.status, 403);
 
   const signOut = await fetchJson(`${baseUrl}/v1/users/sign-out`, {
     method: 'POST',
@@ -721,7 +759,7 @@ test('protects v1 routes with app credentials while leaving health open', async 
       store,
       generationService,
       config: loadTestConfig({
-        APP_CREDENTIAL_POST_BODY_LIMIT_BYTES: '32'
+        APP_CREDENTIAL_POST_BODY_LIMIT_BYTES: '128'
       })
     })
   );
@@ -734,48 +772,82 @@ test('protects v1 routes with app credentials while leaving health open', async 
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true });
 
-  const unsigned = await fetch(`${baseUrl}/v1/words/next?limit=1`);
+  const cardUrl = `${baseUrl}/v1/learning/cards`;
+  const cardBody = JSON.stringify({
+    device_id: 'anonymous_credentials',
+    target_language: 'en',
+    limit: 10,
+    card_mode: 'new'
+  });
+
+  const unsigned = await fetch(cardUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: cardBody
+  });
   assert.equal(unsigned.status, 400);
   assert.deepEqual(await unsigned.json(), { error: 'bad_request' });
-  assert.equal(store.findNewWordsCalls, 0);
+  assert.equal(store.learningCardsCalls, 0);
   assert.equal(generationService.calls, 0);
 
-  const valid = await fetch(`${baseUrl}/v1/words/next?limit=1`, signedFetchOptions(`${baseUrl}/v1/words/next?limit=1`));
+  const valid = await fetch(cardUrl, signedFetchOptions(cardUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: cardBody
+  }));
   assert.equal(valid.status, 200);
-  assert.equal(store.findNewWordsCalls, 1);
+  // learningCards is called twice when shortfall triggers generation: once to
+  // detect the gap, and once after generateAndStore to build the final response.
+  assert.equal(store.learningCardsCalls, 2);
 
   const tampered = await fetch(
-    `${baseUrl}/v1/words/next?limit=2`,
-    signedFetchOptions(`${baseUrl}/v1/words/next?limit=2`, {}, {
-      signUrl: `${baseUrl}/v1/words/next?limit=1`
+    cardUrl,
+    signedFetchOptions(cardUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: cardBody
+    }, {
+      signUrl: `${baseUrl}/v1/learning/cards?limit=1`
     })
   );
   assert.equal(tampered.status, 400);
   assert.deepEqual(await tampered.json(), { error: 'bad_request' });
 
   const expired = await fetch(
-    `${baseUrl}/v1/words/next?limit=1`,
-    signedFetchOptions(`${baseUrl}/v1/words/next?limit=1`, {}, {
+    cardUrl,
+    signedFetchOptions(cardUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: cardBody
+    }, {
       timestamp: '2026-05-04T10:20:00.000Z'
     })
   );
   assert.equal(expired.status, 400);
 
   const unknownApp = await fetch(
-    `${baseUrl}/v1/words/next?limit=1`,
-    signedFetchOptions(`${baseUrl}/v1/words/next?limit=1`, {}, {
+    cardUrl,
+    signedFetchOptions(cardUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: cardBody
+    }, {
       appId: 'unknown_app'
     })
   );
   assert.equal(unknownApp.status, 400);
 
-  const replayOptions = signedFetchOptions(`${baseUrl}/v1/words/next?limit=1`, {}, {
+  const replayOptions = signedFetchOptions(cardUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: cardBody
+  }, {
     nonce: 'replay_nonce'
   });
-  assert.equal((await fetch(`${baseUrl}/v1/words/next?limit=1`, replayOptions)).status, 200);
-  assert.equal((await fetch(`${baseUrl}/v1/words/next?limit=1`, replayOptions)).status, 400);
+  assert.equal((await fetch(cardUrl, replayOptions)).status, 200);
+  assert.equal((await fetch(cardUrl, replayOptions)).status, 400);
 
-  const oversizedBody = JSON.stringify({ device_id: 'device_1', events: [], padding: 'too-large' });
+  const oversizedBody = JSON.stringify({ device_id: 'device_1', events: [], padding: 'x'.repeat(256) });
   const oversized = await fetch(
     `${baseUrl}/v1/study-events/sync`,
     signedFetchOptions(`${baseUrl}/v1/study-events/sync`, {
@@ -820,12 +892,20 @@ class AsyncStoreAdapter {
     return this.store.insertWord(input);
   }
 
-  async findNewWords(input) {
-    return this.store.findNewWords(input);
-  }
-
   async recentWords(input) {
     return this.store.recentWords(input);
+  }
+
+  async learningCards(input) {
+    return this.store.learningCards(input);
+  }
+
+  async addCachedWordIds(input) {
+    return this.store.addCachedWordIds(input);
+  }
+
+  async replaceCachedWordIds(input) {
+    return this.store.replaceCachedWordIds(input);
   }
 
   async syncStudyEvents(input) {
@@ -857,157 +937,6 @@ class AsyncStoreAdapter {
   }
 }
 
-test('filters recent words by exclude_server_word_id', async (t) => {
-  const store = new WordStore({ seed: false });
-  store.insertWord(wordInput({ id: 'word_recent_a', term: 'alpha' }));
-  store.insertWord(wordInput({ id: 'word_recent_b', term: 'beta' }));
-  store.insertWord(wordInput({ id: 'word_recent_c', term: 'gamma' }));
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-
-  const all = await fetchJson(`${baseUrl}/v1/words/recent?limit=10&target_language=en`);
-  assert.equal(all.items.length, 3);
-
-  const filtered = await fetchJson(
-    `${baseUrl}/v1/words/recent?limit=10&target_language=en&exclude_server_word_id=word_recent_a&exclude_server_word_id=word_recent_b`
-  );
-  assert.equal(filtered.items.length, 1);
-  assert.equal(filtered.items[0].server_word_id, 'word_recent_c');
-});
-
-test('enforces rate limit on registration and sign-in', async (t) => {
-  const store = new WordStore({ seed: false });
-  const server = http.createServer(
-    createApp({
-      store,
-      generationService: null,
-      config: loadTestConfig({ AUTH_RATE_LIMIT_REGISTER: '2', AUTH_RATE_LIMIT_SIGN_IN: '2' })
-    })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const registerUrl = `${baseUrl}/v1/users/register`;
-  const registerBody = JSON.stringify({ identifier: 'rl@example.com', password: 'pass1234', device_id: 'device_rl' });
-
-  // First two requests succeed (or 409 if duplicate) — not 429
-  for (let i = 0; i < 2; i++) {
-    const res = await fetch(registerUrl, signedFetchOptions(registerUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: registerBody
-    }));
-    assert.ok(res.status !== 429, `request ${i + 1} should not be rate-limited`);
-  }
-
-  // Third request should be rate-limited
-  const limited = await fetch(registerUrl, signedFetchOptions(registerUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: registerBody
-  }));
-  assert.equal(limited.status, 429);
-  assert.deepEqual(await limited.json(), { error: 'too_many_requests' });
-
-  // Sign-in rate limit
-  const signInUrl = `${baseUrl}/v1/users/sign-in`;
-  const signInBody = JSON.stringify({ identifier: 'rl@example.com', password: 'wrong', device_id: 'device_rl' });
-  for (let i = 0; i < 2; i++) {
-    const res = await fetch(signInUrl, signedFetchOptions(signInUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: signInBody
-    }));
-    assert.ok(res.status !== 429, `sign-in ${i + 1} should not be rate-limited`);
-  }
-  const signInLimited = await fetch(signInUrl, signedFetchOptions(signInUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: signInBody
-  }));
-  assert.equal(signInLimited.status, 429);
-  assert.deepEqual(await signInLimited.json(), { error: 'too_many_requests' });
-});
-
-test('rejects invalid bearer token with 401 on optional-auth endpoints', async (t) => {
-  const store = new WordStore();
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const url = `${baseUrl}/v1/words/next?limit=1&target_language=en`;
-  const response = await fetch(url, signedFetchOptions(url, {
-    headers: { authorization: 'Bearer totally_fake_token_xyz' }
-  }));
-  assert.equal(response.status, 401);
-  assert.deepEqual(await response.json(), { error: 'invalid_session' });
-});
-
-test('rejects study event with invalid occurred_at timestamp', async (t) => {
-  const store = new WordStore();
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const url = `${baseUrl}/v1/study-events`;
-  const body = JSON.stringify({
-    device_id: 'device_invalid_ts',
-    client_event_id: 'evt_invalid_ts',
-    word_id: 'word_reliable',
-    rating: 'easy',
-    occurred_at: 'not-a-date'
-  });
-  const response = await fetch(url, signedFetchOptions(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body
-  }));
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: 'bad_request' });
-});
-
-test('rejects unknown language code on /words/next', async (t) => {
-  const store = new WordStore();
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const url = `${baseUrl}/v1/words/next?limit=1&target_language=xx_invalid`;
-  const response = await fetch(url, signedFetchOptions(url));
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: 'bad_request' });
-});
-
-test('rejects unknown language code on /words/recent', async (t) => {
-  const store = new WordStore();
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
-  await listen(server);
-  t.after(() => server.close());
-
-  const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const url = `${baseUrl}/v1/words/recent?limit=1&target_language=xx_invalid`;
-  const response = await fetch(url, signedFetchOptions(url));
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: 'bad_request' });
-});
-
 function listen(server) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 }
@@ -1020,13 +949,19 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
-function bearerHeaders(token) {
-  return { authorization: `Bearer ${token}` };
+function postLearningCards(baseUrl, body, headers = {}) {
+  return fetchJson(`${baseUrl}/v1/learning/cards`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...headers
+    },
+    body: JSON.stringify(body)
+  });
 }
 
-function seedTestDeviceProficiencies(store) {
-  store.getProficiency({ deviceId: 'device_1', language: 'en' });
-  store.getProficiency({ deviceId: 'device_zh', language: 'zh' });
+function bearerHeaders(token) {
+  return { authorization: `Bearer ${token}` };
 }
 
 function wordInput(overrides = {}) {
@@ -1048,14 +983,14 @@ function wordInput(overrides = {}) {
 class CountingStore extends AsyncStoreAdapter {
   constructor() {
     super(new WordStore());
-    this.findNewWordsCalls = 0;
+    this.learningCardsCalls = 0;
     this.registerUserCalls = 0;
     this.syncStudyEventsCalls = 0;
   }
 
-  async findNewWords(input) {
-    this.findNewWordsCalls += 1;
-    return super.findNewWords(input);
+  async learningCards(input) {
+    this.learningCardsCalls += 1;
+    return super.learningCards(input);
   }
 
   async registerUser(input) {

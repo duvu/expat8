@@ -13,7 +13,6 @@ import '../models/study_event.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import 'local_database.dart';
-import 'vocabulary_refresh_worker.dart';
 
 class WordRepository {
   WordRepository({
@@ -22,23 +21,16 @@ class WordRepository {
     Logger? logger,
     Uuid? uuid,
     AppConfig? config,
-    VocabularyRefreshWorker? refreshWorker,
   })  : _uuid = uuid ?? const Uuid(),
         _logger = logger ?? const NoopLogger(),
-        _config = config ?? AppConfig.fromEnvironment(),
-        _refreshWorker = refreshWorker;
+        _config = config ?? AppConfig.fromEnvironment();
 
   final LocalDatabase database;
   final BackendApiClient apiClient;
   final Logger _logger;
   final Uuid _uuid;
   final AppConfig _config;
-  VocabularyRefreshWorker? _refreshWorker;
-
-  String get defaultLearningLanguage => _config.defaultLearningLanguage;
-
-  List<String> get supportedLearningLanguages =>
-      List.unmodifiable(_config.supportedLearningLanguages);
+  String? _refillDeviceId;
 
   Future<String> getOrCreateDeviceId() {
     return database.getOrCreateDeviceId(_uuid.v4);
@@ -47,13 +39,7 @@ class WordRepository {
   /// Initializes the internal [VocabularyRefreshWorker] using the given deviceId.
   /// Must be called once the deviceId is known (e.g. during app startup).
   void initRefreshWorker(String deviceId) {
-    _refreshWorker = VocabularyRefreshWorker(
-      database: database,
-      apiClient: apiClient,
-      deviceId: deviceId,
-      config: _config,
-      logger: _logger,
-    );
+    _refillDeviceId = deviceId;
   }
 
   /// Checks if the first-install prefetch has been done; if not, runs it
@@ -61,11 +47,6 @@ class WordRepository {
   Future<void> checkAndRunFirstInstallPrefetch() async {
     final done = await database.getSetting(LocalDatabase.keyIsPrefetchDone);
     if (done == 'true') {
-      return;
-    }
-    final worker = _refreshWorker;
-    if (worker != null) {
-      unawaited(worker.runPrefetch());
       return;
     }
     unawaited(_runBackendManagedRefill(
@@ -77,17 +58,31 @@ class WordRepository {
   /// Checks if the daily refresh is due today; if so, runs it fire-and-forget.
   Future<void> checkAndRunDailyRefresh() async {
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    final lastRefresh = await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
+    final lastRefresh =
+        await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
     if (lastRefresh == today) {
       return;
     }
-    final worker = _refreshWorker;
-    if (worker != null) {
-      unawaited(worker.runDailyRefresh());
+    final unstudiedCount = await database.countUnstudiedNewWords();
+    if (unstudiedCount >= 100) {
+      await _logger.info(
+        category: AppLogCategory.sync,
+        event: 'learning_cards.daily_refresh.skipped',
+        message:
+            'Daily refresh skipped because local unlearned count is healthy.',
+        context: {
+          'unlearned_count': unstudiedCount,
+          'threshold': 100,
+        },
+      );
+      await database.setSetting(
+        LocalDatabase.keyLastDailyRefreshDate,
+        today,
+      );
       return;
     }
     unawaited(_runBackendManagedRefill(
-      limit: _config.vocabDailyRefreshCount,
+      limit: 100,
       markDailyRefreshDate: today,
     ));
   }
@@ -95,7 +90,8 @@ class WordRepository {
   /// Records that a word was studied, and triggers a proactive refresh if the
   /// unstudied new-word count drops below the configured threshold.
   Future<void> recordWordStudied() async {
-    final raw = await database.getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
+    final raw = await database
+        .getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
     final count = (int.tryParse(raw ?? '0') ?? 0) + 1;
     await database.setSetting(
       LocalDatabase.keyWordsStudiedSinceLastRefresh,
@@ -104,13 +100,8 @@ class WordRepository {
     if (count % _config.vocabProactiveThreshold == 0) {
       final unstudied = await database.countUnstudiedNewWords();
       if (unstudied < _config.vocabProactiveMinNew) {
-        final needed = _config.vocabProactiveMinNew - unstudied;
-        final worker = _refreshWorker;
-        if (worker != null) {
-          unawaited(worker.runProactiveRefresh(needed));
-        } else {
-          unawaited(_runBackendManagedRefill(limit: needed));
-        }
+        unawaited(
+            _runBackendManagedRefill(limit: _config.vocabProactiveMinNew));
       }
     }
   }
@@ -120,7 +111,7 @@ class WordRepository {
     bool markPrefetchDone = false,
     String? markDailyRefreshDate,
   }) async {
-    final deviceId = _refreshWorker?.deviceId ?? await getOrCreateDeviceId();
+    final deviceId = _refillDeviceId ?? await getOrCreateDeviceId();
     try {
       await refillLearningCards(deviceId: deviceId, limit: limit);
       if (markPrefetchDone) {
@@ -144,18 +135,6 @@ class WordRepository {
 
   Future<UserSession?> loadUserSession() {
     return database.loadUserSession();
-  }
-
-  Future<String> loadActiveLearningLanguage() async {
-    final stored = await database.getSetting(LocalDatabase.keyActiveLearningLanguage);
-    return _normalizeLearningLanguage(stored);
-  }
-
-  Future<void> saveActiveLearningLanguage(String language) async {
-    await database.setSetting(
-      LocalDatabase.keyActiveLearningLanguage,
-      _normalizeLearningLanguage(language),
-    );
   }
 
   Future<UserSession> registerUser({
@@ -216,10 +195,7 @@ class WordRepository {
     }
   }
 
-  Future<ProficiencyState> fetchProficiency({
-    required String deviceId,
-    String language = 'en',
-  }) async {
+  Future<ProficiencyState> fetchProficiency({required String deviceId}) async {
     final session = await database.loadUserSession();
     await _logger.debug(
       category: AppLogCategory.session,
@@ -231,99 +207,64 @@ class WordRepository {
     );
     return apiClient.fetchProficiency(
       deviceId: deviceId,
-      language: language,
       sessionToken: session?.sessionToken,
     );
   }
 
-  String _normalizeLearningLanguage(String? language) {
-    final candidate = language?.trim();
-    if (candidate != null && _config.supportedLearningLanguages.contains(candidate)) {
-      return candidate;
-    }
-    return _config.defaultLearningLanguage;
-  }
-
   Future<VocabularyWord?> getNewWordWithFallback({
-    String? excludeServerWordId,
-    String? proficiencyLevel,
     String? deviceId,
-    String targetLanguage = 'en',
   }) async {
-    return (await getNewWordWithFallbackResult(
-      excludeServerWordId: excludeServerWordId,
-      proficiencyLevel: proficiencyLevel,
-      deviceId: deviceId,
-      targetLanguage: targetLanguage,
-    ))
-        .word;
+    return (await getNewWordWithFallbackResult(deviceId: deviceId)).word;
   }
 
   Future<WordLookupResult> getNewWordWithFallbackResult({
-    String? excludeServerWordId,
-    String? proficiencyLevel,
     String? deviceId,
-    String targetLanguage = 'en',
   }) async {
     try {
-      if (deviceId != null) {
-        final unstudiedCount = await database.countUnstudiedNewWords();
-        if (unstudiedCount < _config.vocabProactiveMinNew) {
-          final refilled = await refillLearningCards(
-            deviceId: deviceId,
-            limit: _config.vocabProactiveMinNew,
-            targetLanguage: targetLanguage,
-          );
-          if (refilled.isNotEmpty) {
-            final localWord = await database.nextNewWord(language: targetLanguage);
-            if (localWord != null) {
-              return WordLookupResult(
-                word: localWord,
-                source: WordLookupSource.backend,
-              );
-            }
-          }
-        }
+      final resolvedDeviceId = deviceId ?? await getOrCreateDeviceId();
+      final unstudiedCount = await database.countUnstudiedNewWords();
+      var refillAttempted = false;
+      var usedBackendRefill = false;
+      if (unstudiedCount < _config.vocabProactiveMinNew) {
+        refillAttempted = true;
+        final refilled = await refillLearningCards(
+          deviceId: resolvedDeviceId,
+          limit: _config.vocabProactiveMinNew,
+        );
+        usedBackendRefill = refilled.isNotEmpty;
       }
-      final excludeServerWordIds = await database.recentServerWordIds(language: targetLanguage);
-      if (excludeServerWordId != null &&
-          excludeServerWordId.isNotEmpty &&
-          !excludeServerWordIds.contains(excludeServerWordId)) {
-        excludeServerWordIds.insert(0, excludeServerWordId);
-      }
-      final session = await database.loadUserSession();
-      final words = await apiClient.fetchNewWords(
-        limit: 1,
-        targetLanguage: targetLanguage,
-        excludeServerWordIds: excludeServerWordIds,
-        proficiencyLevel: proficiencyLevel,
-        deviceId: deviceId,
-        sessionToken: session?.sessionToken,
-      );
-      if (words.isNotEmpty) {
-        await database.upsertWord(words.first);
-        await database.pruneToMostRecent();
+      final localWord = await database.nextNewWord();
+      if (localWord != null) {
+        final event =
+            usedBackendRefill ? 'new_word.refill.hit' : 'new_word.local.hit';
         await _logger.info(
           category: AppLogCategory.api,
-          event: 'new_word.backend.success',
-          message: 'Fetched new word from backend.',
+          event: event,
+          message: usedBackendRefill
+              ? 'Selected new word after backend-managed refill.'
+              : 'Selected new word from local cache.',
           context: {
-            'local_id': words.first.localId,
-            'server_word_id': words.first.serverWordId,
+            'local_id': localWord.localId,
+            'server_word_id': localWord.serverWordId,
+            'backend_refill_used': usedBackendRefill,
           },
         );
         return WordLookupResult(
-          word: words.first,
-          source: WordLookupSource.backend,
+          word: localWord,
+          source: usedBackendRefill
+              ? WordLookupSource.backend
+              : WordLookupSource.localFallback,
         );
       }
-      final localWord = await database.nextNewWord(language: targetLanguage);
       await _logger.warning(
         category: AppLogCategory.api,
-        event: 'new_word.backend.empty',
-        message: 'Backend returned no new words, using local fallback.',
+        event:
+            refillAttempted ? 'new_word.refill.empty' : 'new_word.local.empty',
+        message: refillAttempted
+            ? 'Backend-managed refill returned no new words.'
+            : 'No local new word is available.',
         context: {
-          'fallback_hit': localWord != null,
+          'backend_refill_attempted': refillAttempted,
         },
       );
       return WordLookupResult(
@@ -331,19 +272,21 @@ class WordRepository {
         source: localWord == null
             ? WordLookupSource.none
             : WordLookupSource.localFallback,
-        message: localWord == null ? 'No backend or local new word was available.' : null,
+        message: localWord == null
+            ? 'No backend or local new word was available.'
+            : null,
       );
     } catch (error) {
       // Local fallback is the product behavior for offline, failed, or timed-out
       // backend requests. Telemetry is emitted by the caller.
-      final localWord = await database.nextNewWord(language: targetLanguage);
+      final localWord = await database.nextNewWord();
       await _logger.warning(
         category: AppLogCategory.api,
         event: 'new_word.backend.error',
         message: 'Backend new-word request failed, using local fallback.',
         context: {
           'error': '$error',
-          'fallback_hit': localWord != null,
+          'fallback_source': localWord == null ? 'none' : 'local',
         },
       );
       return WordLookupResult(
@@ -359,16 +302,20 @@ class WordRepository {
     }
   }
 
-  Future<VocabularyWord?> getReviewWord(DateTime now, {String? language}) {
-    return database.nextDueReviewWord(now, language: language);
+  Future<VocabularyWord?> getReviewWord(DateTime now) {
+    return database.nextDueReviewWord(now);
   }
 
-  Future<VocabularyWord?> getRecentReviewWord(DateTime now, {String? language}) async {
-    return (await getRecentReviewWordResult(now, language: language)).word;
+  Future<VocabularyWord?> getDifficultRelearnWord(DateTime now) {
+    return database.nextDifficultRelearnWord(now);
   }
 
-  Future<WordLookupResult> getRecentReviewWordResult(DateTime now, {String? language}) async {
-    final recent = await database.recentlyLearnedReviewWord(language: language);
+  Future<VocabularyWord?> getRecentReviewWord(DateTime now) async {
+    return (await getRecentReviewWordResult(now)).word;
+  }
+
+  Future<WordLookupResult> getRecentReviewWordResult(DateTime now) async {
+    final recent = await database.recentlyLearnedReviewWord();
     if (recent != null) {
       await _logger.debug(
         category: AppLogCategory.session,
@@ -378,25 +325,24 @@ class WordRepository {
           'local_id': recent.localId,
         },
       );
-      return WordLookupResult(word: recent, source: WordLookupSource.recentReview);
+      return WordLookupResult(
+          word: recent, source: WordLookupSource.recentReview);
     }
-    final dueReview = await database.nextDueReviewWord(now, language: language);
+    final dueReview = await database.nextDueReviewWord(now);
     return WordLookupResult(
       word: dueReview,
-      source: dueReview == null ? WordLookupSource.none : WordLookupSource.dueReview,
-      message: dueReview == null ? 'No recent or due review word is available.' : null,
+      source: dueReview == null
+          ? WordLookupSource.none
+          : WordLookupSource.dueReview,
+      message: dueReview == null
+          ? 'No recent or due review word is available.'
+          : null,
     );
   }
 
   Future<void> bootstrapRecentWords() async {
-    final words = await apiClient.fetchRecentWords(
-      limit: 1000,
-      deviceId: await getOrCreateDeviceId(),
-    );
-    for (final word in words.take(1000)) {
-      await database.upsertWord(word);
-    }
-    await database.pruneToMostRecent();
+    final words = await apiClient.fetchRecentWords(limit: 1000);
+    await database.addBatch(words.take(1000).toList());
     await _logger.info(
       category: AppLogCategory.sync,
       event: 'bootstrap.recent_words',
@@ -407,9 +353,10 @@ class WordRepository {
     );
   }
 
-  Future<CacheInventoryResult> syncCacheInventory({required String deviceId, String? language}) async {
+  Future<CacheInventoryResult> syncCacheInventory(
+      {required String deviceId}) async {
     final session = await database.loadUserSession();
-    final serverWordIds = await database.activeCachedServerWordIds(language: language);
+    final serverWordIds = await database.activeCachedServerWordIds();
     final result = await apiClient.syncCacheInventory(
       deviceId: deviceId,
       serverWordIds: serverWordIds,
@@ -431,21 +378,16 @@ class WordRepository {
 
   Future<List<VocabularyWord>> refillLearningCards({
     required String deviceId,
-    int limit = 20,
-    String targetLanguage = 'en',
+    int limit = 10,
   }) async {
     final session = await database.loadUserSession();
     final batch = await apiClient.fetchLearningCards(
       deviceId: deviceId,
-      limit: limit,
-      targetLanguage: targetLanguage,
+      limit: limit.clamp(1, 100).toInt(),
       sessionToken: session?.sessionToken,
     );
-    for (final word in batch.items) {
-      await database.upsertWord(word);
-    }
-    await database.pruneToMostRecent();
-    await syncCacheInventory(deviceId: deviceId, language: targetLanguage);
+    await database.addBatch(batch.items);
+    await syncCacheInventory(deviceId: deviceId);
     await _logger.info(
       category: AppLogCategory.api,
       event: 'learning_cards.refill',
@@ -459,12 +401,34 @@ class WordRepository {
     return batch.items;
   }
 
+  /// Fetches a batch of vocabulary cards from the backend and persists them
+  /// locally using [LocalDatabase.addBatch], which enforces the 1000-word cap.
+  Future<List<VocabularyWord>> prefetchBatch({int batchSize = 100}) async {
+    final deviceId = _refillDeviceId ?? await getOrCreateDeviceId();
+    final session = await database.loadUserSession();
+    final batch = await apiClient.fetchLearningCards(
+      deviceId: deviceId,
+      limit: batchSize.clamp(1, 100).toInt(),
+      sessionToken: session?.sessionToken,
+    );
+    await database.addBatch(batch.items);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'learning_cards.prefetch_batch',
+      message: 'Prefetched vocabulary batch from backend.',
+      context: {
+        'batch_size': batchSize,
+        'fetched_count': batch.items.length,
+      },
+    );
+    return batch.items;
+  }
+
   Future<ProficiencyState?> recordRating({
     required VocabularyWord word,
     required StudyRating rating,
     required DateTime now,
     required String deviceId,
-    String language = 'en',
   }) async {
     final event = StudyEvent(
       clientEventId: _uuid.v4(),
@@ -478,7 +442,7 @@ class WordRepository {
     if (rating == StudyRating.easy) {
       await database.deleteLocalWord(word.localId);
       try {
-        await syncCacheInventory(deviceId: deviceId, language: language);
+        await syncCacheInventory(deviceId: deviceId);
       } catch (error) {
         await _logger.warning(
           category: AppLogCategory.sync,
@@ -499,7 +463,8 @@ class WordRepository {
         },
       );
     } else {
-      await database.updateWordAfterRating(word: word, rating: rating, now: now);
+      await database.updateWordAfterRating(
+          word: word, rating: rating, now: now);
     }
     await recordWordStudied();
     try {
@@ -507,7 +472,6 @@ class WordRepository {
       final result = await apiClient.submitStudyEvent(
         deviceId: deviceId,
         event: event.toSyncJson(),
-        language: language,
         sessionToken: session?.sessionToken,
       );
       await database.markEventSynced(event.clientEventId);
@@ -533,6 +497,72 @@ class WordRepository {
       );
       return null;
     }
+  }
+
+  Future<void> markRememberedLowFrequency({
+    required VocabularyWord word,
+    required DateTime now,
+    required String deviceId,
+  }) async {
+    await database.markWordRememberedLowFrequency(word: word, now: now);
+    await recordWordStudied();
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'gesture.remembered.local_state_updated',
+      message: 'Applied remembered gesture update locally.',
+      context: {
+        'word_id': word.serverWordId ?? word.localId,
+        'relearn_frequency_percent': 10,
+      },
+    );
+    try {
+      await syncCacheInventory(deviceId: deviceId);
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'gesture.remembered.sync_deferred',
+        message: 'Deferred cache sync after remembered gesture.',
+        context: {'error': '$error'},
+      );
+    }
+  }
+
+  Future<void> markAsDifficultForRelearn({
+    required VocabularyWord word,
+    required DateTime now,
+    required String deviceId,
+  }) async {
+    await database.markWordDifficultForRelearn(word: word, now: now);
+    await recordWordStudied();
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'gesture.difficult.local_state_updated',
+      message: 'Applied difficult gesture update locally.',
+      context: {
+        'word_id': word.serverWordId ?? word.localId,
+      },
+    );
+    try {
+      await syncCacheInventory(deviceId: deviceId);
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'gesture.difficult.sync_deferred',
+        message: 'Deferred cache sync after difficult gesture.',
+        context: {'error': '$error'},
+      );
+    }
+  }
+
+  /// Transitions a newly displayed [newWord] to [learning] status.
+  ///
+  /// Called fire-and-forget from the controller after a word is shown so the
+  /// word pool advances and the same word is not shown again on the next swipe.
+  Future<void> markWordAsLearning({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    await database.markWordAsLearning(word: word, now: now);
   }
 
   Future<void> syncPendingEvents({
@@ -616,7 +646,8 @@ class WordRepository {
       '${Directory.systemTemp.path}/expat8_logs_${DateTime.now().millisecondsSinceEpoch}.jsonl',
     );
     await file.writeAsString(payload);
-    return LogExportResult(path: file.path, payload: payload, count: logs.length);
+    return LogExportResult(
+        path: file.path, payload: payload, count: logs.length);
   }
 }
 

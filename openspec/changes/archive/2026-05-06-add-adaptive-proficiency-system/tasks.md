@@ -1,11 +1,16 @@
 ## 1. Database Schema & Persistence
 
+> Current-state note (2026-05-06): completed `/v1/words/next` tasks in this
+> file are historical records. The live card-loading path is
+> `POST /v1/learning/cards`, and proficiency-aware selection should be
+> understood through that endpoint plus study-event/proficiency state.
+
 - [x] 1.1 Create `user_proficiency` table in `backend/db/schema.sql` with columns: id, device_id, language, level, created_at, updated_at
 - [x] 1.2 Add unique constraint on (device_id, language) to `user_proficiency` table
 - [x] 1.3 Add `rating` column (VARCHAR) to `study_events` table to store difficulty ratings (easy, too_easy, hard, too_hard)
 - [x] 1.4 Create database migration script for schema changes
 - [x] 1.5 Verify schema migration works in development and test environments
-- [x] 1.6 Create initial `user_proficiency` records for test devices at A1
+- [ ] 1.6 Create initial `user_proficiency` records for test devices at A1
 
 ## 2. Backend API: Study Events with Rating
 
@@ -68,13 +73,13 @@
   - Query `user_proficiency` for device_id
   - If not found, initialize at A1
   - Return level, language, last_updated, consecutive_current_rating, current_rating_type
-- [x] 6.2 Implement authentication/authorization: allow device to query own proficiency (check device_id in request)
+- [ ] 6.2 Implement authentication/authorization: allow device to query own proficiency (check device_id in request)
 - [x] 6.3 Write unit tests for proficiency fetch
 - [x] 6.4 Write integration test: new device auto-initializes at A1 on first proficiency query
 
 ## 7. Backend API: Word Filtering by Proficiency
 
-- [x] 7.1 Modify `GET /v1/words/next` route to accept optional `proficiency_level` parameter (A1–C2)
+- [x] 7.1 Historical/superseded: modify `GET /v1/words/next` route to accept optional `proficiency_level` parameter (current selection path is `POST /v1/learning/cards`)
 - [x] 7.2 Enhance `findNewWords(targetLanguage, excludeWordIds, proficiencyLevel)` signature in word store
 - [x] 7.3 Implement filtering in in-memory store: filter by `difficulty_level === proficiencyLevel`
 - [x] 7.4 Implement filtering in PostgreSQL store: add WHERE clause `AND difficulty_level = $param`
@@ -92,7 +97,7 @@
 - [x] 8.2 Ensure LiteLLM generation prompt specifies target CEFR level (currently does "term-avoiding" only)
 - [x] 8.3 Create validation function: `validateDifficultyLevel(word)` returns true if difficulty is A1–C2
 - [x] 8.4 Add validation to word ingest/generation pipeline
-- [x] 8.5 Document legacy difficulty field mapping (beginner→A1, intermediate→B1, advanced→C1)
+- [ ] 8.5 Document legacy difficulty field mapping (beginner→A1, intermediate→B1, advanced→C1)
 
 ## 9. Mobile: Proficiency State Management
 
@@ -126,7 +131,7 @@
 - [x] 11.3 Add visual feedback on button press (highlight, ripple effect)
 - [x] 11.4 Implement button label overflow handling (short labels, no wrapping)
 - [x] 11.5 Add accessibility labels to buttons
-- [x] 11.6 Write Flutter widget test for rating button layout and taps
+- [ ] 11.6 Write Flutter widget test for rating button layout and taps
 - [x] 11.7 Write widget test: all 4 buttons have equal width
 
 ## 12. Mobile UI: Level-Up Notification
@@ -137,14 +142,14 @@
   - Optional animation (fade-in, scale, bounce)
   - Auto-dismiss after 2–3 seconds or user tap
 - [x] 12.2 Handle level-down notification similarly
-- [x] 12.3 Test notification appears correctly on level change
+- [ ] 12.3 Test notification appears correctly on level change
 
 ## 13. Mobile: Integration with Word Fetching
 
 - [x] 13.1 Modify `getNewWordWithFallback()` in `word_repository.dart` to include `proficiency_level` parameter
-- [x] 13.2 Call `GET /v1/words/next?proficiency_level=<current_level>&...` when fetching next word
+- [x] 13.2 Historical/superseded: call `GET /v1/words/next?proficiency_level=<current_level>&...` when fetching next word (current mobile refill uses `POST /v1/learning/cards`)
 - [x] 13.3 Verify word filtering works after level change (next word should be at new level)
-- [x] 13.4 Test fallback behavior: if no exact-level words, app receives adjacent-level word
+- [ ] 13.4 Test fallback behavior: if no exact-level words, app receives adjacent-level word
 
 ## 14. E2E Testing
 
@@ -162,29 +167,29 @@
 - [x] 15.1 Update `contracts/api.md` with new/modified endpoints:
   - `GET /v1/proficiency`
   - Enhanced `POST /v1/study-events` with rating and proficiency response
-  - Enhanced `GET /v1/words/next` with proficiency_level parameter
-- [x] 15.2 Update backend README with proficiency system overview
+  - Historical/superseded: enhanced `GET /v1/words/next` with proficiency_level parameter; current path is `POST /v1/learning/cards`
+- [ ] 15.2 Update backend README with proficiency system overview
 - [x] 15.3 Document CEFR level mapping and fallback strategy
 - [x] 15.4 Document device initialization behavior (default A1)
-- [x] 15.5 Add migration guide for existing data (if any) regarding difficulty fields
-- [x] 15.6 Update mobile README with new rating buttons and proficiency display
-- [x] 15.7 Create or update architecture diagram showing proficiency system
-- [x] 15.8 Generate release notes summarizing adaptive proficiency feature
+- [ ] 15.5 Add migration guide for existing data (if any) regarding difficulty fields
+- [ ] 15.6 Update mobile README with new rating buttons and proficiency display
+- [ ] 15.7 Create or update architecture diagram showing proficiency system
+- [ ] 15.8 Generate release notes summarizing adaptive proficiency feature
 
 ## 16. Code Review & Validation
 
-- [x] 16.1 Code review: Backend schema and migration
-- [x] 16.2 Code review: Backend proficiency logic (counter, level changes, transactions)
-- [x] 16.3 Code review: Backend API endpoints
-- [x] 16.4 Code review: Mobile state management and API integration
-- [x] 16.5 Code review: Mobile UI (proficiency display, rating buttons, notifications)
-- [x] 16.6 Security review: Ensure device_id in requests can't be spoofed (MVP: device isolation)
-- [x] 16.7 Accessibility review: Button text, contrast, touch targets, label accessibility
+- [ ] 16.1 Code review: Backend schema and migration
+- [ ] 16.2 Code review: Backend proficiency logic (counter, level changes, transactions)
+- [ ] 16.3 Code review: Backend API endpoints
+- [ ] 16.4 Code review: Mobile state management and API integration
+- [ ] 16.5 Code review: Mobile UI (proficiency display, rating buttons, notifications)
+- [ ] 16.6 Security review: Ensure device_id in requests can't be spoofed (MVP: device isolation)
+- [ ] 16.7 Accessibility review: Button text, contrast, touch targets, label accessibility
 
 ## 17. Optional: Analytics & Monitoring
 
-- [x] 17.1 Add telemetry: Track time-to-level-up, drop rates, rating distribution
-- [x] 17.2 Add backend logging for proficiency level changes (timestamp, device_id, old level, new level)
+- [ ] 17.1 Add telemetry: Track time-to-level-up, drop rates, rating distribution
+- [ ] 17.2 Add backend logging for proficiency level changes (timestamp, device_id, old level, new level)
 - [ ] 17.3 Add anomaly detection: Flag gaming patterns (5 "Too Easy" in < 1 minute)
 - [ ] 17.4 Set up alerts for unexpected proficiency changes
 - [ ] 17.5 Create dashboard: Monitor proficiency distribution across users/devices

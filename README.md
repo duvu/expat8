@@ -4,24 +4,25 @@ This workspace contains the OpenSpec-driven MVP implementation for a Flutter voc
 
 ## Adaptive Proficiency
 
-The current app/backend flow includes adaptive language-native proficiency ladders:
+The current app/backend flow includes an adaptive CEFR proficiency ladder:
 
-- English initializes at `A1` and progresses on CEFR (`A1` to `C2`)
-- Chinese initializes at `HSK1` and progresses on HSK (`HSK1` to `HSK6`)
+- New devices initialize at `A1`
 - Mobile shows the current level in the top-right corner of the learning screen
 - Rating buttons are `Easy`, `Too Easy`, `Hard`, and `Too Hard`
 - Backend upgrades proficiency after 5 consecutive `too_easy` ratings
 - Backend downgrades proficiency after 5 consecutive `hard` ratings
-- `/v1/words/next` can filter by explicit `proficiency_level` or by resolved device proficiency
-- Proficiency responses are scale-native (`scale`, `level`, `level_index`) with additive aliases during migration
-
-Compatibility mode is controlled by `PROFICIENCY_COMPATIBILITY_MODE` (`additive` by default, `strict` to disable aliases).
+- `/v1/learning/cards` is the single card-loading endpoint and returns
+  backend-selected batches using learner state
+- The mobile app stores local vocabulary, study events, settings, sync queue
+  entries, and logs in ObjectBox.
+- All mobile `/v1/*` calls are signed with app credential headers; optional
+  user sessions ride inside that app-credential layer.
 
 See `contracts/api.md` for the request and response shapes.
 
 ## Structure
 
-- `mobile/`: Flutter app source for Android and iOS.
+- `mobile/`: Flutter app source for Android and iOS using ObjectBox local storage.
 - `backend/`: Node.js backend service using ExpressJS and `node:test`.
 - `contracts/`: mobile-backend API contracts.
 - `docs/`: product and technical documentation.
@@ -39,6 +40,11 @@ flutter run \
 	--dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
 ```
 
+Mobile card loading uses `POST /v1/learning/cards` with `card_mode: "new"`.
+The backend owns duplicate avoidance through learner state and
+`PUT /v1/user-word-cache`; mobile no longer sends exclusion lists for card
+refill.
+
 Backend environment:
 
 ```bash
@@ -52,8 +58,8 @@ The backend requires signed app credential headers for `/v1/*` requests.
 `GET /health` remains unsigned for health checks. See `contracts/api.md` and
 `docs/app-credential-security.md` for the signing contract.
 
-The backend test suite now covers adaptive proficiency state, CEFR filtering,
-single-event submission, and sync responses:
+The backend test suite now covers adaptive proficiency state, learning-card
+selection, single-event submission, and sync responses:
 
 ```bash
 cd backend

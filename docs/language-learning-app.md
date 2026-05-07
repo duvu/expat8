@@ -1,5 +1,10 @@
 # Tài liệu sản phẩm và kỹ thuật: Ứng dụng học ngoại ngữ bằng Flutter
 
+> Historical product/design note (2026-05-06): this document contains early
+> product architecture ideas, including route and storage options that may no
+> longer be current. Use `contracts/api.md`, `README.md`, and
+> `docs/mvp-setup.md` for implementation guidance.
+
 ## 1. Tổng quan
 
 Ứng dụng giúp người dùng học từ vựng ngoại ngữ theo cơ chế vuốt ngang để điều hướng thẻ học: vuốt từ phải qua trái để lấy từ mới, vuốt từ trái qua phải để ôn lại từ vừa học. Mỗi thẻ hiển thị một từ hoặc cụm từ mới kèm giải nghĩa, cách đọc dành cho người Việt, phiên âm IPA và ví dụ sử dụng.

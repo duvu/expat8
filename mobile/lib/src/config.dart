@@ -48,11 +48,11 @@ class AppConfig {
       ),
       vocabPrefetchLimit: int.fromEnvironment(
         'VOCAB_PREFETCH_LIMIT',
-        defaultValue: 1000,
+        defaultValue: 100,
       ),
       vocabDailyRefreshCount: int.fromEnvironment(
         'VOCAB_DAILY_REFRESH_COUNT',
-        defaultValue: 150,
+        defaultValue: 10,
       ),
       vocabProactiveThreshold: int.fromEnvironment(
         'VOCAB_PROACTIVE_THRESHOLD',
@@ -60,7 +60,7 @@ class AppConfig {
       ),
       vocabProactiveMinNew: int.fromEnvironment(
         'VOCAB_PROACTIVE_MIN_NEW',
-        defaultValue: 15,
+        defaultValue: 10,
       ),
     );
   }

@@ -1,45 +1,35 @@
 # Expat8 Mobile App
 
-Flutter client for Expat8 vocabulary learning.
+Flutter client for the Expat8 vocabulary learning MVP.
 
-## Adaptive Proficiency UX
+## Current Architecture
 
-- Proficiency badge is shown in the top-right of the learning screen.
-- Rating actions are shown as one horizontal row with 4 equal-width buttons:
-	- Easy
-	- Too Easy
-	- Hard
-	- Too Hard
-- Level-change feedback is surfaced in-app after backend confirms progression/regression.
+- Local persistence uses ObjectBox through `LocalDatabase`.
+- The app signs every `/v1/*` backend request with app credential headers.
+- Anonymous users persist an `anonymous_<uuid>` device id locally.
+- Signed-in users add a bearer session token while keeping the same device id
+  for offline/cache context.
+- Card refill uses `POST /v1/learning/cards` with `card_mode: "new"`.
+- Duplicate avoidance is backend-owned through learner state and
+  `PUT /v1/user-word-cache`; the mobile app does not send word exclusion lists
+  for refill.
 
-## Startup Refresh
-
-At startup, the app initializes a refresh worker and triggers:
-
-- first-install prefetch (fire-and-forget)
-- daily refresh check (fire-and-forget)
-
-Startup flow keeps loading non-blocking and logs refresh failures without crashing.
-
-## Build Defines
-
-Key runtime defines:
-
-- BACKEND_BASE_URL
-- NEW_WORD_TIMEOUT_SECONDS
-- APP_CREDENTIAL_APP_ID
-- APP_CREDENTIAL_SECRET
-- VOCAB_PREFETCH_LIMIT
-- VOCAB_DAILY_REFRESH_COUNT
-- VOCAB_PROACTIVE_THRESHOLD
-- VOCAB_PROACTIVE_MIN_NEW
-
-Example:
+## Development
 
 ```bash
+flutter pub get
+flutter test
 flutter run \
-	--dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
-	--dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
-	--dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-	--dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+  --dart-define=BACKEND_BASE_URL=http://localhost:8787 \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+```
+
+ObjectBox native libraries are required for desktop/unit-test runs. In this
+repo, Linux test runs expect `mobile/lib/libobjectbox.so` to be present.
+
+After editing ObjectBox entities, regenerate bindings:
+
+```bash
+flutter pub run build_runner build --delete-conflicting-outputs
 ```

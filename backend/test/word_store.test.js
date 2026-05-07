@@ -39,6 +39,45 @@ test('syncs study events idempotently', () => {
   assert.equal(first.proficiency.level, 'A1');
 });
 
+test('syncing an empty study-event batch returns current proficiency', () => {
+  const store = new WordStore({ seed: false });
+
+  const result = store.syncStudyEvents({
+    deviceId: 'device_empty_sync',
+    events: []
+  });
+
+  assert.deepEqual(result.accepted_event_ids, []);
+  assert.deepEqual(result.rejected_events, []);
+  assert.equal(result.proficiency.level, 'A1');
+});
+
+test('syncing only rejected study events returns current proficiency', () => {
+  const store = new WordStore({ seed: false });
+
+  const result = store.syncStudyEvents({
+    deviceId: 'device_rejected_sync',
+    events: [
+      {
+        client_event_id: 'evt_rejected',
+        server_word_id: 'word_1',
+        rating: 'remembered',
+        occurred_at: '2026-05-04T10:30:00.000Z'
+      }
+    ]
+  });
+
+  assert.deepEqual(result.accepted_event_ids, []);
+  assert.deepEqual(result.rejected_events, [
+    {
+      client_event_id: 'evt_rejected',
+      reason: 'invalid_rating'
+    }
+  ]);
+  assert.equal(result.proficiency.level, 'A1');
+  assert.equal(store.studyEventsByClientId.size, 0);
+});
+
 test('stores repeated study attempts and projects the latest word state', () => {
   const store = new WordStore({ seed: false });
   store.insertWord(wordInput({ id: 'state_word', term: 'stateful' }));
@@ -231,94 +270,88 @@ test('auto-initializes proficiency for a new device', () => {
 
   const proficiency = store.getProficiency({ deviceId: 'fresh_device', language: 'en' });
 
-  assert.equal(proficiency.scale, 'cefr');
   assert.equal(proficiency.level, 'A1');
-  assert.equal(proficiency.level_index, 0);
   assert.equal(proficiency.language, 'en');
 });
 
-test('auto-initializes Chinese proficiency with HSK scale', () => {
+test('learning cards returns ten new words and records active claims', () => {
   const store = new WordStore({ seed: false });
-
-  const proficiency = store.getProficiency({ deviceId: 'fresh_zh_device', language: 'zh' });
-
-  assert.equal(proficiency.scale, 'hsk');
-  assert.equal(proficiency.level, 'HSK1');
-  assert.equal(proficiency.level_index, 0);
-  assert.equal(proficiency.language, 'zh');
-});
-
-test('filters words by proficiency level with fallback order', () => {
-  const store = new WordStore({ seed: false });
-  store.insertWord(wordInput({ id: 'word_a2', term: 'basic', difficulty: 'A2' }));
-  store.insertWord(wordInput({ id: 'word_b2', term: 'refine', difficulty: 'B2' }));
-  store.insertWord(wordInput({ id: 'word_c1', term: 'articulate', difficulty: 'C1' }));
-
-  const words = store.findNewWords({
-    targetLanguage: 'en',
-    limit: 1,
-    proficiencyLevel: 'B1'
-  });
-
-  assert.deepEqual(words.map((word) => word.id), ['word_b2']);
-});
-
-test('uses device proficiency when word feed omits explicit level', () => {
-  const store = new WordStore({ seed: false });
-  store.insertWord(wordInput({ id: 'word_a1', term: 'basic', difficulty: 'A1' }));
-  store.insertWord(wordInput({ id: 'word_a2', term: 'bridge', difficulty: 'A2' }));
-
-  for (let index = 0; index < 5; index += 1) {
-    store.recordStudyEvent({
-      deviceId: 'device_query',
-      event: {
-        client_event_id: `evt_query_${index + 1}`,
-        server_word_id: 'word_a1',
-        local_word_id: 'local_1',
-        rating: 'too_easy',
-        occurred_at: `2026-05-04T10:38:0${index}.000Z`
-      }
-    });
+  for (let index = 0; index < 12; index += 1) {
+    store.insertWord(
+      wordInput({
+        id: `word_batch_${index}`,
+        term: `batch ${index}`,
+        created_at: `2026-05-05T00:${index.toString().padStart(2, '0')}:00.000Z`
+      })
+    );
   }
 
-  const words = store.findNewWords({
+  const first = store.learningCards({
+    deviceId: 'anonymous_batch',
     targetLanguage: 'en',
-    limit: 1,
-    deviceId: 'device_query'
+    limit: 10,
+    now: '2026-05-05T01:00:00.000Z'
+  });
+  const second = store.learningCards({
+    deviceId: 'anonymous_batch',
+    targetLanguage: 'en',
+    limit: 10,
+    now: '2026-05-05T01:01:00.000Z'
   });
 
-  assert.deepEqual(words.map((word) => word.id), ['word_a2']);
+  assert.equal(first.items.length, 10);
+  assert.deepEqual(first.target_mix, { new: 10, review: 0 });
+  assert.deepEqual(first.actual_mix, { new: 10, review: 0 });
+  assert.equal(store.cachedWordIdsFor({ deviceId: 'anonymous_batch' }).size, 12);
+  assert.equal(second.items.length, 2);
 });
 
-test('applies HSK progression and fallback for Chinese language', () => {
+test('learning cards exclude anonymous history after sign-in', () => {
   const store = new WordStore({ seed: false });
-  store.insertWord(wordInput({ id: 'word_hsk1', term: 'ni hao', language: 'zh', difficulty: 'HSK1' }));
-  store.insertWord(wordInput({ id: 'word_hsk2', term: 'xuexi', language: 'zh', difficulty: 'HSK2' }));
+  store.insertWord(wordInput({ id: 'word_seen', term: 'seen', created_at: '2026-05-05T00:00:00.000Z' }));
+  store.insertWord(wordInput({ id: 'word_fresh', term: 'fresh', created_at: '2026-05-05T00:01:00.000Z' }));
 
-  for (let index = 0; index < 5; index += 1) {
-    store.recordStudyEvent({
-      deviceId: 'device_zh',
-      language: 'zh',
-      event: {
-        client_event_id: `evt_zh_${index + 1}`,
-        server_word_id: 'word_hsk1',
-        local_word_id: `local_zh_${index + 1}`,
-        rating: 'too_easy',
-        occurred_at: `2026-05-04T11:30:0${index}.000Z`
-      }
-    });
-  }
-
-  const proficiency = store.getProficiency({ deviceId: 'device_zh', language: 'zh' });
-  assert.equal(proficiency.scale, 'hsk');
-  assert.equal(proficiency.level, 'HSK2');
-
-  const words = store.findNewWords({
-    targetLanguage: 'zh',
-    limit: 1,
-    deviceId: 'device_zh'
+  store.recordStudyEvent({
+    deviceId: 'anonymous_history',
+    event: {
+      client_event_id: 'evt_history',
+      server_word_id: 'word_fresh',
+      local_word_id: 'local_fresh',
+      rating: 'easy',
+      occurred_at: '2026-05-05T02:00:00.000Z'
+    }
   });
-  assert.deepEqual(words.map((word) => word.id), ['word_hsk2']);
+
+  const result = store.learningCards({
+    deviceId: 'anonymous_history',
+    userId: 'user_history',
+    targetLanguage: 'en',
+    limit: 10,
+    now: '2026-05-05T03:00:00.000Z'
+  });
+
+  assert.deepEqual(result.items.map((card) => card.word.id), ['word_seen']);
+});
+
+test('additive cache claims are idempotent and filter unknown words', () => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_claim', term: 'claim' }));
+
+  const first = store.addCachedWordIds({
+    deviceId: 'anonymous_claim',
+    wordIds: ['word_claim', 'missing_claim'],
+    observedAt: '2026-05-05T01:00:00.000Z'
+  });
+  const second = store.addCachedWordIds({
+    deviceId: 'anonymous_claim',
+    wordIds: ['word_claim'],
+    observedAt: '2026-05-05T01:01:00.000Z'
+  });
+
+  assert.equal(first.stored_count, 1);
+  assert.deepEqual(first.unknown_server_word_ids, ['missing_claim']);
+  assert.equal(second.stored_count, 1);
+  assert.equal(store.cachedWordIdsFor({ deviceId: 'anonymous_claim' }).size, 1);
 });
 
 function wordInput(overrides = {}) {

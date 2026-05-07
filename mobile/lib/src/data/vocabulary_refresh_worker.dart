@@ -1,6 +1,7 @@
 import '../api/backend_api_client.dart';
 import '../config.dart';
 import '../logging/logger.dart';
+import '../models/vocabulary_word.dart';
 import 'local_database.dart';
 
 class VocabularyRefreshWorker {
@@ -28,14 +29,9 @@ class VocabularyRefreshWorker {
       context: {'limit': _config.vocabPrefetchLimit},
     );
     try {
-      final words = await apiClient.fetchRecentWords(
-        limit: _config.vocabPrefetchLimit,
-        deviceId: deviceId,
+      final words = await _fetchAndStoreLearningCards(
+        _config.vocabPrefetchLimit,
       );
-      for (final word in words) {
-        await database.upsertWord(word);
-      }
-      await database.pruneToMostRecent();
       await database.setSetting(LocalDatabase.keyIsPrefetchDone, 'true');
       await _logger.info(
         category: AppLogCategory.sync,
@@ -54,8 +50,8 @@ class VocabularyRefreshWorker {
     }
   }
 
-  /// Daily refresh: replace ~[dailyRefreshCount] words by fetching new ones
-  /// that differ from already-cached server word IDs.
+  /// Daily refresh: ask the backend for selected new cards and sync the
+  /// resulting local cache inventory.
   Future<void> runDailyRefresh() async {
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     await _logger.info(
@@ -65,16 +61,9 @@ class VocabularyRefreshWorker {
       context: {'date': today, 'count': _config.vocabDailyRefreshCount},
     );
     try {
-      final excludeIds = await database.recentServerWordIds(limit: 1000);
-      final words = await apiClient.fetchRecentWords(
-        limit: _config.vocabDailyRefreshCount,
-        deviceId: deviceId,
-        excludeIds: excludeIds,
+      final words = await _fetchAndStoreLearningCards(
+        _config.vocabDailyRefreshCount,
       );
-      for (final word in words) {
-        await database.upsertWord(word);
-      }
-      await database.pruneToMostRecent();
       await database.setSetting(LocalDatabase.keyLastDailyRefreshDate, today);
       await _logger.info(
         category: AppLogCategory.sync,
@@ -102,16 +91,7 @@ class VocabularyRefreshWorker {
       context: {'needed': needed},
     );
     try {
-      final excludeIds = await database.recentServerWordIds(limit: 1000);
-      final words = await apiClient.fetchRecentWords(
-        limit: needed,
-        deviceId: deviceId,
-        excludeIds: excludeIds,
-      );
-      for (final word in words) {
-        await database.upsertWord(word);
-      }
-      await database.pruneToMostRecent();
+      final words = await _fetchAndStoreLearningCards(needed);
       await _logger.info(
         category: AppLogCategory.sync,
         event: 'vocab_refresh.proactive.complete',
@@ -126,5 +106,19 @@ class VocabularyRefreshWorker {
         context: {'error': '$error'},
       );
     }
+  }
+
+  Future<List<VocabularyWord>> _fetchAndStoreLearningCards(int limit) async {
+    final batch = await apiClient.fetchLearningCards(
+      deviceId: deviceId,
+      limit: limit.clamp(1, 100).toInt(),
+    );
+    await database.addBatch(batch.items);
+    final serverWordIds = await database.activeCachedServerWordIds();
+    await apiClient.syncCacheInventory(
+      deviceId: deviceId,
+      serverWordIds: serverWordIds,
+    );
+    return batch.items;
   }
 }

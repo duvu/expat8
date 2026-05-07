@@ -34,7 +34,7 @@ test('stores valid generated words and rejects duplicates', async () => {
   const accepted = await service.generateAndStore({ limit: 2 });
 
   assert.equal(accepted.length, 1);
-  assert.equal(store.findNewWords({ limit: 10 }).length, 1);
+  assert.equal(store.countUsableWords(), 1);
 });
 
 test('rejects missing required fields', async () => {

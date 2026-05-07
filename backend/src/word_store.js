@@ -1,15 +1,11 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
-  buildScaleLevelState,
   DEFAULT_PROFICIENCY_LEVEL,
   decrementLevel,
-  getDefaultProficiencyLevel,
-  getFallbackDifficultyLevels,
   incrementLevel,
   isProgressionRating,
   normalizeDifficultyLevel,
-  PROFICIENCY_LEVEL_UP_THRESHOLD,
   requireStudyRating
 } from './proficiency.js';
 import {
@@ -22,9 +18,6 @@ import {
   requireRegistrationInput,
   verifyPassword
 } from './user_identity.js';
-
-const NEW_CARD_RATIO = 0.15;
-const WORD_CACHE_LIMIT = 1000;
 
 export class WordStore {
   constructor({ seed = true } = {}) {
@@ -63,7 +56,7 @@ export class WordStore {
       vietnamese_pronunciation: input.vietnamese_pronunciation,
       example: input.example,
       example_vi: input.example_vi,
-      difficulty: normalizeDifficultyLevel(input.difficulty, { language: input.language }) ?? input.difficulty,
+      difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
       topics: input.topics ?? [],
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
@@ -73,44 +66,11 @@ export class WordStore {
     return { word, inserted: true };
   }
 
-  findNewWords({ targetLanguage = 'en', limit = 1, excludeWordIds = [], proficiencyLevel, deviceId, userId }) {
-    const learnedWordIds = this.#learnedWordIds({ deviceId, userId });
-    const availableWords = [...this.words.values()]
-      .filter(
-        (word) =>
-          word.language === targetLanguage &&
-          !excludeWordIds.includes(word.id) &&
-          !learnedWordIds.has(word.id)
-      )
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-    const resolvedLevel = proficiencyLevel
-      ? normalizeDifficultyLevel(proficiencyLevel, { language: targetLanguage })
-      : deviceId || userId
-        ? this.#getOrCreateProficiency({ deviceId, userId, language: targetLanguage }).level
-        : null;
-
-    if (!resolvedLevel) {
-      return availableWords.slice(0, limit);
-    }
-
-    for (const level of getFallbackDifficultyLevels(resolvedLevel, { language: targetLanguage })) {
-      const matches = availableWords.filter(
-        (word) => normalizeDifficultyLevel(word.difficulty, { language: targetLanguage }) === level
-      );
-      if (matches.length > 0) {
-        return matches.slice(0, limit);
-      }
-    }
-
-    return [];
-  }
-
-  recentWords({ targetLanguage = 'en', limit = 1000, excludeServerWordIds = [] }) {
+  recentWords({ targetLanguage = 'en', limit = 1000 }) {
     return [...this.words.values()]
-      .filter((word) => word.language === targetLanguage && !excludeServerWordIds.includes(word.id))
+      .filter((word) => word.language === targetLanguage)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-      .slice(0, Math.min(limit, WORD_CACHE_LIMIT));
+      .slice(0, Math.min(limit, 1000));
   }
 
   countUsableWords({ targetLanguage = 'en' } = {}) {
@@ -177,7 +137,7 @@ export class WordStore {
         unknown.push(wordId);
         continue;
       }
-      if (known.length < WORD_CACHE_LIMIT) {
+      if (known.length < 1000) {
         known.push(wordId);
       }
     }
@@ -192,6 +152,39 @@ export class WordStore {
     };
   }
 
+  addCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
+    const key = this.#ownerKey({ deviceId, userId });
+    const existing = this.cachedWordIdsByOwner.get(key) ?? {
+      wordIds: new Set(),
+      observed_at: observedAt
+    };
+    const unknown = [];
+    const seen = new Set();
+    let storedCount = 0;
+
+    for (const wordId of wordIds) {
+      if (typeof wordId !== 'string' || wordId.length === 0 || seen.has(wordId)) {
+        continue;
+      }
+      seen.add(wordId);
+      if (!this.words.has(wordId)) {
+        unknown.push(wordId);
+        continue;
+      }
+      if (existing.wordIds.size < 1000 || existing.wordIds.has(wordId)) {
+        existing.wordIds.add(wordId);
+        storedCount += 1;
+      }
+    }
+
+    existing.observed_at = observedAt;
+    this.cachedWordIdsByOwner.set(key, existing);
+    return {
+      stored_count: storedCount,
+      unknown_server_word_ids: unknown
+    };
+  }
+
   cachedWordIdsFor({ deviceId, userId = null }) {
     return new Set(this.cachedWordIdsByOwner.get(this.#ownerKey({ deviceId, userId }))?.wordIds ?? []);
   }
@@ -200,65 +193,43 @@ export class WordStore {
     return this.wordStatesByOwnerWord.get(this.#wordStateKey({ deviceId, userId, wordId })) ?? null;
   }
 
-  learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 20, now = new Date().toISOString() }) {
-    const cappedLimit = Math.max(1, Math.min(limit, 50));
-    const targetNew = Math.round(cappedLimit * NEW_CARD_RATIO);
-    const targetReview = cappedLimit - targetNew;
-    const cachedWordIds = this.cachedWordIdsFor({ deviceId, userId });
-    const nowDate = new Date(now);
-    const ownerStates = [...this.wordStatesByOwnerWord.values()].filter((state) =>
-      userId ? state.user_id === userId : state.device_id === deviceId
+  learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 10, now = new Date().toISOString() }) {
+    const cappedLimit = Math.max(1, Math.min(limit, 100));
+    const ownerKeys = this.#selectionOwnerKeys({ deviceId, userId });
+    const cachedWordIds = this.#cachedWordIdsForOwnerKeys(ownerKeys);
+    const stateWordIds = new Set(
+      [...this.wordStatesByOwnerWord.entries()]
+        .filter(([key, state]) => ownerKeys.has(this.#ownerKeyFromState(state)) && key.includes(':word:'))
+        .filter(([, state]) => state.language === targetLanguage)
+        .map(([, state]) => state.word_id)
     );
-    const stateByWordId = new Map(ownerStates.map((state) => [state.word_id, state]));
-    const reviewCandidates = ownerStates
-      .filter((state) => state.language === targetLanguage && state.status !== 'completed')
-      .filter((state) => !state.next_review_at || new Date(state.next_review_at) <= nowDate)
-      .map((state) => this.words.get(state.word_id))
-      .filter(Boolean)
-      .sort((left, right) => left.updated_at.localeCompare(right.updated_at));
     const newCandidates = [...this.words.values()]
       .filter((word) => word.language === targetLanguage)
       .filter((word) => !cachedWordIds.has(word.id))
-      .filter((word) => !stateByWordId.has(word.id) || stateByWordId.get(word.id)?.status !== 'completed')
-      .filter((word) => !stateByWordId.has(word.id))
+      .filter((word) => !stateWordIds.has(word.id))
       .sort((left, right) => bCompareCreated(left, right));
 
-    const cards = [];
-    const take = (candidates, count, cardType, reason) => {
-      for (const word of candidates) {
-        if (cards.length >= cappedLimit || count <= 0) {
-          break;
-        }
-        if (cards.some((card) => card.word.id === word.id)) {
-          continue;
-        }
-        cards.push({ word, cardType, selectionReason: reason });
-        count -= 1;
-      }
-    };
+    const cards = newCandidates
+      .slice(0, cappedLimit)
+      .map((word) => ({ word, cardType: 'new', selectionReason: 'new_available' }));
+    this.addCachedWordIds({
+      deviceId,
+      userId,
+      wordIds: cards.map((card) => card.word.id),
+      observedAt: now
+    });
 
-    take(reviewCandidates, targetReview, 'review', 'due_review');
-    take(newCandidates, targetNew, 'new', 'new_available');
-    if (cards.length < cappedLimit) {
-      take(newCandidates, cappedLimit - cards.length, 'new', 'review_shortage_fallback');
-    }
-    if (cards.length < cappedLimit) {
-      take(reviewCandidates, cappedLimit - cards.length, 'review', 'new_shortage_fallback');
-    }
-
-    const actualNew = cards.filter((card) => card.cardType === 'new').length;
-    const actualReview = cards.filter((card) => card.cardType === 'review').length;
     return {
       items: cards,
-      target_mix: { new: targetNew, review: targetReview },
-      actual_mix: { new: actualNew, review: actualReview }
+      target_mix: { new: cappedLimit, review: 0 },
+      actual_mix: { new: cards.length, review: 0 }
     };
   }
 
   syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
     const accepted = [];
     const rejected = [];
-    let latestResult = this.getProficiency({ deviceId, userId, language });
+    let latestProficiency = this.getProficiency({ deviceId, userId, language });
 
     for (const event of events) {
       if (!event.client_event_id || !event.rating || !event.occurred_at) {
@@ -269,16 +240,13 @@ export class WordStore {
         continue;
       }
       try {
-        latestResult = this.recordStudyEvent({ deviceId, userId, event, language });
+        const result = this.recordStudyEvent({ deviceId, userId, event, language });
+        latestProficiency = result.proficiency;
       } catch (error) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
           reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
         });
-        continue;
-      }
-      if (latestResult.idempotent) {
-        accepted.push(event.client_event_id);
         continue;
       }
       accepted.push(event.client_event_id);
@@ -287,7 +255,7 @@ export class WordStore {
     return {
       accepted_event_ids: accepted,
       rejected_events: rejected,
-      proficiency: latestResult.proficiency
+      proficiency: latestProficiency
     };
   }
 
@@ -421,19 +389,16 @@ export class WordStore {
   #applyProficiencyChange({ deviceId, userId = null, language, rating }) {
     const proficiency = this.#getOrCreateProficiency({ deviceId, userId, language });
     const consecutiveCount = this.countConsecutiveRatings({ deviceId, userId, rating });
-    if (!isProgressionRating(rating) || consecutiveCount === 0 || consecutiveCount % PROFICIENCY_LEVEL_UP_THRESHOLD !== 0) {
+    if (!isProgressionRating(rating) || consecutiveCount === 0 || consecutiveCount % 5 !== 0) {
       return null;
     }
 
     const previousLevel = proficiency.level;
     const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel, { language })
-      : decrementLevel(previousLevel, { language });
-    const nextScaleState = buildScaleLevelState({ level: nextLevel, language });
+      ? incrementLevel(previousLevel)
+      : decrementLevel(previousLevel);
 
     proficiency.level = nextLevel;
-    proficiency.scale = nextScaleState.scale;
-    proficiency.level_index = nextScaleState.level_index;
     proficiency.updated_at = new Date().toISOString();
     return {
       levelChanged: nextLevel !== previousLevel,
@@ -448,12 +413,9 @@ export class WordStore {
     const consecutiveCount = currentRatingType
       ? this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType })
       : 0;
-    const scaleState = buildScaleLevelState({ level: proficiency.level, language });
 
     return {
-      scale: scaleState.scale,
-      level: scaleState.level,
-      level_index: scaleState.level_index,
+      level: proficiency.level,
       level_changed: levelChanged,
       previous_level: previousLevel,
       triggered_by: triggeredBy,
@@ -472,15 +434,12 @@ export class WordStore {
       return existing;
     }
     const now = new Date().toISOString();
-    const defaultLevel = getDefaultProficiencyLevel({ language });
     const created = {
       id: createId('proficiency'),
       user_id: userId,
       device_id: deviceId,
       language,
-      level: defaultLevel ?? DEFAULT_PROFICIENCY_LEVEL,
-      scale: buildScaleLevelState({ level: defaultLevel, language }).scale,
-      level_index: buildScaleLevelState({ level: defaultLevel, language }).level_index,
+      level: DEFAULT_PROFICIENCY_LEVEL,
       created_at: now,
       updated_at: now
     };
@@ -496,15 +455,6 @@ export class WordStore {
         return occurred !== 0 ? occurred : right.received_at.localeCompare(left.received_at);
       })
       .slice(0, 10);
-  }
-
-  #learnedWordIds({ deviceId, userId = null }) {
-    return new Set(
-      [...this.studyEventsByClientId.values()]
-        .filter((event) => (userId ? event.user_id === userId : event.device_id === deviceId))
-        .map((event) => event.word_id)
-        .filter(Boolean)
-    );
   }
 
   #upsertWordState({ deviceId, userId = null, language, event }) {
@@ -529,6 +479,29 @@ export class WordStore {
 
   #ownerKey({ deviceId, userId = null }) {
     return userId ? `user:${userId}` : `device:${deviceId}`;
+  }
+
+  #ownerKeyFromState(state) {
+    return this.#ownerKey({ deviceId: state.device_id, userId: state.user_id });
+  }
+
+  #selectionOwnerKeys({ deviceId, userId = null }) {
+    const keys = new Set([this.#ownerKey({ deviceId })]);
+    if (userId) {
+      keys.add(this.#ownerKey({ deviceId, userId }));
+    }
+    return keys;
+  }
+
+  #cachedWordIdsForOwnerKeys(ownerKeys) {
+    const wordIds = new Set();
+    for (const key of ownerKeys) {
+      const ownerCache = this.cachedWordIdsByOwner.get(key)?.wordIds ?? [];
+      for (const wordId of ownerCache) {
+        wordIds.add(wordId);
+      }
+    }
+    return wordIds;
   }
 
   #wordStateKey({ deviceId, userId = null, wordId }) {

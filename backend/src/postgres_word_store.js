@@ -1,11 +1,8 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
-  buildScaleLevelState,
   DEFAULT_PROFICIENCY_LEVEL,
   decrementLevel,
-  getDefaultProficiencyLevel,
-  getFallbackDifficultyLevels,
   incrementLevel,
   isProgressionRating,
   normalizeDifficultyLevel,
@@ -43,7 +40,7 @@ export class PostgresWordStore {
       vietnamese_pronunciation: input.vietnamese_pronunciation,
       example: input.example,
       example_vi: input.example_vi,
-      difficulty: normalizeDifficultyLevel(input.difficulty, { language: input.language }) ?? input.difficulty,
+      difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
       topics_json: JSON.stringify(input.topics ?? []),
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
@@ -113,81 +110,13 @@ export class PostgresWordStore {
     return { word: rowToWord(existing.rows[0]), inserted: false };
   }
 
-  async findNewWords({ targetLanguage = 'en', limit = 1, excludeWordIds = [], proficiencyLevel, deviceId, userId }) {
-    const startedAt = Date.now();
-    const resolvedLevel = proficiencyLevel
-      ? normalizeDifficultyLevel(proficiencyLevel, { language: targetLanguage })
-      : deviceId || userId
-        ? (await this.getProficiency({ deviceId, userId, language: targetLanguage })).level
-        : null;
-
-    if (!resolvedLevel) {
-      const words = await this.#findWordsForLevel({
-        targetLanguage,
-        limit,
-        excludeWordIds,
-        deviceId,
-        userId
-      });
-      this.logger.debug?.('db_find_new_words_completed', {
-        target_language: targetLanguage,
-        limit,
-        item_count: words.length,
-        elapsed_ms: Date.now() - startedAt
-      });
-      return words;
-    }
-
-    for (const level of getFallbackDifficultyLevels(resolvedLevel, { language: targetLanguage })) {
-      const words = await this.#findWordsForLevel({
-        targetLanguage,
-        limit,
-        excludeWordIds,
-        deviceId,
-        userId,
-        proficiencyLevel: level
-      });
-      if (words.length > 0) {
-        this.logger.debug?.('db_find_new_words_completed', {
-          target_language: targetLanguage,
-          limit,
-          item_count: words.length,
-          proficiency_scale: buildScaleLevelState({ level: resolvedLevel, language: targetLanguage }).scale,
-          resolved_level: level,
-          elapsed_ms: Date.now() - startedAt
-        });
-        return words;
-      }
-    }
-
-    this.logger.debug?.('db_find_new_words_completed', {
-      target_language: targetLanguage,
-      limit,
-      item_count: 0,
-      elapsed_ms: Date.now() - startedAt
-    });
-    return [];
-  }
-
-  async recentWords({ targetLanguage = 'en', limit = 1000, excludeServerWordIds = [] }) {
-    const safeLimit = Math.min(limit, 1000);
-    if (excludeServerWordIds.length > 0) {
-      const placeholders = excludeServerWordIds.map((_, i) => `$${i + 3}`).join(', ');
-      const result = await this.pool.query(
-        `SELECT * FROM words
-        WHERE language = $1 AND id NOT IN (${placeholders})
-        ORDER BY updated_at DESC
-        LIMIT $2`,
-        [targetLanguage, safeLimit, ...excludeServerWordIds]
-      );
-      return result.rows.map(rowToWord);
-    }
+  async recentWords({ targetLanguage = 'en', limit = 1000 }) {
     const result = await this.pool.query(
       `SELECT * FROM words
       WHERE language = $1
       ORDER BY updated_at DESC
       LIMIT $2`,
-      [targetLanguage, safeLimit]
+      [targetLanguage, Math.min(limit, 1000)]
     );
     return result.rows.map(rowToWord);
   }
@@ -317,6 +246,62 @@ export class PostgresWordStore {
     });
   }
 
+  async addCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const distinctIds = [...new Set(wordIds.filter((wordId) => typeof wordId === 'string' && wordId.length > 0))];
+      const knownResult = distinctIds.length === 0
+        ? { rows: [] }
+        : await client.query(
+            `SELECT id FROM words WHERE id = ANY($1)`,
+            [distinctIds]
+          );
+      const knownIds = new Set(knownResult.rows.map((row) => row.id));
+      const unknown = distinctIds.filter((wordId) => !knownIds.has(wordId));
+      const stored = distinctIds.filter((wordId) => knownIds.has(wordId)).slice(0, 1000);
+      const now = new Date().toISOString();
+      for (const wordId of stored) {
+        const params = [deviceId, userId, wordId, observedAt, now];
+        const updateResult = userId
+          ? await client.query(
+              `UPDATE user_cached_words
+              SET
+                device_id = $1,
+                observed_at = $4,
+                updated_at = $5
+              WHERE user_id = $2 AND word_id = $3`,
+              params
+            )
+          : await client.query(
+              `UPDATE user_cached_words
+              SET
+                observed_at = $3,
+                updated_at = $4
+              WHERE device_id = $1 AND user_id IS NULL AND word_id = $2`,
+              [deviceId, wordId, observedAt, now]
+            );
+        if (updateResult.rowCount > 0) {
+          continue;
+        }
+        await client.query(
+          `INSERT INTO user_cached_words (
+            device_id,
+            user_id,
+            word_id,
+            observed_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING`,
+          params
+        );
+      }
+      return {
+        stored_count: stored.length,
+        unknown_server_word_ids: unknown
+      };
+    });
+  }
+
   async cachedWordIdsFor({ deviceId, userId = null }) {
     const result = userId
       ? await this.pool.query(
@@ -343,91 +328,44 @@ export class PostgresWordStore {
     return result.rows[0] ?? null;
   }
 
-  async learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 20, now = new Date().toISOString() }) {
-    const cappedLimit = Math.max(1, Math.min(limit, 50));
-    const targetNew = Math.round(cappedLimit * 0.15);
-    const targetReview = cappedLimit - targetNew;
-
-    // Review candidates: states that are due, joined to their word
-    const reviewQuery = userId
-      ? `SELECT w.*, s.updated_at AS state_updated_at
-           FROM user_word_states s
-           JOIN words w ON w.id = s.word_id
-          WHERE s.user_id = $1
-            AND w.language = $2
-            AND s.status != 'completed'
-            AND (s.next_review_at IS NULL OR s.next_review_at <= $3)
-          ORDER BY s.updated_at ASC
-          LIMIT $4`
-      : `SELECT w.*, s.updated_at AS state_updated_at
-           FROM user_word_states s
-           JOIN words w ON w.id = s.word_id
-          WHERE s.device_id = $1
-            AND s.user_id IS NULL
-            AND w.language = $2
-            AND s.status != 'completed'
-            AND (s.next_review_at IS NULL OR s.next_review_at <= $3)
-          ORDER BY s.updated_at ASC
-          LIMIT $4`;
-
-    // New candidates: words with no state and not in cache for this user/device
-    const newQuery = userId
-      ? `SELECT w.*
-           FROM words w
-          WHERE w.language = $1
-            AND NOT EXISTS (
-              SELECT 1 FROM user_word_states s
-               WHERE s.word_id = w.id AND s.user_id = $2
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM user_cached_words c
-               WHERE c.word_id = w.id AND c.user_id = $2
-            )
-          ORDER BY w.created_at DESC
-          LIMIT $3`
-      : `SELECT w.*
-           FROM words w
-          WHERE w.language = $1
-            AND NOT EXISTS (
-              SELECT 1 FROM user_word_states s
-               WHERE s.word_id = w.id AND s.device_id = $2 AND s.user_id IS NULL
-            )
-            AND NOT EXISTS (
-              SELECT 1 FROM user_cached_words c
-               WHERE c.word_id = w.id AND c.device_id = $2 AND c.user_id IS NULL
-            )
-          ORDER BY w.created_at DESC
-          LIMIT $3`;
-
-    const [reviewResult, newResult] = await Promise.all([
-      this.pool.query(reviewQuery, [userId ?? deviceId, targetLanguage, now, cappedLimit]),
-      this.pool.query(newQuery, [targetLanguage, userId ?? deviceId, cappedLimit])
+  async learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 10, now = new Date().toISOString() }) {
+    const cappedLimit = Math.max(1, Math.min(limit, 100));
+    const [wordsResult, cachedIds, stateResult] = await Promise.all([
+      this.pool.query(`SELECT * FROM words WHERE language = $1`, [targetLanguage]),
+      this.#cachedWordIdsForSelection({ deviceId, userId }),
+      userId
+        ? this.pool.query(
+            `SELECT * FROM user_word_states
+            WHERE language = $3
+            AND (user_id = $1 OR (device_id = $2 AND user_id IS NULL))`,
+            [userId, deviceId, targetLanguage]
+          )
+        : this.pool.query(
+            `SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND language = $2`,
+            [deviceId, targetLanguage]
+          )
     ]);
-
-    const reviewCandidates = reviewResult.rows.map(rowToWord);
-    const newCandidates = newResult.rows.map(rowToWord);
-
-    const cards = [];
-    const usedIds = new Set();
-    const take = (candidates, count, cardType, reason) => {
-      for (const word of candidates) {
-        if (cards.length >= cappedLimit || count <= 0) break;
-        if (usedIds.has(word.id)) continue;
-        cards.push({ word, cardType, selectionReason: reason });
-        usedIds.add(word.id);
-        count -= 1;
-      }
-    };
-    take(reviewCandidates, targetReview, 'review', 'due_review');
-    take(newCandidates, targetNew, 'new', 'new_available');
-    take(newCandidates, cappedLimit - cards.length, 'new', 'review_shortage_fallback');
-    take(reviewCandidates, cappedLimit - cards.length, 'review', 'new_shortage_fallback');
+    const words = wordsResult.rows.map(rowToWord);
+    const stateWordIds = new Set(stateResult.rows.map((state) => state.word_id));
+    const newCandidates = words
+      .filter((word) => !cachedIds.has(word.id))
+      .filter((word) => !stateWordIds.has(word.id))
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    const cards = newCandidates
+      .slice(0, cappedLimit)
+      .map((word) => ({ word, cardType: 'new', selectionReason: 'new_available' }));
+    await this.addCachedWordIds({
+      deviceId,
+      userId,
+      wordIds: cards.map((card) => card.word.id),
+      observedAt: now
+    });
     return {
       items: cards,
-      target_mix: { new: targetNew, review: targetReview },
+      target_mix: { new: cappedLimit, review: 0 },
       actual_mix: {
-        new: cards.filter((card) => card.cardType === 'new').length,
-        review: cards.filter((card) => card.cardType === 'review').length
+        new: cards.length,
+        review: 0
       }
     };
   }
@@ -436,7 +374,7 @@ export class PostgresWordStore {
     const startedAt = Date.now();
     const accepted = [];
     const rejected = [];
-    let latestResult = await this.getProficiency({ deviceId, userId, language });
+    let latestProficiency = await this.getProficiency({ deviceId, userId, language });
 
     for (const event of events) {
       if (!event.client_event_id || !event.rating || !event.occurred_at) {
@@ -447,7 +385,8 @@ export class PostgresWordStore {
         continue;
       }
       try {
-        latestResult = await this.recordStudyEvent({ deviceId, userId, event, language });
+        const result = await this.recordStudyEvent({ deviceId, userId, event, language });
+        latestProficiency = result.proficiency;
       } catch (error) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
@@ -460,9 +399,6 @@ export class PostgresWordStore {
 
     this.logger.info?.('db_sync_study_events_completed', {
       device_id: deviceId,
-      target_language: language,
-      proficiency_scale: latestResult?.proficiency?.scale ?? null,
-      proficiency_level: latestResult?.proficiency?.level ?? null,
       accepted_count: accepted.length,
       rejected_count: rejected.length,
       elapsed_ms: Date.now() - startedAt
@@ -470,7 +406,7 @@ export class PostgresWordStore {
     return {
       accepted_event_ids: accepted,
       rejected_events: rejected,
-      proficiency: latestResult.proficiency
+      proficiency: latestProficiency
     };
   }
 
@@ -545,25 +481,21 @@ export class PostgresWordStore {
         currentLevel: proficiency.level
       });
 
-      const responseProficiency = await this.#buildProficiencyResponse({
-        client,
-        deviceId,
-        userId: eventUserId,
-        language,
-        ...levelChange
-      });
       this.logger.debug?.('db_record_study_event_completed', {
         device_id: deviceId,
-        target_language: language,
         client_event_id: event.client_event_id,
-        proficiency_scale: responseProficiency?.scale ?? null,
-        proficiency_level: responseProficiency?.level ?? null,
         elapsed_ms: Date.now() - startedAt
       });
       return {
         eventId: inserted.rows[0].id,
         idempotent: false,
-        proficiency: responseProficiency
+        proficiency: await this.#buildProficiencyResponse({
+          client,
+          deviceId,
+          userId: eventUserId,
+          language,
+          ...levelChange
+        })
       };
     });
   }
@@ -722,48 +654,32 @@ export class PostgresWordStore {
           [deviceId, language]
         );
     if (existing.rows[0]) {
-      const row = existing.rows[0];
-      if (!row.scale || row.level_index === undefined || row.level_index === null) {
-        const normalized = buildScaleLevelState({ level: row.level, language });
-        const updated = await client.query(
-          `UPDATE user_proficiency
-          SET scale = $3, level_index = $4, updated_at = $5
-          WHERE ${userId ? 'user_id' : 'device_id'} = $1 AND language = $2
-          RETURNING *`,
-          [userId ? userId : deviceId, language, normalized.scale, normalized.level_index, new Date().toISOString()]
-        );
-        return updated.rows[0] ?? row;
-      }
-      return row;
+      return existing.rows[0];
     }
 
     const now = new Date().toISOString();
-    const defaultLevel = getDefaultProficiencyLevel({ language }) ?? DEFAULT_PROFICIENCY_LEVEL;
-    const defaultScaleState = buildScaleLevelState({ level: defaultLevel, language });
-    const profileDeviceId = userId ? `user:${userId}` : deviceId;
+    const conflictTarget = userId
+      ? '(user_id, language) WHERE user_id IS NOT NULL'
+      : '(device_id, language) WHERE user_id IS NULL';
     const inserted = await client.query(
       `INSERT INTO user_proficiency (
         id,
         user_id,
         device_id,
         language,
-        scale,
         level,
-        level_index,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (device_id, language) DO UPDATE SET updated_at = user_proficiency.updated_at
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT ${conflictTarget} DO UPDATE SET updated_at = user_proficiency.updated_at
       RETURNING *`,
       [
         createId('proficiency'),
         userId,
-        profileDeviceId,
+        deviceId,
         language,
-        defaultScaleState.scale,
-        defaultLevel,
-        defaultScaleState.level_index,
+        DEFAULT_PROFICIENCY_LEVEL,
         now,
         now
       ]
@@ -777,26 +693,16 @@ export class PostgresWordStore {
       return null;
     }
 
-    const previousLevel = normalizeDifficultyLevel(currentLevel, { language })
-      ?? getDefaultProficiencyLevel({ language })
-      ?? DEFAULT_PROFICIENCY_LEVEL;
+    const previousLevel = normalizeDifficultyLevel(currentLevel) ?? DEFAULT_PROFICIENCY_LEVEL;
     const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel, { language })
-      : decrementLevel(previousLevel, { language });
-    const nextScaleState = buildScaleLevelState({ level: nextLevel, language });
+      ? incrementLevel(previousLevel)
+      : decrementLevel(previousLevel);
 
     await client.query(
       `UPDATE user_proficiency
-      SET scale = $3, level = $4, level_index = $5, updated_at = $6
+      SET level = $3, updated_at = $4
       WHERE ${userId ? 'user_id' : 'device_id'} = $1 AND language = $2`,
-      [
-        userId ?? deviceId,
-        language,
-        nextScaleState.scale,
-        nextLevel,
-        nextScaleState.level_index,
-        new Date().toISOString()
-      ]
+      [userId ?? deviceId, language, nextLevel, new Date().toISOString()]
     );
 
     return {
@@ -820,12 +726,9 @@ export class PostgresWordStore {
     const consecutiveCount = currentRatingType
       ? await this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType, client })
       : 0;
-    const scaleState = buildScaleLevelState({ level: proficiency.level, language });
 
     return {
-      scale: scaleState.scale,
-      level: scaleState.level,
-      level_index: scaleState.level_index,
+      level: proficiency.level,
       level_changed: levelChanged,
       previous_level: previousLevel,
       triggered_by: triggeredBy,
@@ -856,40 +759,15 @@ export class PostgresWordStore {
     return result.rows;
   }
 
-  async #findWordsForLevel({ targetLanguage, limit, excludeWordIds, proficiencyLevel, deviceId, userId }) {
-    const filters = ['language = $1'];
-    const params = [targetLanguage];
-
-    if (proficiencyLevel) {
-      params.push(proficiencyLevel);
-      filters.push(`difficulty = $${params.length}`);
+  async #cachedWordIdsForSelection({ deviceId, userId = null }) {
+    if (!userId) {
+      return this.cachedWordIdsFor({ deviceId });
     }
-
-    if (excludeWordIds.length > 0) {
-      params.push(excludeWordIds);
-      filters.push(`id <> ALL($${params.length})`);
-    }
-
-    if (userId || deviceId) {
-      params.push(userId ?? deviceId);
-      filters.push(
-        `id NOT IN (
-          SELECT word_id FROM study_events
-          WHERE ${userId ? 'user_id' : 'device_id'} = $${params.length}
-          AND word_id IS NOT NULL
-        )`
-      );
-    }
-
-    params.push(limit);
-    const result = await this.pool.query(
-      `SELECT * FROM words
-      WHERE ${filters.join('\n      AND ')}
-      ORDER BY created_at DESC
-      LIMIT $${params.length}`,
-      params
-    );
-    return result.rows.map(rowToWord);
+    const [userCached, deviceCached] = await Promise.all([
+      this.cachedWordIdsFor({ deviceId, userId }),
+      this.cachedWordIdsFor({ deviceId, userId: null })
+    ]);
+    return new Set([...userCached, ...deviceCached]);
   }
 
   async #upsertWordState({ client, deviceId, userId = null, language, event }) {

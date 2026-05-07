@@ -1,133 +1,79 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:path/path.dart' as path;
-import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
 
+import '../../objectbox.g.dart';
 import '../logging/logger.dart';
 import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
+import 'local_database_entities.dart';
 
 class LocalDatabase {
-  LocalDatabase(this._db, {Logger? logger}) : _logger = logger ?? const NoopLogger();
+  LocalDatabase(this._store, {Logger? logger})
+      : _logger = logger ?? const NoopLogger(),
+        _localWords = _store.box<LocalWordEntity>(),
+        _studyEvents = _store.box<StudyEventEntity>(),
+        _syncQueue = _store.box<SyncQueueEntity>(),
+        _settings = _store.box<AppSettingEntity>(),
+        _logs = _store.box<AppLogEntity>();
 
-  final Database _db;
+  final Store _store;
   Logger _logger;
+
+  final Box<LocalWordEntity> _localWords;
+  final Box<StudyEventEntity> _studyEvents;
+  final Box<SyncQueueEntity> _syncQueue;
+  final Box<AppSettingEntity> _settings;
+  final Box<AppLogEntity> _logs;
 
   void attachLogger(Logger logger) {
     _logger = logger;
   }
 
-  static Future<LocalDatabase> open({String databaseName = 'expat8_words.db'}) async {
-    final dbPath = path.join(await getDatabasesPath(), databaseName);
-    final database = await openDatabase(
-      dbPath,
-      version: 3,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE local_words (
-            local_id TEXT PRIMARY KEY,
-            server_word_id TEXT,
-            term TEXT NOT NULL,
-            language TEXT NOT NULL,
-            meaning_vi TEXT NOT NULL,
-            part_of_speech TEXT,
-            ipa TEXT NOT NULL,
-            vietnamese_pronunciation TEXT NOT NULL,
-            example TEXT NOT NULL,
-            example_vi TEXT NOT NULL,
-            difficulty TEXT NOT NULL,
-            topics TEXT NOT NULL,
-            status TEXT NOT NULL,
-            last_seen_at TEXT,
-            next_review_at TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE study_events (
-            client_event_id TEXT PRIMARY KEY,
-            local_word_id TEXT NOT NULL,
-            server_word_id TEXT,
-            rating TEXT NOT NULL,
-            occurred_at TEXT NOT NULL,
-            sync_status TEXT NOT NULL
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE sync_queue (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            payload TEXT NOT NULL,
-            retry_count INTEGER NOT NULL,
-            next_retry_at TEXT NOT NULL,
-            created_at TEXT NOT NULL
-          )
-        ''');
-        await _createAppSettingsTable(db);
-        await _createAppLogsTable(db);
-        await db.execute('CREATE INDEX idx_local_words_status ON local_words(status)');
-        await db.execute(
-          'CREATE INDEX idx_local_words_last_seen ON local_words(last_seen_at)',
-        );
-        await db.execute(
-          'CREATE INDEX idx_study_events_sync_status ON study_events(sync_status)',
-        );
-        await db.execute(
-          'CREATE INDEX idx_app_logs_timestamp ON app_logs(timestamp)',
-        );
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await _createAppSettingsTable(db);
-        }
-        if (oldVersion < 3) {
-          await _createAppLogsTable(db);
-          await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_app_logs_timestamp ON app_logs(timestamp)',
-          );
-        }
-      },
-    );
-    return LocalDatabase(database);
+  static Future<LocalDatabase> open(
+      {String databaseName = 'expat8_words.db'}) async {
+    final baseDir = await _resolveStorageDirectory();
+    final dbDir = Directory(path.join(baseDir.path, databaseName));
+    if (!dbDir.existsSync()) {
+      dbDir.createSync(recursive: true);
+    }
+    final store = await openStore(directory: dbDir.path);
+    return LocalDatabase(store);
   }
 
-  static Future<void> _createAppSettingsTable(DatabaseExecutor db) {
-    return db.execute('''
-      CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    ''');
-  }
+  static Future<Directory> _resolveStorageDirectory() async {
+    // On Linux (unit tests, desktop), use $HOME to keep data outside the project.
+    if (Platform.isLinux) {
+      final home = Platform.environment['HOME'];
+      if (home != null && home.isNotEmpty && home != '/') {
+        final dir = Directory(path.join(home, '.expat8_mobile_data'));
+        if (!dir.existsSync()) {
+          dir.createSync(recursive: true);
+        }
+        return dir;
+      }
+    }
 
-  static Future<void> _createAppLogsTable(DatabaseExecutor db) {
-    return db.execute('''
-      CREATE TABLE IF NOT EXISTS app_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT NOT NULL,
-        level TEXT NOT NULL,
-        category TEXT NOT NULL,
-        event TEXT NOT NULL,
-        message TEXT NOT NULL,
-        trace_id TEXT,
-        context TEXT NOT NULL
-      )
-    ''');
+    // On Android/iOS or when HOME is unusable, use the app documents directory.
+    return getApplicationDocumentsDirectory();
   }
 
   Future<void> persistLogEntry(LogEntry entry) async {
-    await _db.insert('app_logs', {
-      'timestamp': entry.timestamp.toUtc().toIso8601String(),
-      'level': entry.level.name,
-      'category': entry.category.name,
-      'event': entry.event,
-      'message': entry.message,
-      'trace_id': entry.traceId,
-      'context': jsonEncode(entry.context),
-    });
+    _logs.put(
+      AppLogEntity(
+        timestampMs: entry.timestamp.toUtc().millisecondsSinceEpoch,
+        level: entry.level.name,
+        category: entry.category.name,
+        event: entry.event,
+        message: entry.message,
+        traceId: entry.traceId,
+        contextJson: jsonEncode(entry.context),
+      ),
+    );
   }
 
   Future<List<LogEntry>> queryLogs({
@@ -138,41 +84,41 @@ class LocalDatabase {
     int limit = 200,
     int offset = 0,
   }) async {
-    final where = <String>[];
-    final whereArgs = <Object?>[];
+    final all = _logs.getAll();
+    var filtered = all.where((entity) {
+      if (minimumLevel != null &&
+          AppLogLevel.fromName(entity.level).priority < minimumLevel.priority) {
+        return false;
+      }
+      if (category != null && entity.category != category.name) {
+        return false;
+      }
+      if (from != null &&
+          entity.timestampMs < from.toUtc().millisecondsSinceEpoch) {
+        return false;
+      }
+      if (to != null &&
+          entity.timestampMs > to.toUtc().millisecondsSinceEpoch) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false)
+      ..sort((a, b) {
+        final timeCompare = b.timestampMs.compareTo(a.timestampMs);
+        if (timeCompare != 0) {
+          return timeCompare;
+        }
+        return b.id.compareTo(a.id);
+      });
 
-    if (minimumLevel != null) {
-      final allowed = AppLogLevel.values
-          .where((level) => level.priority >= minimumLevel.priority)
-          .map((level) => level.name)
-          .toList(growable: false);
-      where.add('level IN (${List.filled(allowed.length, '?').join(',')})');
-      whereArgs.addAll(allowed);
+    if (offset > 0) {
+      filtered = filtered.skip(offset).toList(growable: false);
+    }
+    if (limit >= 0) {
+      filtered = filtered.take(limit).toList(growable: false);
     }
 
-    if (category != null) {
-      where.add('category = ?');
-      whereArgs.add(category.name);
-    }
-    if (from != null) {
-      where.add('timestamp >= ?');
-      whereArgs.add(from.toUtc().toIso8601String());
-    }
-    if (to != null) {
-      where.add('timestamp <= ?');
-      whereArgs.add(to.toUtc().toIso8601String());
-    }
-
-    final rows = await _db.query(
-      'app_logs',
-      where: where.isEmpty ? null : where.join(' AND '),
-      whereArgs: whereArgs,
-      orderBy: 'timestamp DESC, id DESC',
-      limit: limit,
-      offset: offset,
-    );
-
-    return rows.map(_logFromRow).toList(growable: false);
+    return filtered.map(_logFromEntity).toList(growable: false);
   }
 
   Future<int> pruneLogs({
@@ -180,40 +126,65 @@ class LocalDatabase {
     Duration maxAge = const Duration(days: 7),
     DateTime? now,
   }) async {
-    final cutoff = (now ?? DateTime.now().toUtc()).subtract(maxAge).toIso8601String();
-    var removed = await _db.delete(
-      'app_logs',
-      where: 'timestamp < ?',
-      whereArgs: [cutoff],
-    );
+    final cutoff =
+        (now ?? DateTime.now().toUtc()).subtract(maxAge).millisecondsSinceEpoch;
+    final all = _logs.getAll();
+    var removed = 0;
 
-    final count = Sqflite.firstIntValue(
-          await _db.rawQuery('SELECT COUNT(*) FROM app_logs'),
-        ) ??
-        0;
-
-    if (count > maxEntries) {
-      final overflowRows = await _db.rawQuery(
-        '''
-        SELECT id FROM app_logs
-        ORDER BY timestamp DESC, id DESC
-        LIMIT -1 OFFSET ?
-        ''',
-        [maxEntries],
-      );
-      for (final row in overflowRows) {
-        removed += await _db.delete('app_logs', where: 'id = ?', whereArgs: [row['id']]);
+    for (final entry in all) {
+      if (entry.timestampMs < cutoff) {
+        _logs.remove(entry.id);
+        removed += 1;
       }
     }
+
+    final remaining = _logs.getAll()
+      ..sort((a, b) {
+        final timeCompare = b.timestampMs.compareTo(a.timestampMs);
+        if (timeCompare != 0) {
+          return timeCompare;
+        }
+        return b.id.compareTo(a.id);
+      });
+
+    if (remaining.length > maxEntries) {
+      final overflow = remaining.skip(maxEntries).toList(growable: false);
+      for (final entry in overflow) {
+        _logs.remove(entry.id);
+        removed += 1;
+      }
+    }
+
     return removed;
   }
 
   Future<void> upsertWord(VocabularyWord word) async {
-    await _db.insert(
-      'local_words',
-      _wordToRow(word),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    final entity = LocalWordEntity(
+      id: existing?.id ?? 0,
+      localId: word.localId,
+      serverWordId: word.serverWordId,
+      term: word.term,
+      language: word.language,
+      meaningVi: word.meaningVi,
+      partOfSpeech: word.partOfSpeech,
+      ipa: word.ipa,
+      vietnamesePronunciation: word.vietnamesePronunciation,
+      example: word.example,
+      exampleVi: word.exampleVi,
+      difficulty: word.difficulty,
+      topicsJson: jsonEncode(word.topics),
+      status: word.status.name,
+      lastSeenAtMs: word.lastSeenAt?.toUtc().millisecondsSinceEpoch,
+      nextReviewAtMs: word.nextReviewAt?.toUtc().millisecondsSinceEpoch,
+      createdAtMs: word.createdAt.toUtc().millisecondsSinceEpoch,
+      updatedAtMs: word.updatedAt.toUtc().millisecondsSinceEpoch,
     );
+    _localWords.put(entity);
+
     await _logger.debug(
       category: AppLogCategory.database,
       event: 'local_words.upsert',
@@ -225,175 +196,219 @@ class LocalDatabase {
     );
   }
 
-  Future<VocabularyWord?> nextNewWord({String? language}) async {
-    final rows = await _db.query(
-      'local_words',
-      where: language == null ? 'status = ?' : 'status = ? AND language = ?',
-      whereArgs: language == null
-          ? [WordStatus.newWord.name]
-          : [WordStatus.newWord.name, language],
-      orderBy: 'created_at DESC',
-      limit: 1,
-    );
-    return rows.isEmpty ? null : _wordFromRow(rows.first);
+  Future<VocabularyWord?> nextNewWord() async {
+    final rows = _localWords
+        .query(LocalWordEntity_.status.equals(WordStatus.newWord.name))
+        .order(LocalWordEntity_.createdAtMs, flags: Order.descending)
+        .build()
+        .find();
+    return rows.isEmpty ? null : _wordFromEntity(rows.first);
   }
 
-  Future<VocabularyWord?> nextDueReviewWord(DateTime now, {String? language}) async {
-    final rows = await _db.query(
-      'local_words',
-      where: language == null
-          ? 'status IN (?, ?, ?) AND (next_review_at IS NULL OR next_review_at <= ?)'
-          : 'status IN (?, ?, ?) AND language = ? AND (next_review_at IS NULL OR next_review_at <= ?)',
-      whereArgs: language == null
-          ? [
-              WordStatus.learning.name,
-              WordStatus.review.name,
-              WordStatus.mastered.name,
-              now.toUtc().toIso8601String(),
-            ]
-          : [
-              WordStatus.learning.name,
-              WordStatus.review.name,
-              WordStatus.mastered.name,
-              language,
-              now.toUtc().toIso8601String(),
-            ],
-      orderBy: 'next_review_at ASC, last_seen_at ASC',
-      limit: 1,
-    );
-    return rows.isEmpty ? null : _wordFromRow(rows.first);
+  Future<VocabularyWord?> nextDueReviewWord(DateTime now) async {
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    final rows = _localWords
+        .query(
+          LocalWordEntity_.status.oneOf(
+                [
+                  WordStatus.learning.name,
+                  WordStatus.review.name,
+                  WordStatus.mastered.name,
+                ],
+              ) &
+              (LocalWordEntity_.nextReviewAtMs.isNull() |
+                  LocalWordEntity_.nextReviewAtMs.lessOrEqual(nowMs)),
+        )
+        .build()
+        .find();
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    rows.sort((a, b) {
+      final aNext = a.nextReviewAtMs ?? -1;
+      final bNext = b.nextReviewAtMs ?? -1;
+      final nextCompare = aNext.compareTo(bNext);
+      if (nextCompare != 0) {
+        return nextCompare;
+      }
+      final aSeen = a.lastSeenAtMs ?? -1;
+      final bSeen = b.lastSeenAtMs ?? -1;
+      return aSeen.compareTo(bSeen);
+    });
+
+    return _wordFromEntity(rows.first);
   }
 
-  Future<VocabularyWord?> recentlyLearnedReviewWord({String? language}) async {
-    final rows = await _db.query(
-      'local_words',
-      where: language == null
-          ? 'status IN (?, ?, ?) AND last_seen_at IS NOT NULL'
-          : 'status IN (?, ?, ?) AND language = ? AND last_seen_at IS NOT NULL',
-      whereArgs: language == null
-          ? [
-              WordStatus.learning.name,
-              WordStatus.review.name,
-              WordStatus.mastered.name,
-            ]
-          : [
-              WordStatus.learning.name,
-              WordStatus.review.name,
-              WordStatus.mastered.name,
-              language,
-            ],
-      orderBy: 'last_seen_at DESC, updated_at DESC',
-      limit: 1,
-    );
-    return rows.isEmpty ? null : _wordFromRow(rows.first);
+  Future<VocabularyWord?> recentlyLearnedReviewWord() async {
+    final rows = _localWords
+        .query(
+          LocalWordEntity_.status.oneOf(
+                [
+                  WordStatus.learning.name,
+                  WordStatus.review.name,
+                  WordStatus.mastered.name,
+                ],
+              ) &
+              LocalWordEntity_.lastSeenAtMs.notNull(),
+        )
+        .build()
+        .find();
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    rows.sort((a, b) {
+      final seenCompare =
+          (b.lastSeenAtMs ?? -1).compareTo(a.lastSeenAtMs ?? -1);
+      if (seenCompare != 0) {
+        return seenCompare;
+      }
+      return b.updatedAtMs.compareTo(a.updatedAtMs);
+    });
+
+    return _wordFromEntity(rows.first);
   }
 
-  Future<List<String>> recentServerWordIds({int limit = 20, String? language}) async {
-    final rows = await _db.query(
-      'local_words',
-      columns: ['server_word_id'],
-      where: language == null
-          ? 'server_word_id IS NOT NULL'
-          : 'server_word_id IS NOT NULL AND language = ?',
-      whereArgs: language == null ? null : [language],
-      orderBy: 'COALESCE(last_seen_at, updated_at, created_at) DESC',
-      limit: limit,
-    );
+  Future<VocabularyWord?> nextDifficultRelearnWord(DateTime now) async {
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    final rows = _localWords
+        .query(
+          LocalWordEntity_.status.equals(WordStatus.learning.name) &
+              (LocalWordEntity_.nextReviewAtMs.isNull() |
+                  LocalWordEntity_.nextReviewAtMs.lessOrEqual(nowMs)),
+        )
+        .build()
+        .find();
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    rows.sort((a, b) {
+      final aTs = a.nextReviewAtMs ?? a.updatedAtMs;
+      final bTs = b.nextReviewAtMs ?? b.updatedAtMs;
+      return aTs.compareTo(bTs);
+    });
+
+    return _wordFromEntity(rows.first);
+  }
+
+  Future<List<String>> recentServerWordIds({int limit = 20}) async {
+    final rows = _localWords
+        .query(LocalWordEntity_.serverWordId.notNull())
+        .build()
+        .find();
+
+    rows.sort((a, b) {
+      final aTs = a.lastSeenAtMs ?? a.updatedAtMs;
+      final bTs = b.lastSeenAtMs ?? b.updatedAtMs;
+      return bTs.compareTo(aTs);
+    });
+
     final seen = <String>{};
     final result = <String>[];
     for (final row in rows) {
-      final serverWordId = row['server_word_id'] as String?;
-      if (serverWordId == null || serverWordId.isEmpty || seen.contains(serverWordId)) {
+      final serverWordId = row.serverWordId;
+      if (serverWordId == null ||
+          serverWordId.isEmpty ||
+          seen.contains(serverWordId)) {
         continue;
       }
       seen.add(serverWordId);
       result.add(serverWordId);
+      if (result.length >= limit) {
+        break;
+      }
     }
+
     return result;
   }
 
-  Future<List<String>> activeCachedServerWordIds({int limit = 1000, String? language}) async {
-    final rows = await _db.query(
-      'local_words',
-      columns: ['server_word_id'],
-      where: language == null
-          ? 'server_word_id IS NOT NULL'
-          : 'server_word_id IS NOT NULL AND language = ?',
-      whereArgs: language == null ? null : [language],
-      orderBy: 'COALESCE(last_seen_at, updated_at, created_at) DESC',
-      limit: limit,
-    );
+  Future<List<String>> activeCachedServerWordIds({int limit = 1000}) async {
+    final rows = _localWords
+        .query(LocalWordEntity_.serverWordId.notNull())
+        .build()
+        .find();
+
+    rows.sort((a, b) {
+      final aTs = a.lastSeenAtMs ?? a.updatedAtMs;
+      final bTs = b.lastSeenAtMs ?? b.updatedAtMs;
+      return bTs.compareTo(aTs);
+    });
+
     final seen = <String>{};
     final result = <String>[];
     for (final row in rows) {
-      final serverWordId = row['server_word_id'] as String?;
-      if (serverWordId == null || serverWordId.isEmpty || seen.contains(serverWordId)) {
+      final serverWordId = row.serverWordId;
+      if (serverWordId == null ||
+          serverWordId.isEmpty ||
+          seen.contains(serverWordId)) {
         continue;
       }
       seen.add(serverWordId);
       result.add(serverWordId);
+      if (result.length >= limit) {
+        break;
+      }
     }
+
     return result;
   }
 
   Future<bool> deleteLocalWord(String localId) async {
-    final removed = await _db.delete(
-      'local_words',
-      where: 'local_id = ?',
-      whereArgs: [localId],
-    );
-    return removed > 0;
+    final query =
+        _localWords.query(LocalWordEntity_.localId.equals(localId)).build();
+    final matches = query.find();
+    if (matches.isEmpty) {
+      return false;
+    }
+    for (final entity in matches) {
+      _localWords.remove(entity.id);
+    }
+    return true;
   }
 
   Future<String> getOrCreateDeviceId(String Function() createId) async {
-    final rows = await _db.query(
-      'app_settings',
-      columns: ['value'],
-      where: 'key = ?',
-      whereArgs: ['device_id'],
-      limit: 1,
-    );
-    final existing = rows.isEmpty ? null : rows.first['value'] as String?;
+    final existing = await getSetting('device_id');
     if (existing != null && existing.isNotEmpty) {
-      return existing;
+      final normalized = _anonymousDeviceId(existing);
+      if (normalized != existing) {
+        await setSetting('device_id', normalized);
+      }
+      return normalized;
     }
-    final deviceId = createId();
-    await _db.insert(
-      'app_settings',
-      {'key': 'device_id', 'value': deviceId},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+
+    final deviceId = _anonymousDeviceId(createId());
+    await setSetting('device_id', deviceId);
     return deviceId;
   }
 
+  String _anonymousDeviceId(String value) {
+    return value.startsWith('anonymous_') ? value : 'anonymous_$value';
+  }
+
   Future<void> saveUserSession(UserSession session) async {
-    await _db.insert(
-      'app_settings',
-      {'key': 'user_session', 'value': jsonEncode(session.toJson())},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await setSetting('user_session', jsonEncode(session.toJson()));
   }
 
   Future<UserSession?> loadUserSession() async {
-    final rows = await _db.query(
-      'app_settings',
-      columns: ['value'],
-      where: 'key = ?',
-      whereArgs: ['user_session'],
-      limit: 1,
-    );
-    if (rows.isEmpty) {
+    final raw = await getSetting('user_session');
+    if (raw == null) {
       return null;
     }
-    return UserSession.fromJson(jsonDecode(rows.first['value'] as String) as Map<String, dynamic>);
+    return UserSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
   }
 
   Future<void> clearUserSession() async {
-    await _db.delete(
-      'app_settings',
-      where: 'key = ?',
-      whereArgs: ['user_session'],
-    );
+    final query =
+        _settings.query(AppSettingEntity_.key.equals('user_session')).build();
+    final row = query.findFirst();
+    if (row != null) {
+      _settings.remove(row.id);
+    }
   }
 
   Future<void> updateWordAfterRating({
@@ -413,81 +428,167 @@ class LocalDatabase {
       StudyRating.easy => WordStatus.review,
       StudyRating.tooEasy => WordStatus.mastered,
     };
-    await _db.update(
-      'local_words',
-      {
-        'status': status.name,
-        'last_seen_at': now.toUtc().toIso8601String(),
-        'next_review_at': nextReview.toUtc().toIso8601String(),
-        'updated_at': now.toUtc().toIso8601String(),
-      },
-      where: 'local_id = ?',
-      whereArgs: [word.localId],
-    );
+
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    existing.status = status.name;
+    existing.lastSeenAtMs = now.toUtc().millisecondsSinceEpoch;
+    existing.nextReviewAtMs = nextReview.toUtc().millisecondsSinceEpoch;
+    existing.updatedAtMs = now.toUtc().millisecondsSinceEpoch;
+    _localWords.put(existing);
+  }
+
+  Future<void> markWordRememberedLowFrequency({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WordStatus.mastered.name;
+    existing.lastSeenAtMs = nowMs;
+    // Product rule: remembered swipe reduces relearn frequency to 10%.
+    // We model this by scheduling a farther review interval.
+    existing.nextReviewAtMs =
+        now.toUtc().add(const Duration(days: 10)).millisecondsSinceEpoch;
+    existing.updatedAtMs = nowMs;
+    _localWords.put(existing);
+  }
+
+  Future<void> markWordDifficultForRelearn({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WordStatus.learning.name;
+    existing.lastSeenAtMs = nowMs;
+    existing.nextReviewAtMs =
+        now.toUtc().add(const Duration(minutes: 10)).millisecondsSinceEpoch;
+    existing.updatedAtMs = nowMs;
+    _localWords.put(existing);
+  }
+
+  /// Transitions a [newWord] word to [learning] status on first display.
+  ///
+  /// Schedules a review in 24 hours so the word enters the SRS cycle.
+  /// Safe to call fire-and-forget — no-op if word not found.
+  Future<void> markWordAsLearning({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) return;
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WordStatus.learning.name;
+    existing.lastSeenAtMs = nowMs;
+    existing.nextReviewAtMs =
+        now.toUtc().add(const Duration(hours: 24)).millisecondsSinceEpoch;
+    existing.updatedAtMs = nowMs;
+    _localWords.put(existing);
   }
 
   Future<void> insertStudyEvent(StudyEvent event) async {
     final payload = jsonEncode(event.toSyncJson());
-    await _db.transaction((txn) async {
-      await txn.insert(
-        'study_events',
-        {
-          'client_event_id': event.clientEventId,
-          'local_word_id': event.localWordId,
-          'server_word_id': event.serverWordId,
-          'rating': event.rating.apiValue,
-          'occurred_at': event.occurredAt.toUtc().toIso8601String(),
-          'sync_status': event.syncStatus.name,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
+
+    final existing = _studyEvents
+        .query(StudyEventEntity_.clientEventId.equals(event.clientEventId))
+        .build()
+        .findFirst();
+    if (existing == null) {
+      _studyEvents.put(
+        StudyEventEntity(
+          clientEventId: event.clientEventId,
+          localWordId: event.localWordId,
+          serverWordId: event.serverWordId,
+          rating: event.rating.apiValue,
+          occurredAtMs: event.occurredAt.toUtc().millisecondsSinceEpoch,
+          syncStatus: event.syncStatus.name,
+        ),
       );
-      await txn.insert('sync_queue', {
-        'type': 'study_event',
-        'payload': payload,
-        'retry_count': 0,
-        'next_retry_at': DateTime.now().toUtc().toIso8601String(),
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      });
-    });
+    }
+
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'study_event',
+        payload: payload,
+        retryCount: 0,
+        nextRetryAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   Future<List<SyncQueueEntry>> dueSyncEntries(DateTime now) async {
-    final rows = await _db.query(
-      'sync_queue',
-      where: 'next_retry_at <= ?',
-      whereArgs: [now.toUtc().toIso8601String()],
-      orderBy: 'created_at ASC',
-      limit: 50,
-    );
-    return rows.map(_queueFromRow).toList();
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    final rows = _syncQueue
+        .query(SyncQueueEntity_.nextRetryAtMs.lessOrEqual(nowMs))
+        .order(SyncQueueEntity_.createdAtMs)
+        .build()
+        .find();
+
+    return rows.take(50).map(_queueFromEntity).toList(growable: false);
   }
 
   Future<void> markEventSynced(String clientEventId) async {
-    await _db.update(
-      'study_events',
-      {'sync_status': SyncStatus.synced.name},
-      where: 'client_event_id = ?',
-      whereArgs: [clientEventId],
-    );
-    await _db.delete(
-      'sync_queue',
-      where: 'payload LIKE ?',
-      whereArgs: ['%"client_event_id":"$clientEventId"%'],
-    );
+    final event = _studyEvents
+        .query(StudyEventEntity_.clientEventId.equals(clientEventId))
+        .build()
+        .findFirst();
+    if (event != null) {
+      event.syncStatus = SyncStatus.synced.name;
+      _studyEvents.put(event);
+    }
+
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.payload.contains('"client_event_id":"$clientEventId"')) {
+        _syncQueue.remove(item.id);
+      }
+    }
   }
 
   Future<void> scheduleRetry(SyncQueueEntry entry, DateTime now) async {
+    if (entry.id == null) {
+      return;
+    }
+
+    final entity = _syncQueue.get(entry.id!);
+    if (entity == null) {
+      return;
+    }
+
     final retryCount = entry.retryCount + 1;
     final delayMinutes = retryCount.clamp(1, 30).toInt();
-    await _db.update(
-      'sync_queue',
-      {
-        'retry_count': retryCount,
-        'next_retry_at': now.add(Duration(minutes: delayMinutes)).toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [entry.id],
-    );
+
+    entity.retryCount = retryCount;
+    entity.nextRetryAtMs =
+        now.add(Duration(minutes: delayMinutes)).toUtc().millisecondsSinceEpoch;
+    _syncQueue.put(entity);
+
     await _logger.warning(
       category: AppLogCategory.sync,
       event: 'sync_queue.retry_scheduled',
@@ -499,138 +600,211 @@ class LocalDatabase {
     );
   }
 
-  // Settings key constants
   static const String keyIsPrefetchDone = 'is_prefetch_done';
   static const String keyLastDailyRefreshDate = 'last_daily_refresh_date';
-  static const String keyWordsStudiedSinceLastRefresh = 'words_studied_since_last_refresh';
-  static const String keyActiveLearningLanguage = 'active_learning_language';
+  static const String keyWordsStudiedSinceLastRefresh =
+      'words_studied_since_last_refresh';
 
   Future<String?> getSetting(String key) async {
-    final rows = await _db.query(
-      'app_settings',
-      columns: ['value'],
-      where: 'key = ?',
-      whereArgs: [key],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : rows.first['value'] as String?;
+    final row =
+        _settings.query(AppSettingEntity_.key.equals(key)).build().findFirst();
+    return row?.value;
   }
 
   Future<void> setSetting(String key, String value) async {
-    await _db.insert(
-      'app_settings',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<int> countUnstudiedNewWords() async {
-    return Sqflite.firstIntValue(
-          await _db.rawQuery(
-            'SELECT COUNT(*) FROM local_words WHERE status = ?',
-            [WordStatus.newWord.name],
-          ),
-        ) ??
-        0;
-  }
-
-  Future<int> pruneToMostRecent({int maxWords = 1000}) async {
-    final count = Sqflite.firstIntValue(
-          await _db.rawQuery('SELECT COUNT(*) FROM local_words'),
-        ) ??
-        0;
-    if (count <= maxWords) {
-      return 0;
-    }
-    final staleRows = await _db.rawQuery(
-      '''
-      SELECT local_id FROM local_words
-      ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC
-      LIMIT -1 OFFSET ?
-      ''',
-      [maxWords],
-    );
-    final staleIds = staleRows.map((row) => row['local_id'] as String).toList();
-    for (final id in staleIds) {
-      await _db.delete('local_words', where: 'local_id = ?', whereArgs: [id]);
-    }
-    return staleIds.length;
-  }
-
-  Map<String, Object?> _wordToRow(VocabularyWord word) {
-    return {
-      'local_id': word.localId,
-      'server_word_id': word.serverWordId,
-      'term': word.term,
-      'language': word.language,
-      'meaning_vi': word.meaningVi,
-      'part_of_speech': word.partOfSpeech,
-      'ipa': word.ipa,
-      'vietnamese_pronunciation': word.vietnamesePronunciation,
-      'example': word.example,
-      'example_vi': word.exampleVi,
-      'difficulty': word.difficulty,
-      'topics': jsonEncode(word.topics),
-      'status': word.status.name,
-      'last_seen_at': word.lastSeenAt?.toUtc().toIso8601String(),
-      'next_review_at': word.nextReviewAt?.toUtc().toIso8601String(),
-      'created_at': word.createdAt.toUtc().toIso8601String(),
-      'updated_at': word.updatedAt.toUtc().toIso8601String(),
-    };
-  }
-
-  VocabularyWord _wordFromRow(Map<String, Object?> row) {
-    return VocabularyWord(
-      localId: row['local_id'] as String,
-      serverWordId: row['server_word_id'] as String?,
-      term: row['term'] as String,
-      language: row['language'] as String,
-      meaningVi: row['meaning_vi'] as String,
-      partOfSpeech: row['part_of_speech'] as String?,
-      ipa: row['ipa'] as String,
-      vietnamesePronunciation: row['vietnamese_pronunciation'] as String,
-      example: row['example'] as String,
-      exampleVi: row['example_vi'] as String,
-      difficulty: row['difficulty'] as String,
-      topics: List<String>.from(jsonDecode(row['topics'] as String) as List),
-      status: WordStatus.values.byName(row['status'] as String),
-      lastSeenAt: _parseDate(row['last_seen_at']),
-      nextReviewAt: _parseDate(row['next_review_at']),
-      createdAt: DateTime.parse(row['created_at'] as String),
-      updatedAt: DateTime.parse(row['updated_at'] as String),
-    );
-  }
-
-  SyncQueueEntry _queueFromRow(Map<String, Object?> row) {
-    return SyncQueueEntry(
-      id: row['id'] as int,
-      type: row['type'] as String,
-      payload: row['payload'] as String,
-      retryCount: row['retry_count'] as int,
-      nextRetryAt: DateTime.parse(row['next_retry_at'] as String),
-      createdAt: DateTime.parse(row['created_at'] as String),
-    );
-  }
-
-  LogEntry _logFromRow(Map<String, Object?> row) {
-    return LogEntry(
-      id: row['id'] as int,
-      timestamp: DateTime.parse(row['timestamp'] as String).toUtc(),
-      level: AppLogLevel.fromName(row['level'] as String),
-      category: AppLogCategory.values.byName(row['category'] as String),
-      event: row['event'] as String,
-      message: row['message'] as String,
-      traceId: row['trace_id'] as String?,
-      context: Map<String, Object?>.from(
-        jsonDecode(row['context'] as String) as Map<String, dynamic>,
+    final existing =
+        _settings.query(AppSettingEntity_.key.equals(key)).build().findFirst();
+    _settings.put(
+      AppSettingEntity(
+        id: existing?.id ?? 0,
+        key: key,
+        value: value,
       ),
     );
   }
 
-  DateTime? _parseDate(Object? value) {
+  Future<int> countUnstudiedNewWords() async {
+    return _localWords
+        .query(LocalWordEntity_.status.equals(WordStatus.newWord.name))
+        .build()
+        .count();
+  }
+
+  /// Adds a batch of words to the local cache.
+  ///
+  /// Enforces the 1000-word cap after every batch write so all callers finish
+  /// within the local cache ceiling.
+  Future<void> addBatch(List<VocabularyWord> words) async {
+    if (words.isEmpty) return;
+    for (final word in words) {
+      await upsertWord(word);
+    }
+    await pruneToCapSmartly(maxWords: 1000);
+  }
+
+  /// Prunes the local word store to [maxWords] using smart priority ordering:
+  ///
+  /// Pass 1: Remove [mastered] words (least-recently-seen first).
+  /// Pass 2: Remove [review] words with nextReviewAt > 30 days from now
+  ///         (farthest-first).
+  /// Pass 3: Fallback — remove oldest words by createdAt.
+  ///
+  /// Words with pending (unsynced) study events are skipped in all passes.
+  Future<int> pruneToCapSmartly({int maxWords = 1000}) async {
+    final all = _localWords.getAll();
+    if (all.length <= maxWords) return 0;
+
+    // Build set of localIds that have pending sync events.
+    final pendingLocalIds = _studyEvents
+        .query(StudyEventEntity_.syncStatus.equals(SyncStatus.pending.name))
+        .build()
+        .find()
+        .map((e) => e.localWordId)
+        .toSet();
+
+    bool hasPending(LocalWordEntity e) => pendingLocalIds.contains(e.localId);
+
+    var removed = 0;
+    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final thirtyDaysMs = const Duration(days: 30).inMilliseconds;
+
+    // Pass 1: mastered words, least-recently-seen first.
+    if (all.length - removed > maxWords) {
+      final mastered = all
+          .where((e) =>
+              e.status == WordStatus.mastered.name && !hasPending(e))
+          .toList()
+        ..sort((a, b) {
+          final aTs = a.lastSeenAtMs ?? 0;
+          final bTs = b.lastSeenAtMs ?? 0;
+          return aTs.compareTo(bTs); // ascending: least-recently-seen first
+        });
+      for (final row in mastered) {
+        if (all.length - removed <= maxWords) break;
+        _localWords.remove(row.id);
+        removed += 1;
+      }
+    }
+
+    // Pass 2: review words with nextReviewAt far in the future (> 30 days).
+    if (all.length - removed > maxWords) {
+      final farReview = all
+          .where((e) =>
+              e.status == WordStatus.review.name &&
+              !hasPending(e) &&
+              (e.nextReviewAtMs != null &&
+                  e.nextReviewAtMs! > nowMs + thirtyDaysMs))
+          .toList()
+        ..sort((a, b) {
+          final aTs = a.nextReviewAtMs ?? 0;
+          final bTs = b.nextReviewAtMs ?? 0;
+          return bTs.compareTo(aTs); // descending: farthest first
+        });
+      for (final row in farReview) {
+        if (all.length - removed <= maxWords) break;
+        _localWords.remove(row.id);
+        removed += 1;
+      }
+    }
+
+    // Pass 3: fallback — oldest by createdAt, skipping pending.
+    if (all.length - removed > maxWords) {
+      final oldest = all
+          .where((e) => !hasPending(e))
+          .toList()
+        ..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
+      for (final row in oldest) {
+        if (all.length - removed <= maxWords) break;
+        // Skip rows already removed in earlier passes.
+        if (_localWords.get(row.id) == null) continue;
+        _localWords.remove(row.id);
+        removed += 1;
+      }
+    }
+
+    return removed;
+  }
+
+  Future<int> pruneToMostRecent({int maxWords = 1000}) async {
+    final words = _localWords.getAll();
+    if (words.length <= maxWords) {
+      return 0;
+    }
+
+    words.sort((a, b) {
+      final aTs = a.lastSeenAtMs ?? a.updatedAtMs;
+      final bTs = b.lastSeenAtMs ?? b.updatedAtMs;
+      return bTs.compareTo(aTs);
+    });
+
+    final stale = words.skip(maxWords).toList(growable: false);
+    for (final row in stale) {
+      _localWords.remove(row.id);
+    }
+    return stale.length;
+  }
+
+  Future<void> close() async {
+    _store.close();
+  }
+
+  VocabularyWord _wordFromEntity(LocalWordEntity row) {
+    return VocabularyWord(
+      localId: row.localId,
+      serverWordId: row.serverWordId,
+      term: row.term,
+      language: row.language,
+      meaningVi: row.meaningVi,
+      partOfSpeech: row.partOfSpeech,
+      ipa: row.ipa,
+      vietnamesePronunciation: row.vietnamesePronunciation,
+      example: row.example,
+      exampleVi: row.exampleVi,
+      difficulty: row.difficulty,
+      topics: List<String>.from(jsonDecode(row.topicsJson) as List<dynamic>),
+      status: WordStatus.values.byName(row.status),
+      lastSeenAt: _parseDateMs(row.lastSeenAtMs),
+      nextReviewAt: _parseDateMs(row.nextReviewAtMs),
+      createdAt:
+          DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+      updatedAt:
+          DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
+    );
+  }
+
+  SyncQueueEntry _queueFromEntity(SyncQueueEntity row) {
+    return SyncQueueEntry(
+      id: row.id,
+      type: row.type,
+      payload: row.payload,
+      retryCount: row.retryCount,
+      nextRetryAt:
+          DateTime.fromMillisecondsSinceEpoch(row.nextRetryAtMs, isUtc: true),
+      createdAt:
+          DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+    );
+  }
+
+  LogEntry _logFromEntity(AppLogEntity row) {
+    return LogEntry(
+      id: row.id,
+      timestamp:
+          DateTime.fromMillisecondsSinceEpoch(row.timestampMs, isUtc: true),
+      level: AppLogLevel.fromName(row.level),
+      category: AppLogCategory.values.byName(row.category),
+      event: row.event,
+      message: row.message,
+      traceId: row.traceId,
+      context: Map<String, Object?>.from(
+        jsonDecode(row.contextJson) as Map<String, dynamic>,
+      ),
+    );
+  }
+
+  DateTime? _parseDateMs(int? value) {
     if (value == null) {
       return null;
     }
-    return DateTime.parse(value as String);
+    return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
   }
 }

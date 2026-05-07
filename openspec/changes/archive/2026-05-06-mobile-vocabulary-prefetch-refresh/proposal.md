@@ -1,5 +1,12 @@
 ## Why
 
+> Current-state note (2026-05-06): this proposal has been superseded by the
+> ObjectBox migration and backend-managed learning-card flow. Current mobile
+> storage is ObjectBox, and learner-specific refill uses
+> `POST /v1/learning/cards` plus `PUT /v1/user-word-cache`, not SQLite,
+> `/v1/words/next`, or recent-word exclusion lists. Treat the original text
+> below as historical context unless it agrees with that current architecture.
+
 Hiện tại app mobile chỉ tải từng từ mới từ backend theo yêu cầu (on-demand), khiến người dùng phụ thuộc vào kết nối mạng ổn định khi học. Cần xây dựng cơ chế tải trước (prefetch) tối đa 1000 từ vào local database ngay khi cài đặt, và duy trì tập từ này luôn "tươi" bằng cách thay thế 15% số từ cũ mỗi ngày—đảm bảo người dùng luôn có đủ từ để học ngay cả khi offline.
 
 ## What Changes
@@ -24,5 +31,7 @@ Hiện tại app mobile chỉ tải từng từ mới từ backend theo yêu c�
 ## Impact
 
 - **Mobile**: `WordRepository`, `SyncWorker` hoặc new `VocabularyRefreshWorker`, `LocalDatabase` (thêm cột tracking trạng thái prefetch và refresh timestamp), `main.dart` (trigger prefetch on first run).
-- **Backend**: Endpoint `/v1/words/recent?limit=1000` đã có sẵn (bootstrap); có thể cần thêm filter `exclude_ids` hoặc `after_id` để tránh trả về từ đã có trong local.
+- **Backend**: Current refill/top-up behavior uses `POST /v1/learning/cards`
+  and cache inventory. `/v1/words/recent` remains read-only bootstrap support
+  with only `limit` and `target_language`.
 - **Config**: Thêm `VOCAB_PREFETCH_BATCH_SIZE`, `VOCAB_REFRESH_RATE_PERCENT`, `VOCAB_REFRESH_TRIGGER_INTERVAL`.

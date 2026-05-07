@@ -1,5 +1,9 @@
 # Deploy Report: expat8 -> Z440
 
+> Historical note (2026-05-06): this deployment report records one dated
+> deployment. Build warnings or storage-route details here are not current
+> setup guidance.
+
 **Date:** 2026-05-05 06:04 Asia/Ho_Chi_Minh  
 **Tag:** 20260505.0604  
 **Server:** 10.113.213.9  

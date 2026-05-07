@@ -66,8 +66,8 @@ The backend SHALL load active app credential definitions from runtime configurat
 ### Requirement: Backend composes security checks as ExpressJS middleware
 The backend SHALL use ExpressJS middleware ordering so app credential checks run before `/v1/*` routers, database access, LiteLLM calls, and JSON body parsing.
 
-#### Scenario: Invalid credential request targets a word feed endpoint
-- **WHEN** a client sends an invalid credential request to `/v1/words/next`
+#### Scenario: Invalid credential request targets a learning card endpoint
+- **WHEN** a client sends an invalid credential request to `/v1/learning/cards`
 - **THEN** the backend rejects the request before querying the word store or calling LiteLLM
 
 #### Scenario: Invalid credential request targets study event sync

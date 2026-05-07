@@ -1,5 +1,9 @@
 # Investigation: CEFR Proficiency Hierarchy (A1 -> C2)
 
+> Historical note (2026-05-06): this investigation predates later API
+> consolidation. Mentions of enhancing `/v1/words/next` are historical; current
+> card loading uses `POST /v1/learning/cards`.
+
 Date: 2026-05-04
 
 ## Problem Statement

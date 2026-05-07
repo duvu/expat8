@@ -5,15 +5,9 @@ import 'package:expat8_language_app/src/data/vocabulary_refresh_worker.dart';
 import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
 
   test('runPrefetch marks prefetch done and upserts words', () async {
     final database = await LocalDatabase.open(
@@ -36,6 +30,9 @@ void main() {
     expect(done, 'true');
     final count = await database.countUnstudiedNewWords();
     expect(count, 2);
+    expect(apiClient.lastLearningCardsDeviceId, 'device_1');
+    expect(apiClient.lastSyncedCachedServerWordIds,
+        containsAll(['word_1', 'word_2']));
   });
 
   test('runPrefetch does not mark done when API fails', () async {
@@ -56,11 +53,13 @@ void main() {
     expect(done, isNull);
   });
 
-  test('runDailyRefresh updates last_daily_refresh_date and upserts words', () async {
+  test('runDailyRefresh updates last_daily_refresh_date and upserts words',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'vocab_refresh_test_daily.db',
     );
-    final apiClient = _RecordingApiClient(wordsToReturn: [_word('word_daily_1')]);
+    final apiClient =
+        _RecordingApiClient(wordsToReturn: [_word('word_daily_1')]);
     final worker = VocabularyRefreshWorker(
       database: database,
       apiClient: apiClient,
@@ -71,7 +70,8 @@ void main() {
     await worker.runDailyRefresh();
 
     final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
-    final lastRefresh = await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
+    final lastRefresh =
+        await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
     expect(lastRefresh, today);
     final count = await database.countUnstudiedNewWords();
     expect(count, greaterThan(0));
@@ -91,7 +91,8 @@ void main() {
 
     await worker.runDailyRefresh();
 
-    final lastRefresh = await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
+    final lastRefresh =
+        await database.getSetting(LocalDatabase.keyLastDailyRefreshDate);
     expect(lastRefresh, isNull);
   });
 
@@ -112,11 +113,13 @@ void main() {
     await worker.runProactiveRefresh(10);
 
     expect(apiClient.lastLimit, 10);
+    expect(apiClient.lastLearningCardsDeviceId, 'device_1');
     final count = await database.countUnstudiedNewWords();
     expect(count, 10);
   });
 
-  test('runProactiveRefresh logs warning and does not throw when API fails', () async {
+  test('runProactiveRefresh logs warning and does not throw when API fails',
+      () async {
     final database = await LocalDatabase.open(
       databaseName: 'vocab_refresh_test_proactive_fail.db',
     );
@@ -150,8 +153,6 @@ AppConfig _testConfig() {
     newWordTimeout: Duration(seconds: 5),
     appCredentialAppId: 'test-app',
     appCredentialSecret: 'test-secret',
-    defaultLearningLanguage: 'en',
-    supportedLearningLanguages: ['en', 'zh', 'vi'],
     logLevel: 'info',
     logMaxEntries: 100,
     logRetentionDays: 1,
@@ -173,19 +174,50 @@ class _RecordingApiClient extends BackendApiClient {
 
   final List<VocabularyWord> wordsToReturn;
   int lastLimit = 0;
-  List<String> lastExcludeIds = const [];
+  String? lastLearningCardsDeviceId;
+  List<String> lastSyncedCachedServerWordIds = const [];
+
+  @override
+  Future<LearningCardBatch> fetchLearningCards({
+    required String deviceId,
+    int limit = 10,
+    String targetLanguage = 'en',
+    String? sessionToken,
+  }) async {
+    lastLimit = limit;
+    lastLearningCardsDeviceId = deviceId;
+    final words = wordsToReturn.take(limit).toList();
+    return LearningCardBatch(
+      items: words,
+      targetMix: LearningCardMix(newCount: limit, reviewCount: 0),
+      actualMix: LearningCardMix(newCount: words.length, reviewCount: 0),
+    );
+  }
+
+  @override
+  Future<CacheInventoryResult> syncCacheInventory({
+    required String deviceId,
+    required List<String> serverWordIds,
+    DateTime? observedAt,
+    String? sessionToken,
+  }) async {
+    lastSyncedCachedServerWordIds = serverWordIds;
+    return CacheInventoryResult(
+      storedCount: serverWordIds.length,
+      unknownServerWordIds: const [],
+    );
+  }
 
   @override
   Future<List<VocabularyWord>> fetchRecentWords({
-    required String deviceId,
     int limit = 1000,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
     List<String> excludeIds = const [],
-  }) async {
-    lastLimit = limit;
-    lastExcludeIds = excludeIds;
-    return wordsToReturn.take(limit).toList();
+    String? deviceId,
+  }) {
+    throw BackendApiException(
+        'fetchRecentWords should not be used for refresh');
   }
 }
 
@@ -199,12 +231,11 @@ class _FailingApiClient extends BackendApiClient {
         );
 
   @override
-  Future<List<VocabularyWord>> fetchRecentWords({
+  Future<LearningCardBatch> fetchLearningCards({
     required String deviceId,
-    int limit = 1000,
-    String sourceLanguage = 'vi',
+    int limit = 10,
     String targetLanguage = 'en',
-    List<String> excludeIds = const [],
+    String? sessionToken,
   }) {
     throw BackendApiException('forced failure');
   }

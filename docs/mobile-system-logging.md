@@ -24,7 +24,7 @@ flutter run -d emulator-5554 \
 ```
 
 ## Cac nguon log duoc ghi
-- API lifecycle: request/response/error cho `words/next`, `proficiency`, `study-events`, `study-events/sync`
+- API lifecycle: request/response/error cho `learning/cards`, `proficiency`, `study-events`, `study-events/sync`
 - Session lifecycle: load initial, new word request, review request, rating submit, level change
 - Sync lifecycle: batch start, retry scheduling, sync worker run
 - Local DB lifecycle: upsert word, retry scheduling, log persistence

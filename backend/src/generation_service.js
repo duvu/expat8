@@ -12,7 +12,7 @@ export class VocabularyGenerationService {
   async generateAndStore({
     sourceLanguage = 'vi',
     targetLanguage = 'en',
-    limit = 5,
+    limit = 100,
     avoidTerms = [],
     difficultyLevel = 'B1'
   }) {

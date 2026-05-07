@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../api/backend_api_client.dart';
@@ -28,13 +30,13 @@ class LearningSessionController extends ChangeNotifier {
   VocabularyWord? currentWord;
   bool isLoading = false;
   bool isAuthInProgress = false;
+  bool _prefetchInFlight = false;
   String? statusMessage;
   String? authSuccessMessage;
   String? authErrorMessage;
   ProficiencyState proficiency = ProficiencyState.initial();
   UserSession? userSession;
   String? _deviceId;
-  String _activeLearningLanguage = 'en';
   String? _levelChangeMessage;
   String? _userFeedbackMessage;
 
@@ -62,10 +64,6 @@ class LearningSessionController extends ChangeNotifier {
     return session.identifier;
   }
 
-  String get activeLearningLanguage => _activeLearningLanguage;
-
-  List<String> get supportedLearningLanguages => repository.supportedLearningLanguages;
-
   Future<void> loadInitial() async {
     await _logger.info(
       category: AppLogCategory.session,
@@ -74,30 +72,8 @@ class LearningSessionController extends ChangeNotifier {
     );
     _deviceId ??= await repository.getOrCreateDeviceId();
     userSession = await repository.loadUserSession();
-    _activeLearningLanguage = _normalizeLearningLanguage(
-      await repository.loadActiveLearningLanguage(),
-    );
     try {
-      proficiency = await repository.fetchProficiency(
-        deviceId: _deviceId!,
-        language: _activeLearningLanguage,
-      );
-      _activeLearningLanguage = _normalizeLearningLanguage(proficiency.language);
-      if (_activeLearningLanguage != proficiency.language) {
-        proficiency = ProficiencyState(
-          scale: proficiency.scale,
-          level: proficiency.level,
-          levelIndex: proficiency.levelIndex,
-          levelChanged: proficiency.levelChanged,
-          previousLevel: proficiency.previousLevel,
-          triggeredBy: proficiency.triggeredBy,
-          consecutiveCount: proficiency.consecutiveCount,
-          consecutiveRatingType: proficiency.consecutiveRatingType,
-          language: _activeLearningLanguage,
-          lastUpdated: proficiency.lastUpdated,
-        );
-      }
-      await repository.saveActiveLearningLanguage(_activeLearningLanguage);
+      proficiency = await repository.fetchProficiency(deviceId: _deviceId!);
     } catch (_) {
       proficiency = ProficiencyState.initial();
     }
@@ -109,13 +85,114 @@ class LearningSessionController extends ChangeNotifier {
       context: {
         'has_user_session': userSession != null,
         'proficiency_level': proficiency.level,
-        'proficiency_scale': proficiency.scale,
-        'target_language': _activeLearningLanguage,
       },
     );
   }
 
   Future<void> nextCard() async {
+    await _showBiasedCard(newWordPercent: 30, reviewPercent: 70);
+  }
+
+  Future<void> onSwipeRightToLeft() async {
+    _telemetry.track(TelemetryEvent.newWordSwipeRequested);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.gesture.right_to_left',
+      message: 'Swipe right-to-left received.',
+    );
+    await _showBiasedCard(newWordPercent: 85, reviewPercent: 15);
+  }
+
+  Future<void> onSwipeLeftToRight() async {
+    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.gesture.left_to_right',
+      message: 'Swipe left-to-right received.',
+    );
+    await _showBiasedCard(newWordPercent: 15, reviewPercent: 85);
+  }
+
+  Future<void> onSwipeBottomToTop() async {
+    final word = currentWord;
+    if (word == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markRememberedLowFrequency(
+        word: word,
+        now: DateTime.now().toUtc(),
+        deviceId: _deviceId!,
+      );
+      await _logger.info(
+        category: AppLogCategory.session,
+        event: 'session.gesture.bottom_to_top',
+        message: 'Marked current word as remembered with low relearn frequency.',
+        context: {'word_id': word.serverWordId ?? word.localId},
+      );
+      _triggerPrefetchIfNeeded();
+      await nextCard();
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.gesture.bottom_to_top.failed',
+        message: 'Remembered gesture update failed.',
+        context: {'error': '$error'},
+      );
+    }
+  }
+
+  Future<void> onSwipeTopToBottom() async {
+    final word = currentWord;
+    if (word == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markAsDifficultForRelearn(
+        word: word,
+        now: DateTime.now().toUtc(),
+        deviceId: _deviceId!,
+      );
+      await _logger.info(
+        category: AppLogCategory.session,
+        event: 'session.gesture.top_to_bottom',
+        message: 'Marked current word as difficult for relearn group.',
+        context: {'word_id': word.serverWordId ?? word.localId},
+      );
+      _triggerPrefetchIfNeeded();
+      await nextCard();
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.gesture.top_to_bottom.failed',
+        message: 'Difficult gesture update failed.',
+        context: {'error': '$error'},
+      );
+    }
+  }
+
+  Future<void> _showBiasedCard({
+    required int newWordPercent,
+    required int reviewPercent,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final selection = now.millisecond % 100;
+    if (selection < reviewPercent) {
+      final difficult = await repository.getDifficultRelearnWord(now);
+      if (difficult != null) {
+        _showWord(difficult, CardKind.review,
+            emptyMessage: 'No review card is available.');
+        return;
+      }
+      await showRecentReview();
+      return;
+    }
+    if (selection < (reviewPercent + newWordPercent)) {
+      await showNewWord();
+      return;
+    }
     await showNewWord();
   }
 
@@ -128,47 +205,43 @@ class LearningSessionController extends ChangeNotifier {
     notifyListeners();
 
     final now = DateTime.now().toUtc();
-    final excludedServerWordId = currentWord?.serverWordId;
     VocabularyWord? word;
     CardKind? actualKind;
 
-    _telemetry.track(TelemetryEvent.newWordRequested, {
-      'target_language': _activeLearningLanguage,
-      'scale': proficiency.scale,
-      'level': proficiency.level,
-    });
-    _telemetry.track(TelemetryEvent.newWordSwipeRequested, {
-      'target_language': _activeLearningLanguage,
-      'scale': proficiency.scale,
-      'level': proficiency.level,
-    });
+    _telemetry.track(TelemetryEvent.newWordRequested);
+    _telemetry.track(TelemetryEvent.newWordSwipeRequested);
     await _logger.info(
       category: AppLogCategory.session,
       event: 'session.new_word.requested',
       message: 'User requested a new word card.',
       context: {
         'proficiency_level': proficiency.level,
-        'proficiency_scale': proficiency.scale,
-        'target_language': _activeLearningLanguage,
       },
     );
     final result = await repository.getNewWordWithFallbackResult(
-      excludeServerWordId: excludedServerWordId,
-      proficiencyLevel: proficiency.level,
       deviceId: _deviceId,
-      targetLanguage: _activeLearningLanguage,
     );
     word = result.word;
     _trackNewWordLookup(result);
     actualKind = word == null ? null : CardKind.newWord;
-    word ??= await repository.getReviewWord(now, language: _activeLearningLanguage);
+    word ??= await repository.getReviewWord(now);
     actualKind ??= word == null ? null : CardKind.review;
 
     _showWord(
       word,
       actualKind,
-      emptyMessage: result.message ?? 'No learning card is available. Check connection and try again.',
+      emptyMessage: result.message ??
+          'No learning card is available. Check connection and try again.',
     );
+    if (word != null && actualKind == CardKind.newWord) {
+      unawaited(
+        repository.markWordAsLearning(
+          word: word,
+          now: DateTime.now().toUtc(),
+        ),
+      );
+    }
+    _triggerPrefetchIfNeeded();
   }
 
   Future<void> showRecentReview() async {
@@ -179,37 +252,21 @@ class LearningSessionController extends ChangeNotifier {
     statusMessage = null;
     notifyListeners();
 
-    final excludedServerWordId = currentWord?.serverWordId;
     final now = DateTime.now().toUtc();
-    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested, {
-      'target_language': _activeLearningLanguage,
-      'scale': proficiency.scale,
-      'level': proficiency.level,
-    });
+    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
     await _logger.info(
       category: AppLogCategory.session,
       event: 'session.review.requested',
       message: 'User requested a recent review card.',
-      context: {
-        'target_language': _activeLearningLanguage,
-        'proficiency_scale': proficiency.scale,
-        'proficiency_level': proficiency.level,
-      },
     );
-    final reviewResult = await repository.getRecentReviewWordResult(
-      now,
-      language: _activeLearningLanguage,
-    );
+    final reviewResult = await repository.getRecentReviewWordResult(now);
     _trackReviewLookup(reviewResult);
     VocabularyWord? word = reviewResult.word;
     CardKind? actualKind = word == null ? null : CardKind.review;
     final newWordResult = word == null
         ? await repository.getNewWordWithFallbackResult(
-      excludeServerWordId: excludedServerWordId,
-      proficiencyLevel: proficiency.level,
-      deviceId: _deviceId,
-      targetLanguage: _activeLearningLanguage,
-    )
+            deviceId: _deviceId,
+          )
         : null;
     if (newWordResult != null) {
       _trackNewWordLookup(newWordResult);
@@ -224,6 +281,7 @@ class LearningSessionController extends ChangeNotifier {
           reviewResult.message ??
           'No review or new card is available. Try again later.',
     );
+    _triggerPrefetchIfNeeded();
   }
 
   void _showWord(
@@ -261,9 +319,6 @@ class LearningSessionController extends ChangeNotifier {
       context: {
         'rating': rating.name,
         'word_id': word.serverWordId ?? word.localId,
-        'target_language': _activeLearningLanguage,
-        'proficiency_scale': proficiency.scale,
-        'proficiency_level': proficiency.level,
       },
     );
     _deviceId ??= await repository.getOrCreateDeviceId();
@@ -272,13 +327,14 @@ class LearningSessionController extends ChangeNotifier {
       rating: rating,
       now: DateTime.now().toUtc(),
       deviceId: _deviceId!,
-      language: _activeLearningLanguage,
     );
     if (updatedProficiency != null) {
       final previousLevel = proficiency.level;
       proficiency = updatedProficiency;
-      if (updatedProficiency.levelChanged && updatedProficiency.level != previousLevel) {
-        _levelChangeMessage = 'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
+      if (updatedProficiency.levelChanged &&
+          updatedProficiency.level != previousLevel) {
+        _levelChangeMessage =
+            'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
         await _logger.info(
           category: AppLogCategory.session,
           event: 'session.proficiency.changed',
@@ -286,8 +342,6 @@ class LearningSessionController extends ChangeNotifier {
           context: {
             'previous_level': updatedProficiency.previousLevel ?? previousLevel,
             'new_level': updatedProficiency.level,
-            'proficiency_scale': updatedProficiency.scale,
-            'target_language': _activeLearningLanguage,
           },
         );
       }
@@ -295,57 +349,27 @@ class LearningSessionController extends ChangeNotifier {
     _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
       'rating': rating.name,
       'word_id': word.serverWordId ?? word.localId,
-      'target_language': _activeLearningLanguage,
-      'scale': proficiency.scale,
-      'level': proficiency.level,
     });
+    // Low-watermark background prefetch: if the unlearned cache is running low,
+    // trigger a background refill without blocking the UI.
+    _triggerPrefetchIfNeeded();
     await nextCard();
   }
 
-  Future<void> setActiveLearningLanguage(String language) async {
-    final resolvedLanguage = _normalizeLearningLanguage(language);
-    if (resolvedLanguage == _activeLearningLanguage || isLoading) {
-      return;
-    }
-
-    _deviceId ??= await repository.getOrCreateDeviceId();
-    isLoading = true;
-    statusMessage = null;
-    currentWord = null;
-    notifyListeners();
-
-    _activeLearningLanguage = resolvedLanguage;
-    await repository.saveActiveLearningLanguage(_activeLearningLanguage);
-    try {
-      proficiency = await repository.fetchProficiency(
-        deviceId: _deviceId!,
-        language: _activeLearningLanguage,
-      );
-      _activeLearningLanguage = _normalizeLearningLanguage(proficiency.language);
-      if (_activeLearningLanguage != proficiency.language) {
-        proficiency = ProficiencyState(
-          scale: proficiency.scale,
-          level: proficiency.level,
-          levelIndex: proficiency.levelIndex,
-          levelChanged: proficiency.levelChanged,
-          previousLevel: proficiency.previousLevel,
-          triggeredBy: proficiency.triggeredBy,
-          consecutiveCount: proficiency.consecutiveCount,
-          consecutiveRatingType: proficiency.consecutiveRatingType,
-          language: _activeLearningLanguage,
-          lastUpdated: proficiency.lastUpdated,
+  void _triggerPrefetchIfNeeded() {
+    if (_prefetchInFlight) return;
+    repository.database.countUnstudiedNewWords().then((count) {
+      if (count < 100 && !_prefetchInFlight) {
+        _prefetchInFlight = true;
+        unawaited(
+          repository.prefetchBatch().then((_) {
+            _prefetchInFlight = false;
+          }).catchError((_) {
+            _prefetchInFlight = false;
+          }),
         );
       }
-      await repository.saveActiveLearningLanguage(_activeLearningLanguage);
-      isLoading = false;
-      notifyListeners();
-      await showNewWord();
-    } catch (_) {
-      proficiency = ProficiencyState.initial();
-      isLoading = false;
-      notifyListeners();
-      await showNewWord();
-    }
+    }).catchError((_) {});
   }
 
   Future<void> register({
@@ -521,14 +545,6 @@ class LearningSessionController extends ChangeNotifier {
       }
     }
     return '${action.failureLabel} failed. Check connection and try again.';
-  }
-
-  String _normalizeLearningLanguage(String? language) {
-    final candidate = language?.trim();
-    if (candidate != null && repository.supportedLearningLanguages.contains(candidate)) {
-      return candidate;
-    }
-    return repository.defaultLearningLanguage;
   }
 }
 

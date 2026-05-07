@@ -16,12 +16,14 @@ Output:
 {"ok":true}
 ```
 
-## 2) Words Next (vi -> en)
+## 2) Learning Cards (vi -> en)
 
 Command:
 
 ```bash
-curl -sS 'http://localhost:8787/v1/words/next?limit=5&source_language=vi&target_language=en'
+curl -sS -X POST 'http://localhost:8787/v1/learning/cards' \
+  -H 'content-type: application/json' \
+  --data '{"device_id":"anonymous_example","target_language":"en","limit":10,"card_mode":"new"}'
 ```
 
 Output:

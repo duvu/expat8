@@ -2,10 +2,10 @@
 
 ### Requirement: Filter words by user proficiency level
 
-The system SHALL filter vocabulary words based on the user's current proficiency level when fetching new words.
+The system SHALL filter vocabulary words based on the user's current proficiency level when selecting new learning cards.
 
 #### Scenario: Word feed filters to current level
-- **WHEN** client calls `GET /v1/words/next?target_language=en&proficiency_level=B1&limit=1`
+- **WHEN** client calls `POST /v1/learning/cards` for a learner whose current proficiency is B1
 - **THEN** system returns only words with `difficulty_level='B1'`
 
 #### Scenario: No exact match falls back to adjacent levels
@@ -46,5 +46,5 @@ The system SHALL use a defined fallback strategy if no words exist at the exact 
 The system MAY optionally support dynamic proficiency lookup per request (fetch current proficiency from database) instead of requiring client to provide it.
 
 #### Scenario: Query with device_id
-- **WHEN** client calls `GET /v1/words/next?target_language=en&device_id=<id>&limit=1` (without explicit proficiency_level)
+- **WHEN** client calls `POST /v1/learning/cards` with `device_id=<id>` and no explicit proficiency level
 - **THEN** system looks up current proficiency for that device and applies filter automatically

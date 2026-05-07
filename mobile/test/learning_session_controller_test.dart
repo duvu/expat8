@@ -8,15 +8,9 @@ import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
 
   test('registration success exposes feedback and active user', () async {
     final controller = LearningSessionController(
@@ -36,7 +30,9 @@ void main() {
     expect(controller.takeUserFeedbackMessage(), 'Registered as Learner.');
   });
 
-  test('registration failure leaves previous session and exposes error feedback', () async {
+  test(
+      'registration failure leaves previous session and exposes error feedback',
+      () async {
     final apiClient = _ControllerApiClient(
       registerError: BackendApiException(
         'Registration failed: 409',
@@ -55,7 +51,8 @@ void main() {
 
     expect(controller.isAuthInProgress, false);
     expect(controller.userSession, isNull);
-    expect(controller.authErrorMessage, 'An account already exists for this email.');
+    expect(controller.authErrorMessage,
+        'An account already exists for this email.');
     expect(
       controller.takeUserFeedbackMessage(),
       'An account already exists for this email.',
@@ -102,7 +99,9 @@ void main() {
     expect(controller.takeUserFeedbackMessage(), 'Signed in as Learner.');
   });
 
-  test('sign-in failure preserves previous valid session and exposes error feedback', () async {
+  test(
+      'sign-in failure preserves previous valid session and exposes error feedback',
+      () async {
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
       repository: await _repository(apiClient),
@@ -125,10 +124,13 @@ void main() {
     expect(controller.isAuthInProgress, false);
     expect(controller.userSession?.identifier, 'learner@example.com');
     expect(controller.authErrorMessage, 'Email or password is incorrect.');
-    expect(controller.takeUserFeedbackMessage(), 'Email or password is incorrect.');
+    expect(controller.takeUserFeedbackMessage(),
+        'Email or password is incorrect.');
   });
 
-  test('sign-out failure still reports local sign-out when session is cleared locally', () async {
+  test(
+      'sign-out failure still reports local sign-out when session is cleared locally',
+      () async {
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
       repository: await _repository(apiClient),
@@ -137,7 +139,8 @@ void main() {
       identifier: 'learner@example.com',
       password: 'correct-password',
     );
-    apiClient.signOutError = BackendApiException('Sign-out failed: 503', statusCode: 503);
+    apiClient.signOutError =
+        BackendApiException('Sign-out failed: 503', statusCode: 503);
 
     await controller.signOut();
 
@@ -155,7 +158,8 @@ void main() {
   test('new-word fallback miss clears stale current word', () async {
     final controller = LearningSessionController(
       repository: await _repository(
-        _ControllerApiClient(fetchNewWordsError: TimeoutException('timeout')),
+        _ControllerApiClient(
+            fetchLearningCardsError: TimeoutException('timeout')),
       ),
     );
     controller.currentWord = _word('stale_word');
@@ -170,10 +174,12 @@ void main() {
     );
   });
 
-  test('recent-review miss clears stale current word when no fallback exists', () async {
+  test('recent-review miss clears stale current word when no fallback exists',
+      () async {
     final controller = LearningSessionController(
       repository: await _repository(
-        _ControllerApiClient(fetchNewWordsError: TimeoutException('timeout')),
+        _ControllerApiClient(
+            fetchLearningCardsError: TimeoutException('timeout')),
       ),
     );
     controller.currentWord = _word('stale_word');
@@ -188,173 +194,66 @@ void main() {
     );
   });
 
-  test('controller uses language from proficiency for word fetch and rating submission', () async {
+  test(
+      'showNewWord triggers prefetch when unstudied count is below threshold',
+      () async {
+    // Seed the database with 5 new words (well below threshold of 100).
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_test_prefetch_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final now = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 5; i++) {
+      await database.upsertWord(_word('seed_$i'));
+    }
+    final prefetchCalled = Completer<void>();
     final apiClient = _ControllerApiClient(
-      proficiencyLanguage: 'zh',
-      proficiencyScale: 'hsk',
-      proficiencyLevel: 'HSK2',
-      proficiencyLevelIndex: 1,
+      onFetchLearningCards: () => prefetchCalled.complete(),
     );
     final controller = LearningSessionController(
-      repository: await _repository(apiClient),
+      repository: WordRepository(database: database, apiClient: apiClient),
     );
 
-    await controller.loadInitial();
+    await controller.showNewWord();
 
-    expect(controller.proficiency.language, 'zh');
-    expect(controller.proficiency.scale, 'hsk');
-    expect(apiClient.lastFetchNewWordsTargetLanguage, 'zh');
+    // Allow the async prefetch callback to fire.
+    await prefetchCalled.future.timeout(const Duration(seconds: 3));
+    expect(prefetchCalled.isCompleted, isTrue);
+  });
 
-    final now = DateTime.utc(2026, 5, 5);
-    final db = controller.repository.database;
-    await db.upsertWord(
-      VocabularyWord(
-        localId: 'zh_word_1',
-        serverWordId: 'zh_word_1',
-        term: '你好',
-        language: 'zh',
-        meaningVi: 'xin chao',
-        partOfSpeech: 'interjection',
-        ipa: '',
-        vietnamesePronunciation: 'ni hao',
-        example: '你好。',
-        exampleVi: 'Xin chao.',
-        difficulty: 'HSK1',
-        topics: const ['greeting'],
-        status: WordStatus.newWord,
-        createdAt: now,
-        updatedAt: now,
+  test('consecutive showNewWord calls show distinct words', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_test_distinct_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    // Seed 3 new words with distinct timestamps so order is deterministic.
+    for (var i = 0; i < 3; i++) {
+      await database.upsertWord(
+        _wordAt('seed_distinct_$i', base.add(Duration(seconds: i))),
+      );
+    }
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
       ),
     );
 
     await controller.showNewWord();
-    await controller.rateCurrent(StudyRating.easy);
+    final first = controller.currentWord?.localId;
 
-    expect(apiClient.lastSubmittedStudyEventLanguage, 'zh');
-  });
+    await controller.showNewWord();
+    final second = controller.currentWord?.localId;
 
-  test('loadInitial restores persisted active learning language before fetching proficiency', () async {
-    final apiClient = _ControllerApiClient(
-      proficiencyLanguage: 'zh',
-      proficiencyScale: 'hsk',
-      proficiencyLevel: 'HSK2',
-      proficiencyLevelIndex: 1,
-    );
-    final repository = await _repository(apiClient);
-    await repository.saveActiveLearningLanguage('zh');
-    final controller = LearningSessionController(repository: repository);
+    await controller.showNewWord();
+    final third = controller.currentWord?.localId;
 
-    await controller.loadInitial();
-
-    expect(controller.activeLearningLanguage, 'zh');
-    expect(controller.proficiency.language, 'zh');
-    expect(apiClient.lastFetchNewWordsTargetLanguage, 'zh');
-  });
-
-  test('setActiveLearningLanguage persists selection and reloads session in new language', () async {
-    final apiClient = _ControllerApiClient(
-      fetchNewWordsResponse: [
-        VocabularyWord(
-          localId: 'zh_word_visible',
-          serverWordId: 'zh_word_visible',
-          term: '你好',
-          language: 'zh',
-          meaningVi: 'xin chao',
-          partOfSpeech: 'interjection',
-          ipa: '',
-          vietnamesePronunciation: 'ni hao',
-          example: '你好。',
-          exampleVi: 'Xin chao.',
-          difficulty: 'HSK1',
-          topics: const ['greeting'],
-          status: WordStatus.newWord,
-          createdAt: DateTime.utc(2026, 5, 5),
-          updatedAt: DateTime.utc(2026, 5, 5),
-        ),
-      ],
-      proficiencyLanguage: 'zh',
-      proficiencyScale: 'hsk',
-      proficiencyLevel: 'HSK1',
-      proficiencyLevelIndex: 0,
-    );
-    final repository = await _repository(apiClient);
-    final controller = LearningSessionController(repository: repository);
-
-    await controller.loadInitial();
-    await controller.setActiveLearningLanguage('zh');
-
-    expect(controller.activeLearningLanguage, 'zh');
-    expect(controller.proficiency.language, 'zh');
-    expect(controller.currentWord?.language, 'zh');
-    expect(await repository.loadActiveLearningLanguage(), 'zh');
-    expect(apiClient.lastFetchNewWordsTargetLanguage, 'zh');
-  });
-
-  test('setActiveLearningLanguage falls back to default when unsupported language is chosen', () async {
-    final repository = await _repository(_ControllerApiClient());
-    final controller = LearningSessionController(repository: repository);
-
-    await controller.loadInitial();
-    await controller.setActiveLearningLanguage('es');
-
-    expect(controller.activeLearningLanguage, 'en');
-    expect(await repository.loadActiveLearningLanguage(), 'en');
-  });
-
-  test('sets level-change feedback message after rating changes proficiency level', () async {
-    final apiClient = _ControllerApiClient(
-      submitProficiency: const ProficiencyState(
-        scale: 'cefr',
-        level: 'A2',
-        levelIndex: 1,
-        previousLevel: 'A1',
-        levelChanged: true,
-      ),
-      fetchNewWordsResponse: [_word('word_level_change')],
-    );
-    final controller = LearningSessionController(
-      repository: await _repository(apiClient),
-    );
-
-    await controller.loadInitial();
-    await controller.rateCurrent(StudyRating.tooEasy);
-
-    expect(controller.proficiency.level, 'A2');
-    expect(controller.takeLevelChangeMessage(), 'Level changed: A1 -> A2');
-  });
-
-  test('accepts adjacent-level word when backend fallback provides non-exact level', () async {
-    final apiClient = _ControllerApiClient(
-      proficiencyLevel: 'B1',
-      fetchNewWordsResponse: [
-        VocabularyWord(
-          localId: 'fallback_b2',
-          serverWordId: 'fallback_b2',
-          term: 'resilient',
-          language: 'en',
-          meaningVi: 'kien cuong',
-          partOfSpeech: 'adjective',
-          ipa: '/rɪˈzɪliənt/',
-          vietnamesePronunciation: 'ri-zil-i-nt',
-          example: 'She is resilient under pressure.',
-          exampleVi: 'Co ay kien cuong khi bi ap luc.',
-          difficulty: 'B2',
-          topics: const ['work'],
-          status: WordStatus.newWord,
-          createdAt: DateTime.utc(2026, 5, 6),
-          updatedAt: DateTime.utc(2026, 5, 6),
-        ),
-      ],
-    );
-    final controller = LearningSessionController(
-      repository: await _repository(apiClient),
-    );
-
-    await controller.loadInitial();
-
-    expect(apiClient.lastFetchNewWordsProficiencyLevel, 'B1');
-    expect(controller.currentWord, isNotNull);
-    expect(controller.currentWord!.difficulty, 'B2');
+    expect(first, isNotNull);
+    expect(second, isNotNull);
+    expect(third, isNotNull);
+    expect({first, second, third}.length, 3,
+        reason: 'Each swipe should reveal a distinct new word');
   });
 }
 
@@ -371,13 +270,8 @@ Future<WordRepository> _repository(_ControllerApiClient apiClient) async {
 class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
-    this.fetchNewWordsError,
-    this.fetchNewWordsResponse = const [],
-    this.submitProficiency,
-    this.proficiencyLanguage = 'en',
-    this.proficiencyScale = 'cefr',
-    this.proficiencyLevel = 'A1',
-    this.proficiencyLevelIndex = 0,
+    this.fetchLearningCardsError,
+    this.onFetchLearningCards,
   }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
@@ -388,34 +282,26 @@ class _ControllerApiClient extends BackendApiClient {
   Object? registerError;
   Object? signInError;
   Object? signOutError;
-  Object? fetchNewWordsError;
-  List<VocabularyWord> fetchNewWordsResponse;
-  ProficiencyState? submitProficiency;
-  String proficiencyLanguage;
-  String proficiencyScale;
-  String proficiencyLevel;
-  int proficiencyLevelIndex;
-  String? lastFetchNewWordsTargetLanguage;
-  String? lastFetchNewWordsProficiencyLevel;
-  String? lastSubmittedStudyEventLanguage;
+  Object? fetchLearningCardsError;
+  void Function()? onFetchLearningCards;
 
   @override
-  Future<List<VocabularyWord>> fetchNewWords({
-    int limit = 1,
-    String sourceLanguage = 'vi',
+  Future<LearningCardBatch> fetchLearningCards({
+    required String deviceId,
+    int limit = 20,
     String targetLanguage = 'en',
-    List<String> excludeServerWordIds = const [],
-    String? proficiencyLevel,
-    String? deviceId,
     String? sessionToken,
   }) async {
-    final error = fetchNewWordsError;
+    onFetchLearningCards?.call();
+    final error = fetchLearningCardsError;
     if (error != null) {
       throw error;
     }
-    lastFetchNewWordsTargetLanguage = targetLanguage;
-    lastFetchNewWordsProficiencyLevel = proficiencyLevel;
-    return fetchNewWordsResponse;
+    return const LearningCardBatch(
+      items: [],
+      targetMix: LearningCardMix(newCount: 10, reviewCount: 0),
+      actualMix: LearningCardMix(newCount: 0, reviewCount: 0),
+    );
   }
 
   @override
@@ -424,12 +310,7 @@ class _ControllerApiClient extends BackendApiClient {
     String language = 'en',
     String? sessionToken,
   }) async {
-    return ProficiencyState(
-      scale: proficiencyScale,
-      level: proficiencyLevel,
-      levelIndex: proficiencyLevelIndex,
-      language: proficiencyLanguage,
-    );
+    return ProficiencyState.initial();
   }
 
   @override
@@ -476,29 +357,6 @@ class _ControllerApiClient extends BackendApiClient {
       throw error;
     }
   }
-
-  @override
-  Future<StudyEventResult> submitStudyEvent({
-    required String deviceId,
-    required Map<String, dynamic> event,
-    String language = 'en',
-    String? sessionToken,
-  }) async {
-    lastSubmittedStudyEventLanguage = language;
-    final resolvedProficiency = submitProficiency ??
-        ProficiencyState(
-          scale: proficiencyScale,
-          level: proficiencyLevel,
-          levelIndex: proficiencyLevelIndex,
-          language: proficiencyLanguage,
-        );
-    return StudyEventResult(
-      success: true,
-      eventId: event['client_event_id'] as String,
-      idempotent: false,
-      proficiency: resolvedProficiency,
-    );
-  }
 }
 
 VocabularyWord _word(String id) {
@@ -520,4 +378,8 @@ VocabularyWord _word(String id) {
     createdAt: now,
     updatedAt: now,
   );
+}
+
+VocabularyWord _wordAt(String id, DateTime at) {
+  return _word(id).copyWith(createdAt: at, updatedAt: at);
 }
