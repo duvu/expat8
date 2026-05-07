@@ -1,8 +1,10 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
+  buildScaleLevelState,
   DEFAULT_PROFICIENCY_LEVEL,
   decrementLevel,
+  getDefaultProficiencyLevel,
   getFallbackDifficultyLevels,
   incrementLevel,
   isProgressionRating,
@@ -41,7 +43,7 @@ export class PostgresWordStore {
       vietnamese_pronunciation: input.vietnamese_pronunciation,
       example: input.example,
       example_vi: input.example_vi,
-      difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
+      difficulty: normalizeDifficultyLevel(input.difficulty, { language: input.language }) ?? input.difficulty,
       topics_json: JSON.stringify(input.topics ?? []),
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
@@ -114,7 +116,7 @@ export class PostgresWordStore {
   async findNewWords({ targetLanguage = 'en', limit = 1, excludeWordIds = [], proficiencyLevel, deviceId, userId }) {
     const startedAt = Date.now();
     const resolvedLevel = proficiencyLevel
-      ? normalizeDifficultyLevel(proficiencyLevel)
+      ? normalizeDifficultyLevel(proficiencyLevel, { language: targetLanguage })
       : deviceId || userId
         ? (await this.getProficiency({ deviceId, userId, language: targetLanguage })).level
         : null;
@@ -136,7 +138,7 @@ export class PostgresWordStore {
       return words;
     }
 
-    for (const level of getFallbackDifficultyLevels(resolvedLevel)) {
+    for (const level of getFallbackDifficultyLevels(resolvedLevel, { language: targetLanguage })) {
       const words = await this.#findWordsForLevel({
         targetLanguage,
         limit,
@@ -150,6 +152,7 @@ export class PostgresWordStore {
           target_language: targetLanguage,
           limit,
           item_count: words.length,
+          proficiency_scale: buildScaleLevelState({ level: resolvedLevel, language: targetLanguage }).scale,
           resolved_level: level,
           elapsed_ms: Date.now() - startedAt
         });
@@ -166,13 +169,25 @@ export class PostgresWordStore {
     return [];
   }
 
-  async recentWords({ targetLanguage = 'en', limit = 1000 }) {
+  async recentWords({ targetLanguage = 'en', limit = 1000, excludeServerWordIds = [] }) {
+    const safeLimit = Math.min(limit, 1000);
+    if (excludeServerWordIds.length > 0) {
+      const placeholders = excludeServerWordIds.map((_, i) => `$${i + 3}`).join(', ');
+      const result = await this.pool.query(
+        `SELECT * FROM words
+        WHERE language = $1 AND id NOT IN (${placeholders})
+        ORDER BY updated_at DESC
+        LIMIT $2`,
+        [targetLanguage, safeLimit, ...excludeServerWordIds]
+      );
+      return result.rows.map(rowToWord);
+    }
     const result = await this.pool.query(
       `SELECT * FROM words
       WHERE language = $1
       ORDER BY updated_at DESC
       LIMIT $2`,
-      [targetLanguage, Math.min(limit, 1000)]
+      [targetLanguage, safeLimit]
     );
     return result.rows.map(rowToWord);
   }
@@ -332,41 +347,74 @@ export class PostgresWordStore {
     const cappedLimit = Math.max(1, Math.min(limit, 50));
     const targetNew = Math.round(cappedLimit * 0.15);
     const targetReview = cappedLimit - targetNew;
-    const [wordsResult, cachedIds, stateResult] = await Promise.all([
-      this.pool.query(`SELECT * FROM words WHERE language = $1`, [targetLanguage]),
-      this.cachedWordIdsFor({ deviceId, userId }),
-      userId
-        ? this.pool.query(`SELECT * FROM user_word_states WHERE user_id = $1 AND language = $2`, [userId, targetLanguage])
-        : this.pool.query(
-            `SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND language = $2`,
-            [deviceId, targetLanguage]
-          )
+
+    // Review candidates: states that are due, joined to their word
+    const reviewQuery = userId
+      ? `SELECT w.*, s.updated_at AS state_updated_at
+           FROM user_word_states s
+           JOIN words w ON w.id = s.word_id
+          WHERE s.user_id = $1
+            AND w.language = $2
+            AND s.status != 'completed'
+            AND (s.next_review_at IS NULL OR s.next_review_at <= $3)
+          ORDER BY s.updated_at ASC
+          LIMIT $4`
+      : `SELECT w.*, s.updated_at AS state_updated_at
+           FROM user_word_states s
+           JOIN words w ON w.id = s.word_id
+          WHERE s.device_id = $1
+            AND s.user_id IS NULL
+            AND w.language = $2
+            AND s.status != 'completed'
+            AND (s.next_review_at IS NULL OR s.next_review_at <= $3)
+          ORDER BY s.updated_at ASC
+          LIMIT $4`;
+
+    // New candidates: words with no state and not in cache for this user/device
+    const newQuery = userId
+      ? `SELECT w.*
+           FROM words w
+          WHERE w.language = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM user_word_states s
+               WHERE s.word_id = w.id AND s.user_id = $2
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM user_cached_words c
+               WHERE c.word_id = w.id AND c.user_id = $2
+            )
+          ORDER BY w.created_at DESC
+          LIMIT $3`
+      : `SELECT w.*
+           FROM words w
+          WHERE w.language = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM user_word_states s
+               WHERE s.word_id = w.id AND s.device_id = $2 AND s.user_id IS NULL
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM user_cached_words c
+               WHERE c.word_id = w.id AND c.device_id = $2 AND c.user_id IS NULL
+            )
+          ORDER BY w.created_at DESC
+          LIMIT $3`;
+
+    const [reviewResult, newResult] = await Promise.all([
+      this.pool.query(reviewQuery, [userId ?? deviceId, targetLanguage, now, cappedLimit]),
+      this.pool.query(newQuery, [targetLanguage, userId ?? deviceId, cappedLimit])
     ]);
-    const words = wordsResult.rows.map(rowToWord);
-    const wordsById = new Map(words.map((word) => [word.id, word]));
-    const states = stateResult.rows;
-    const stateByWordId = new Map(states.map((state) => [state.word_id, state]));
-    const nowDate = new Date(now);
-    const reviewCandidates = states
-      .filter((state) => state.status !== 'completed')
-      .filter((state) => !state.next_review_at || new Date(state.next_review_at) <= nowDate)
-      .map((state) => wordsById.get(state.word_id))
-      .filter(Boolean)
-      .sort((left, right) => left.updated_at.localeCompare(right.updated_at));
-    const newCandidates = words
-      .filter((word) => !cachedIds.has(word.id))
-      .filter((word) => !stateByWordId.has(word.id))
-      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+
+    const reviewCandidates = reviewResult.rows.map(rowToWord);
+    const newCandidates = newResult.rows.map(rowToWord);
+
     const cards = [];
+    const usedIds = new Set();
     const take = (candidates, count, cardType, reason) => {
       for (const word of candidates) {
-        if (cards.length >= cappedLimit || count <= 0) {
-          break;
-        }
-        if (cards.some((card) => card.word.id === word.id)) {
-          continue;
-        }
+        if (cards.length >= cappedLimit || count <= 0) break;
+        if (usedIds.has(word.id)) continue;
         cards.push({ word, cardType, selectionReason: reason });
+        usedIds.add(word.id);
         count -= 1;
       }
     };
@@ -412,6 +460,9 @@ export class PostgresWordStore {
 
     this.logger.info?.('db_sync_study_events_completed', {
       device_id: deviceId,
+      target_language: language,
+      proficiency_scale: latestResult?.proficiency?.scale ?? null,
+      proficiency_level: latestResult?.proficiency?.level ?? null,
       accepted_count: accepted.length,
       rejected_count: rejected.length,
       elapsed_ms: Date.now() - startedAt
@@ -494,21 +545,25 @@ export class PostgresWordStore {
         currentLevel: proficiency.level
       });
 
+      const responseProficiency = await this.#buildProficiencyResponse({
+        client,
+        deviceId,
+        userId: eventUserId,
+        language,
+        ...levelChange
+      });
       this.logger.debug?.('db_record_study_event_completed', {
         device_id: deviceId,
+        target_language: language,
         client_event_id: event.client_event_id,
+        proficiency_scale: responseProficiency?.scale ?? null,
+        proficiency_level: responseProficiency?.level ?? null,
         elapsed_ms: Date.now() - startedAt
       });
       return {
         eventId: inserted.rows[0].id,
         idempotent: false,
-        proficiency: await this.#buildProficiencyResponse({
-          client,
-          deviceId,
-          userId: eventUserId,
-          language,
-          ...levelChange
-        })
+        proficiency: responseProficiency
       };
     });
   }
@@ -667,10 +722,24 @@ export class PostgresWordStore {
           [deviceId, language]
         );
     if (existing.rows[0]) {
-      return existing.rows[0];
+      const row = existing.rows[0];
+      if (!row.scale || row.level_index === undefined || row.level_index === null) {
+        const normalized = buildScaleLevelState({ level: row.level, language });
+        const updated = await client.query(
+          `UPDATE user_proficiency
+          SET scale = $3, level_index = $4, updated_at = $5
+          WHERE ${userId ? 'user_id' : 'device_id'} = $1 AND language = $2
+          RETURNING *`,
+          [userId ? userId : deviceId, language, normalized.scale, normalized.level_index, new Date().toISOString()]
+        );
+        return updated.rows[0] ?? row;
+      }
+      return row;
     }
 
     const now = new Date().toISOString();
+    const defaultLevel = getDefaultProficiencyLevel({ language }) ?? DEFAULT_PROFICIENCY_LEVEL;
+    const defaultScaleState = buildScaleLevelState({ level: defaultLevel, language });
     const profileDeviceId = userId ? `user:${userId}` : deviceId;
     const inserted = await client.query(
       `INSERT INTO user_proficiency (
@@ -678,11 +747,13 @@ export class PostgresWordStore {
         user_id,
         device_id,
         language,
+        scale,
         level,
+        level_index,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       ON CONFLICT (device_id, language) DO UPDATE SET updated_at = user_proficiency.updated_at
       RETURNING *`,
       [
@@ -690,7 +761,9 @@ export class PostgresWordStore {
         userId,
         profileDeviceId,
         language,
-        DEFAULT_PROFICIENCY_LEVEL,
+        defaultScaleState.scale,
+        defaultLevel,
+        defaultScaleState.level_index,
         now,
         now
       ]
@@ -704,16 +777,26 @@ export class PostgresWordStore {
       return null;
     }
 
-    const previousLevel = normalizeDifficultyLevel(currentLevel) ?? DEFAULT_PROFICIENCY_LEVEL;
+    const previousLevel = normalizeDifficultyLevel(currentLevel, { language })
+      ?? getDefaultProficiencyLevel({ language })
+      ?? DEFAULT_PROFICIENCY_LEVEL;
     const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel)
-      : decrementLevel(previousLevel);
+      ? incrementLevel(previousLevel, { language })
+      : decrementLevel(previousLevel, { language });
+    const nextScaleState = buildScaleLevelState({ level: nextLevel, language });
 
     await client.query(
       `UPDATE user_proficiency
-      SET level = $3, updated_at = $4
+      SET scale = $3, level = $4, level_index = $5, updated_at = $6
       WHERE ${userId ? 'user_id' : 'device_id'} = $1 AND language = $2`,
-      [userId ?? deviceId, language, nextLevel, new Date().toISOString()]
+      [
+        userId ?? deviceId,
+        language,
+        nextScaleState.scale,
+        nextLevel,
+        nextScaleState.level_index,
+        new Date().toISOString()
+      ]
     );
 
     return {
@@ -737,9 +820,12 @@ export class PostgresWordStore {
     const consecutiveCount = currentRatingType
       ? await this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType, client })
       : 0;
+    const scaleState = buildScaleLevelState({ level: proficiency.level, language });
 
     return {
-      level: proficiency.level,
+      scale: scaleState.scale,
+      level: scaleState.level,
+      level_index: scaleState.level_index,
       level_changed: levelChanged,
       previous_level: previousLevel,
       triggered_by: triggeredBy,

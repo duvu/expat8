@@ -35,7 +35,7 @@ void main() {
         home: Scaffold(
           appBar: AppBar(
             actions: const [
-              ProficiencyLevelLabel(level: 'B1'),
+              ProficiencyLevelLabel(scale: 'cefr', level: 'B1'),
             ],
           ),
           body: RatingButtonBar(
@@ -62,6 +62,100 @@ void main() {
     expect((easyWidth - tooEasyWidth).abs(), lessThan(1));
     expect((easyWidth - hardWidth).abs(), lessThan(1));
     expect((easyWidth - tooHardWidth).abs(), lessThan(1));
+  });
+
+  testWidgets('rating buttons trigger callbacks on tap', (tester) async {
+    var easyCount = 0;
+    var tooEasyCount = 0;
+    var hardCount = 0;
+    var tooHardCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RatingButtonBar(
+            onEasy: () => easyCount += 1,
+            onTooEasy: () => tooEasyCount += 1,
+            onHard: () => hardCount += 1,
+            onTooHard: () => tooHardCount += 1,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Easy'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Too Easy'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Hard'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Too Hard'));
+    await tester.pump();
+
+    expect(easyCount, 1);
+    expect(tooEasyCount, 1);
+    expect(hardCount, 1);
+    expect(tooHardCount, 1);
+  });
+
+  testWidgets('renders HSK proficiency label for Chinese learning state', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(
+            actions: const [
+              ProficiencyLevelLabel(scale: 'hsk', level: 'HSK3'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Level HSK3'), findsOneWidget);
+  });
+
+  testWidgets('language selector shows current learning language prominently', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LearningLanguageSelector(
+            currentLanguage: 'zh',
+            supportedLanguages: const ['en', 'zh', 'vi'],
+            isLoading: false,
+            onChanged: (_) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Learning language'), findsOneWidget);
+    expect(find.text('Chinese'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Change'), findsOneWidget);
+  });
+
+  testWidgets('language selector opens choices and reports selection changes', (tester) async {
+    String? selectedLanguage;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: LearningLanguageSelector(
+            currentLanguage: 'en',
+            supportedLanguages: const ['en', 'zh', 'vi'],
+            isLoading: false,
+            onChanged: (language) async => selectedLanguage = language,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Change'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose learning language'), findsOneWidget);
+    expect(find.text('Chinese'), findsOneWidget);
+
+    await tester.tap(find.text('Chinese'));
+    await tester.pumpAndSettle();
+
+    expect(selectedLanguage, 'zh');
   });
 
   testWidgets('drawer shows vocabulary and anonymous identity actions', (tester) async {

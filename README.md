@@ -4,14 +4,18 @@ This workspace contains the OpenSpec-driven MVP implementation for a Flutter voc
 
 ## Adaptive Proficiency
 
-The current app/backend flow includes an adaptive CEFR proficiency ladder:
+The current app/backend flow includes adaptive language-native proficiency ladders:
 
-- New devices initialize at `A1`
+- English initializes at `A1` and progresses on CEFR (`A1` to `C2`)
+- Chinese initializes at `HSK1` and progresses on HSK (`HSK1` to `HSK6`)
 - Mobile shows the current level in the top-right corner of the learning screen
 - Rating buttons are `Easy`, `Too Easy`, `Hard`, and `Too Hard`
 - Backend upgrades proficiency after 5 consecutive `too_easy` ratings
 - Backend downgrades proficiency after 5 consecutive `hard` ratings
 - `/v1/words/next` can filter by explicit `proficiency_level` or by resolved device proficiency
+- Proficiency responses are scale-native (`scale`, `level`, `level_index`) with additive aliases during migration
+
+Compatibility mode is controlled by `PROFICIENCY_COMPATIBILITY_MODE` (`additive` by default, `strict` to disable aliases).
 
 See `contracts/api.md` for the request and response shapes.
 

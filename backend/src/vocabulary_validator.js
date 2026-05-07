@@ -22,15 +22,19 @@ export function validateVocabularyItem(item) {
   if (!Array.isArray(item.topics)) {
     return { ok: false, reason: 'topics_must_be_array' };
   }
-  if (!String(item.ipa).trim()) {
+  const language = String(item.language ?? '').trim().toLowerCase();
+  if (!String(item.ipa).trim() && !language.startsWith('zh')) {
     return { ok: false, reason: 'empty_ipa' };
   }
-  if (!validateDifficultyLevel(item.difficulty)) {
+  if (!validateDifficultyLevel(item.difficulty, { language: item.language })) {
     return { ok: false, reason: 'invalid_difficulty' };
+  }
+  if (language.startsWith('zh') && !/[a-zA-Z]/.test(String(item.vietnamese_pronunciation))) {
+    return { ok: false, reason: 'invalid_chinese_pronunciation' };
   }
   const normalizedTerm = normalizeTerm(item.term);
   const normalizedExample = normalizeTerm(item.example);
-  if (!normalizedExample.includes(normalizedTerm)) {
+  if (!normalizedExample.includes(normalizedTerm) && !language.startsWith('zh')) {
     return { ok: false, reason: 'example_unrelated_to_term' };
   }
   return { ok: true };

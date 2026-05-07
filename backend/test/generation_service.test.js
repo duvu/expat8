@@ -99,6 +99,64 @@ test('passes target CEFR level through generation flow', async () => {
   assert.equal(accepted[0].difficulty, 'A2');
 });
 
+test('rejects Chinese generation items with non-HSK difficulty values', async () => {
+  const store = new WordStore({ seed: false });
+  const service = new VocabularyGenerationService({
+    store,
+    liteLLMClient: {
+      generateVocabulary: async () => JSON.stringify({
+        items: [
+          wordInput({
+            language: 'zh',
+            term: 'xuexi',
+            difficulty: 'B1',
+            vietnamese_pronunciation: 'xue xi',
+            ipa: ''
+          })
+        ]
+      })
+    },
+    logger: { warn() {} }
+  });
+
+  const accepted = await service.generateAndStore({
+    limit: 1,
+    targetLanguage: 'zh',
+    difficultyLevel: 'HSK2'
+  });
+
+  assert.equal(accepted.length, 0);
+});
+
+test('rejects Chinese generation items with invalid pronunciation metadata', async () => {
+  const store = new WordStore({ seed: false });
+  const service = new VocabularyGenerationService({
+    store,
+    liteLLMClient: {
+      generateVocabulary: async () => JSON.stringify({
+        items: [
+          wordInput({
+            language: 'zh',
+            term: 'xuexi',
+            difficulty: 'HSK2',
+            vietnamese_pronunciation: '1234',
+            ipa: ''
+          })
+        ]
+      })
+    },
+    logger: { warn() {} }
+  });
+
+  const accepted = await service.generateAndStore({
+    limit: 1,
+    targetLanguage: 'zh',
+    difficultyLevel: 'HSK2'
+  });
+
+  assert.equal(accepted.length, 0);
+});
+
 function wordInput(overrides = {}) {
   return {
     term: 'reliable',

@@ -12,41 +12,37 @@ The backend SHALL use LiteLLM as the abstraction layer for AI vocabulary generat
 - **THEN** the vocabulary generation service continues to use the same internal generation interface
 
 ### Requirement: AI output uses a structured schema
-The backend SHALL request and process AI vocabulary output as structured JSON with required vocabulary fields.
+The backend SHALL request and process AI vocabulary output as structured JSON with required fields that align to the active language profile and proficiency scale.
 
-#### Scenario: AI returns valid structured output
-- **WHEN** LiteLLM returns JSON containing all required vocabulary fields
-- **THEN** the backend parses the response into vocabulary items
+#### Scenario: English generation request
+- **WHEN** LiteLLM is asked to generate English vocabulary
+- **THEN** the backend requests output using CEFR-aligned difficulty values and English profile schema expectations
 
-#### Scenario: AI returns non-JSON output
-- **WHEN** LiteLLM returns output that cannot be parsed as valid JSON
-- **THEN** the backend rejects the output and does not persist it as vocabulary
+#### Scenario: Chinese generation request
+- **WHEN** LiteLLM is asked to generate Chinese vocabulary
+- **THEN** the backend requests output using HSK-aligned difficulty values and Chinese profile pronunciation expectations
 
 ### Requirement: Generated vocabulary is validated before persistence
-The backend MUST validate AI-generated vocabulary before saving or serving it.
+The backend MUST validate AI-generated vocabulary before saving or serving it using language-profile aware rules.
 
-#### Scenario: Required field is missing
-- **WHEN** a generated vocabulary item lacks a required field
+#### Scenario: Difficulty level is invalid for language profile
+- **WHEN** a generated item includes a difficulty value that is not valid for the active language scale
 - **THEN** the backend rejects that item
 
-#### Scenario: IPA is empty
-- **WHEN** a generated vocabulary item has an empty IPA value
-- **THEN** the backend rejects that item
-
-#### Scenario: Example does not match the term
-- **WHEN** a generated vocabulary item has an example that is unrelated to the term
+#### Scenario: Chinese pronunciation metadata is insufficient
+- **WHEN** a generated Chinese item lacks required pronunciation support defined by the Chinese profile
 - **THEN** the backend rejects that item or flags it for regeneration
 
 ### Requirement: Generated content includes Vietnamese learner support
-The backend SHALL generate vocabulary content that is useful for Vietnamese learners.
+The backend SHALL generate vocabulary content that remains useful for Vietnamese learners across supported language profiles.
 
-#### Scenario: Vocabulary item is generated
-- **WHEN** the backend accepts a generated vocabulary item
-- **THEN** the item includes Vietnamese meaning, Vietnamese-friendly pronunciation, IPA, a natural example, and Vietnamese example translation
+#### Scenario: English item is generated
+- **WHEN** the backend accepts an English generated vocabulary item
+- **THEN** the item includes Vietnamese meaning, practical pronunciation guidance, a natural example, and Vietnamese example translation
 
-#### Scenario: Vietnamese-friendly pronunciation is generated
-- **WHEN** the backend generates Vietnamese-friendly pronunciation
-- **THEN** the pronunciation is stored as a practical reading aid alongside IPA, not as a replacement for IPA
+#### Scenario: Chinese item is generated
+- **WHEN** the backend accepts a Chinese generated vocabulary item
+- **THEN** the item includes Vietnamese meaning and Chinese pronunciation guidance suitable for Vietnamese learners alongside example and translation
 
 ### Requirement: Accepted generated words are reused
 The backend SHALL persist accepted AI-generated vocabulary items for future requests.

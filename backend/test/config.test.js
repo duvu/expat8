@@ -48,13 +48,16 @@ test('loads logging settings with production-safe defaults', () => {
   const defaults = loadConfig({});
   assert.equal(defaults.logLevel, 'info');
   assert.equal(defaults.logRedactionEnabled, true);
+  assert.equal(defaults.proficiencyCompatibilityMode, 'additive');
 
   const custom = loadConfig({
     LOG_LEVEL: 'DEBUG',
-    LOG_REDACTION_ENABLED: 'false'
+    LOG_REDACTION_ENABLED: 'false',
+    PROFICIENCY_COMPATIBILITY_MODE: 'strict'
   });
   assert.equal(custom.logLevel, 'debug');
   assert.equal(custom.logRedactionEnabled, false);
+  assert.equal(custom.proficiencyCompatibilityMode, 'strict');
 });
 
 test('rejects malformed app credential configuration', () => {

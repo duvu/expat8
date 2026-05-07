@@ -54,7 +54,9 @@ CREATE TABLE user_proficiency (
   user_id TEXT,
   device_id TEXT NOT NULL,
   language TEXT NOT NULL DEFAULT 'en',
+  scale TEXT NOT NULL DEFAULT 'cefr',
   level TEXT NOT NULL,
+  level_index INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id),
@@ -123,3 +125,4 @@ CREATE UNIQUE INDEX idx_user_word_states_user_word ON user_word_states(user_id, 
 CREATE INDEX idx_generation_runs_language_date ON generation_runs(target_language, mode, run_date);
 CREATE INDEX idx_user_cached_words_device ON user_cached_words(device_id, updated_at DESC);
 CREATE INDEX idx_user_cached_words_user ON user_cached_words(user_id, updated_at DESC);
+CREATE INDEX idx_user_word_states_word_id ON user_word_states(word_id);

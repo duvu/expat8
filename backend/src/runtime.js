@@ -20,7 +20,12 @@ export function createStore({ config, logger, poolFactory = (options) => new pg.
 
   if (config.databaseUrl) {
     return new PostgresWordStore({
-      pool: poolFactory({ connectionString: config.databaseUrl }),
+      pool: poolFactory({
+        connectionString: config.databaseUrl,
+        max: config.dbPoolMax,
+        idleTimeoutMillis: config.dbIdleTimeoutMs,
+        connectionTimeoutMillis: config.dbConnectionTimeoutMs
+      }),
       logger: storeLogger.child({ component: 'postgres_word_store' })
     });
   }

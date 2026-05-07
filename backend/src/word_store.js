@@ -1,12 +1,15 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
+  buildScaleLevelState,
   DEFAULT_PROFICIENCY_LEVEL,
   decrementLevel,
+  getDefaultProficiencyLevel,
   getFallbackDifficultyLevels,
   incrementLevel,
   isProgressionRating,
   normalizeDifficultyLevel,
+  PROFICIENCY_LEVEL_UP_THRESHOLD,
   requireStudyRating
 } from './proficiency.js';
 import {
@@ -19,6 +22,9 @@ import {
   requireRegistrationInput,
   verifyPassword
 } from './user_identity.js';
+
+const NEW_CARD_RATIO = 0.15;
+const WORD_CACHE_LIMIT = 1000;
 
 export class WordStore {
   constructor({ seed = true } = {}) {
@@ -57,7 +63,7 @@ export class WordStore {
       vietnamese_pronunciation: input.vietnamese_pronunciation,
       example: input.example,
       example_vi: input.example_vi,
-      difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
+      difficulty: normalizeDifficultyLevel(input.difficulty, { language: input.language }) ?? input.difficulty,
       topics: input.topics ?? [],
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
@@ -79,7 +85,7 @@ export class WordStore {
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
     const resolvedLevel = proficiencyLevel
-      ? normalizeDifficultyLevel(proficiencyLevel)
+      ? normalizeDifficultyLevel(proficiencyLevel, { language: targetLanguage })
       : deviceId || userId
         ? this.#getOrCreateProficiency({ deviceId, userId, language: targetLanguage }).level
         : null;
@@ -88,9 +94,9 @@ export class WordStore {
       return availableWords.slice(0, limit);
     }
 
-    for (const level of getFallbackDifficultyLevels(resolvedLevel)) {
+    for (const level of getFallbackDifficultyLevels(resolvedLevel, { language: targetLanguage })) {
       const matches = availableWords.filter(
-        (word) => normalizeDifficultyLevel(word.difficulty) === level
+        (word) => normalizeDifficultyLevel(word.difficulty, { language: targetLanguage }) === level
       );
       if (matches.length > 0) {
         return matches.slice(0, limit);
@@ -100,11 +106,11 @@ export class WordStore {
     return [];
   }
 
-  recentWords({ targetLanguage = 'en', limit = 1000 }) {
+  recentWords({ targetLanguage = 'en', limit = 1000, excludeServerWordIds = [] }) {
     return [...this.words.values()]
-      .filter((word) => word.language === targetLanguage)
+      .filter((word) => word.language === targetLanguage && !excludeServerWordIds.includes(word.id))
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-      .slice(0, Math.min(limit, 1000));
+      .slice(0, Math.min(limit, WORD_CACHE_LIMIT));
   }
 
   countUsableWords({ targetLanguage = 'en' } = {}) {
@@ -171,7 +177,7 @@ export class WordStore {
         unknown.push(wordId);
         continue;
       }
-      if (known.length < 1000) {
+      if (known.length < WORD_CACHE_LIMIT) {
         known.push(wordId);
       }
     }
@@ -196,7 +202,7 @@ export class WordStore {
 
   learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 20, now = new Date().toISOString() }) {
     const cappedLimit = Math.max(1, Math.min(limit, 50));
-    const targetNew = Math.round(cappedLimit * 0.15);
+    const targetNew = Math.round(cappedLimit * NEW_CARD_RATIO);
     const targetReview = cappedLimit - targetNew;
     const cachedWordIds = this.cachedWordIdsFor({ deviceId, userId });
     const nowDate = new Date(now);
@@ -415,16 +421,19 @@ export class WordStore {
   #applyProficiencyChange({ deviceId, userId = null, language, rating }) {
     const proficiency = this.#getOrCreateProficiency({ deviceId, userId, language });
     const consecutiveCount = this.countConsecutiveRatings({ deviceId, userId, rating });
-    if (!isProgressionRating(rating) || consecutiveCount === 0 || consecutiveCount % 5 !== 0) {
+    if (!isProgressionRating(rating) || consecutiveCount === 0 || consecutiveCount % PROFICIENCY_LEVEL_UP_THRESHOLD !== 0) {
       return null;
     }
 
     const previousLevel = proficiency.level;
     const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel)
-      : decrementLevel(previousLevel);
+      ? incrementLevel(previousLevel, { language })
+      : decrementLevel(previousLevel, { language });
+    const nextScaleState = buildScaleLevelState({ level: nextLevel, language });
 
     proficiency.level = nextLevel;
+    proficiency.scale = nextScaleState.scale;
+    proficiency.level_index = nextScaleState.level_index;
     proficiency.updated_at = new Date().toISOString();
     return {
       levelChanged: nextLevel !== previousLevel,
@@ -439,9 +448,12 @@ export class WordStore {
     const consecutiveCount = currentRatingType
       ? this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType })
       : 0;
+    const scaleState = buildScaleLevelState({ level: proficiency.level, language });
 
     return {
-      level: proficiency.level,
+      scale: scaleState.scale,
+      level: scaleState.level,
+      level_index: scaleState.level_index,
       level_changed: levelChanged,
       previous_level: previousLevel,
       triggered_by: triggeredBy,
@@ -460,12 +472,15 @@ export class WordStore {
       return existing;
     }
     const now = new Date().toISOString();
+    const defaultLevel = getDefaultProficiencyLevel({ language });
     const created = {
       id: createId('proficiency'),
       user_id: userId,
       device_id: deviceId,
       language,
-      level: DEFAULT_PROFICIENCY_LEVEL,
+      level: defaultLevel ?? DEFAULT_PROFICIENCY_LEVEL,
+      scale: buildScaleLevelState({ level: defaultLevel, language }).scale,
+      level_index: buildScaleLevelState({ level: defaultLevel, language }).level_index,
       created_at: now,
       updated_at: now
     };

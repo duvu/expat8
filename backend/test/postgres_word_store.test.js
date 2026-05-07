@@ -41,6 +41,8 @@ test('postgres store syncs study events idempotently', async () => {
   assert.deepEqual(first.accepted_event_ids, ['evt_1']);
   assert.deepEqual(second.accepted_event_ids, ['evt_1']);
   assert.equal(pool.studyEvents.size, 1);
+  assert.equal(first.proficiency.scale, 'cefr');
+  assert.equal(first.proficiency.level_index, 0);
   assert.equal(first.proficiency.level, 'A1');
 });
 
@@ -80,8 +82,63 @@ test('postgres store levels up after five consecutive too_easy ratings', async (
     if (index === 4) {
       assert.equal(result.proficiency.level, 'A2');
       assert.equal(result.proficiency.level_changed, true);
+      assert.equal(result.proficiency.scale, 'cefr');
     }
   }
+});
+
+test('postgres store initializes and progresses Chinese proficiency with HSK scale', async () => {
+  const store = new PostgresWordStore({ pool: new FakePool() });
+  await store.insertWord(wordInput({ id: 'word_zh_1', term: 'ni hao', language: 'zh', difficulty: 'HSK1' }));
+  await store.insertWord(wordInput({ id: 'word_zh_2', term: 'xuexi', language: 'zh', difficulty: 'HSK2' }));
+
+  const initial = await store.getProficiency({ deviceId: 'device_zh', language: 'zh' });
+  assert.equal(initial.scale, 'hsk');
+  assert.equal(initial.level, 'HSK1');
+  assert.equal(initial.level_index, 0);
+
+  for (let index = 0; index < 5; index += 1) {
+    await store.recordStudyEvent({
+      deviceId: 'device_zh',
+      language: 'zh',
+      event: {
+        client_event_id: `evt_zh_level_${index + 1}`,
+        server_word_id: 'word_zh_1',
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T12:31:0${index}.000Z`
+      }
+    });
+  }
+
+  const advanced = await store.getProficiency({ deviceId: 'device_zh', language: 'zh' });
+  assert.equal(advanced.scale, 'hsk');
+  assert.equal(advanced.level, 'HSK2');
+  assert.equal(advanced.level_index, 1);
+
+  const words = await store.findNewWords({ targetLanguage: 'zh', limit: 1, deviceId: 'device_zh' });
+  assert.deepEqual(words.map((word) => word.id), ['word_zh_2']);
+});
+
+test('postgres store backfills missing scale metadata on existing proficiency rows', async () => {
+  const pool = new FakePool();
+  const store = new PostgresWordStore({ pool });
+  pool.userProficiencies.set('device:legacy_device:zh', {
+    id: 'proficiency_legacy',
+    user_id: null,
+    device_id: 'legacy_device',
+    language: 'zh',
+    scale: null,
+    level: 'HSK2',
+    level_index: null,
+    created_at: '2026-05-01T00:00:00.000Z',
+    updated_at: '2026-05-01T00:00:00.000Z'
+  });
+
+  const proficiency = await store.getProficiency({ deviceId: 'legacy_device', language: 'zh' });
+
+  assert.equal(proficiency.scale, 'hsk');
+  assert.equal(proficiency.level, 'HSK2');
+  assert.equal(proficiency.level_index, 1);
 });
 
 test('postgres store registers users, resolves sessions, revokes sessions, and excludes learned words by user', async () => {
@@ -223,7 +280,7 @@ class FakePool {
       normalizedSql.startsWith('SELECT * FROM words') &&
       normalizedSql.includes('ORDER BY created_at DESC')
     ) {
-      const difficulty = typeof params[1] === 'string' && /^A\d|B\d|C\d$/.test(params[1])
+      const difficulty = typeof params[1] === 'string' && /^(A\d|B\d|C\d|HSK\d)$/i.test(params[1])
         ? params[1]
         : null;
       const excludeWordIds = Array.isArray(params[1])
@@ -324,8 +381,16 @@ class FakePool {
         ? `user:${params[0]}:${params[1]}`
         : `device:${params[0]}:${params[1]}`;
       const existing = this.userProficiencies.get(key);
-      existing.level = params[2];
-      existing.updated_at = params[3];
+      if (params.length >= 6) {
+        existing.scale = params[2];
+        existing.level = params[3];
+        existing.level_index = params[4];
+        existing.updated_at = params[5];
+      } else {
+        existing.scale = params[2];
+        existing.level_index = params[3];
+        existing.updated_at = params[4];
+      }
       return { rows: [existing] };
     }
 
@@ -479,8 +544,8 @@ function wordStateRowFromParams(params) {
 }
 
 function proficiencyRowFromParams(params) {
-  const [id, user_id, device_id, language, level, created_at, updated_at] = params;
-  return { id, user_id, device_id, language, level, created_at, updated_at };
+  const [id, user_id, device_id, language, scale, level, level_index, created_at, updated_at] = params;
+  return { id, user_id, device_id, language, scale, level, level_index, created_at, updated_at };
 }
 
 function userRowFromParams(params) {

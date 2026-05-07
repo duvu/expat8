@@ -1,3 +1,5 @@
+import { getProficiencyProfile, normalizeDifficultyLevel } from './proficiency.js';
+
 export class LiteLLMClient {
   constructor({ baseUrl, apiKey, model, fetchImpl = fetch, logger = console }) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
@@ -15,11 +17,22 @@ export class LiteLLMClient {
     difficultyLevel = 'A1'
   }) {
     const startedAt = Date.now();
+    const profile = getProficiencyProfile({ language: targetLanguage });
+    const resolvedDifficulty = normalizeDifficultyLevel(difficultyLevel, { language: targetLanguage }) ?? difficultyLevel;
+    const userPromptLines = buildPromptLines({
+      sourceLanguage,
+      targetLanguage,
+      limit,
+      avoidTerms,
+      profile,
+      difficultyLevel: resolvedDifficulty
+    });
     this.logger.debug?.('litellm_request_started', {
       source_language: sourceLanguage,
       target_language: targetLanguage,
       limit,
-      difficulty_level: difficultyLevel,
+      difficulty_level: resolvedDifficulty,
+      proficiency_scale: profile.scale,
       avoid_terms_count: avoidTerms.length
     });
 
@@ -41,15 +54,7 @@ export class LiteLLMClient {
             },
             {
               role: 'user',
-              content: [
-                `Generate ${limit} ${targetLanguage} vocabulary words for Vietnamese speakers learning ${targetLanguage}.`,
-                `Target CEFR difficulty level is ${difficultyLevel}.`,
-                `Each item: term is a ${targetLanguage} word/phrase, language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, ipa is the ${targetLanguage} IPA pronunciation, vietnamese_pronunciation is how to pronounce in Vietnamese phonetics, example is a ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of A1/A2/B1/B2/C1/C2 and should equal ${difficultyLevel}, topics is an array of relevant topic strings.`,
-                avoidTerms.length > 0
-                  ? `Do not return any term from this forbidden list: ${avoidTerms.join(', ')}.`
-                  : 'Return terms that are different from previously generated results.',
-                `Return a JSON array of ${limit} objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics.`
-              ].join('\n')
+              content: userPromptLines.join('\n')
             }
           ],
           temperature: 0.5
@@ -76,4 +81,36 @@ export class LiteLLMClient {
     });
     return body.choices?.[0]?.message?.content ?? '';
   }
+}
+
+function buildPromptLines({
+  sourceLanguage,
+  targetLanguage,
+  limit,
+  avoidTerms,
+  profile,
+  difficultyLevel
+}) {
+  const difficultyLevels = profile.levels.join('/');
+  if (profile.scale === 'hsk') {
+    return [
+      `Generate ${limit} ${targetLanguage} vocabulary words for ${sourceLanguage} speakers learning ${targetLanguage}.`,
+      `Target proficiency scale is HSK and target level is ${difficultyLevel}.`,
+      `Each item: term is a Chinese word/phrase (hanzi), language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, ipa may be empty for Chinese, vietnamese_pronunciation MUST contain pinyin-style romanization, example is a natural ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of ${difficultyLevels} and should equal ${difficultyLevel}, topics is an array of relevant topic strings.`,
+      avoidTerms.length > 0
+        ? `Do not return any term from this forbidden list: ${avoidTerms.join(', ')}.`
+        : 'Return terms that are different from previously generated results.',
+      `Return a JSON array of ${limit} objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics.`
+    ];
+  }
+
+  return [
+    `Generate ${limit} ${targetLanguage} vocabulary words for ${sourceLanguage} speakers learning ${targetLanguage}.`,
+    `Target proficiency scale is CEFR and target level is ${difficultyLevel}.`,
+    `Each item: term is a ${targetLanguage} word/phrase, language="${targetLanguage}", meaning_vi is the Vietnamese meaning, part_of_speech in English, ipa is the ${targetLanguage} IPA pronunciation, vietnamese_pronunciation is how to pronounce in Vietnamese phonetics, example is a ${targetLanguage} sentence using the term, example_vi is the Vietnamese translation of example, difficulty is one of ${difficultyLevels} and should equal ${difficultyLevel}, topics is an array of relevant topic strings.`,
+    avoidTerms.length > 0
+      ? `Do not return any term from this forbidden list: ${avoidTerms.join(', ')}.`
+      : 'Return terms that are different from previously generated results.',
+    `Return a JSON array of ${limit} objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics.`
+  ];
 }

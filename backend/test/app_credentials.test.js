@@ -155,6 +155,29 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
   );
 });
 
+test('timingSafeEqual rejects mismatched signatures of different byte lengths without throwing', () => {
+  // Verify signature with a shorter tampered value — should return false, not throw
+  const now = new Date('2026-05-04T10:30:00.000Z');
+  const url = new URL('http://localhost/v1/words/next?limit=1');
+  const rawBody = Buffer.alloc(0);
+  const headers = signedHeaders({ method: 'GET', url, rawBody, timestamp: now.toISOString(), nonce: 'nonce_len' });
+  // Replace the real signature with a short string (different byte length)
+  headers['x-expat8-signature'] = 'v1=short';
+
+  assert.equal(
+    verifyAppCredentialRequest({
+      method: 'GET',
+      url,
+      headers,
+      rawBody,
+      config: baseConfig,
+      nonceCache: new InMemoryNonceCache(),
+      now
+    }).ok,
+    false
+  );
+});
+
 function signedHeaders({ method, url, rawBody, timestamp, nonce }) {
   const contentSha256 = hashBody(rawBody);
   const canonicalRequest = buildCanonicalRequest({

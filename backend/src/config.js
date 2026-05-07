@@ -28,13 +28,24 @@ export function loadConfig(env = process.env) {
     ),
     logLevel: String(env.LOG_LEVEL ?? 'info').toLowerCase(),
     logRedactionEnabled: parseBoolean(env.LOG_REDACTION_ENABLED ?? 'true'),
+    proficiencyCompatibilityMode: String(
+      env.PROFICIENCY_COMPATIBILITY_MODE ?? 'additive'
+    ).toLowerCase(),
     vocabSchedulerEnabled: parseBoolean(env.VOCAB_SCHEDULER_ENABLED ?? 'true'),
     vocabPoolMinSize: Number.parseInt(env.VOCAB_POOL_MIN_SIZE ?? '1000', 10),
     vocabFillIntervalSeconds: Number.parseInt(env.VOCAB_FILL_INTERVAL_SECONDS ?? '60', 10),
     vocabDailyGenerationCount: Number.parseInt(env.VOCAB_DAILY_GENERATION_COUNT ?? '10', 10),
     vocabDailyGenerationHourUtc: Number.parseInt(env.VOCAB_DAILY_GENERATION_HOUR_UTC ?? '0', 10),
     vocabGenerationBatchSize: Number.parseInt(env.VOCAB_GENERATION_BATCH_SIZE ?? '20', 10),
-    vocabSchedulerLockTtlSeconds: Number.parseInt(env.VOCAB_SCHEDULER_LOCK_TTL_SECONDS ?? '120', 10)
+    vocabSchedulerLockTtlSeconds: Number.parseInt(env.VOCAB_SCHEDULER_LOCK_TTL_SECONDS ?? '120', 10),
+    authRateLimitRegister: Number.parseInt(env.AUTH_RATE_LIMIT_REGISTER ?? '10', 10),
+    authRateLimitSignIn: Number.parseInt(env.AUTH_RATE_LIMIT_SIGN_IN ?? '20', 10),
+    dbPoolMax: Number.parseInt(env.DB_POOL_MAX ?? '10', 10),
+    dbIdleTimeoutMs: Number.parseInt(env.DB_IDLE_TIMEOUT_MS ?? '10000', 10),
+    dbConnectionTimeoutMs: Number.parseInt(env.DB_CONNECTION_TIMEOUT_MS ?? '5000', 10),
+    validLanguages: new Set(
+      String(env.VALID_LANGUAGES ?? 'en,vi,fr,de,es,ja,ko,zh,pt,it,ru,ar').split(',').map((l) => l.trim()).filter(Boolean)
+    )
   };
 }
 

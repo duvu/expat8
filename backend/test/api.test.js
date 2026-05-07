@@ -8,6 +8,7 @@ import { loadTestConfig, signedFetchOptions } from './support/app_credential_hel
 
 test('serves word feed, recent words, and idempotent sync', async (t) => {
   const store = new WordStore();
+  seedTestDeviceProficiencies(store);
   const server = http.createServer(
     createApp({
       store,
@@ -55,7 +56,12 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
     })
   });
   assert.deepEqual(sync.accepted_event_ids, ['evt_1']);
+  assert.equal(sync.proficiency.scale, 'cefr');
+  assert.equal(sync.proficiency.level_index, 0);
   assert.equal(sync.proficiency.level, 'A1');
+  assert.equal(sync.proficiency.proficiency_scale, 'cefr');
+  assert.equal(sync.proficiency.proficiency_level, 'A1');
+  assert.equal(sync.proficiency.proficiency_level_index, 0);
 
   const retry = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
     method: 'POST',
@@ -77,7 +83,57 @@ test('serves word feed, recent words, and idempotent sync', async (t) => {
   assert.equal(store.studyEventsByClientId.size, 1);
 
   const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_1&language=en`);
+  assert.equal(proficiency.scale, 'cefr');
+  assert.equal(proficiency.level_index, 0);
   assert.equal(proficiency.level, 'A1');
+  assert.equal(proficiency.proficiency_scale, 'cefr');
+  assert.equal(proficiency.proficiency_level, 'A1');
+  assert.equal(proficiency.proficiency_level_index, 0);
+});
+
+test('omits compatibility aliases when strict proficiency mode is enabled', async (t) => {
+  const store = new WordStore({ seed: false });
+  seedTestDeviceProficiencies(store);
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig({ PROFICIENCY_COMPATIBILITY_MODE: 'strict' })
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_zh&language=zh`);
+
+  assert.equal(proficiency.scale, 'hsk');
+  assert.equal(proficiency.level, 'HSK1');
+  assert.equal(proficiency.level_index, 0);
+  assert.equal('proficiency_scale' in proficiency, false);
+  assert.equal('proficiency_level' in proficiency, false);
+  assert.equal('proficiency_level_index' in proficiency, false);
+});
+
+test('returns HSK proficiency contract for Chinese language lookup', async (t) => {
+  const store = new WordStore({ seed: false });
+  seedTestDeviceProficiencies(store);
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_zh&language=zh`);
+
+  assert.equal(proficiency.scale, 'hsk');
+  assert.equal(proficiency.level, 'HSK1');
+  assert.equal(proficiency.level_index, 0);
 });
 
 test('does not call AI generation when database inventory is empty', async (t) => {
@@ -543,6 +599,14 @@ test('registers, signs in, signs out, and associates signed-in learning with use
   });
   assert.equal(proficiency.user_id, registered.user_id);
 
+  const foreignProficiency = await fetch(
+    `${baseUrl}/v1/proficiency?device_id=device_other&language=en`,
+    signedFetchOptions(`${baseUrl}/v1/proficiency?device_id=device_other&language=en`, {
+      headers: bearerHeaders(signedIn.session_token)
+    })
+  );
+  assert.equal(foreignProficiency.status, 403);
+
   const signOut = await fetchJson(`${baseUrl}/v1/users/sign-out`, {
     method: 'POST',
     headers: {
@@ -793,6 +857,157 @@ class AsyncStoreAdapter {
   }
 }
 
+test('filters recent words by exclude_server_word_id', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_recent_a', term: 'alpha' }));
+  store.insertWord(wordInput({ id: 'word_recent_b', term: 'beta' }));
+  store.insertWord(wordInput({ id: 'word_recent_c', term: 'gamma' }));
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const all = await fetchJson(`${baseUrl}/v1/words/recent?limit=10&target_language=en`);
+  assert.equal(all.items.length, 3);
+
+  const filtered = await fetchJson(
+    `${baseUrl}/v1/words/recent?limit=10&target_language=en&exclude_server_word_id=word_recent_a&exclude_server_word_id=word_recent_b`
+  );
+  assert.equal(filtered.items.length, 1);
+  assert.equal(filtered.items[0].server_word_id, 'word_recent_c');
+});
+
+test('enforces rate limit on registration and sign-in', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig({ AUTH_RATE_LIMIT_REGISTER: '2', AUTH_RATE_LIMIT_SIGN_IN: '2' })
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const registerUrl = `${baseUrl}/v1/users/register`;
+  const registerBody = JSON.stringify({ identifier: 'rl@example.com', password: 'pass1234', device_id: 'device_rl' });
+
+  // First two requests succeed (or 409 if duplicate) — not 429
+  for (let i = 0; i < 2; i++) {
+    const res = await fetch(registerUrl, signedFetchOptions(registerUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: registerBody
+    }));
+    assert.ok(res.status !== 429, `request ${i + 1} should not be rate-limited`);
+  }
+
+  // Third request should be rate-limited
+  const limited = await fetch(registerUrl, signedFetchOptions(registerUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: registerBody
+  }));
+  assert.equal(limited.status, 429);
+  assert.deepEqual(await limited.json(), { error: 'too_many_requests' });
+
+  // Sign-in rate limit
+  const signInUrl = `${baseUrl}/v1/users/sign-in`;
+  const signInBody = JSON.stringify({ identifier: 'rl@example.com', password: 'wrong', device_id: 'device_rl' });
+  for (let i = 0; i < 2; i++) {
+    const res = await fetch(signInUrl, signedFetchOptions(signInUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: signInBody
+    }));
+    assert.ok(res.status !== 429, `sign-in ${i + 1} should not be rate-limited`);
+  }
+  const signInLimited = await fetch(signInUrl, signedFetchOptions(signInUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: signInBody
+  }));
+  assert.equal(signInLimited.status, 429);
+  assert.deepEqual(await signInLimited.json(), { error: 'too_many_requests' });
+});
+
+test('rejects invalid bearer token with 401 on optional-auth endpoints', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const url = `${baseUrl}/v1/words/next?limit=1&target_language=en`;
+  const response = await fetch(url, signedFetchOptions(url, {
+    headers: { authorization: 'Bearer totally_fake_token_xyz' }
+  }));
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: 'invalid_session' });
+});
+
+test('rejects study event with invalid occurred_at timestamp', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const url = `${baseUrl}/v1/study-events`;
+  const body = JSON.stringify({
+    device_id: 'device_invalid_ts',
+    client_event_id: 'evt_invalid_ts',
+    word_id: 'word_reliable',
+    rating: 'easy',
+    occurred_at: 'not-a-date'
+  });
+  const response = await fetch(url, signedFetchOptions(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body
+  }));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'bad_request' });
+});
+
+test('rejects unknown language code on /words/next', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const url = `${baseUrl}/v1/words/next?limit=1&target_language=xx_invalid`;
+  const response = await fetch(url, signedFetchOptions(url));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'bad_request' });
+});
+
+test('rejects unknown language code on /words/recent', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const url = `${baseUrl}/v1/words/recent?limit=1&target_language=xx_invalid`;
+  const response = await fetch(url, signedFetchOptions(url));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'bad_request' });
+});
+
 function listen(server) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 }
@@ -807,6 +1022,11 @@ async function fetchJson(url, options) {
 
 function bearerHeaders(token) {
   return { authorization: `Bearer ${token}` };
+}
+
+function seedTestDeviceProficiencies(store) {
+  store.getProficiency({ deviceId: 'device_1', language: 'en' });
+  store.getProficiency({ deviceId: 'device_zh', language: 'zh' });
 }
 
 function wordInput(overrides = {}) {

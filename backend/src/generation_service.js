@@ -51,7 +51,7 @@ export class VocabularyGenerationService {
         const candidate = {
           ...item,
           language: item.language ?? targetLanguage,
-          difficulty: normalizeDifficultyLevel(item.difficulty) ?? item.difficulty,
+          difficulty: normalizeDifficultyLevel(item.difficulty, { language: targetLanguage }) ?? item.difficulty,
           generation_source: 'litellm'
         };
         const normalizedCandidateTerm = normalizeTerm(String(candidate.term ?? ''));

@@ -59,10 +59,9 @@ export function hashSessionToken(token) {
 }
 
 function timingSafeEqual(left, right) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+  // Hash both operands to a fixed-length digest before comparing.
+  // This removes the length-check branch that would leak whether the
+  // operand lengths matched, preserving constant-time semantics.
+  const hash = (v) => crypto.createHash('sha256').update(v).digest();
+  return crypto.timingSafeEqual(hash(left), hash(right));
 }

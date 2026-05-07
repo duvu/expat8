@@ -226,6 +226,17 @@ void main() {
     expect(value, 'second');
   });
 
+  test('persists active learning language in app settings', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'local_database_test_active_learning_language.db',
+    );
+
+    await database.setSetting(LocalDatabase.keyActiveLearningLanguage, 'zh');
+    final value = await database.getSetting(LocalDatabase.keyActiveLearningLanguage);
+
+    expect(value, 'zh');
+  });
+
   test('countUnstudiedNewWords returns 0 for empty database', () async {
     final database = await LocalDatabase.open(
       databaseName: 'local_database_test_count_new_empty.db',

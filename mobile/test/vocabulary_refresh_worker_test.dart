@@ -150,6 +150,8 @@ AppConfig _testConfig() {
     newWordTimeout: Duration(seconds: 5),
     appCredentialAppId: 'test-app',
     appCredentialSecret: 'test-secret',
+    defaultLearningLanguage: 'en',
+    supportedLearningLanguages: ['en', 'zh', 'vi'],
     logLevel: 'info',
     logMaxEntries: 100,
     logRetentionDays: 1,
@@ -175,11 +177,11 @@ class _RecordingApiClient extends BackendApiClient {
 
   @override
   Future<List<VocabularyWord>> fetchRecentWords({
+    required String deviceId,
     int limit = 1000,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
     List<String> excludeIds = const [],
-    String? deviceId,
   }) async {
     lastLimit = limit;
     lastExcludeIds = excludeIds;
@@ -198,11 +200,11 @@ class _FailingApiClient extends BackendApiClient {
 
   @override
   Future<List<VocabularyWord>> fetchRecentWords({
+    required String deviceId,
     int limit = 1000,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
     List<String> excludeIds = const [],
-    String? deviceId,
   }) {
     throw BackendApiException('forced failure');
   }

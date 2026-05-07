@@ -201,18 +201,19 @@ class BackendApiClient {
   }
 
   Future<List<VocabularyWord>> fetchRecentWords({
+    required String deviceId,
     int limit = 1000,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
     List<String> excludeIds = const [],
-    String? deviceId,
   }) async {
     final traceId = _newTraceId();
     final queryEntries = <MapEntry<String, String>>[
       MapEntry('limit', '$limit'),
       MapEntry('source_language', sourceLanguage),
       MapEntry('target_language', targetLanguage),
-      if (deviceId != null) MapEntry('device_id', deviceId),
+      MapEntry('device_id', deviceId),
+      ...excludeIds.map((id) => MapEntry('exclude_server_word_id', id)),
     ];
     final query = queryEntries
         .map(

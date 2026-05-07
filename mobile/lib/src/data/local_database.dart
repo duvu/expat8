@@ -225,53 +225,77 @@ class LocalDatabase {
     );
   }
 
-  Future<VocabularyWord?> nextNewWord() async {
+  Future<VocabularyWord?> nextNewWord({String? language}) async {
     final rows = await _db.query(
       'local_words',
-      where: 'status = ?',
-      whereArgs: [WordStatus.newWord.name],
+      where: language == null ? 'status = ?' : 'status = ? AND language = ?',
+      whereArgs: language == null
+          ? [WordStatus.newWord.name]
+          : [WordStatus.newWord.name, language],
       orderBy: 'created_at DESC',
       limit: 1,
     );
     return rows.isEmpty ? null : _wordFromRow(rows.first);
   }
 
-  Future<VocabularyWord?> nextDueReviewWord(DateTime now) async {
+  Future<VocabularyWord?> nextDueReviewWord(DateTime now, {String? language}) async {
     final rows = await _db.query(
       'local_words',
-      where: 'status IN (?, ?, ?) AND (next_review_at IS NULL OR next_review_at <= ?)',
-      whereArgs: [
-        WordStatus.learning.name,
-        WordStatus.review.name,
-        WordStatus.mastered.name,
-        now.toUtc().toIso8601String(),
-      ],
+      where: language == null
+          ? 'status IN (?, ?, ?) AND (next_review_at IS NULL OR next_review_at <= ?)'
+          : 'status IN (?, ?, ?) AND language = ? AND (next_review_at IS NULL OR next_review_at <= ?)',
+      whereArgs: language == null
+          ? [
+              WordStatus.learning.name,
+              WordStatus.review.name,
+              WordStatus.mastered.name,
+              now.toUtc().toIso8601String(),
+            ]
+          : [
+              WordStatus.learning.name,
+              WordStatus.review.name,
+              WordStatus.mastered.name,
+              language,
+              now.toUtc().toIso8601String(),
+            ],
       orderBy: 'next_review_at ASC, last_seen_at ASC',
       limit: 1,
     );
     return rows.isEmpty ? null : _wordFromRow(rows.first);
   }
 
-  Future<VocabularyWord?> recentlyLearnedReviewWord() async {
+  Future<VocabularyWord?> recentlyLearnedReviewWord({String? language}) async {
     final rows = await _db.query(
       'local_words',
-      where: 'status IN (?, ?, ?) AND last_seen_at IS NOT NULL',
-      whereArgs: [
-        WordStatus.learning.name,
-        WordStatus.review.name,
-        WordStatus.mastered.name,
-      ],
+      where: language == null
+          ? 'status IN (?, ?, ?) AND last_seen_at IS NOT NULL'
+          : 'status IN (?, ?, ?) AND language = ? AND last_seen_at IS NOT NULL',
+      whereArgs: language == null
+          ? [
+              WordStatus.learning.name,
+              WordStatus.review.name,
+              WordStatus.mastered.name,
+            ]
+          : [
+              WordStatus.learning.name,
+              WordStatus.review.name,
+              WordStatus.mastered.name,
+              language,
+            ],
       orderBy: 'last_seen_at DESC, updated_at DESC',
       limit: 1,
     );
     return rows.isEmpty ? null : _wordFromRow(rows.first);
   }
 
-  Future<List<String>> recentServerWordIds({int limit = 20}) async {
+  Future<List<String>> recentServerWordIds({int limit = 20, String? language}) async {
     final rows = await _db.query(
       'local_words',
       columns: ['server_word_id'],
-      where: 'server_word_id IS NOT NULL',
+      where: language == null
+          ? 'server_word_id IS NOT NULL'
+          : 'server_word_id IS NOT NULL AND language = ?',
+      whereArgs: language == null ? null : [language],
       orderBy: 'COALESCE(last_seen_at, updated_at, created_at) DESC',
       limit: limit,
     );
@@ -288,11 +312,14 @@ class LocalDatabase {
     return result;
   }
 
-  Future<List<String>> activeCachedServerWordIds({int limit = 1000}) async {
+  Future<List<String>> activeCachedServerWordIds({int limit = 1000, String? language}) async {
     final rows = await _db.query(
       'local_words',
       columns: ['server_word_id'],
-      where: 'server_word_id IS NOT NULL',
+      where: language == null
+          ? 'server_word_id IS NOT NULL'
+          : 'server_word_id IS NOT NULL AND language = ?',
+      whereArgs: language == null ? null : [language],
       orderBy: 'COALESCE(last_seen_at, updated_at, created_at) DESC',
       limit: limit,
     );
@@ -476,6 +503,7 @@ class LocalDatabase {
   static const String keyIsPrefetchDone = 'is_prefetch_done';
   static const String keyLastDailyRefreshDate = 'last_daily_refresh_date';
   static const String keyWordsStudiedSinceLastRefresh = 'words_studied_since_last_refresh';
+  static const String keyActiveLearningLanguage = 'active_learning_language';
 
   Future<String?> getSetting(String key) async {
     final rows = await _db.query(

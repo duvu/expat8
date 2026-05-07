@@ -34,6 +34,7 @@ class LearningSessionController extends ChangeNotifier {
   ProficiencyState proficiency = ProficiencyState.initial();
   UserSession? userSession;
   String? _deviceId;
+  String _activeLearningLanguage = 'en';
   String? _levelChangeMessage;
   String? _userFeedbackMessage;
 
@@ -61,6 +62,10 @@ class LearningSessionController extends ChangeNotifier {
     return session.identifier;
   }
 
+  String get activeLearningLanguage => _activeLearningLanguage;
+
+  List<String> get supportedLearningLanguages => repository.supportedLearningLanguages;
+
   Future<void> loadInitial() async {
     await _logger.info(
       category: AppLogCategory.session,
@@ -69,8 +74,30 @@ class LearningSessionController extends ChangeNotifier {
     );
     _deviceId ??= await repository.getOrCreateDeviceId();
     userSession = await repository.loadUserSession();
+    _activeLearningLanguage = _normalizeLearningLanguage(
+      await repository.loadActiveLearningLanguage(),
+    );
     try {
-      proficiency = await repository.fetchProficiency(deviceId: _deviceId!);
+      proficiency = await repository.fetchProficiency(
+        deviceId: _deviceId!,
+        language: _activeLearningLanguage,
+      );
+      _activeLearningLanguage = _normalizeLearningLanguage(proficiency.language);
+      if (_activeLearningLanguage != proficiency.language) {
+        proficiency = ProficiencyState(
+          scale: proficiency.scale,
+          level: proficiency.level,
+          levelIndex: proficiency.levelIndex,
+          levelChanged: proficiency.levelChanged,
+          previousLevel: proficiency.previousLevel,
+          triggeredBy: proficiency.triggeredBy,
+          consecutiveCount: proficiency.consecutiveCount,
+          consecutiveRatingType: proficiency.consecutiveRatingType,
+          language: _activeLearningLanguage,
+          lastUpdated: proficiency.lastUpdated,
+        );
+      }
+      await repository.saveActiveLearningLanguage(_activeLearningLanguage);
     } catch (_) {
       proficiency = ProficiencyState.initial();
     }
@@ -82,6 +109,8 @@ class LearningSessionController extends ChangeNotifier {
       context: {
         'has_user_session': userSession != null,
         'proficiency_level': proficiency.level,
+        'proficiency_scale': proficiency.scale,
+        'target_language': _activeLearningLanguage,
       },
     );
   }
@@ -103,25 +132,36 @@ class LearningSessionController extends ChangeNotifier {
     VocabularyWord? word;
     CardKind? actualKind;
 
-    _telemetry.track(TelemetryEvent.newWordRequested);
-    _telemetry.track(TelemetryEvent.newWordSwipeRequested);
+    _telemetry.track(TelemetryEvent.newWordRequested, {
+      'target_language': _activeLearningLanguage,
+      'scale': proficiency.scale,
+      'level': proficiency.level,
+    });
+    _telemetry.track(TelemetryEvent.newWordSwipeRequested, {
+      'target_language': _activeLearningLanguage,
+      'scale': proficiency.scale,
+      'level': proficiency.level,
+    });
     await _logger.info(
       category: AppLogCategory.session,
       event: 'session.new_word.requested',
       message: 'User requested a new word card.',
       context: {
         'proficiency_level': proficiency.level,
+        'proficiency_scale': proficiency.scale,
+        'target_language': _activeLearningLanguage,
       },
     );
     final result = await repository.getNewWordWithFallbackResult(
       excludeServerWordId: excludedServerWordId,
       proficiencyLevel: proficiency.level,
       deviceId: _deviceId,
+      targetLanguage: _activeLearningLanguage,
     );
     word = result.word;
     _trackNewWordLookup(result);
     actualKind = word == null ? null : CardKind.newWord;
-    word ??= await repository.getReviewWord(now);
+    word ??= await repository.getReviewWord(now, language: _activeLearningLanguage);
     actualKind ??= word == null ? null : CardKind.review;
 
     _showWord(
@@ -141,13 +181,25 @@ class LearningSessionController extends ChangeNotifier {
 
     final excludedServerWordId = currentWord?.serverWordId;
     final now = DateTime.now().toUtc();
-    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested);
+    _telemetry.track(TelemetryEvent.recentReviewSwipeRequested, {
+      'target_language': _activeLearningLanguage,
+      'scale': proficiency.scale,
+      'level': proficiency.level,
+    });
     await _logger.info(
       category: AppLogCategory.session,
       event: 'session.review.requested',
       message: 'User requested a recent review card.',
+      context: {
+        'target_language': _activeLearningLanguage,
+        'proficiency_scale': proficiency.scale,
+        'proficiency_level': proficiency.level,
+      },
     );
-    final reviewResult = await repository.getRecentReviewWordResult(now);
+    final reviewResult = await repository.getRecentReviewWordResult(
+      now,
+      language: _activeLearningLanguage,
+    );
     _trackReviewLookup(reviewResult);
     VocabularyWord? word = reviewResult.word;
     CardKind? actualKind = word == null ? null : CardKind.review;
@@ -156,6 +208,7 @@ class LearningSessionController extends ChangeNotifier {
       excludeServerWordId: excludedServerWordId,
       proficiencyLevel: proficiency.level,
       deviceId: _deviceId,
+      targetLanguage: _activeLearningLanguage,
     )
         : null;
     if (newWordResult != null) {
@@ -208,6 +261,9 @@ class LearningSessionController extends ChangeNotifier {
       context: {
         'rating': rating.name,
         'word_id': word.serverWordId ?? word.localId,
+        'target_language': _activeLearningLanguage,
+        'proficiency_scale': proficiency.scale,
+        'proficiency_level': proficiency.level,
       },
     );
     _deviceId ??= await repository.getOrCreateDeviceId();
@@ -216,6 +272,7 @@ class LearningSessionController extends ChangeNotifier {
       rating: rating,
       now: DateTime.now().toUtc(),
       deviceId: _deviceId!,
+      language: _activeLearningLanguage,
     );
     if (updatedProficiency != null) {
       final previousLevel = proficiency.level;
@@ -229,6 +286,8 @@ class LearningSessionController extends ChangeNotifier {
           context: {
             'previous_level': updatedProficiency.previousLevel ?? previousLevel,
             'new_level': updatedProficiency.level,
+            'proficiency_scale': updatedProficiency.scale,
+            'target_language': _activeLearningLanguage,
           },
         );
       }
@@ -236,8 +295,57 @@ class LearningSessionController extends ChangeNotifier {
     _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
       'rating': rating.name,
       'word_id': word.serverWordId ?? word.localId,
+      'target_language': _activeLearningLanguage,
+      'scale': proficiency.scale,
+      'level': proficiency.level,
     });
     await nextCard();
+  }
+
+  Future<void> setActiveLearningLanguage(String language) async {
+    final resolvedLanguage = _normalizeLearningLanguage(language);
+    if (resolvedLanguage == _activeLearningLanguage || isLoading) {
+      return;
+    }
+
+    _deviceId ??= await repository.getOrCreateDeviceId();
+    isLoading = true;
+    statusMessage = null;
+    currentWord = null;
+    notifyListeners();
+
+    _activeLearningLanguage = resolvedLanguage;
+    await repository.saveActiveLearningLanguage(_activeLearningLanguage);
+    try {
+      proficiency = await repository.fetchProficiency(
+        deviceId: _deviceId!,
+        language: _activeLearningLanguage,
+      );
+      _activeLearningLanguage = _normalizeLearningLanguage(proficiency.language);
+      if (_activeLearningLanguage != proficiency.language) {
+        proficiency = ProficiencyState(
+          scale: proficiency.scale,
+          level: proficiency.level,
+          levelIndex: proficiency.levelIndex,
+          levelChanged: proficiency.levelChanged,
+          previousLevel: proficiency.previousLevel,
+          triggeredBy: proficiency.triggeredBy,
+          consecutiveCount: proficiency.consecutiveCount,
+          consecutiveRatingType: proficiency.consecutiveRatingType,
+          language: _activeLearningLanguage,
+          lastUpdated: proficiency.lastUpdated,
+        );
+      }
+      await repository.saveActiveLearningLanguage(_activeLearningLanguage);
+      isLoading = false;
+      notifyListeners();
+      await showNewWord();
+    } catch (_) {
+      proficiency = ProficiencyState.initial();
+      isLoading = false;
+      notifyListeners();
+      await showNewWord();
+    }
   }
 
   Future<void> register({
@@ -413,6 +521,14 @@ class LearningSessionController extends ChangeNotifier {
       }
     }
     return '${action.failureLabel} failed. Check connection and try again.';
+  }
+
+  String _normalizeLearningLanguage(String? language) {
+    final candidate = language?.trim();
+    if (candidate != null && repository.supportedLearningLanguages.contains(candidate)) {
+      return candidate;
+    }
+    return repository.defaultLearningLanguage;
   }
 }
 

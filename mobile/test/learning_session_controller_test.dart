@@ -187,6 +187,175 @@ void main() {
       'Could not reach the word feed and no local new word is available.',
     );
   });
+
+  test('controller uses language from proficiency for word fetch and rating submission', () async {
+    final apiClient = _ControllerApiClient(
+      proficiencyLanguage: 'zh',
+      proficiencyScale: 'hsk',
+      proficiencyLevel: 'HSK2',
+      proficiencyLevelIndex: 1,
+    );
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+
+    await controller.loadInitial();
+
+    expect(controller.proficiency.language, 'zh');
+    expect(controller.proficiency.scale, 'hsk');
+    expect(apiClient.lastFetchNewWordsTargetLanguage, 'zh');
+
+    final now = DateTime.utc(2026, 5, 5);
+    final db = controller.repository.database;
+    await db.upsertWord(
+      VocabularyWord(
+        localId: 'zh_word_1',
+        serverWordId: 'zh_word_1',
+        term: '你好',
+        language: 'zh',
+        meaningVi: 'xin chao',
+        partOfSpeech: 'interjection',
+        ipa: '',
+        vietnamesePronunciation: 'ni hao',
+        example: '你好。',
+        exampleVi: 'Xin chao.',
+        difficulty: 'HSK1',
+        topics: const ['greeting'],
+        status: WordStatus.newWord,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await controller.showNewWord();
+    await controller.rateCurrent(StudyRating.easy);
+
+    expect(apiClient.lastSubmittedStudyEventLanguage, 'zh');
+  });
+
+  test('loadInitial restores persisted active learning language before fetching proficiency', () async {
+    final apiClient = _ControllerApiClient(
+      proficiencyLanguage: 'zh',
+      proficiencyScale: 'hsk',
+      proficiencyLevel: 'HSK2',
+      proficiencyLevelIndex: 1,
+    );
+    final repository = await _repository(apiClient);
+    await repository.saveActiveLearningLanguage('zh');
+    final controller = LearningSessionController(repository: repository);
+
+    await controller.loadInitial();
+
+    expect(controller.activeLearningLanguage, 'zh');
+    expect(controller.proficiency.language, 'zh');
+    expect(apiClient.lastFetchNewWordsTargetLanguage, 'zh');
+  });
+
+  test('setActiveLearningLanguage persists selection and reloads session in new language', () async {
+    final apiClient = _ControllerApiClient(
+      fetchNewWordsResponse: [
+        VocabularyWord(
+          localId: 'zh_word_visible',
+          serverWordId: 'zh_word_visible',
+          term: '你好',
+          language: 'zh',
+          meaningVi: 'xin chao',
+          partOfSpeech: 'interjection',
+          ipa: '',
+          vietnamesePronunciation: 'ni hao',
+          example: '你好。',
+          exampleVi: 'Xin chao.',
+          difficulty: 'HSK1',
+          topics: const ['greeting'],
+          status: WordStatus.newWord,
+          createdAt: DateTime.utc(2026, 5, 5),
+          updatedAt: DateTime.utc(2026, 5, 5),
+        ),
+      ],
+      proficiencyLanguage: 'zh',
+      proficiencyScale: 'hsk',
+      proficiencyLevel: 'HSK1',
+      proficiencyLevelIndex: 0,
+    );
+    final repository = await _repository(apiClient);
+    final controller = LearningSessionController(repository: repository);
+
+    await controller.loadInitial();
+    await controller.setActiveLearningLanguage('zh');
+
+    expect(controller.activeLearningLanguage, 'zh');
+    expect(controller.proficiency.language, 'zh');
+    expect(controller.currentWord?.language, 'zh');
+    expect(await repository.loadActiveLearningLanguage(), 'zh');
+    expect(apiClient.lastFetchNewWordsTargetLanguage, 'zh');
+  });
+
+  test('setActiveLearningLanguage falls back to default when unsupported language is chosen', () async {
+    final repository = await _repository(_ControllerApiClient());
+    final controller = LearningSessionController(repository: repository);
+
+    await controller.loadInitial();
+    await controller.setActiveLearningLanguage('es');
+
+    expect(controller.activeLearningLanguage, 'en');
+    expect(await repository.loadActiveLearningLanguage(), 'en');
+  });
+
+  test('sets level-change feedback message after rating changes proficiency level', () async {
+    final apiClient = _ControllerApiClient(
+      submitProficiency: const ProficiencyState(
+        scale: 'cefr',
+        level: 'A2',
+        levelIndex: 1,
+        previousLevel: 'A1',
+        levelChanged: true,
+      ),
+      fetchNewWordsResponse: [_word('word_level_change')],
+    );
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+
+    await controller.loadInitial();
+    await controller.rateCurrent(StudyRating.tooEasy);
+
+    expect(controller.proficiency.level, 'A2');
+    expect(controller.takeLevelChangeMessage(), 'Level changed: A1 -> A2');
+  });
+
+  test('accepts adjacent-level word when backend fallback provides non-exact level', () async {
+    final apiClient = _ControllerApiClient(
+      proficiencyLevel: 'B1',
+      fetchNewWordsResponse: [
+        VocabularyWord(
+          localId: 'fallback_b2',
+          serverWordId: 'fallback_b2',
+          term: 'resilient',
+          language: 'en',
+          meaningVi: 'kien cuong',
+          partOfSpeech: 'adjective',
+          ipa: '/rɪˈzɪliənt/',
+          vietnamesePronunciation: 'ri-zil-i-nt',
+          example: 'She is resilient under pressure.',
+          exampleVi: 'Co ay kien cuong khi bi ap luc.',
+          difficulty: 'B2',
+          topics: const ['work'],
+          status: WordStatus.newWord,
+          createdAt: DateTime.utc(2026, 5, 6),
+          updatedAt: DateTime.utc(2026, 5, 6),
+        ),
+      ],
+    );
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+
+    await controller.loadInitial();
+
+    expect(apiClient.lastFetchNewWordsProficiencyLevel, 'B1');
+    expect(controller.currentWord, isNotNull);
+    expect(controller.currentWord!.difficulty, 'B2');
+  });
 }
 
 int _databaseCounter = 0;
@@ -203,6 +372,12 @@ class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
     this.fetchNewWordsError,
+    this.fetchNewWordsResponse = const [],
+    this.submitProficiency,
+    this.proficiencyLanguage = 'en',
+    this.proficiencyScale = 'cefr',
+    this.proficiencyLevel = 'A1',
+    this.proficiencyLevelIndex = 0,
   }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
@@ -214,6 +389,15 @@ class _ControllerApiClient extends BackendApiClient {
   Object? signInError;
   Object? signOutError;
   Object? fetchNewWordsError;
+  List<VocabularyWord> fetchNewWordsResponse;
+  ProficiencyState? submitProficiency;
+  String proficiencyLanguage;
+  String proficiencyScale;
+  String proficiencyLevel;
+  int proficiencyLevelIndex;
+  String? lastFetchNewWordsTargetLanguage;
+  String? lastFetchNewWordsProficiencyLevel;
+  String? lastSubmittedStudyEventLanguage;
 
   @override
   Future<List<VocabularyWord>> fetchNewWords({
@@ -229,7 +413,9 @@ class _ControllerApiClient extends BackendApiClient {
     if (error != null) {
       throw error;
     }
-    return [];
+    lastFetchNewWordsTargetLanguage = targetLanguage;
+    lastFetchNewWordsProficiencyLevel = proficiencyLevel;
+    return fetchNewWordsResponse;
   }
 
   @override
@@ -238,7 +424,12 @@ class _ControllerApiClient extends BackendApiClient {
     String language = 'en',
     String? sessionToken,
   }) async {
-    return ProficiencyState.initial();
+    return ProficiencyState(
+      scale: proficiencyScale,
+      level: proficiencyLevel,
+      levelIndex: proficiencyLevelIndex,
+      language: proficiencyLanguage,
+    );
   }
 
   @override
@@ -284,6 +475,29 @@ class _ControllerApiClient extends BackendApiClient {
     if (error != null) {
       throw error;
     }
+  }
+
+  @override
+  Future<StudyEventResult> submitStudyEvent({
+    required String deviceId,
+    required Map<String, dynamic> event,
+    String language = 'en',
+    String? sessionToken,
+  }) async {
+    lastSubmittedStudyEventLanguage = language;
+    final resolvedProficiency = submitProficiency ??
+        ProficiencyState(
+          scale: proficiencyScale,
+          level: proficiencyLevel,
+          levelIndex: proficiencyLevelIndex,
+          language: proficiencyLanguage,
+        );
+    return StudyEventResult(
+      success: true,
+      eventId: event['client_event_id'] as String,
+      idempotent: false,
+      proficiency: resolvedProficiency,
+    );
   }
 }
 

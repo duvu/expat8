@@ -231,8 +231,21 @@ test('auto-initializes proficiency for a new device', () => {
 
   const proficiency = store.getProficiency({ deviceId: 'fresh_device', language: 'en' });
 
+  assert.equal(proficiency.scale, 'cefr');
   assert.equal(proficiency.level, 'A1');
+  assert.equal(proficiency.level_index, 0);
   assert.equal(proficiency.language, 'en');
+});
+
+test('auto-initializes Chinese proficiency with HSK scale', () => {
+  const store = new WordStore({ seed: false });
+
+  const proficiency = store.getProficiency({ deviceId: 'fresh_zh_device', language: 'zh' });
+
+  assert.equal(proficiency.scale, 'hsk');
+  assert.equal(proficiency.level, 'HSK1');
+  assert.equal(proficiency.level_index, 0);
+  assert.equal(proficiency.language, 'zh');
 });
 
 test('filters words by proficiency level with fallback order', () => {
@@ -275,6 +288,37 @@ test('uses device proficiency when word feed omits explicit level', () => {
   });
 
   assert.deepEqual(words.map((word) => word.id), ['word_a2']);
+});
+
+test('applies HSK progression and fallback for Chinese language', () => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_hsk1', term: 'ni hao', language: 'zh', difficulty: 'HSK1' }));
+  store.insertWord(wordInput({ id: 'word_hsk2', term: 'xuexi', language: 'zh', difficulty: 'HSK2' }));
+
+  for (let index = 0; index < 5; index += 1) {
+    store.recordStudyEvent({
+      deviceId: 'device_zh',
+      language: 'zh',
+      event: {
+        client_event_id: `evt_zh_${index + 1}`,
+        server_word_id: 'word_hsk1',
+        local_word_id: `local_zh_${index + 1}`,
+        rating: 'too_easy',
+        occurred_at: `2026-05-04T11:30:0${index}.000Z`
+      }
+    });
+  }
+
+  const proficiency = store.getProficiency({ deviceId: 'device_zh', language: 'zh' });
+  assert.equal(proficiency.scale, 'hsk');
+  assert.equal(proficiency.level, 'HSK2');
+
+  const words = store.findNewWords({
+    targetLanguage: 'zh',
+    limit: 1,
+    deviceId: 'device_zh'
+  });
+  assert.deepEqual(words.map((word) => word.id), ['word_hsk2']);
 });
 
 function wordInput(overrides = {}) {

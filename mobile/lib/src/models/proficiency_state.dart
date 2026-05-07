@@ -1,6 +1,8 @@
 class ProficiencyState {
   const ProficiencyState({
+    required this.scale,
     required this.level,
+    required this.levelIndex,
     this.levelChanged = false,
     this.previousLevel,
     this.triggeredBy,
@@ -11,12 +13,16 @@ class ProficiencyState {
   });
 
   factory ProficiencyState.initial() {
-    return const ProficiencyState(level: 'A1');
+    return const ProficiencyState(scale: 'cefr', level: 'A1', levelIndex: 0);
   }
 
   factory ProficiencyState.fromJson(Map<String, dynamic> json) {
+    final resolvedLevel = (json['level'] ?? 'A1') as String;
+    final resolvedScale = (json['scale'] as String?) ?? _inferScaleFromLevel(resolvedLevel);
     return ProficiencyState(
-      level: (json['level'] ?? 'A1') as String,
+      scale: resolvedScale,
+      level: resolvedLevel,
+      levelIndex: (json['level_index'] ?? 0) as int,
       levelChanged: (json['level_changed'] ?? false) as bool,
       previousLevel: json['previous_level'] as String?,
       triggeredBy: json['triggered_by'] as String?,
@@ -29,7 +35,9 @@ class ProficiencyState {
     );
   }
 
+  final String scale;
   final String level;
+  final int levelIndex;
   final bool levelChanged;
   final String? previousLevel;
   final String? triggeredBy;
@@ -37,4 +45,11 @@ class ProficiencyState {
   final String? consecutiveRatingType;
   final String language;
   final DateTime? lastUpdated;
+
+  static String _inferScaleFromLevel(String level) {
+    if (level.toUpperCase().startsWith('HSK')) {
+      return 'hsk';
+    }
+    return 'cefr';
+  }
 }

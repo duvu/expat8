@@ -1,16 +1,45 @@
-# expat8_language_app
+# Expat8 Mobile App
 
-A new Flutter project.
+Flutter client for Expat8 vocabulary learning.
 
-## Getting Started
+## Adaptive Proficiency UX
 
-This project is a starting point for a Flutter application.
+- Proficiency badge is shown in the top-right of the learning screen.
+- Rating actions are shown as one horizontal row with 4 equal-width buttons:
+	- Easy
+	- Too Easy
+	- Hard
+	- Too Hard
+- Level-change feedback is surfaced in-app after backend confirms progression/regression.
 
-A few resources to get you started if this is your first Flutter project:
+## Startup Refresh
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+At startup, the app initializes a refresh worker and triggers:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- first-install prefetch (fire-and-forget)
+- daily refresh check (fire-and-forget)
+
+Startup flow keeps loading non-blocking and logs refresh failures without crashing.
+
+## Build Defines
+
+Key runtime defines:
+
+- BACKEND_BASE_URL
+- NEW_WORD_TIMEOUT_SECONDS
+- APP_CREDENTIAL_APP_ID
+- APP_CREDENTIAL_SECRET
+- VOCAB_PREFETCH_LIMIT
+- VOCAB_DAILY_REFRESH_COUNT
+- VOCAB_PROACTIVE_THRESHOLD
+- VOCAB_PROACTIVE_MIN_NEW
+
+Example:
+
+```bash
+flutter run \
+	--dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+	--dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
+	--dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+	--dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+```

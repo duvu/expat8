@@ -195,6 +195,53 @@ void main() {
     expect(apiClient.lastSessionToken, 'session_recording');
   });
 
+  test('loads default active learning language when no setting exists', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_language_default.db',
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      config: _testConfig(),
+    );
+
+    final language = await repository.loadActiveLearningLanguage();
+
+    expect(language, 'en');
+  });
+
+  test('persists and restores active learning language through repository helpers', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_language_persist.db',
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      config: _testConfig(),
+    );
+
+    await repository.saveActiveLearningLanguage('zh');
+    final language = await repository.loadActiveLearningLanguage();
+
+    expect(language, 'zh');
+  });
+
+  test('falls back to default when persisted active learning language is unsupported', () async {
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_language_invalid.db',
+    );
+    await database.setSetting(LocalDatabase.keyActiveLearningLanguage, 'es');
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      config: _testConfig(),
+    );
+
+    final language = await repository.loadActiveLearningLanguage();
+
+    expect(language, 'en');
+  });
+
   test('clears local session on sign out and keeps anonymous learning available', () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_sign_out.db',
@@ -334,6 +381,28 @@ void main() {
     expect(apiClient.fetchRecentWordsCalled, false);
   });
 
+  test('checkAndRunDailyRefresh triggers backend refresh when date changed', () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_daily_trigger_$ts.db',
+    );
+    await database.setSetting(LocalDatabase.keyLastDailyRefreshDate, '2000-01-01');
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+    repository.initRefreshWorker('device_test');
+
+    await repository.checkAndRunDailyRefresh();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final today = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    expect(apiClient.fetchRecentWordsCalled, true);
+    expect(await database.getSetting(LocalDatabase.keyLastDailyRefreshDate), today);
+  });
+
   test('recordWordStudied increments words_studied counter in settings', () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
@@ -356,6 +425,28 @@ void main() {
 
     final raw = await database.getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
     expect(int.parse(raw!), 3);
+  });
+
+  test('recordWordStudied triggers proactive refresh at threshold with low new words', () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_proactive_refresh_$ts.db',
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(proactiveThreshold: 2, proactiveMinNew: 3),
+    );
+    repository.initRefreshWorker('device_test');
+
+    await repository.recordWordStudied();
+    await repository.recordWordStudied();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    final raw = await database.getSetting(LocalDatabase.keyWordsStudiedSinceLastRefresh);
+    expect(apiClient.fetchRecentWordsCalled, true);
+    expect(int.parse(raw!), 0);
   });
 }
 
@@ -416,11 +507,11 @@ class _RecordingApiClient extends BackendApiClient {
 
   @override
   Future<List<VocabularyWord>> fetchRecentWords({
+    required String deviceId,
     int limit = 1000,
     String sourceLanguage = 'vi',
     String targetLanguage = 'en',
     List<String> excludeIds = const [],
-    String? deviceId,
   }) async {
     fetchRecentWordsCalled = true;
     return [];
@@ -473,7 +564,9 @@ class _RecordingApiClient extends BackendApiClient {
       eventId: event['client_event_id'] as String,
       idempotent: false,
       proficiency: const ProficiencyState(
+        scale: 'cefr',
         level: 'A2',
+        levelIndex: 1,
         levelChanged: true,
         previousLevel: 'A1',
       ),
@@ -561,6 +654,8 @@ AppConfig _testConfig({int proactiveThreshold = 100, int proactiveMinNew = 15}) 
     newWordTimeout: Duration.zero,
     appCredentialAppId: 'test-app',
     appCredentialSecret: 'test-secret',
+    defaultLearningLanguage: 'en',
+    supportedLearningLanguages: const ['en', 'zh', 'vi'],
     logLevel: 'info',
     logMaxEntries: 100,
     logRetentionDays: 1,

@@ -8,6 +8,8 @@ export class InMemoryNonceCache {
   }
 
   use(appId, nonce, nowMs, ttlSeconds) {
+    // Node.js runs on a single thread, so the check-then-set below is atomic —
+    // no concurrent request can interleave between `has` and `set`.
     this.prune(nowMs);
     const key = `${appId}:${nonce}`;
     if (this.entries.has(key)) {
@@ -125,10 +127,9 @@ function headerValue(headers, name) {
 }
 
 function timingSafeEqual(left, right) {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+  // Hash both operands to a fixed-length digest before comparing.
+  // This removes the length-check branch that would leak whether the
+  // operand lengths matched, preserving constant-time semantics.
+  const hash = (v) => crypto.createHash('sha256').update(v).digest();
+  return crypto.timingSafeEqual(hash(left), hash(right));
 }

@@ -4,6 +4,8 @@ class AppConfig {
     required this.newWordTimeout,
     required this.appCredentialAppId,
     required this.appCredentialSecret,
+    required this.defaultLearningLanguage,
+    required this.supportedLearningLanguages,
     required this.logLevel,
     required this.logMaxEntries,
     required this.logRetentionDays,
@@ -30,6 +32,8 @@ class AppConfig {
         'APP_CREDENTIAL_SECRET',
         defaultValue: 'expat8-mobile-secret',
       ),
+      defaultLearningLanguage: 'en',
+      supportedLearningLanguages: ['en', 'zh', 'vi'],
       logLevel: String.fromEnvironment(
         'APP_LOG_LEVEL',
         defaultValue: 'info',
@@ -65,6 +69,8 @@ class AppConfig {
   final Duration newWordTimeout;
   final String appCredentialAppId;
   final String appCredentialSecret;
+  final String defaultLearningLanguage;
+  final List<String> supportedLearningLanguages;
   final String logLevel;
   final int logMaxEntries;
   final int logRetentionDays;

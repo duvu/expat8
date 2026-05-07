@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
@@ -51,8 +52,18 @@ Future<void> main() async {
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
     await repository.syncCacheInventory(deviceId: deviceId);
-    await repository.checkAndRunFirstInstallPrefetch();
-    await repository.checkAndRunDailyRefresh();
+    unawaited(_runStartupRefreshTask(
+      repository.checkAndRunFirstInstallPrefetch,
+      logger,
+      event: 'app.prefetch.startup_error',
+      message: 'First-install prefetch trigger failed at startup.',
+    ));
+    unawaited(_runStartupRefreshTask(
+      repository.checkAndRunDailyRefresh,
+      logger,
+      event: 'app.daily_refresh.startup_error',
+      message: 'Daily refresh trigger failed at startup.',
+    ));
   } catch (error) {
     await logger.warning(
       category: AppLogCategory.app,
@@ -69,6 +80,24 @@ Future<void> main() async {
   );
 
   runApp(LanguageLearningApp(controller: controller));
+}
+
+Future<void> _runStartupRefreshTask(
+  Future<void> Function() action,
+  Logger logger, {
+  required String event,
+  required String message,
+}) async {
+  try {
+    await action();
+  } catch (error) {
+    await logger.warning(
+      category: AppLogCategory.app,
+      event: event,
+      message: message,
+      context: {'error': '$error'},
+    );
+  }
 }
 
 class LanguageLearningApp extends StatelessWidget {

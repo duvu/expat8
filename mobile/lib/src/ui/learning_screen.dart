@@ -6,6 +6,12 @@ import '../session/learning_session_controller.dart';
 import 'logs_screen.dart';
 import 'vocabulary_card.dart';
 
+const Map<String, String> kLearningLanguageLabels = {
+  'en': 'English',
+  'zh': 'Chinese',
+  'vi': 'Vietnamese',
+};
+
 class LearningScreen extends StatefulWidget {
   const LearningScreen({required this.controller, super.key});
 
@@ -62,7 +68,10 @@ class _LearningScreenState extends State<LearningScreen> {
               )
             : null,
         actions: [
-          ProficiencyLevelLabel(level: controller.proficiency.level),
+          ProficiencyLevelLabel(
+            scale: controller.proficiency.scale,
+            level: controller.proficiency.level,
+          ),
         ],
       ),
       drawer: LearningDrawer(
@@ -92,7 +101,17 @@ class _LearningScreenState extends State<LearningScreen> {
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: LearningLanguageSelector(
+                currentLanguage: controller.activeLearningLanguage,
+                supportedLanguages: controller.supportedLearningLanguages,
+                isLoading: controller.isLoading,
+                onChanged: controller.setActiveLearningLanguage,
+              ),
+            ),
+            const SizedBox(height: 16),
             if (controller.isLoading)
               const Center(child: CircularProgressIndicator())
             else if (controller.currentWord != null)
@@ -168,6 +187,101 @@ class _LearningScreenState extends State<LearningScreen> {
     await widget.controller.signIn(
       identifier: credentials.identifier,
       password: credentials.password,
+    );
+  }
+}
+
+class LearningLanguageSelector extends StatelessWidget {
+  const LearningLanguageSelector({
+    required this.currentLanguage,
+    required this.supportedLanguages,
+    required this.isLoading,
+    required this.onChanged,
+    super.key,
+  });
+
+  final String currentLanguage;
+  final List<String> supportedLanguages;
+  final bool isLoading;
+  final Future<void> Function(String language) onChanged;
+
+  String _labelFor(String language) {
+    return kLearningLanguageLabels[language] ?? language.toUpperCase();
+  }
+
+  Future<void> _showPicker(BuildContext context) async {
+    if (isLoading) {
+      return;
+    }
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Text(
+                'Choose learning language',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              for (final language in supportedLanguages)
+                ListTile(
+                  title: Text(_labelFor(language)),
+                  subtitle: Text(language.toUpperCase()),
+                  trailing: language == currentLanguage
+                      ? const Icon(Icons.check_circle)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(language),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null && selected != currentLanguage) {
+      await onChanged(selected);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.language),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Learning language',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _labelFor(currentLanguage),
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: isLoading ? null : () => _showPicker(context),
+              icon: const Icon(Icons.swap_vert),
+              label: const Text('Change'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -470,9 +584,23 @@ class AuthProgressIndicator extends StatelessWidget {
 }
 
 class ProficiencyLevelLabel extends StatelessWidget {
-  const ProficiencyLevelLabel({required this.level, super.key});
+  const ProficiencyLevelLabel({
+    required this.scale,
+    required this.level,
+    super.key,
+  });
 
+  final String scale;
   final String level;
+
+  String get formattedLevel {
+    if (scale.toLowerCase() == 'hsk') {
+      return level.toUpperCase().startsWith('HSK')
+          ? level.toUpperCase()
+          : 'HSK$level';
+    }
+    return level.toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -480,7 +608,7 @@ class ProficiencyLevelLabel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Center(
         child: Text(
-          'Level $level',
+          'Level $formattedLevel',
           style: Theme.of(context).textTheme.titleMedium,
         ),
       ),
