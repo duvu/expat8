@@ -603,11 +603,6 @@ class LocalDatabase {
     WordStatus.mastered.name,
   ];
 
-  static const String keyIsPrefetchDone = 'is_prefetch_done';
-  static const String keyLastDailyRefreshDate = 'last_daily_refresh_date';
-  static const String keyWordsStudiedSinceLastRefresh =
-      'words_studied_since_last_refresh';
-
   Future<String?> getSetting(String key) async {
     final row =
         _settings.query(AppSettingEntity_.key.equals(key)).build().findFirst();
@@ -634,6 +629,50 @@ class LocalDatabase {
         )
         .build()
         .count();
+  }
+
+  Future<int> countWords({String language = 'en'}) async {
+    return _localWords
+        .query(LocalWordEntity_.language.equals(language))
+        .build()
+        .count();
+  }
+
+  /// Deletes up to [limit] oldest mastered (remembered) words for [language],
+  /// skipping any with pending sync events. Returns the number actually removed.
+  Future<int> deleteOldestMasteredWords({
+    String language = 'en',
+    required int limit,
+  }) async {
+    if (limit <= 0) return 0;
+    final pendingLocalIds = _studyEvents
+        .query(StudyEventEntity_.syncStatus.equals(SyncStatus.pending.name))
+        .build()
+        .find()
+        .map((e) => e.localWordId)
+        .toSet();
+
+    final rows = _localWords
+        .query(
+          LocalWordEntity_.status.equals(WordStatus.mastered.name) &
+              LocalWordEntity_.language.equals(language),
+        )
+        .build()
+        .find()
+        .where((e) => !pendingLocalIds.contains(e.localId))
+        .toList();
+
+    rows.sort((a, b) {
+      final aTs = a.lastSeenAtMs ?? a.updatedAtMs;
+      final bTs = b.lastSeenAtMs ?? b.updatedAtMs;
+      return aTs.compareTo(bTs);
+    });
+
+    final toDelete = rows.take(limit).toList();
+    for (final row in toDelete) {
+      _localWords.remove(row.id);
+    }
+    return toDelete.length;
   }
 
   /// Adds a batch of words to the local cache.

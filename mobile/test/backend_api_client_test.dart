@@ -83,41 +83,6 @@ void main() {
     expect(nonces, everyElement(isNot(matches(RegExp(r'^mobile_\d+$')))));
   });
 
-  test('fetchRecentWords sends only supported bootstrap query parameters',
-      () async {
-    late http.Request captured;
-    final client = MockClient((request) async {
-      captured = request;
-      return http.Response(
-        jsonEncode({'items': []}),
-        200,
-        headers: {'content-type': 'application/json'},
-      );
-    });
-
-    final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
-      timeout: const Duration(seconds: 5),
-      appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
-      httpClient: client,
-    );
-
-    await apiClient.fetchRecentWords(
-      limit: 500,
-      targetLanguage: 'en',
-      sourceLanguage: 'vi',
-      deviceId: 'device_ignored',
-      excludeIds: const ['word_ignored'],
-    );
-
-    expect(captured.url.path, '/v1/words/recent');
-    expect(captured.url.queryParameters, {
-      'limit': '500',
-      'target_language': 'en',
-    });
-  });
-
   test('parses proficiency fetch response', () async {
     final client = MockClient((request) async {
       return http.Response(
@@ -151,56 +116,6 @@ void main() {
     expect(proficiency.levelIndex, 1);
     expect(proficiency.consecutiveCount, 3);
     expect(proficiency.consecutiveRatingType, 'too_easy');
-  });
-
-  test('fetchRecentWords sends device/exclude filters and parses response list', () async {
-    late Uri requestedUri;
-    final client = MockClient((request) async {
-      requestedUri = request.url;
-      return http.Response(
-        jsonEncode({
-          'items': [
-            {
-              'server_word_id': 'word_1',
-              'term': 'reliable',
-              'language': 'en',
-              'meaning_vi': 'dang tin cay',
-              'part_of_speech': 'adjective',
-              'ipa': '/rɪˈlaɪəbl/',
-              'vietnamese_pronunciation': 'ri-lai-uh-bol',
-              'example': 'She is reliable.',
-              'example_vi': 'Co ay dang tin cay.',
-              'difficulty': 'B1',
-              'topics': ['work'],
-              'created_at': '2026-05-05T00:00:00.000Z',
-            }
-          ],
-        }),
-        200,
-        headers: {'content-type': 'application/json'},
-      );
-    });
-
-    final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
-      timeout: const Duration(seconds: 5),
-      appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
-      httpClient: client,
-    );
-
-    final words = await apiClient.fetchRecentWords(
-      deviceId: 'device_1',
-      limit: 50,
-      excludeIds: const ['word_x', 'word_y'],
-    );
-
-    expect(requestedUri.path, '/v1/words/recent');
-    expect(requestedUri.queryParameters['device_id'], 'device_1');
-    expect(requestedUri.queryParameters['limit'], '50');
-    expect(requestedUri.queryParametersAll['exclude_server_word_id'], const ['word_x', 'word_y']);
-    expect(words.length, 1);
-    expect(words.single.serverWordId, 'word_1');
   });
 
   test('syncs local cache inventory to backend', () async {

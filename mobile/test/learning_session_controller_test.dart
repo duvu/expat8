@@ -194,33 +194,6 @@ void main() {
     );
   });
 
-  test(
-      'showNewWord triggers prefetch when unstudied count is below threshold',
-      () async {
-    // Seed the database with 5 new words (well below threshold of 100).
-    final database = await LocalDatabase.open(
-      databaseName:
-          'learning_session_test_prefetch_${DateTime.now().microsecondsSinceEpoch}.db',
-    );
-    final now = DateTime.utc(2026, 5, 5);
-    for (var i = 0; i < 5; i++) {
-      await database.upsertWord(_word('seed_$i'));
-    }
-    final prefetchCalled = Completer<void>();
-    final apiClient = _ControllerApiClient(
-      onFetchLearningCards: () => prefetchCalled.complete(),
-    );
-    final controller = LearningSessionController(
-      repository: WordRepository(database: database, apiClient: apiClient),
-    );
-
-    await controller.showNewWord();
-
-    // Allow the async prefetch callback to fire.
-    await prefetchCalled.future.timeout(const Duration(seconds: 3));
-    expect(prefetchCalled.isCompleted, isTrue);
-  });
-
   test('consecutive showNewWord calls show distinct words', () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -271,7 +244,6 @@ class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
     this.fetchLearningCardsError,
-    this.onFetchLearningCards,
   }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
@@ -283,7 +255,6 @@ class _ControllerApiClient extends BackendApiClient {
   Object? signInError;
   Object? signOutError;
   Object? fetchLearningCardsError;
-  void Function()? onFetchLearningCards;
 
   @override
   Future<LearningCardBatch> fetchLearningCards({
@@ -292,7 +263,6 @@ class _ControllerApiClient extends BackendApiClient {
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
-    onFetchLearningCards?.call();
     final error = fetchLearningCardsError;
     if (error != null) {
       throw error;

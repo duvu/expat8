@@ -22,8 +22,9 @@ Core behavior:
 - POST /v1/study-events
 - POST /v1/study-events/sync
 - GET /v1/proficiency
-- GET /v1/words/next
+- POST /v1/learning/cards
 - GET /v1/words/recent
+- PUT /v1/user-word-cache
 
 See contracts/api.md for request and response details.
 

@@ -9,10 +9,11 @@ class AppConfig {
     required this.logLevel,
     required this.logMaxEntries,
     required this.logRetentionDays,
-    required this.vocabPrefetchLimit,
-    required this.vocabDailyRefreshCount,
-    required this.vocabProactiveThreshold,
-    required this.vocabProactiveMinNew,
+    required this.vocabFirstInstallSize,
+    required this.vocabPoolFullSize,
+    required this.vocabHourlyTopUpSize,
+    required this.vocabRotationSize,
+    required this.vocabRotationUnstudiedThreshold,
   });
 
   factory AppConfig.fromEnvironment() {
@@ -46,21 +47,25 @@ class AppConfig {
         'APP_LOG_RETENTION_DAYS',
         defaultValue: 7,
       ),
-      vocabPrefetchLimit: int.fromEnvironment(
-        'VOCAB_PREFETCH_LIMIT',
-        defaultValue: 100,
+      vocabFirstInstallSize: int.fromEnvironment(
+        'VOCAB_FIRST_INSTALL_SIZE',
+        defaultValue: 200,
       ),
-      vocabDailyRefreshCount: int.fromEnvironment(
-        'VOCAB_DAILY_REFRESH_COUNT',
+      vocabPoolFullSize: int.fromEnvironment(
+        'VOCAB_POOL_FULL_SIZE',
+        defaultValue: 1000,
+      ),
+      vocabHourlyTopUpSize: int.fromEnvironment(
+        'VOCAB_HOURLY_TOP_UP_SIZE',
         defaultValue: 10,
       ),
-      vocabProactiveThreshold: int.fromEnvironment(
-        'VOCAB_PROACTIVE_THRESHOLD',
+      vocabRotationSize: int.fromEnvironment(
+        'VOCAB_ROTATION_SIZE',
         defaultValue: 100,
       ),
-      vocabProactiveMinNew: int.fromEnvironment(
-        'VOCAB_PROACTIVE_MIN_NEW',
-        defaultValue: 10,
+      vocabRotationUnstudiedThreshold: int.fromEnvironment(
+        'VOCAB_ROTATION_UNSTUDIED_THRESHOLD',
+        defaultValue: 100,
       ),
     );
   }
@@ -74,8 +79,9 @@ class AppConfig {
   final String logLevel;
   final int logMaxEntries;
   final int logRetentionDays;
-  final int vocabPrefetchLimit;
-  final int vocabDailyRefreshCount;
-  final int vocabProactiveThreshold;
-  final int vocabProactiveMinNew;
+  final int vocabFirstInstallSize;
+  final int vocabPoolFullSize;
+  final int vocabHourlyTopUpSize;
+  final int vocabRotationSize;
+  final int vocabRotationUnstudiedThreshold;
 }

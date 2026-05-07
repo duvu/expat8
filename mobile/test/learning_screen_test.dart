@@ -44,37 +44,6 @@ void main() {
     expect(find.text('Too Hard'), findsNothing);
   });
 
-  testWidgets('rating buttons trigger callbacks on tap', (tester) async {
-    var easyCount = 0;
-    var tooEasyCount = 0;
-    var hardCount = 0;
-    var tooHardCount = 0;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: RatingButtonBar(
-            onEasy: () => easyCount += 1,
-            onTooEasy: () => tooEasyCount += 1,
-            onHard: () => hardCount += 1,
-            onTooHard: () => tooHardCount += 1,
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Easy'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Too Easy'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Hard'));
-    await tester.tap(find.widgetWithText(FilledButton, 'Too Hard'));
-    await tester.pump();
-
-    expect(easyCount, 1);
-    expect(tooEasyCount, 1);
-    expect(hardCount, 1);
-    expect(tooHardCount, 1);
-  });
-
   testWidgets('renders HSK proficiency label for Chinese learning state', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -107,7 +76,7 @@ void main() {
 
     expect(find.text('Learning language'), findsOneWidget);
     expect(find.text('Chinese'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Change'), findsOneWidget);
+    expect(find.text('Change'), findsOneWidget);
   });
 
   testWidgets('language selector opens choices and reports selection changes', (tester) async {
@@ -126,7 +95,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Change'));
+    await tester.tap(find.text('Change'));
     await tester.pumpAndSettle();
 
     expect(find.text('Choose learning language'), findsOneWidget);

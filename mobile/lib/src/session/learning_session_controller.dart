@@ -37,7 +37,9 @@ class LearningSessionController extends ChangeNotifier {
   VocabularyWord? currentWord;
   bool isLoading = false;
   bool isAuthInProgress = false;
-  bool _prefetchInFlight = false;
+  Timer? _inventoryTimer;
+  bool _topUpInFlight = false;
+  final Duration _inventoryTopUpInterval = const Duration(hours: 1);
   String? statusMessage;
   String? authSuccessMessage;
   String? authErrorMessage;
@@ -104,6 +106,7 @@ class LearningSessionController extends ChangeNotifier {
       proficiency = ProficiencyState.initial();
     }
     await showNewWord();
+    _startInventoryTimer();
     await _logger.info(
       category: AppLogCategory.session,
       event: 'session.load_initial.complete',
@@ -157,7 +160,6 @@ class LearningSessionController extends ChangeNotifier {
         message: 'Marked current word as remembered with low relearn frequency.',
         context: {'word_id': word.serverWordId ?? word.localId},
       );
-      _triggerPrefetchIfNeeded();
       await nextCard();
     } catch (error) {
       await _logger.warning(
@@ -187,7 +189,6 @@ class LearningSessionController extends ChangeNotifier {
         message: 'Marked current word as difficult for relearn group.',
         context: {'word_id': word.serverWordId ?? word.localId},
       );
-      _triggerPrefetchIfNeeded();
       await nextCard();
     } catch (error) {
       await _logger.warning(
@@ -246,7 +247,6 @@ class LearningSessionController extends ChangeNotifier {
       },
     );
     final result = await repository.getNewWordWithFallbackResult(
-      deviceId: _deviceId,
       language: _activeLearningLanguage,
     );
     word = result.word;
@@ -270,7 +270,6 @@ class LearningSessionController extends ChangeNotifier {
         ),
       );
     }
-    _triggerPrefetchIfNeeded();
   }
 
   Future<void> showRecentReview() async {
@@ -295,7 +294,6 @@ class LearningSessionController extends ChangeNotifier {
     CardKind? actualKind = word == null ? null : CardKind.review;
     final newWordResult = word == null
         ? await repository.getNewWordWithFallbackResult(
-            deviceId: _deviceId,
             language: _activeLearningLanguage,
           )
         : null;
@@ -312,7 +310,6 @@ class LearningSessionController extends ChangeNotifier {
           reviewResult.message ??
           'No review or new card is available. Try again later.',
     );
-    _triggerPrefetchIfNeeded();
   }
 
   void _showWord(
@@ -381,28 +378,31 @@ class LearningSessionController extends ChangeNotifier {
       'rating': rating.name,
       'word_id': word.serverWordId ?? word.localId,
     });
-    // Low-watermark background prefetch: if the unlearned cache is running low,
-    // trigger a background refill without blocking the UI.
-    _triggerPrefetchIfNeeded();
     await nextCard();
   }
 
-  void _triggerPrefetchIfNeeded() {
-    if (_prefetchInFlight) return;
-    repository.database
-        .countUnstudiedNewWords(language: _activeLearningLanguage)
-        .then((count) {
-      if (count < 100 && !_prefetchInFlight) {
-        _prefetchInFlight = true;
-        unawaited(
-          repository.prefetchBatch().then((_) {
-            _prefetchInFlight = false;
-          }).catchError((_) {
-            _prefetchInFlight = false;
-          }),
-        );
-      }
-    }).catchError((_) {});
+  void _startInventoryTimer() {
+    _inventoryTimer?.cancel();
+    _inventoryTimer = Timer.periodic(_inventoryTopUpInterval, (_) {
+      _runInventoryTopUp();
+    });
+  }
+
+  Future<void> _runInventoryTopUp() async {
+    if (_topUpInFlight) return;
+    _topUpInFlight = true;
+    try {
+      await repository.topUpInventoryIfNeeded();
+    } finally {
+      _topUpInFlight = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _inventoryTimer?.cancel();
+    _inventoryTimer = null;
+    super.dispose();
   }
 
   Future<void> register({
@@ -519,7 +519,6 @@ class LearningSessionController extends ChangeNotifier {
       case WordLookupSource.none:
         _telemetry.track(TelemetryEvent.newWordFallbackMiss);
         return;
-      case WordLookupSource.backend:
       case WordLookupSource.recentReview:
       case WordLookupSource.dueReview:
         return;
@@ -535,7 +534,6 @@ class LearningSessionController extends ChangeNotifier {
       case WordLookupSource.none:
         _telemetry.track(TelemetryEvent.recentReviewMiss);
         return;
-      case WordLookupSource.backend:
       case WordLookupSource.localFallback:
         return;
     }

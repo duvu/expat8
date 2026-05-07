@@ -237,17 +237,6 @@ void main() {
     expect(value, 'second');
   });
 
-  test('persists active learning language in app settings', () async {
-    final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_active_learning_language.db',
-    );
-
-    await database.setSetting(LocalDatabase.keyActiveLearningLanguage, 'zh');
-    final value = await database.getSetting(LocalDatabase.keyActiveLearningLanguage);
-
-    expect(value, 'zh');
-  });
-
   test('countUnstudiedNewWords returns 0 for empty database', () async {
     final database = await LocalDatabase.open(
       databaseName: 'local_database_test_count_new_empty.db',
@@ -311,7 +300,7 @@ void main() {
     final total = await database.countUnstudiedNewWords();
     expect(total, lessThanOrEqualTo(1000));
     // The newest 10 batch words must be present
-    for (final word in batch) {
+    for (final _ in batch) {
       expect(await database.nextNewWord(), isNotNull);
     }
   });

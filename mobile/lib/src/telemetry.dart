@@ -3,8 +3,6 @@ enum TelemetryEvent {
   newWordRequested,
   newWordSwipeRequested,
   recentReviewSwipeRequested,
-  newWordBackendSuccess,
-  newWordBackendTimeout,
   newWordLocalFallback,
   newWordFallbackMiss,
   recentReviewHit,
@@ -17,9 +15,6 @@ enum TelemetryEvent {
   authSignInFailure,
   authSignOutSuccess,
   authSignOutFailure,
-  syncSuccess,
-  syncFailed,
-  localCachePruned,
 }
 
 abstract class TelemetrySink {

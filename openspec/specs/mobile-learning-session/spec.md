@@ -1,11 +1,19 @@
 ## ADDED Requirements
 
 ### Requirement: Swipe advances the learning session
-The mobile app SHALL provide a primary learning screen where a downward swipe requests the next vocabulary card, and SHALL keep session navigation scoped to the active learning language and proficiency scale.
+The mobile app SHALL provide a primary learning screen where horizontal swipes request new or review vocabulary cards, vertical swipes update the current card's local learning state, and session navigation stays scoped to the active learning language and proficiency scale.
 
-#### Scenario: User swipes down for next card
-- **WHEN** the user performs a downward swipe on the learning screen
-- **THEN** the app requests the next card using the active language and current scale-native proficiency state
+#### Scenario: User swipes right-to-left for a new card
+- **WHEN** the user performs a right-to-left swipe on the learning screen
+- **THEN** the app requests a new-card-biased selection using the active language and current scale-native proficiency state
+
+#### Scenario: User swipes left-to-right for review
+- **WHEN** the user performs a left-to-right swipe on the learning screen
+- **THEN** the app requests a review-biased selection using the active language and current scale-native proficiency state
+
+#### Scenario: User swipes vertically on current card
+- **WHEN** the user performs a vertical swipe on the current card
+- **THEN** the app updates the current card's local learning state and advances to another locally selected card
 
 #### Scenario: App starts with local state
 - **WHEN** the user opens the app

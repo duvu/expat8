@@ -121,59 +121,6 @@ class BackendApiClient {
     );
   }
 
-  Future<List<VocabularyWord>> fetchRecentWords({
-    int limit = 1000,
-    String sourceLanguage = 'vi',
-    String targetLanguage = 'en',
-    List<String> excludeIds = const [],
-    String? deviceId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/words/recent').replace(
-      queryParameters: {
-        'limit': '$limit',
-        'target_language': targetLanguage,
-      },
-    );
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'words_recent.request',
-      message: 'Requesting recent vocabulary words.',
-      traceId: traceId,
-      context: {
-        'limit': limit,
-      },
-    );
-    late final http.Response response;
-    try {
-      response = await _httpClient
-          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
-          .timeout(timeout);
-    } catch (error) {
-      await _logger.error(
-        category: AppLogCategory.api,
-        event: 'words_recent.error',
-        message: 'Recent-words request failed before response.',
-        traceId: traceId,
-        context: {'error': '$error'},
-      );
-      rethrow;
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'words_recent.response',
-      message: 'Received recent-words response.',
-      traceId: traceId,
-      context: {'status_code': response.statusCode},
-    );
-    _throwIfFailed(response, 'Recent words failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
-    return items
-        .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
   Future<LearningCardBatch> fetchLearningCards({
     required String deviceId,
     int limit = 10,

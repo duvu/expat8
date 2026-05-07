@@ -33,20 +33,24 @@ The mobile app MUST retain no more than 1000 vocabulary words in local storage.
 - **WHEN** an older local word is eligible for removal and has unsynced study data
 - **THEN** the app preserves the pending sync payload before removing the local word record
 
-### Requirement: New-word requests fall back to local storage
-The mobile app SHALL use local fallback when a backend new-word request fails, times out after 5 seconds, or the device is offline, and SHALL emit diagnostic logs for request attempts, fallback decisions, and fallback outcomes.
+### Requirement: Card requests use local storage while backend refill is separate
+The mobile app SHALL serve visible new/review card requests from ObjectBox local storage and SHALL use backend `/v1/learning/cards` only for inventory refill/top-up paths.
 
-#### Scenario: Backend returns within timeout
-- **WHEN** the app requests a new word and the backend returns a valid response within 5 seconds
-- **THEN** the app saves the returned word locally, displays it, and records a success log event for the remote fetch path
+#### Scenario: Local new word is available
+- **WHEN** the app requests a new word and local storage contains at least one eligible unstudied new word
+- **THEN** the app serves the word from local storage without making a backend request in the visible card path
 
-#### Scenario: Backend request times out
-- **WHEN** the app requests a new word and the backend does not return within 5 seconds
-- **THEN** the app queries local eligible new words, displays one if available, and records timeout and fallback-attempt log events
+#### Scenario: Local new word is unavailable
+- **WHEN** the app requests a new word and local storage has no eligible unstudied new word
+- **THEN** the app may display an eligible review word if one is available and records a local-empty diagnostic log
 
-#### Scenario: No local new word is available
-- **WHEN** backend fallback is required and no eligible local new word exists
-- **THEN** the app displays an eligible review word if one is available and records a fallback-result log event indicating source selection
+#### Scenario: Backend refill succeeds
+- **WHEN** inventory refill or top-up requests `/v1/learning/cards` and the backend returns a valid batch
+- **THEN** the app saves the returned words locally through the capped ObjectBox write path
+
+#### Scenario: Backend refill fails
+- **WHEN** inventory refill or top-up fails due to timeout, network error, or backend rejection
+- **THEN** the app logs the failure and continues serving any available local cards without blocking the visible session
 
 ### Requirement: Sync queue retries failed uploads
 The mobile app SHALL sync pending study events to the backend in the background and retry failed sync attempts, and SHALL log sync batch execution, retry scheduling, and terminal failure conditions.

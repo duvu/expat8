@@ -41,24 +41,25 @@ Future<void> main() async {
   );
   final controller = LearningSessionController(repository: repository, logger: logger);
 
-  // Initialize the refresh worker once device ID is known
+  // Block startup only when local cache is empty (first install or wiped data),
+  // so the user always opens to a populated word feed. Otherwise the periodic
+  // top-up timer in the controller handles refills.
   try {
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
     await repository.syncCacheInventory(deviceId: deviceId);
-    // Await initial prefetch synchronously if the local cache is empty so the
-    // learning screen has words available immediately on first launch.
-    final unlearnedCount = await repository.database.countUnstudiedNewWords();
-    if (unlearnedCount < 10) {
-      await repository.prefetchBatch();
+    final total = await repository.database
+        .countWords(language: config.defaultLearningLanguage);
+    if (total == 0) {
+      await repository.topUpInventoryIfNeeded();
+    } else {
+      unawaited(repository.topUpInventoryIfNeeded());
     }
-    unawaited(repository.checkAndRunFirstInstallPrefetch());
-    unawaited(repository.checkAndRunDailyRefresh());
   } catch (error) {
     await logger.warning(
       category: AppLogCategory.app,
       event: 'app.refresh.init_error',
-      message: 'Vocabulary refresh worker init failed at startup.',
+      message: 'Vocabulary inventory init failed at startup.',
       context: {'error': '$error'},
     );
   }

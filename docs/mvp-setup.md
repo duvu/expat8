@@ -52,7 +52,7 @@ Environment values:
 - `VOCAB_DAILY_GENERATION_HOUR_UTC`: earliest UTC hour for the daily top-up,
   default `0`.
 - `VOCAB_GENERATION_BATCH_SIZE`: maximum words requested per fill run, default
-  `20`.
+  `100`.
 - `VOCAB_SCHEDULER_LOCK_TTL_SECONDS`: lock expiration for multi-instance
   scheduler ownership, default `120`.
 
@@ -107,7 +107,7 @@ Compose environment values:
 - `VOCAB_FILL_INTERVAL_SECONDS`: default `60`.
 - `VOCAB_DAILY_GENERATION_COUNT`: default `10`.
 - `VOCAB_DAILY_GENERATION_HOUR_UTC`: default `0`.
-- `VOCAB_GENERATION_BATCH_SIZE`: default `20`.
+- `VOCAB_GENERATION_BATCH_SIZE`: default `100`.
 - `VOCAB_SCHEDULER_LOCK_TTL_SECONDS`: default `120`.
 
 For a fresh database volume, PostgreSQL initializes tables and indexes from `backend/db/schema.sql`. To reset local Compose data, run `docker compose down -v`.
@@ -137,8 +137,8 @@ Vocabulary refill is backend-managed:
 - `easy` writes the study event first, removes the word from `local_words`,
   syncs cache inventory, and lets the next local/backend refill supply a
   replacement.
-- Startup prefetch, daily refresh, proactive refresh, and on-demand refill all
-  use the same backend-selected card path and capped ObjectBox write path.
+- Startup and inventory top-up/rotation use the same backend-selected card path
+  and capped ObjectBox write path.
 
 The mobile app supports optional registration/sign-in. Anonymous learning uses
 the persisted `device_id`; signed-in learning keeps that `device_id` and adds a
@@ -164,8 +164,8 @@ Swipe behavior:
 - Left-to-right requests a recent/due review word.
 - Slow drags are accepted using a drag-distance threshold, not only velocity.
 - The learning screen also exposes explicit `New Word` and `Review` actions.
-- If a backend request and local fallback both miss, the stale card is cleared
-  and a no-card/retry message is rendered.
+- If local new/review lookup misses, the stale card is cleared and a no-card
+  message is rendered.
 
 ## Smoke Test Coverage
 

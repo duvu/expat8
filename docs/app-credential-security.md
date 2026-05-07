@@ -2,7 +2,7 @@
 
 Tài liệu này mô tả cơ chế đơn giản để bảo vệ API public bằng `appId` và
 `secret`, đồng thời giảm rủi ro request giả mạo, replay, brute force và DDOS.
-Đây là tài liệu thiết kế; chưa phải triển khai code.
+Đây là tài liệu thiết kế cho cơ chế app credential đang được backend triển khai.
 
 ## Mục tiêu
 
