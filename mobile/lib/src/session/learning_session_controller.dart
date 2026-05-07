@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/backend_api_client.dart';
+import '../config.dart';
 import '../data/word_repository.dart';
 import '../logging/logger.dart';
 import '../models/proficiency_state.dart';
@@ -18,14 +19,20 @@ class LearningSessionController extends ChangeNotifier {
     CardSelectionWindow? selectionWindow,
     TelemetrySink? telemetry,
     Logger? logger,
+    AppConfig? config,
   })  : _selectionWindow = selectionWindow ?? CardSelectionWindow(),
         _telemetry = telemetry ?? DebugTelemetrySink(),
-        _logger = logger ?? const NoopLogger();
+        _logger = logger ?? const NoopLogger(),
+        _config = config ?? AppConfig.fromEnvironment() {
+    _activeLearningLanguage = _config.defaultLearningLanguage;
+  }
 
   final WordRepository repository;
   final CardSelectionWindow _selectionWindow;
   final TelemetrySink _telemetry;
   final Logger _logger;
+  final AppConfig _config;
+  late String _activeLearningLanguage;
 
   VocabularyWord? currentWord;
   bool isLoading = false;
@@ -39,6 +46,24 @@ class LearningSessionController extends ChangeNotifier {
   String? _deviceId;
   String? _levelChangeMessage;
   String? _userFeedbackMessage;
+
+  String get activeLearningLanguage => _activeLearningLanguage;
+
+  List<String> get supportedLearningLanguages =>
+      _config.supportedLearningLanguages;
+
+  Future<void> setActiveLearningLanguage(String language) async {
+    if (!_config.supportedLearningLanguages.contains(language)) {
+      return;
+    }
+    if (_activeLearningLanguage == language) {
+      return;
+    }
+    _activeLearningLanguage = language;
+    repository.setActiveLanguage(language);
+    notifyListeners();
+    await showNewWord();
+  }
 
   String? takeLevelChangeMessage() {
     final message = _levelChangeMessage;
@@ -73,7 +98,8 @@ class LearningSessionController extends ChangeNotifier {
     _deviceId ??= await repository.getOrCreateDeviceId();
     userSession = await repository.loadUserSession();
     try {
-      proficiency = await repository.fetchProficiency(deviceId: _deviceId!);
+      proficiency = await repository.fetchProficiency(
+          deviceId: _deviceId!, language: _activeLearningLanguage);
     } catch (_) {
       proficiency = ProficiencyState.initial();
     }
@@ -180,7 +206,8 @@ class LearningSessionController extends ChangeNotifier {
     final now = DateTime.now().toUtc();
     final selection = now.millisecond % 100;
     if (selection < reviewPercent) {
-      final difficult = await repository.getDifficultRelearnWord(now);
+      final difficult = await repository.getDifficultRelearnWord(now,
+          language: _activeLearningLanguage);
       if (difficult != null) {
         _showWord(difficult, CardKind.review,
             emptyMessage: 'No review card is available.');
@@ -220,11 +247,13 @@ class LearningSessionController extends ChangeNotifier {
     );
     final result = await repository.getNewWordWithFallbackResult(
       deviceId: _deviceId,
+      language: _activeLearningLanguage,
     );
     word = result.word;
     _trackNewWordLookup(result);
     actualKind = word == null ? null : CardKind.newWord;
-    word ??= await repository.getReviewWord(now);
+    word ??= await repository.getReviewWord(now,
+        language: _activeLearningLanguage);
     actualKind ??= word == null ? null : CardKind.review;
 
     _showWord(
@@ -259,13 +288,15 @@ class LearningSessionController extends ChangeNotifier {
       event: 'session.review.requested',
       message: 'User requested a recent review card.',
     );
-    final reviewResult = await repository.getRecentReviewWordResult(now);
+    final reviewResult = await repository.getRecentReviewWordResult(now,
+        language: _activeLearningLanguage);
     _trackReviewLookup(reviewResult);
     VocabularyWord? word = reviewResult.word;
     CardKind? actualKind = word == null ? null : CardKind.review;
     final newWordResult = word == null
         ? await repository.getNewWordWithFallbackResult(
             deviceId: _deviceId,
+            language: _activeLearningLanguage,
           )
         : null;
     if (newWordResult != null) {
@@ -358,7 +389,9 @@ class LearningSessionController extends ChangeNotifier {
 
   void _triggerPrefetchIfNeeded() {
     if (_prefetchInFlight) return;
-    repository.database.countUnstudiedNewWords().then((count) {
+    repository.database
+        .countUnstudiedNewWords(language: _activeLearningLanguage)
+        .then((count) {
       if (count < 100 && !_prefetchInFlight) {
         _prefetchInFlight = true;
         unawaited(
@@ -480,15 +513,13 @@ class LearningSessionController extends ChangeNotifier {
 
   void _trackNewWordLookup(WordLookupResult result) {
     switch (result.source) {
-      case WordLookupSource.backend:
-        _telemetry.track(TelemetryEvent.newWordBackendSuccess);
-        return;
       case WordLookupSource.localFallback:
         _telemetry.track(TelemetryEvent.newWordLocalFallback);
         return;
       case WordLookupSource.none:
         _telemetry.track(TelemetryEvent.newWordFallbackMiss);
         return;
+      case WordLookupSource.backend:
       case WordLookupSource.recentReview:
       case WordLookupSource.dueReview:
         return;

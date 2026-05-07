@@ -196,26 +196,25 @@ class LocalDatabase {
     );
   }
 
-  Future<VocabularyWord?> nextNewWord() async {
+  Future<VocabularyWord?> nextNewWord({String language = 'en'}) async {
     final rows = _localWords
-        .query(LocalWordEntity_.status.equals(WordStatus.newWord.name))
+        .query(
+          LocalWordEntity_.status.equals(WordStatus.newWord.name) &
+              LocalWordEntity_.language.equals(language),
+        )
         .order(LocalWordEntity_.createdAtMs, flags: Order.descending)
         .build()
         .find();
     return rows.isEmpty ? null : _wordFromEntity(rows.first);
   }
 
-  Future<VocabularyWord?> nextDueReviewWord(DateTime now) async {
+  Future<VocabularyWord?> nextDueReviewWord(DateTime now,
+      {String language = 'en'}) async {
     final nowMs = now.toUtc().millisecondsSinceEpoch;
     final rows = _localWords
         .query(
-          LocalWordEntity_.status.oneOf(
-                [
-                  WordStatus.learning.name,
-                  WordStatus.review.name,
-                  WordStatus.mastered.name,
-                ],
-              ) &
+          LocalWordEntity_.language.equals(language) &
+              LocalWordEntity_.status.oneOf(_activeReviewStatuses) &
               (LocalWordEntity_.nextReviewAtMs.isNull() |
                   LocalWordEntity_.nextReviewAtMs.lessOrEqual(nowMs)),
         )
@@ -241,16 +240,12 @@ class LocalDatabase {
     return _wordFromEntity(rows.first);
   }
 
-  Future<VocabularyWord?> recentlyLearnedReviewWord() async {
+  Future<VocabularyWord?> recentlyLearnedReviewWord(
+      {String language = 'en'}) async {
     final rows = _localWords
         .query(
-          LocalWordEntity_.status.oneOf(
-                [
-                  WordStatus.learning.name,
-                  WordStatus.review.name,
-                  WordStatus.mastered.name,
-                ],
-              ) &
+          LocalWordEntity_.language.equals(language) &
+              LocalWordEntity_.status.oneOf(_activeReviewStatuses) &
               LocalWordEntity_.lastSeenAtMs.notNull(),
         )
         .build()
@@ -272,11 +267,13 @@ class LocalDatabase {
     return _wordFromEntity(rows.first);
   }
 
-  Future<VocabularyWord?> nextDifficultRelearnWord(DateTime now) async {
+  Future<VocabularyWord?> nextDifficultRelearnWord(DateTime now,
+      {String language = 'en'}) async {
     final nowMs = now.toUtc().millisecondsSinceEpoch;
     final rows = _localWords
         .query(
-          LocalWordEntity_.status.equals(WordStatus.learning.name) &
+          LocalWordEntity_.language.equals(language) &
+              LocalWordEntity_.status.equals(WordStatus.learning.name) &
               (LocalWordEntity_.nextReviewAtMs.isNull() |
                   LocalWordEntity_.nextReviewAtMs.lessOrEqual(nowMs)),
         )
@@ -600,6 +597,12 @@ class LocalDatabase {
     );
   }
 
+  static final List<String> _activeReviewStatuses = [
+    WordStatus.learning.name,
+    WordStatus.review.name,
+    WordStatus.mastered.name,
+  ];
+
   static const String keyIsPrefetchDone = 'is_prefetch_done';
   static const String keyLastDailyRefreshDate = 'last_daily_refresh_date';
   static const String keyWordsStudiedSinceLastRefresh =
@@ -623,9 +626,12 @@ class LocalDatabase {
     );
   }
 
-  Future<int> countUnstudiedNewWords() async {
+  Future<int> countUnstudiedNewWords({String language = 'en'}) async {
     return _localWords
-        .query(LocalWordEntity_.status.equals(WordStatus.newWord.name))
+        .query(
+          LocalWordEntity_.status.equals(WordStatus.newWord.name) &
+              LocalWordEntity_.language.equals(language),
+        )
         .build()
         .count();
   }

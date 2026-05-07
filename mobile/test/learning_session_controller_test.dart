@@ -170,7 +170,7 @@ void main() {
     expect(controller.currentWord, isNull);
     expect(
       controller.statusMessage,
-      'Could not reach the word feed and no local new word is available.',
+      'No learning card is available. Check connection and try again.',
     );
   });
 
@@ -190,7 +190,7 @@ void main() {
     expect(controller.currentWord, isNull);
     expect(
       controller.statusMessage,
-      'Could not reach the word feed and no local new word is available.',
+      'No learning card is available. Check connection and try again.',
     );
   });
 

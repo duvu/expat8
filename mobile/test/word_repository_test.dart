@@ -30,7 +30,7 @@ void main() {
     expect(word?.localId, localWord.localId);
   });
 
-  test('emits fallback logs when backend new-word request fails', () async {
+  test('emits local-hit log even when backend fails', () async {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_logging_fallback.db',
     );
@@ -51,7 +51,7 @@ void main() {
 
     expect(result.word?.localId, localWord.localId);
     expect(
-      entries.any((entry) => entry.event == 'new_word.backend.error'),
+      entries.any((entry) => entry.event == 'new_word.local.hit'),
       true,
     );
   });
@@ -87,22 +87,17 @@ void main() {
     );
   });
 
-  test('logs backend refill hit separately from local cache hits', () async {
+  test('returns null from empty local cache even when backend has words',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
           'word_repository_test_refill_hit_log_${DateTime.now().microsecondsSinceEpoch}.db',
-    );
-    final entries = <LogEntry>[];
-    final logger = PersistedLogger(
-      minimumLevel: AppLogLevel.debug,
-      write: (entry) async => entries.add(entry),
     );
     final repository = WordRepository(
       database: database,
       apiClient: _RecordingApiClient(
         learningCardItems: [_word('refill_hit_word')],
       ),
-      logger: logger,
       config: _testConfig(proactiveMinNew: 10),
     );
 
@@ -110,12 +105,12 @@ void main() {
       deviceId: 'device_refill_hit',
     );
 
-    expect(result.word?.localId, 'refill_hit_word');
-    expect(entries.any((entry) => entry.event == 'new_word.refill.hit'), true);
+    // Backend refill fires in background; local cache is empty so no word yet.
+    expect(result.word, isNull);
+    expect(result.source, WordLookupSource.none);
   });
 
-  test('logs empty backend refill without misleading fallback_hit context',
-      () async {
+  test('logs local-empty when local cache is empty', () async {
     final database = await LocalDatabase.open(
       databaseName:
           'word_repository_test_refill_empty_log_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -136,14 +131,11 @@ void main() {
       deviceId: 'device_refill_empty',
     );
 
-    final emptyEvent = entries.singleWhere(
-      (entry) => entry.event == 'new_word.refill.empty',
-    );
     expect(result.word, isNull);
-    expect(emptyEvent.context.containsKey('fallback_hit'), false);
+    expect(entries.any((entry) => entry.event == 'new_word.local.empty'), true);
   });
 
-  test('logs backend-error fallback source without fallback_hit context',
+  test('logs local-hit when local word exists despite failing backend',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -166,12 +158,8 @@ void main() {
       deviceId: 'device_error_fallback',
     );
 
-    final errorEvent = entries.singleWhere(
-      (entry) => entry.event == 'new_word.backend.error',
-    );
     expect(result.word?.localId, localWord.localId);
-    expect(errorEvent.context['fallback_source'], 'local');
-    expect(errorEvent.context.containsKey('fallback_hit'), false);
+    expect(entries.any((entry) => entry.event == 'new_word.local.hit'), true);
   });
 
   test('reports local fallback source when backend fails but local word exists',
@@ -207,8 +195,7 @@ void main() {
     expect(result.word, isNull);
     expect(result.source, WordLookupSource.none);
     expect(result.message,
-        'Could not reach the word feed and no local new word is available.');
-    expect(result.error, isA<BackendApiException>());
+        'No learning card is available. Check connection and try again.');
   });
 
   test('requests learning card batch without server word exclusions', () async {
@@ -222,6 +209,7 @@ void main() {
     );
 
     await repository.getNewWordWithFallback(deviceId: 'anonymous_repo');
+    await pumpEventQueue();
 
     expect(apiClient.lastLearningCardsDeviceId, 'anonymous_repo');
     expect(apiClient.lastLearningCardsLimit, 10);
@@ -713,7 +701,9 @@ class _RecordingApiClient extends BackendApiClient {
       eventId: event['client_event_id'] as String,
       idempotent: false,
       proficiency: const ProficiencyState(
+        scale: 'cefr',
         level: 'A2',
+        levelIndex: 1,
         levelChanged: true,
         previousLevel: 'A1',
       ),
@@ -802,6 +792,8 @@ AppConfig _testConfig(
     newWordTimeout: Duration.zero,
     appCredentialAppId: 'test-app',
     appCredentialSecret: 'test-secret',
+    defaultLearningLanguage: 'en',
+    supportedLearningLanguages: const ['en', 'zh', 'vi'],
     logLevel: 'info',
     logMaxEntries: 100,
     logRetentionDays: 1,
