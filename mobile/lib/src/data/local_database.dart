@@ -658,6 +658,24 @@ class LocalDatabase {
     return _wordFromEntity(rows[rng.nextInt(rows.length)]);
   }
 
+  /// Picks any cached word for [language], including mastered words.
+  ///
+  /// This is the final offline fallback: if the learner has exhausted every
+  /// new/learning/review card, the app must still show something instead of
+  /// leaving the card area empty.
+  Future<VocabularyWord?> randomWord({
+    String language = 'en',
+    Random? random,
+  }) async {
+    final rows = _localWords
+        .query(LocalWordEntity_.language.equals(language))
+        .build()
+        .find();
+    if (rows.isEmpty) return null;
+    final rng = random ?? Random();
+    return _wordFromEntity(rows[rng.nextInt(rows.length)]);
+  }
+
   /// Deletes up to [limit] oldest mastered (remembered) words for [language],
   /// skipping any with pending sync events. Returns the number actually removed.
   Future<int> deleteOldestMasteredWords({

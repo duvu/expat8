@@ -24,7 +24,7 @@ class AppConfig {
       ),
       newWordTimeout: Duration(
         seconds:
-        int.fromEnvironment('NEW_WORD_TIMEOUT_SECONDS', defaultValue: 12),
+        int.fromEnvironment('NEW_WORD_TIMEOUT_SECONDS', defaultValue: 60),
       ),
       appCredentialAppId: String.fromEnvironment(
         'APP_CREDENTIAL_APP_ID',

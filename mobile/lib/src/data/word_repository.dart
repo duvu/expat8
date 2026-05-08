@@ -274,6 +274,23 @@ class WordRepository {
         source: WordLookupSource.randomFallback,
       );
     }
+    final anyWord = await database.randomWord(language: language);
+    if (anyWord != null) {
+      await _logger.info(
+        category: AppLogCategory.api,
+        event: 'new_word.random_any.fallback',
+        message:
+            'No new or active review card available; serving any cached word.',
+        context: {
+          'local_id': anyWord.localId,
+          'server_word_id': anyWord.serverWordId,
+        },
+      );
+      return WordLookupResult(
+        word: anyWord,
+        source: WordLookupSource.randomFallback,
+      );
+    }
     await _logger.warning(
       category: AppLogCategory.api,
       event: 'new_word.local.empty',
@@ -482,16 +499,11 @@ class WordRepository {
         'relearn_frequency_percent': 10,
       },
     );
-    try {
-      await syncCacheInventory(deviceId: deviceId);
-    } catch (error) {
-      await _logger.warning(
-        category: AppLogCategory.sync,
-        event: 'gesture.remembered.sync_deferred',
-        message: 'Deferred cache sync after remembered gesture.',
-        context: {'error': '$error'},
-      );
-    }
+    _syncCacheInventoryInBackground(
+      deviceId: deviceId,
+      event: 'gesture.remembered.sync_deferred',
+      message: 'Deferred cache sync after remembered gesture.',
+    );
   }
 
   Future<void> markAsDifficultForRelearn({
@@ -508,16 +520,30 @@ class WordRepository {
         'word_id': word.serverWordId ?? word.localId,
       },
     );
-    try {
-      await syncCacheInventory(deviceId: deviceId);
-    } catch (error) {
-      await _logger.warning(
-        category: AppLogCategory.sync,
-        event: 'gesture.difficult.sync_deferred',
-        message: 'Deferred cache sync after difficult gesture.',
-        context: {'error': '$error'},
-      );
-    }
+    _syncCacheInventoryInBackground(
+      deviceId: deviceId,
+      event: 'gesture.difficult.sync_deferred',
+      message: 'Deferred cache sync after difficult gesture.',
+    );
+  }
+
+  void _syncCacheInventoryInBackground({
+    required String deviceId,
+    required String event,
+    required String message,
+  }) {
+    unawaited(() async {
+      try {
+        await syncCacheInventory(deviceId: deviceId);
+      } catch (error) {
+        await _logger.warning(
+          category: AppLogCategory.sync,
+          event: event,
+          message: message,
+          context: {'error': '$error'},
+        );
+      }
+    }());
   }
 
   /// Transitions a newly displayed [newWord] to [learning] status.

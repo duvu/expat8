@@ -65,14 +65,12 @@ class LearningSessionController extends ChangeNotifier {
     repository.setActiveLanguage(language);
     notifyListeners();
     _deviceId ??= await repository.getOrCreateDeviceId();
-    try {
-      proficiency = await repository.fetchProficiency(
-          deviceId: _deviceId!, language: _activeLearningLanguage);
-    } catch (_) {
-      proficiency = ProficiencyState.initial();
-    }
-    await repository.topUpInventoryIfNeeded();
     await showNewWord();
+    _refreshProficiencyInBackground(
+      deviceId: _deviceId!,
+      language: _activeLearningLanguage,
+    );
+    _triggerInventoryTopUp();
   }
 
   String? takeLevelChangeMessage() {
@@ -107,22 +105,13 @@ class LearningSessionController extends ChangeNotifier {
     );
     _deviceId ??= await repository.getOrCreateDeviceId();
     userSession = await repository.loadUserSession();
-    try {
-      proficiency = await repository.fetchProficiency(
-          deviceId: _deviceId!, language: _activeLearningLanguage);
-    } catch (error) {
-      await _logger.warning(
-        category: AppLogCategory.session,
-        event: 'session.proficiency.fallback',
-        message: 'Falling back to initial proficiency after fetch failure.',
-        context: {
-          'error': '$error',
-        },
-      );
-      proficiency = ProficiencyState.initial();
-    }
     await showNewWord();
     _startInventoryTimer();
+    _refreshProficiencyInBackground(
+      deviceId: _deviceId!,
+      language: _activeLearningLanguage,
+    );
+    _triggerInventoryTopUp();
     await _logger.info(
       category: AppLogCategory.session,
       event: 'session.load_initial.complete',
@@ -177,7 +166,6 @@ class LearningSessionController extends ChangeNotifier {
             'Marked current word as remembered with low relearn frequency.',
         context: {'word_id': word.serverWordId ?? word.localId},
       );
-      await nextCard();
     } catch (error) {
       await _logger.warning(
         category: AppLogCategory.session,
@@ -186,6 +174,7 @@ class LearningSessionController extends ChangeNotifier {
         context: {'error': '$error'},
       );
     }
+    await nextCard();
   }
 
   Future<void> onSwipeTopToBottom() async {
@@ -206,7 +195,6 @@ class LearningSessionController extends ChangeNotifier {
         message: 'Marked current word as difficult for relearn group.',
         context: {'word_id': word.serverWordId ?? word.localId},
       );
-      await nextCard();
     } catch (error) {
       await _logger.warning(
         category: AppLogCategory.session,
@@ -215,6 +203,7 @@ class LearningSessionController extends ChangeNotifier {
         context: {'error': '$error'},
       );
     }
+    await nextCard();
   }
 
   Future<void> showNewWord() async {
@@ -265,76 +254,106 @@ class LearningSessionController extends ChangeNotifier {
     statusMessage = null;
     notifyListeners();
 
-    if (beforeSelect != null) {
-      await beforeSelect();
-    }
+    try {
+      if (beforeSelect != null) {
+        await beforeSelect();
+      }
 
-    final now = DateTime.now().toUtc();
-    final preferredKind = mode == _CardSelectionMode.mixed
-        ? _selectionWindow.preferredKind()
-        : mode.preferredKind;
-    await _logger.info(
-      category: AppLogCategory.session,
-      event: 'session.card_selection.start',
-      message: 'Started learning card selection.',
-      context: {
-        'requested_mode': mode.name,
-        'active_language': _activeLearningLanguage,
-        'preferred_kind': _kindName(preferredKind),
-        'window_size': _selectionWindow.windowSize,
-        'target_new_cards': _selectionWindow.targetNewCards,
-        'history_count': _selectionWindow.history.length,
-        'new_count': _selectionWindow.newCount,
-        'review_count': _selectionWindow.reviewCount,
-      },
-    );
-
-    final selected = preferredKind == CardKind.newWord
-        ? await _selectNewThenReview(now, emptyMessage: emptyMessage)
-        : await _selectReviewThenNew(now, emptyMessage: emptyMessage);
-
-    final word = selected.word;
-    final actualKind = selected.kind;
-    if (word == null) {
-      await _logger.warning(
-        category: AppLogCategory.session,
-        event: 'session.card_selection.empty',
-        message: 'No learning card was available after fallback attempts.',
-        context: {
-          'requested_mode': mode.name,
-          'active_language': _activeLearningLanguage,
-          'preferred_kind': _kindName(preferredKind),
-          'attempted_sources': selected.attemptedSources,
-        },
-      );
-    } else {
+      final now = DateTime.now().toUtc();
+      final preferredKind = mode == _CardSelectionMode.mixed
+          ? _selectionWindow.preferredKind()
+          : mode.preferredKind;
       await _logger.info(
         category: AppLogCategory.session,
-        event: 'session.card_selection.selected',
-        message: 'Selected learning card.',
+        event: 'session.card_selection.start',
+        message: 'Started learning card selection.',
         context: {
           'requested_mode': mode.name,
           'active_language': _activeLearningLanguage,
           'preferred_kind': _kindName(preferredKind),
-          'actual_kind': _kindName(actualKind!),
-          'source': _sourceName(selected.source),
-          'word_id': word.serverWordId ?? word.localId,
+          'window_size': _selectionWindow.windowSize,
+          'target_new_cards': _selectionWindow.targetNewCards,
+          'history_count': _selectionWindow.history.length,
+          'new_count': _selectionWindow.newCount,
+          'review_count': _selectionWindow.reviewCount,
         },
       );
-    }
 
-    _showWord(
-      word,
-      actualKind,
-      emptyMessage: selected.message ?? emptyMessage,
-    );
-    if (word != null && actualKind == CardKind.newWord) {
-      unawaited(
-        repository.markWordAsLearning(
-          word: word,
-          now: DateTime.now().toUtc(),
-        ),
+      final selected = preferredKind == CardKind.newWord
+          ? await _selectNewThenReview(now, emptyMessage: emptyMessage)
+          : await _selectReviewThenNew(now, emptyMessage: emptyMessage);
+
+      final word = selected.word;
+      final actualKind = selected.kind;
+      if (word == null) {
+        await _logger.warning(
+          category: AppLogCategory.session,
+          event: 'session.card_selection.empty',
+          message: 'No learning card was available after fallback attempts.',
+          context: {
+            'requested_mode': mode.name,
+            'active_language': _activeLearningLanguage,
+            'preferred_kind': _kindName(preferredKind),
+            'attempted_sources': selected.attemptedSources,
+          },
+        );
+      } else {
+        await _logger.info(
+          category: AppLogCategory.session,
+          event: 'session.card_selection.selected',
+          message: 'Selected learning card.',
+          context: {
+            'requested_mode': mode.name,
+            'active_language': _activeLearningLanguage,
+            'preferred_kind': _kindName(preferredKind),
+            'actual_kind': _kindName(actualKind!),
+            'source': _sourceName(selected.source),
+            'word_id': word.serverWordId ?? word.localId,
+          },
+        );
+      }
+
+      if (word != null && actualKind == CardKind.newWord) {
+        try {
+          await repository.markWordAsLearning(
+            word: word,
+            now: DateTime.now().toUtc(),
+          );
+        } catch (error) {
+          await _logger.warning(
+            category: AppLogCategory.session,
+            event: 'session.card_selection.local_state_failed',
+            message: 'Selected card could not be marked as learning.',
+            context: {
+              'word_id': word.serverWordId ?? word.localId,
+              'error': '$error',
+            },
+          );
+        }
+      }
+
+      _showWord(
+        word,
+        actualKind,
+        emptyMessage: selected.message ?? emptyMessage,
       );
+      // Always attempt a background top-up after a selection cycle, including
+      // empty results, so the UI does not get stuck waiting for manual retry.
+      _triggerInventoryTopUp();
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.card_selection.failed',
+        message: 'Learning card selection failed.',
+        context: {
+          'requested_mode': mode.name,
+          'active_language': _activeLearningLanguage,
+          'error': '$error',
+        },
+      );
+      isLoading = false;
+      statusMessage = currentWord == null ? emptyMessage : null;
+      notifyListeners();
     }
   }
 
@@ -498,6 +517,35 @@ class LearningSessionController extends ChangeNotifier {
     await nextCard();
   }
 
+  void _refreshProficiencyInBackground({
+    required String deviceId,
+    required String language,
+  }) {
+    unawaited(() async {
+      try {
+        final updated = await repository.fetchProficiency(
+          deviceId: deviceId,
+          language: language,
+        );
+        if (_activeLearningLanguage != language) {
+          return;
+        }
+        proficiency = updated;
+        notifyListeners();
+      } catch (error) {
+        await _logger.warning(
+          category: AppLogCategory.session,
+          event: 'session.proficiency.fallback',
+          message: 'Falling back to initial proficiency after fetch failure.',
+          context: {
+            'error': '$error',
+            'language': language,
+          },
+        );
+      }
+    }());
+  }
+
   void _startInventoryTimer() {
     _inventoryTimer?.cancel();
     _inventoryTimer = Timer.periodic(_inventoryTopUpInterval, (_) {
@@ -505,11 +553,22 @@ class LearningSessionController extends ChangeNotifier {
     });
   }
 
+  void _triggerInventoryTopUp() {
+    unawaited(_runInventoryTopUp());
+  }
+
   Future<void> _runInventoryTopUp() async {
     if (_topUpInFlight) return;
     _topUpInFlight = true;
     try {
       await repository.topUpInventoryIfNeeded();
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.inventory_top_up.failed',
+        message: 'Background inventory top-up failed.',
+        context: {'error': '$error'},
+      );
     } finally {
       _topUpInFlight = false;
     }

@@ -175,6 +175,20 @@ void main() {
     );
   });
 
+  test('new-word fallback miss still triggers inventory top-up', () async {
+    final apiClient = _ControllerApiClient(
+      fetchLearningCardsError: TimeoutException('timeout'),
+    );
+    final controller = LearningSessionController(
+      repository: await _repository(apiClient),
+    );
+
+    await controller.showNewWord();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(apiClient.fetchLearningCardsCallCount, 1);
+  });
+
   test('recent-review miss clears stale current word when no fallback exists',
       () async {
     final controller = LearningSessionController(
@@ -228,6 +242,60 @@ void main() {
     expect(third, isNotNull);
     expect({first, second, third}.length, 3,
         reason: 'Each swipe should reveal a distinct new word');
+  });
+
+  test('loadInitial shows a local word without waiting for proficiency fetch',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_nonblocking_load_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('startup_local_word'));
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(
+          proficiencyFuture: Completer<ProficiencyState>().future,
+        ),
+      ),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.loadInitial().timeout(const Duration(milliseconds: 500));
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord?.localId, 'startup_local_word');
+  });
+
+  test('remembered swipe advances to next local word without waiting for sync',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_nonblocking_swipe_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    await database.upsertWord(_wordAt('older_word', base));
+    await database.upsertWord(
+      _wordAt('newest_word', base.add(const Duration(seconds: 1))),
+    );
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(
+          cacheInventoryFuture: Completer<CacheInventoryResult>().future,
+        ),
+      ),
+    );
+
+    await controller.showNewWord();
+    expect(controller.currentWord?.localId, 'newest_word');
+
+    await controller
+        .onSwipeBottomToTop()
+        .timeout(const Duration(milliseconds: 500));
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord?.localId, 'older_word');
   });
 
   test('new-word selection falls back to learned review card and logs path',
@@ -291,6 +359,8 @@ class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
     this.fetchLearningCardsError,
+    this.proficiencyFuture,
+    this.cacheInventoryFuture,
   }) : super(
           baseUrl: 'http://unused',
           timeout: Duration.zero,
@@ -302,6 +372,9 @@ class _ControllerApiClient extends BackendApiClient {
   Object? signInError;
   Object? signOutError;
   Object? fetchLearningCardsError;
+  int fetchLearningCardsCallCount = 0;
+  Future<ProficiencyState>? proficiencyFuture;
+  Future<CacheInventoryResult>? cacheInventoryFuture;
 
   @override
   Future<LearningCardBatch> fetchLearningCards({
@@ -310,6 +383,7 @@ class _ControllerApiClient extends BackendApiClient {
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
+    fetchLearningCardsCallCount += 1;
     final error = fetchLearningCardsError;
     if (error != null) {
       throw error;
@@ -327,7 +401,28 @@ class _ControllerApiClient extends BackendApiClient {
     String language = 'en',
     String? sessionToken,
   }) async {
+    final pending = proficiencyFuture;
+    if (pending != null) {
+      return await pending;
+    }
     return ProficiencyState.initial();
+  }
+
+  @override
+  Future<CacheInventoryResult> syncCacheInventory({
+    required String deviceId,
+    required List<String> serverWordIds,
+    DateTime? observedAt,
+    String? sessionToken,
+  }) async {
+    final pending = cacheInventoryFuture;
+    if (pending != null) {
+      return await pending;
+    }
+    return CacheInventoryResult(
+      storedCount: serverWordIds.length,
+      unknownServerWordIds: const [],
+    );
   }
 
   @override

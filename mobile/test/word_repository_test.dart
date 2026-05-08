@@ -161,10 +161,11 @@ void main() {
     );
   });
 
-  test('random fallback skips mastered words', () async {
+  test('random fallback returns a mastered word when it is the only local card',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
-          'word_repository_test_random_skip_mastered_${DateTime.now().microsecondsSinceEpoch}.db',
+          'word_repository_test_random_mastered_only_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.now().toUtc();
     final mastered = _word('mastered_word', base);
@@ -178,8 +179,8 @@ void main() {
 
     final result = await repository.getNewWordWithFallbackResult();
 
-    expect(result.word, isNull);
-    expect(result.source, WordLookupSource.none);
+    expect(result.word?.localId, 'mastered_word');
+    expect(result.source, WordLookupSource.randomFallback);
   });
 
   test('logs local-hit when local word exists despite failing backend',
