@@ -631,6 +631,7 @@ class LearningSessionController extends ChangeNotifier {
   void _trackNewWordLookup(WordLookupResult result) {
     switch (result.source) {
       case WordLookupSource.localFallback:
+      case WordLookupSource.randomFallback:
         _telemetry.track(TelemetryEvent.newWordLocalFallback);
         return;
       case WordLookupSource.none:
@@ -654,6 +655,7 @@ class LearningSessionController extends ChangeNotifier {
         _telemetry.track(TelemetryEvent.recentReviewMiss);
         return;
       case WordLookupSource.localFallback:
+      case WordLookupSource.randomFallback:
         return;
     }
   }
@@ -661,6 +663,7 @@ class LearningSessionController extends ChangeNotifier {
   CardKind _kindForSource(WordLookupSource source) {
     return switch (source) {
       WordLookupSource.localFallback => CardKind.newWord,
+      WordLookupSource.randomFallback ||
       WordLookupSource.recentReview ||
       WordLookupSource.dueReview ||
       WordLookupSource.difficultRelearn =>
@@ -679,6 +682,7 @@ class LearningSessionController extends ChangeNotifier {
   String _sourceName(WordLookupSource source) {
     return switch (source) {
       WordLookupSource.localFallback => 'new',
+      WordLookupSource.randomFallback => 'random_fallback',
       WordLookupSource.recentReview => 'recent_review',
       WordLookupSource.dueReview => 'due_review',
       WordLookupSource.difficultRelearn => 'difficult_relearn',

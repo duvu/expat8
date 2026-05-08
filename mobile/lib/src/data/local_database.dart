@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -638,6 +639,25 @@ class LocalDatabase {
         .count();
   }
 
+  /// Picks a random word for [language] whose status is not [mastered]
+  /// (i.e., not yet marked as remembered). Used as the fallback when no
+  /// new-word card is available so the learner always has something to study.
+  Future<VocabularyWord?> randomNotMasteredWord({
+    String language = 'en',
+    Random? random,
+  }) async {
+    final rows = _localWords
+        .query(
+          LocalWordEntity_.language.equals(language) &
+              LocalWordEntity_.status.notEquals(WordStatus.mastered.name),
+        )
+        .build()
+        .find();
+    if (rows.isEmpty) return null;
+    final rng = random ?? Random();
+    return _wordFromEntity(rows[rng.nextInt(rows.length)]);
+  }
+
   /// Deletes up to [limit] oldest mastered (remembered) words for [language],
   /// skipping any with pending sync events. Returns the number actually removed.
   Future<int> deleteOldestMasteredWords({
@@ -677,17 +697,23 @@ class LocalDatabase {
 
   /// Adds a batch of words to the local cache.
   ///
-  /// Enforces the 1000-word cap after every batch write so all callers finish
-  /// within the local cache ceiling.
+  /// Enforces the per-language 1000-word cap after every batch write.
+  /// Pruning runs once per language present in [words] so seeding one language
+  /// never evicts entries from another.
   Future<void> addBatch(List<VocabularyWord> words) async {
     if (words.isEmpty) return;
+    final affectedLanguages = <String>{};
     for (final word in words) {
       await upsertWord(word);
+      affectedLanguages.add(word.language);
     }
-    await pruneToCapSmartly(maxWords: 1000);
+    for (final language in affectedLanguages) {
+      await pruneToCapSmartly(maxWords: 1000, language: language);
+    }
   }
 
-  /// Prunes the local word store to [maxWords] using smart priority ordering:
+  /// Prunes the local word store for [language] (or globally when null) to
+  /// [maxWords] using smart priority ordering:
   ///
   /// Pass 1: Remove [mastered] words (least-recently-seen first).
   /// Pass 2: Remove [review] words with nextReviewAt > 30 days from now
@@ -695,8 +721,13 @@ class LocalDatabase {
   /// Pass 3: Fallback — remove oldest words by createdAt.
   ///
   /// Words with pending (unsynced) study events are skipped in all passes.
-  Future<int> pruneToCapSmartly({int maxWords = 1000}) async {
-    final all = _localWords.getAll();
+  Future<int> pruneToCapSmartly({int maxWords = 1000, String? language}) async {
+    final all = language == null
+        ? _localWords.getAll()
+        : _localWords
+            .query(LocalWordEntity_.language.equals(language))
+            .build()
+            .find();
     if (all.length <= maxWords) return 0;
 
     // Build set of localIds that have pending sync events.

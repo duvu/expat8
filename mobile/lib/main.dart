@@ -42,20 +42,17 @@ Future<void> main() async {
   final controller =
       LearningSessionController(repository: repository, logger: logger);
 
-  // Block startup only when local cache is empty (first install or wiped data),
-  // so the user always opens to a populated word feed. Otherwise the periodic
-  // top-up timer in the controller handles refills.
+  // Seed bundled vocabulary on first launch so the user can start studying
+  // immediately — no waiting on a backend round-trip. The periodic top-up
+  // timer in the controller refreshes inventory in the background afterwards.
   try {
+    await repository.seedFromBundleIfEmpty(
+      languages: config.supportedLearningLanguages,
+    );
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
-    await repository.syncCacheInventory(deviceId: deviceId);
-    final total = await repository.database
-        .countWords(language: config.defaultLearningLanguage);
-    if (total == 0) {
-      await repository.topUpInventoryIfNeeded();
-    } else {
-      unawaited(repository.topUpInventoryIfNeeded());
-    }
+    unawaited(repository.syncCacheInventory(deviceId: deviceId));
+    unawaited(repository.topUpInventoryIfNeeded());
   } catch (error) {
     await logger.warning(
       category: AppLogCategory.app,

@@ -14,6 +14,7 @@ import '../models/study_event.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import 'local_database.dart';
+import 'seed_vocabulary_loader.dart';
 
 class WordRepository {
   WordRepository({
@@ -22,15 +23,18 @@ class WordRepository {
     Logger? logger,
     Uuid? uuid,
     AppConfig? config,
+    SeedVocabularyLoader? seedLoader,
   })  : _uuid = uuid ?? const Uuid(),
         _logger = logger ?? const NoopLogger(),
-        _config = config ?? AppConfig.fromEnvironment();
+        _config = config ?? AppConfig.fromEnvironment(),
+        _seedLoader = seedLoader ?? const SeedVocabularyLoader();
 
   final LocalDatabase database;
   final BackendApiClient apiClient;
   final Logger _logger;
   final Uuid _uuid;
   final AppConfig _config;
+  final SeedVocabularyLoader _seedLoader;
   String? _refillDeviceId;
   String _activeLanguage = 'en';
 
@@ -44,6 +48,34 @@ class WordRepository {
 
   void setActiveLanguage(String language) {
     _activeLanguage = language;
+  }
+
+  /// Seeds the local cache from the app bundle for any [languages] whose local
+  /// table is empty. Returns the total number of words inserted.
+  ///
+  /// Designed to run synchronously during app launch so the user can start
+  /// learning immediately without waiting for a backend round-trip. Languages
+  /// that already have entries are skipped (idempotent on subsequent launches).
+  Future<int> seedFromBundleIfEmpty({required List<String> languages}) async {
+    var totalLoaded = 0;
+    for (final language in languages) {
+      final existing = await database.countWords(language: language);
+      if (existing > 0) continue;
+      final seed = await _seedLoader.loadForLanguage(language);
+      if (seed.isEmpty) continue;
+      await database.addBatch(seed);
+      totalLoaded += seed.length;
+      await _logger.info(
+        category: AppLogCategory.app,
+        event: 'seed_vocab.bundle_loaded',
+        message: 'Seeded local vocabulary cache from app bundle.',
+        context: {
+          'language': language,
+          'loaded_count': seed.length,
+        },
+      );
+    }
+    return totalLoaded;
   }
 
   /// Decides whether the local cache needs more words and acts accordingly.
@@ -224,31 +256,29 @@ class WordRepository {
         source: WordLookupSource.localFallback,
       );
     }
-    await _logger.warning(
-      category: AppLogCategory.api,
-      event: 'new_word.local.empty',
-      message: 'No local new word is available.',
-    );
-    final reviewResult = await getReviewFallbackResult(
-      DateTime.now().toUtc(),
-      language: language,
-    );
-    if (reviewResult.word != null) {
+    final randomWord =
+        await database.randomNotMasteredWord(language: language);
+    if (randomWord != null) {
       await _logger.info(
         category: AppLogCategory.api,
-        event: 'new_word.review.fallback',
+        event: 'new_word.random.fallback',
         message:
-            'No new word available, falling back to review or learned word.',
+            'No new-word card available; serving a random non-mastered word.',
         context: {
-          'local_id': reviewResult.word!.localId,
-          'source': reviewResult.source.name,
+          'local_id': randomWord.localId,
+          'server_word_id': randomWord.serverWordId,
         },
       );
       return WordLookupResult(
-        word: reviewResult.word,
-        source: reviewResult.source,
+        word: randomWord,
+        source: WordLookupSource.randomFallback,
       );
     }
+    await _logger.warning(
+      category: AppLogCategory.api,
+      event: 'new_word.local.empty',
+      message: 'No local card is available for this language.',
+    );
     return const WordLookupResult(
       word: null,
       source: WordLookupSource.none,
@@ -624,6 +654,7 @@ class WordRepository {
 
 enum WordLookupSource {
   localFallback,
+  randomFallback,
   recentReview,
   dueReview,
   difficultRelearn,

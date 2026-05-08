@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/config.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
+import 'package:expat8_language_app/src/data/seed_vocabulary_loader.dart';
 import 'package:expat8_language_app/src/data/word_repository.dart';
 import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
@@ -128,13 +129,14 @@ void main() {
     expect(entries.any((entry) => entry.event == 'new_word.local.empty'), true);
   });
 
-  test('falls back to recently learned word when new pool is empty', () async {
+  test('falls back to a random non-mastered word when new pool is empty',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
-          'word_repository_test_learned_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
+          'word_repository_test_random_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.now().toUtc();
-    final learned = _word('learned_fallback', base);
+    final learned = _word('random_fallback_learned', base);
     await database.upsertWord(learned);
     await database.markWordAsLearning(word: learned, now: base);
     final entries = <LogEntry>[];
@@ -151,12 +153,33 @@ void main() {
 
     final result = await repository.getNewWordWithFallbackResult();
 
-    expect(result.word?.localId, 'learned_fallback');
-    expect(result.source, WordLookupSource.recentReview);
+    expect(result.word?.localId, 'random_fallback_learned');
+    expect(result.source, WordLookupSource.randomFallback);
     expect(
-      entries.any((entry) => entry.event == 'new_word.review.fallback'),
+      entries.any((entry) => entry.event == 'new_word.random.fallback'),
       true,
     );
+  });
+
+  test('random fallback skips mastered words', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_random_skip_mastered_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.now().toUtc();
+    final mastered = _word('mastered_word', base);
+    await database.upsertWord(mastered);
+    await database.markWordRememberedLowFrequency(word: mastered, now: base);
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      config: _testConfig(),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult();
+
+    expect(result.word, isNull);
+    expect(result.source, WordLookupSource.none);
   });
 
   test('logs local-hit when local word exists despite failing backend',
@@ -560,6 +583,48 @@ void main() {
     expect(result.deleted, 3);
     expect(apiClient.lastLearningCardsLimit, 3);
   });
+
+  test('seedFromBundleIfEmpty inserts words for empty languages only',
+      () async {
+    final ts = DateTime.now().microsecondsSinceEpoch;
+    final database = await LocalDatabase.open(
+      databaseName: 'word_repository_test_seed_$ts.db',
+    );
+    // English language already has data — should be skipped.
+    await database.upsertWord(_word('existing_en_word'));
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      seedLoader: _StubSeedLoader({
+        'en': [_word('seed_en_skip_me')],
+        'zh': [
+          _word('seed_zh_a', null, 'zh'),
+          _word('seed_zh_b', null, 'zh'),
+        ],
+        'vi': const [],
+      }),
+      config: _testConfig(),
+    );
+
+    final loaded =
+        await repository.seedFromBundleIfEmpty(languages: ['en', 'zh', 'vi']);
+
+    expect(loaded, 2);
+    expect(await database.countWords(language: 'en'), 1,
+        reason: 'existing en data is preserved');
+    expect(await database.countWords(language: 'zh'), 2);
+  });
+}
+
+class _StubSeedLoader extends SeedVocabularyLoader {
+  _StubSeedLoader(this._wordsByLanguage) : super();
+
+  final Map<String, List<VocabularyWord>> _wordsByLanguage;
+
+  @override
+  Future<List<VocabularyWord>> loadForLanguage(String language) async {
+    return _wordsByLanguage[language] ?? const [];
+  }
 }
 
 class _FailingApiClient extends BackendApiClient {
@@ -717,13 +782,13 @@ class _SyncFailingApiClient extends BackendApiClient {
   }
 }
 
-VocabularyWord _word(String id, [DateTime? timestamp]) {
+VocabularyWord _word(String id, [DateTime? timestamp, String language = 'en']) {
   final ts = timestamp ?? DateTime.utc(2026, 5, 4);
   return VocabularyWord(
     localId: id,
     serverWordId: id,
     term: id,
-    language: 'en',
+    language: language,
     meaningVi: 'meaning',
     partOfSpeech: 'noun',
     ipa: '/wɜːd/',
