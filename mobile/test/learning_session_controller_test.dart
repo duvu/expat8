@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
@@ -343,6 +344,295 @@ void main() {
       true,
     );
   });
+
+  test('isLoading always resets even when card-selection logging fails',
+      () async {
+    final throwingLogger = _ThrowingLogger();
+    final controller = LearningSessionController(
+      repository: await _repository(_ControllerApiClient()),
+      logger: throwingLogger,
+    );
+
+    // No words anywhere — selection returns null. Logger throws on every call.
+    // Without try/finally on isLoading, this would leave the controller stuck
+    // and the gesture surface frozen.
+    await controller.showNewWord();
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord, isNull);
+  });
+
+  test('back-to-back showNewWord calls keep gesture surface unblocked',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_back_to_back_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
+      ),
+    );
+
+    for (var i = 0; i < 5; i += 1) {
+      await controller.showNewWord();
+      expect(controller.isLoading, false,
+          reason: 'isLoading must reset after every selection (iter $i)');
+    }
+  });
+
+  // Threshold tests (4.1–4.3): verify the unstudied < 100 fetch condition.
+
+  test('topUpInventoryIfNeeded does NOT fetch when unstudied count is 100',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'threshold_no_fetch_100_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 100; i++) {
+      await database.upsertWord(
+          _wordAt('threshold_100_$i', base.add(Duration(seconds: i))));
+    }
+    final apiClient = _ControllerApiClient();
+    final repository = WordRepository(database: database, apiClient: apiClient);
+
+    await repository.topUpInventoryIfNeeded();
+
+    expect(apiClient.fetchLearningCardsCallCount, 0,
+        reason: 'exactly 100 unstudied words should not trigger a fetch');
+  });
+
+  test('topUpInventoryIfNeeded DOES fetch when unstudied count is 99',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'threshold_fetch_99_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 99; i++) {
+      await database.upsertWord(
+          _wordAt('threshold_99_$i', base.add(Duration(seconds: i))));
+    }
+    final apiClient = _ControllerApiClient();
+    final repository = WordRepository(database: database, apiClient: apiClient);
+
+    await repository.topUpInventoryIfNeeded();
+
+    expect(apiClient.fetchLearningCardsCallCount, 1,
+        reason:
+            '99 unstudied words is below threshold and should trigger a fetch');
+  });
+
+  test(
+      'topUpInventoryIfNeeded does NOT fetch when 200 unstudied words exist even if total < old pool size',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'threshold_no_fetch_200_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 200; i++) {
+      await database.upsertWord(
+          _wordAt('threshold_200_$i', base.add(Duration(seconds: i))));
+    }
+    final apiClient = _ControllerApiClient();
+    final repository = WordRepository(database: database, apiClient: apiClient);
+    // total = 200, which is below the old vocabPoolFullSize of 1000,
+    // but with the new condition only unstudied count matters.
+
+    await repository.topUpInventoryIfNeeded();
+
+    expect(apiClient.fetchLearningCardsCallCount, 0,
+        reason:
+            '200 unstudied words exceeds threshold; no fetch despite total < 1000');
+  });
+
+  test(
+      'threshold check fires after markWordAsLearning: showing 100th word triggers a refill',
+      () async {
+    // Set up exactly 100 unstudied words. After showing one, count drops to 99,
+    // which is below threshold, so a fetch should be triggered.
+    final database = await LocalDatabase.open(
+      databaseName:
+          'threshold_sequencing_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 100; i++) {
+      await database
+          .upsertWord(_wordAt('seq_word_$i', base.add(Duration(seconds: i))));
+    }
+    final apiClient = _ControllerApiClient();
+    final controller = LearningSessionController(
+      repository: WordRepository(database: database, apiClient: apiClient),
+    );
+
+    await controller.showNewWord();
+    // Flush microtasks: markWordAsLearning → then → _triggerInventoryTopUp
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(apiClient.fetchLearningCardsCallCount, 1,
+        reason:
+            'showing the 100th word drops unstudied to 99, triggering a refill');
+  });
+
+  test('backend timeout during refill does not surface as card-selection error',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'threshold_timeout_resilience_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('resilience_word'));
+    final apiClient = _ControllerApiClient(
+      fetchLearningCardsError: TimeoutException('network timeout'),
+    );
+    final controller = LearningSessionController(
+      repository: WordRepository(database: database, apiClient: apiClient),
+    );
+
+    // Should show the local word even though refill fails.
+    await controller.showNewWord();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord?.localId, 'resilience_word',
+        reason: 'local word must be shown despite backend timeout');
+    expect(controller.statusMessage, isNull,
+        reason:
+            'backend timeout during refill must not surface as a status message');
+  });
+
+  test('remembered swipe records too_easy event and advances locally',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_remembered_event_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    await database.upsertWord(_wordAt('older_word', base));
+    await database.upsertWord(
+      _wordAt('remembered_word', base.add(const Duration(seconds: 1))),
+    );
+    final apiClient = _ControllerApiClient();
+    final controller = LearningSessionController(
+      repository: WordRepository(database: database, apiClient: apiClient),
+    );
+
+    await controller.showNewWord();
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.currentWord?.localId, 'remembered_word');
+
+    await controller.onSwipeBottomToTop();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.currentWord?.localId, 'older_word');
+    expect(apiClient.submittedEvents.single['rating'], 'too_easy');
+    final notMastered = await database.randomNotMasteredWord();
+    expect(notMastered?.localId, 'older_word');
+  });
+
+  test('difficult swipe records too_hard event and advances locally', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_difficult_event_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    await database.upsertWord(_wordAt('older_word', base));
+    await database.upsertWord(
+      _wordAt('difficult_word', base.add(const Duration(seconds: 1))),
+    );
+    final apiClient = _ControllerApiClient();
+    final controller = LearningSessionController(
+      repository: WordRepository(database: database, apiClient: apiClient),
+    );
+
+    await controller.showNewWord();
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.currentWord?.localId, 'difficult_word');
+
+    await controller.onSwipeTopToBottom();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.currentWord?.localId, 'older_word');
+    expect(apiClient.submittedEvents.single['rating'], 'too_hard');
+    final dueDifficult = await database.nextDifficultRelearnWord(
+      DateTime.now().toUtc().add(const Duration(minutes: 11)),
+    );
+    expect(dueDifficult?.localId, 'difficult_word');
+  });
+
+  test('gesture study-event proficiency updates session state', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_gesture_proficiency_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('gesture_proficiency_word'));
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(
+          submitProficiency: const ProficiencyState(
+            scale: 'cefr',
+            level: 'A2',
+            levelIndex: 1,
+            levelChanged: true,
+            previousLevel: 'A1',
+          ),
+        ),
+      ),
+    );
+
+    await controller.showNewWord();
+    await Future<void>.delayed(Duration.zero);
+    await controller.onSwipeBottomToTop();
+    for (var i = 0; i < 4; i += 1) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    expect(controller.proficiency.level, 'A2');
+    expect(controller.takeLevelChangeMessage(), 'Level changed: A1 -> A2');
+  });
+
+  test('offline gesture study-event stays queued and does not block next card',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_session_gesture_offline_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    await database.upsertWord(_wordAt('older_word', base));
+    await database.upsertWord(
+      _wordAt('offline_word', base.add(const Duration(seconds: 1))),
+    );
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(
+          submitStudyEventError: TimeoutException('offline'),
+        ),
+      ),
+    );
+
+    await controller.showNewWord();
+    await Future<void>.delayed(Duration.zero);
+
+    await controller
+        .onSwipeBottomToTop()
+        .timeout(const Duration(milliseconds: 500));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.currentWord?.localId, 'older_word');
+    final dueEntries = await database.dueSyncEntries(
+      DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+    final payload =
+        jsonDecode(dueEntries.single.payload) as Map<String, dynamic>;
+    expect(payload['rating'], 'too_easy');
+  });
 }
 
 int _databaseCounter = 0;
@@ -359,6 +649,8 @@ class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
     this.fetchLearningCardsError,
+    this.submitStudyEventError,
+    this.submitProficiency,
     this.proficiencyFuture,
     this.cacheInventoryFuture,
   }) : super(
@@ -372,7 +664,10 @@ class _ControllerApiClient extends BackendApiClient {
   Object? signInError;
   Object? signOutError;
   Object? fetchLearningCardsError;
+  Object? submitStudyEventError;
   int fetchLearningCardsCallCount = 0;
+  final List<Map<String, dynamic>> submittedEvents = [];
+  ProficiencyState? submitProficiency;
   Future<ProficiencyState>? proficiencyFuture;
   Future<CacheInventoryResult>? cacheInventoryFuture;
 
@@ -422,6 +717,26 @@ class _ControllerApiClient extends BackendApiClient {
     return CacheInventoryResult(
       storedCount: serverWordIds.length,
       unknownServerWordIds: const [],
+    );
+  }
+
+  @override
+  Future<StudyEventResult> submitStudyEvent({
+    required String deviceId,
+    required Map<String, dynamic> event,
+    String language = 'en',
+    String? sessionToken,
+  }) async {
+    submittedEvents.add(event);
+    final error = submitStudyEventError;
+    if (error != null) {
+      throw error;
+    }
+    return StudyEventResult(
+      success: true,
+      eventId: event['client_event_id'] as String?,
+      idempotent: false,
+      proficiency: submitProficiency ?? ProficiencyState.initial(),
     );
   }
 
@@ -494,4 +809,18 @@ VocabularyWord _word(String id) {
 
 VocabularyWord _wordAt(String id, DateTime at) {
   return _word(id).copyWith(createdAt: at, updatedAt: at);
+}
+
+class _ThrowingLogger extends Logger {
+  @override
+  Future<void> log({
+    required AppLogLevel level,
+    required AppLogCategory category,
+    required String event,
+    required String message,
+    String? traceId,
+    Map<String, Object?> context = const {},
+  }) async {
+    throw StateError('logger forced failure');
+  }
 }

@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "start:worker": "node src/worker.js",
+    "test": "node --test",
+    "verify:migrations": "node scripts/verify_content_ingestion_migration.mjs"
   },
   "engines": {
     "node": ">=22"

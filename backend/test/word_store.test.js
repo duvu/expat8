@@ -34,7 +34,8 @@ test('syncs study events idempotently', () => {
   const second = store.syncStudyEvents(payload);
 
   assert.deepEqual(first.accepted_event_ids, ['evt_1']);
-  assert.deepEqual(second.accepted_event_ids, ['evt_1']);
+  assert.deepEqual(second.accepted_event_ids, []);
+  assert.deepEqual(second.duplicates, ['evt_1']);
   assert.equal(store.studyEventsByClientId.size, 1);
   assert.equal(first.proficiency.level, 'A1');
 });
@@ -71,6 +72,7 @@ test('syncing only rejected study events returns current proficiency', () => {
   assert.deepEqual(result.rejected_events, [
     {
       client_event_id: 'evt_rejected',
+      event_id: null,
       reason: 'invalid_rating'
     }
   ]);

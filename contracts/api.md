@@ -146,6 +146,83 @@ Response:
 { "success": true }
 ```
 
+## GET /health/ready
+
+Readiness probe. No app credential headers required.
+
+Response `200`:
+
+```json
+{ "ok": true, "db": "ok" }
+```
+
+Response `503`:
+
+```json
+{ "ok": false, "db": "error" }
+```
+
+## GET /v1/me
+
+Requires a valid bearer session.
+
+Response:
+
+```json
+{
+  "user_id": "user_123",
+  "identifier": "learner@example.com",
+  "display_name": "Learner"
+}
+```
+
+## GET /v1/articles/:id/vocabulary
+
+Returns vocabulary extracted from a user-owned article or a published article.
+
+Response:
+
+```json
+{
+  "article_id": "article_123",
+  "items": [
+    {
+      "term_id": "term_123",
+      "display_term": "reliable",
+      "word_sense_id": "sense_123",
+      "meaning_vi": "dang tin cay",
+      "part_of_speech": "adjective",
+      "ipa": "/rɪˈlaɪəbl/",
+      "level": "A1",
+      "status": "approved"
+    }
+  ]
+}
+```
+
+## DELETE /v1/articles/:id
+
+Soft-deletes a user-owned article.
+
+Response:
+
+```json
+{ "success": true }
+```
+
+## PATCH /v1/admin/articles/:id
+
+Admin-only metadata patch. Allowed fields: `title`, `language`, `visibility`, `status`.
+
+Response:
+
+```json
+{
+  "id": "article_123",
+  "title": "Updated title"
+}
+```
+
 ## Vocabulary Item
 
 ```json

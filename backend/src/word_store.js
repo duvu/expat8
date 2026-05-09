@@ -25,6 +25,13 @@ export class WordStore {
     this.words = new Map();
     this.studyEventsByClientId = new Map();
     this.userProficiencies = new Map();
+    this.articlesById = new Map();
+    this.vocabularyReviewItemsById = new Map();
+    this.contentPacksById = new Map();
+    this.articleProcessingJobsById = new Map();
+    this.termsById = new Map();
+    this.wordSensesById = new Map();
+    this.articleTermsById = new Map();
     this.usersById = new Map();
     this.usersByIdentifier = new Map();
     this.userSessionsByTokenHash = new Map();
@@ -229,13 +236,18 @@ export class WordStore {
 
   syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
     const accepted = [];
+    const duplicates = [];
     const rejected = [];
     let latestProficiency = this.getProficiency({ deviceId, userId, language });
 
-    for (const event of events) {
-      if (!event.client_event_id || !event.rating || !event.occurred_at) {
+    const orderedEvents = [...events].sort(compareEventsForProjection);
+
+    for (const event of orderedEvents) {
+      const eventKey = resolveEventKey(event);
+      if (!eventKey || !event.rating || !event.occurred_at) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
           reason: 'missing_required_field'
         });
         continue;
@@ -243,18 +255,24 @@ export class WordStore {
       try {
         const result = this.recordStudyEvent({ deviceId, userId, event, language });
         latestProficiency = result.proficiency;
+        if (result.idempotent) {
+          duplicates.push(eventKey);
+        } else {
+          accepted.push(eventKey);
+        }
       } catch (error) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
           reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
         });
         continue;
       }
-      accepted.push(event.client_event_id);
     }
 
     return {
       accepted_event_ids: accepted,
+      duplicates,
       rejected_events: rejected,
       proficiency: latestProficiency
     };
@@ -262,7 +280,11 @@ export class WordStore {
 
   recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
     const rating = requireStudyRating(event.rating);
-    const existing = this.studyEventsByClientId.get(event.client_event_id);
+    const eventKey = resolveEventKey(event);
+    if (!eventKey) {
+      throw new Error('missing_event_id');
+    }
+    const existing = this.studyEventsByClientId.get(eventKey);
     if (existing) {
       return {
         eventId: existing.id,
@@ -274,7 +296,8 @@ export class WordStore {
     const receivedAt = new Date().toISOString();
     const storedEvent = {
       id: createId('study_event'),
-      client_event_id: event.client_event_id,
+      event_id: event.event_id ?? eventKey,
+      client_event_id: event.client_event_id ?? eventKey,
       device_id: deviceId,
       user_id: userId ?? event.user_id ?? null,
       word_id: event.server_word_id ?? null,
@@ -283,7 +306,7 @@ export class WordStore {
       occurred_at: event.occurred_at,
       received_at: receivedAt
     };
-    this.studyEventsByClientId.set(event.client_event_id, storedEvent);
+    this.studyEventsByClientId.set(eventKey, storedEvent);
     this.#upsertWordState({ deviceId, userId: storedEvent.user_id, language, event: storedEvent });
 
     const levelChange = this.#applyProficiencyChange({ deviceId, userId: storedEvent.user_id, language, rating });
@@ -456,9 +479,363 @@ export class WordStore {
       .filter((event) => (userId ? event.user_id === userId : event.device_id === deviceId))
       .sort((left, right) => {
         const occurred = right.occurred_at.localeCompare(left.occurred_at);
-        return occurred !== 0 ? occurred : right.received_at.localeCompare(left.received_at);
+        if (occurred !== 0) {
+          return occurred;
+        }
+        const received = right.received_at.localeCompare(left.received_at);
+        if (received !== 0) {
+          return received;
+        }
+        return right.id.localeCompare(left.id);
       })
       .slice(0, 10);
+  }
+
+  createArticle({ userId, title, sourceUrl = null, language, rawText, visibility = 'private' }) {
+    const now = new Date().toISOString();
+    const article = {
+      id: createId('article'),
+      owner_user_id: userId,
+      created_by_admin_id: null,
+      title,
+      source_url: sourceUrl,
+      language,
+      raw_text: rawText,
+      cleaned_text: null,
+      visibility,
+      status: 'pending_processing',
+      processing_error: null,
+      created_at: now,
+      updated_at: now
+    };
+    this.articlesById.set(article.id, article);
+    this.enqueueArticleProcessingJob({ articleId: article.id });
+    return article;
+  }
+
+  listArticles({ userId, limit = 50 }) {
+    return [...this.articlesById.values()]
+      .filter((article) => article.owner_user_id === userId && article.status !== 'deleted')
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .slice(0, Math.max(1, Math.min(limit, 100)));
+  }
+
+  getArticleByIdForUser({ articleId, userId }) {
+    const article = this.articlesById.get(articleId);
+    if (!article || article.owner_user_id !== userId || article.status === 'deleted') {
+      return null;
+    }
+    return article;
+  }
+
+  getArticleById({ articleId }) {
+    return this.articlesById.get(articleId) ?? null;
+  }
+
+  createAdminArticle({ adminUserId = null, title, sourceUrl = null, language, rawText, visibility = 'published' }) {
+    const now = new Date().toISOString();
+    const article = {
+      id: createId('article'),
+      owner_user_id: null,
+      created_by_admin_id: adminUserId,
+      title,
+      source_url: sourceUrl,
+      language,
+      raw_text: rawText,
+      cleaned_text: null,
+      visibility,
+      status: 'pending_processing',
+      processing_error: null,
+      created_at: now,
+      updated_at: now
+    };
+    this.articlesById.set(article.id, article);
+    this.enqueueArticleProcessingJob({ articleId: article.id });
+    return article;
+  }
+
+  listAdminArticles({ limit = 50, status = null }) {
+    return [...this.articlesById.values()]
+      .filter((article) => (status ? article.status === status : true))
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .slice(0, Math.max(1, Math.min(limit, 100)));
+  }
+
+  reprocessArticle({ articleId }) {
+    const article = this.articlesById.get(articleId);
+    if (!article) {
+      return null;
+    }
+    article.status = 'pending_processing';
+    article.processing_error = null;
+    article.updated_at = new Date().toISOString();
+    this.enqueueArticleProcessingJob({ articleId });
+    return article;
+  }
+
+  publishArticle({ articleId }) {
+    const article = this.articlesById.get(articleId);
+    if (!article) {
+      return null;
+    }
+    article.status = 'published';
+    article.visibility = 'published';
+    article.updated_at = new Date().toISOString();
+    return article;
+  }
+
+  getArticleVocabulary({ articleId, userId }) {
+    if (!userId) {
+      return null;
+    }
+    const article = this.articlesById.get(articleId);
+    if (!article || article.status === 'deleted') {
+      return null;
+    }
+    const isOwner = article.owner_user_id === userId;
+    if (!isOwner && article.visibility !== 'published') {
+      return null;
+    }
+
+    const items = [...this.articleTermsById.values()]
+      .filter((item) => item.article_id === articleId)
+      .sort((left, right) => {
+        const created = String(left.created_at).localeCompare(String(right.created_at));
+        if (created !== 0) {
+          return created;
+        }
+        return left.id.localeCompare(right.id);
+      })
+      .flatMap((articleTerm) => {
+        const term = this.termsById.get(articleTerm.term_id);
+        const sense = this.wordSensesById.get(articleTerm.word_sense_id);
+        if (!term || !sense) {
+          return [];
+        }
+        if (article.visibility === 'published' && sense.status !== 'approved') {
+          return [];
+        }
+        return [{
+          term_id: term.id,
+          display_term: term.display_term,
+          word_sense_id: sense.id,
+          meaning_vi: sense.meaning_vi,
+          part_of_speech: sense.part_of_speech,
+          ipa: sense.ipa,
+          level: sense.level,
+          status: sense.status
+        }];
+      });
+
+    return {
+      article_id: article.id,
+      items
+    };
+  }
+
+  softDeleteArticle({ articleId, userId }) {
+    const article = this.articlesById.get(articleId);
+    if (!article || article.owner_user_id !== userId || article.status === 'deleted') {
+      return null;
+    }
+    article.status = 'deleted';
+    article.visibility = 'private';
+    article.updated_at = new Date().toISOString();
+    return article;
+  }
+
+  patchAdminArticle({ articleId, patch }) {
+    const article = this.articlesById.get(articleId);
+    if (!article) {
+      return null;
+    }
+
+    for (const field of ['title', 'language', 'visibility', 'status']) {
+      if (patch[field] !== undefined) {
+        article[field] = patch[field];
+      }
+    }
+    article.updated_at = new Date().toISOString();
+    return article;
+  }
+
+  async healthCheck() {
+    return true;
+  }
+
+  listVocabularyReviewItems({ status = 'pending', limit = 100 }) {
+    return [...this.vocabularyReviewItemsById.values()]
+      .filter((item) => (status ? item.status === status : true))
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .slice(0, Math.max(1, Math.min(limit, 200)));
+  }
+
+  reviewVocabularyItem({ itemId, status, reviewNote = null, reviewerUserId = null }) {
+    const item = this.vocabularyReviewItemsById.get(itemId);
+    if (!item) {
+      return null;
+    }
+    item.status = status;
+    item.review_note = reviewNote;
+    item.reviewer_user_id = reviewerUserId;
+    item.reviewed_at = new Date().toISOString();
+    item.updated_at = item.reviewed_at;
+    return item;
+  }
+
+  listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
+    return [...this.contentPacksById.values()]
+      .filter((pack) => pack.status === 'published')
+      .filter((pack) => pack.language === language)
+      .filter((pack) => (afterVersion == null ? true : pack.version > afterVersion))
+      .sort((left, right) => right.version - left.version)
+      .slice(0, Math.max(1, Math.min(limit, 200)));
+  }
+
+  getContentPackById({ id }) {
+    const pack = this.contentPacksById.get(id);
+    if (!pack || pack.status !== 'published') {
+      return null;
+    }
+    return {
+      ...pack,
+      items: Array.isArray(pack.items) ? pack.items : []
+    };
+  }
+
+  enqueueArticleProcessingJob({ articleId }) {
+    const now = new Date().toISOString();
+    const job = {
+      id: createId('article_job'),
+      article_id: articleId,
+      status: 'pending_processing',
+      attempt_count: 0,
+      queued_at: now,
+      started_at: null,
+      finished_at: null,
+      error_message: null,
+      created_at: now,
+      updated_at: now
+    };
+    this.articleProcessingJobsById.set(job.id, job);
+    return job;
+  }
+
+  claimNextArticleProcessingJob() {
+    const job = [...this.articleProcessingJobsById.values()]
+      .filter((item) => item.status === 'pending_processing')
+      .sort((left, right) => left.queued_at.localeCompare(right.queued_at))[0];
+    if (!job) {
+      return null;
+    }
+    const article = this.articlesById.get(job.article_id);
+    const now = new Date().toISOString();
+    job.status = 'processing';
+    job.started_at = now;
+    job.attempt_count += 1;
+    job.updated_at = now;
+    if (article) {
+      if (article.status !== 'deleted') {
+        article.status = 'processing';
+      }
+      article.updated_at = now;
+    }
+    return job;
+  }
+
+  completeArticleProcessingJob({ jobId, status = 'processed', errorMessage = null }) {
+    const job = this.articleProcessingJobsById.get(jobId);
+    if (!job) {
+      return null;
+    }
+    const article = this.articlesById.get(job.article_id);
+    const now = new Date().toISOString();
+    job.status = status;
+    job.error_message = errorMessage;
+    job.finished_at = now;
+    job.updated_at = now;
+    if (article) {
+      if (article.status !== 'deleted') {
+        article.status = status;
+      }
+      article.processing_error = errorMessage;
+      article.updated_at = now;
+    }
+    return job;
+  }
+
+  persistArticleVocabulary({ articleId, items = [] }) {
+    const now = new Date().toISOString();
+    const article = this.articlesById.get(articleId);
+    if (!article) {
+      throw new Error('article_not_found');
+    }
+    const persisted = [];
+    for (const item of items) {
+      const normalized = normalizeTerm(item.term);
+      let term = [...this.termsById.values()].find(
+        (entry) => entry.language === item.language && entry.normalized_term === normalized
+      );
+      if (!term) {
+        term = {
+          id: createId('term'),
+          language: item.language,
+          display_term: item.term,
+          normalized_term: normalized,
+          lemma: null,
+          created_at: now
+        };
+        this.termsById.set(term.id, term);
+      }
+
+      const sense = {
+        id: createId('sense'),
+        term_id: term.id,
+        part_of_speech: item.part_of_speech ?? null,
+        meaning_vi: item.meaning_vi,
+        short_definition: item.short_definition ?? null,
+        pronunciation: item.vietnamese_pronunciation,
+        ipa: item.ipa ?? null,
+        pinyin: item.pinyin ?? null,
+        level_scale: item.level_scale ?? 'cefr',
+        level: item.difficulty ?? 'A1',
+        quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
+        status: article.created_by_admin_id ? 'pending_review' : 'approved',
+        created_at: now,
+        updated_at: now
+      };
+      this.wordSensesById.set(sense.id, sense);
+
+      const articleTerm = {
+        id: createId('article_term'),
+        article_id: articleId,
+        term_id: term.id,
+        word_sense_id: sense.id,
+        surface_text: item.term,
+        sentence_context: item.example ?? null,
+        start_offset: null,
+        end_offset: null,
+        frequency: Number(item.frequency ?? 1),
+        extraction_confidence: Number(item.confidence ?? 0.5),
+        created_at: now
+      };
+      this.articleTermsById.set(articleTerm.id, articleTerm);
+
+      const reviewItem = {
+        id: createId('review_item'),
+        word_sense_id: sense.id,
+        article_id: articleId,
+        status: article.created_by_admin_id ? 'pending' : 'approved',
+        reviewer_user_id: null,
+        review_note: null,
+        reviewed_at: article.created_by_admin_id ? null : now,
+        created_at: now,
+        updated_at: now
+      };
+      this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
+      persisted.push({ term, sense, articleTerm, reviewItem });
+    }
+    return { count: persisted.length, items: persisted };
   }
 
   #upsertWordState({ deviceId, userId = null, language, event }) {
@@ -532,6 +909,28 @@ function nextReviewForRating(rating, occurredAt) {
     return new Date(occurredAt.getTime() + 5 * 60 * 1000);
   }
   return new Date(occurredAt.getTime() + 24 * 60 * 60 * 1000);
+}
+
+export function resolveEventKey(event) {
+  if (event?.event_id && typeof event.event_id === 'string') {
+    return event.event_id;
+  }
+  if (event?.client_event_id && typeof event.client_event_id === 'string') {
+    return event.client_event_id;
+  }
+  return null;
+}
+
+export function compareEventsForProjection(left, right) {
+  const occurred = String(left.occurred_at ?? '').localeCompare(String(right.occurred_at ?? ''));
+  if (occurred !== 0) {
+    return occurred;
+  }
+  const received = String(left.received_at ?? '').localeCompare(String(right.received_at ?? ''));
+  if (received !== 0) {
+    return received;
+  }
+  return resolveEventKey(left)?.localeCompare(resolveEventKey(right) ?? '') ?? -1;
 }
 
 export function toApiWord(word) {

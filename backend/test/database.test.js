@@ -11,8 +11,8 @@ test('reads schema SQL and applies it through the pool', async () => {
 
   assert.match(schemaSql, /CREATE TABLE words/);
   assert.match(schemaSql, /CREATE TABLE user_proficiency/);
-  assert.match(schemaSql, /scale TEXT NOT NULL DEFAULT 'cefr'/);
-  assert.match(schemaSql, /level_index INTEGER NOT NULL DEFAULT 0/);
+  assert.match(schemaSql, /language TEXT NOT NULL DEFAULT 'en'/);
+  assert.match(schemaSql, /review_count INTEGER NOT NULL DEFAULT 0/);
   assert.equal(pool.queries.length, 1);
   assert.equal(pool.queries[0], schemaSql);
 });

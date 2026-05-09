@@ -15,17 +15,28 @@ Future<void> main() async {
 
   final config = AppConfig.fromEnvironment();
   final database = await LocalDatabase.open();
+  // Persist log entries only — pruning is expensive (O(n log n) over the whole
+  // log table) and must not run on every log call or the UI hot path stalls
+  // after a few hundred entries accumulate. A periodic timer below handles
+  // pruning out of band.
   final logger = PersistedLogger(
     minimumLevel: AppLogLevel.fromName(config.logLevel),
-    write: (entry) async {
-      await database.persistLogEntry(entry);
-      await database.pruneLogs(
-        maxEntries: config.logMaxEntries,
-        maxAge: config.logRetention,
-      );
-    },
+    write: (entry) => database.persistLogEntry(entry),
   );
   database.attachLogger(logger);
+
+  // Prune log table every 5 minutes (and once at startup) to enforce the
+  // retention/cap budget without blocking individual log writes.
+  unawaited(database.pruneLogs(
+    maxEntries: config.logMaxEntries,
+    maxAge: config.logRetention,
+  ));
+  Timer.periodic(const Duration(minutes: 5), (_) {
+    unawaited(database.pruneLogs(
+      maxEntries: config.logMaxEntries,
+      maxAge: config.logRetention,
+    ));
+  });
   final apiClient = BackendApiClient(
     baseUrl: config.backendBaseUrl,
     timeout: config.newWordTimeout,

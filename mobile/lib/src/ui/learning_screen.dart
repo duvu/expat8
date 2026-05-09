@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/user_session.dart';
@@ -300,6 +302,23 @@ class LearningCardGestureSurface extends StatefulWidget {
 class _LearningCardGestureSurfaceState
     extends State<LearningCardGestureSurface> {
   Offset _panDelta = Offset.zero;
+  bool _gestureInFlight = false;
+
+  void _dispatchGesture(Future<void> Function() callback) {
+    if (_gestureInFlight) {
+      return;
+    }
+    _gestureInFlight = true;
+    unawaited(() async {
+      try {
+        await callback();
+      } catch (_) {
+        // Gesture failures must not leave the surface permanently disabled.
+      } finally {
+        _gestureInFlight = false;
+      }
+    }());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +329,7 @@ class _LearningCardGestureSurfaceState
         _panDelta += details.delta;
       },
       onPanEnd: (details) {
-        if (!widget.isEnabled) {
+        if (!widget.isEnabled || _gestureInFlight) {
           _panDelta = Offset.zero;
           return;
         }
@@ -321,15 +340,15 @@ class _LearningCardGestureSurfaceState
         // Determine primary axis from whichever had more movement.
         if (dx.abs() >= dy.abs()) {
           if (vel.dx < -200 || dx < -80) {
-            widget.onSwipeRightToLeft();
+            _dispatchGesture(widget.onSwipeRightToLeft);
           } else if (vel.dx > 200 || dx > 80) {
-            widget.onSwipeLeftToRight();
+            _dispatchGesture(widget.onSwipeLeftToRight);
           }
         } else {
           if (vel.dy < -200 || dy < -80) {
-            widget.onSwipeBottomToTop();
+            _dispatchGesture(widget.onSwipeBottomToTop);
           } else if (vel.dy > 200 || dy > 80) {
-            widget.onSwipeTopToBottom();
+            _dispatchGesture(widget.onSwipeTopToBottom);
           }
         }
       },

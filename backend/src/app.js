@@ -30,6 +30,19 @@ export function createApp({
     response.json({ ok: true });
   });
 
+  app.get('/health/ready', async (request, response) => {
+    response.setHeader('x-request-id', resolveRequestId(request));
+    try {
+      const healthy = await store.healthCheck();
+      if (!healthy) {
+        return response.status(503).json({ ok: false, db: 'error' });
+      }
+      return response.status(200).json({ ok: true, db: 'ok' });
+    } catch (error) {
+      return response.status(503).json({ ok: false, db: 'error' });
+    }
+  });
+
   app.use(
     '/v1',
     corsMiddleware({ config }),
@@ -70,7 +83,7 @@ export function createApp({
   return app;
 }
 
-function createV1Router({ store, generationService, config }) {
+function createV1Router({ store, config }) {
   const router = express.Router();
 
   router.post(
@@ -134,6 +147,21 @@ function createV1Router({ store, generationService, config }) {
     })
   );
 
+  router.get(
+    '/me',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveRequiredUserSession({ request, response, store });
+      if (!userSession) {
+        return;
+      }
+      return response.json({
+        user_id: userSession.user.id,
+        identifier: userSession.user.identifier,
+        display_name: userSession.user.display_name
+      });
+    })
+  );
+
   router.post(
     '/learning/cards',
     asyncHandler(async (request, response) => {
@@ -154,27 +182,13 @@ function createV1Router({ store, generationService, config }) {
       }
       const limit = clampLimit(body.limit ?? 10, 1, 100);
       const targetLanguage = body.target_language ?? config.defaultTargetLanguage;
-      let result = await store.learningCards({
+      const result = await store.learningCards({
         deviceId: body.device_id,
         userId: userSession?.user.id ?? null,
         targetLanguage,
         limit,
         now: new Date().toISOString()
       });
-      const shortfall = limit - result.items.length;
-      if (shortfall > 0 && generationService != null) {
-        await generationService.generateAndStore({
-          targetLanguage,
-          limit: shortfall,
-        });
-        result = await store.learningCards({
-          deviceId: body.device_id,
-          userId: userSession?.user.id ?? null,
-          targetLanguage,
-          limit,
-          now: new Date().toISOString()
-        });
-      }
       return response.json({
         target_mix: result.target_mix,
         actual_mix: result.actual_mix,
@@ -197,6 +211,261 @@ function createV1Router({ store, generationService, config }) {
     })
   );
 
+  router.get(
+    '/content-packs',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveOptionalUserSession({ request, response, store });
+      if (userSession === false) {
+        return;
+      }
+      const language = request.query.language ?? request.query.target_language ?? config.defaultTargetLanguage;
+      const afterVersion = request.query.after_version == null
+        ? null
+        : Number.parseInt(request.query.after_version, 10);
+      const limit = clampLimit(request.query.limit, 1, 200);
+      const items = await store.listContentPacks({
+        language,
+        afterVersion: Number.isNaN(afterVersion) ? null : afterVersion,
+        limit
+      });
+      return response.json({ items });
+    })
+  );
+
+  router.get(
+    '/content-packs/:id',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveOptionalUserSession({ request, response, store });
+      if (userSession === false) {
+        return;
+      }
+      const pack = await store.getContentPackById({ id: request.params.id });
+      if (!pack) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(pack);
+    })
+  );
+
+  router.post(
+    '/articles',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveRequiredUserSession({ request, response, store });
+      if (!userSession) {
+        return;
+      }
+      const body = request.body ?? {};
+      if (!validateArticleBody(body)) {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+
+      const article = await store.createArticle({
+        userId: userSession.user.id,
+        title: body.title.trim(),
+        sourceUrl: typeof body.source_url === 'string' ? body.source_url : null,
+        language: body.language.trim(),
+        rawText: body.raw_text,
+        visibility: normalizeVisibility(body.visibility)
+      });
+
+      return response.status(201).json(toApiArticle(article));
+    })
+  );
+
+  router.get(
+    '/articles',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveRequiredUserSession({ request, response, store });
+      if (!userSession) {
+        return;
+      }
+      const limit = clampLimit(request.query.limit, 1, 100);
+      const items = await store.listArticles({ userId: userSession.user.id, limit });
+      return response.json({ items: items.map(toApiArticle) });
+    })
+  );
+
+  router.get(
+    '/articles/:id',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveRequiredUserSession({ request, response, store });
+      if (!userSession) {
+        return;
+      }
+      const article = await store.getArticleByIdForUser({
+        articleId: request.params.id,
+        userId: userSession.user.id
+      });
+      if (!article) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(toApiArticle(article));
+    })
+  );
+
+  router.get(
+    '/articles/:id/vocabulary',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveRequiredUserSession({ request, response, store });
+      if (!userSession) {
+        return;
+      }
+      const vocabulary = await store.getArticleVocabulary({
+        articleId: request.params.id,
+        userId: userSession.user.id
+      });
+      if (!vocabulary) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(vocabulary);
+    })
+  );
+
+  router.delete(
+    '/articles/:id',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveRequiredUserSession({ request, response, store });
+      if (!userSession) {
+        return;
+      }
+      const article = await store.softDeleteArticle({
+        articleId: request.params.id,
+        userId: userSession.user.id
+      });
+      if (!article) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json({ success: true });
+    })
+  );
+
+  router.post(
+    '/admin/articles',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const body = request.body ?? {};
+      if (!validateArticleBody(body)) {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const article = await store.createAdminArticle({
+        title: body.title.trim(),
+        sourceUrl: typeof body.source_url === 'string' ? body.source_url : null,
+        language: body.language.trim(),
+        rawText: body.raw_text,
+        visibility: normalizeVisibility(body.visibility ?? 'published')
+      });
+      return response.status(201).json(toApiArticle(article));
+    })
+  );
+
+  router.get(
+    '/admin/articles',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const limit = clampLimit(request.query.limit, 1, 100);
+      const status = typeof request.query.status === 'string' ? request.query.status : null;
+      const items = await store.listAdminArticles({ limit, status });
+      return response.json({ items: items.map(toApiArticle) });
+    })
+  );
+
+  router.post(
+    '/admin/articles/:id/reprocess',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const article = await store.reprocessArticle({ articleId: request.params.id });
+      if (!article) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(toApiArticle(article));
+    })
+  );
+
+  router.post(
+    '/admin/articles/:id/publish',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const article = await store.publishArticle({ articleId: request.params.id });
+      if (!article) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(toApiArticle(article));
+    })
+  );
+
+  router.patch(
+    '/admin/articles/:id',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const body = request.body ?? {};
+      const patch = {};
+      if (typeof body.title === 'string') patch.title = body.title;
+      if (typeof body.language === 'string') patch.language = body.language;
+      if (body.visibility !== undefined) {
+        const v = String(body.visibility).toLowerCase();
+        if (!['private', 'shared', 'published'].includes(v)) {
+          return response.status(400).json({ error: 'bad_request' });
+        }
+        patch.visibility = v;
+      }
+      if (typeof body.status === 'string') patch.status = body.status;
+      const article = await store.patchAdminArticle({
+        articleId: request.params.id,
+        patch
+      });
+      if (!article) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(toApiArticle(article));
+    })
+  );
+
+  router.get(
+    '/admin/review/vocabulary',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const limit = clampLimit(request.query.limit, 1, 200);
+      const status = typeof request.query.status === 'string' ? request.query.status : 'pending';
+      const items = await store.listVocabularyReviewItems({ status, limit });
+      return response.json({ items });
+    })
+  );
+
+  router.patch(
+    '/admin/vocabulary/:id',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const body = request.body ?? {};
+      const nextStatus = String(body.status ?? '').trim();
+      if (!['approved', 'rejected', 'pending'].includes(nextStatus)) {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const item = await store.reviewVocabularyItem({
+        itemId: request.params.id,
+        status: nextStatus,
+        reviewNote: typeof body.review_note === 'string' ? body.review_note : null
+      });
+      if (!item) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(item);
+    })
+  );
+
   router.post(
     '/study-events',
     asyncHandler(async (request, response) => {
@@ -205,7 +474,7 @@ function createV1Router({ store, generationService, config }) {
         return;
       }
       const body = request.body ?? {};
-      if (!body.device_id || !body.client_event_id || !body.rating || !body.occurred_at) {
+      if (!body.device_id || !(body.client_event_id || body.event_id) || !body.rating || !body.occurred_at) {
         return response.status(400).json({ error: 'bad_request' });
       }
 
@@ -215,7 +484,8 @@ function createV1Router({ store, generationService, config }) {
           userId: userSession?.user.id ?? null,
           language: body.language ?? config.defaultTargetLanguage,
           event: {
-            client_event_id: body.client_event_id,
+            event_id: body.event_id ?? null,
+            client_event_id: body.client_event_id ?? null,
             server_word_id: body.server_word_id ?? body.word_id ?? null,
             local_word_id: body.local_word_id ?? null,
             rating: body.rating,
@@ -233,6 +503,7 @@ function createV1Router({ store, generationService, config }) {
         if (error instanceof InvalidStudyRatingError) {
           request.log?.warn('study_event_rejected', {
             reason: 'invalid_rating',
+            event_id: body.event_id ?? null,
             client_event_id: body.client_event_id ?? null
           });
           return response.status(400).json({ error: 'invalid_rating' });
@@ -354,6 +625,32 @@ function userSessionResponse({ user, sessionToken }) {
   };
 }
 
+function toApiArticle(article) {
+  return {
+    id: article.id,
+    title: article.title,
+    source_url: article.source_url,
+    language: article.language,
+    visibility: article.visibility,
+    status: article.status,
+    processing_error: article.processing_error,
+    created_at: article.created_at,
+    updated_at: article.updated_at
+  };
+}
+
+async function resolveRequiredUserSession({ request, response, store }) {
+  const session = await resolveOptionalUserSession({ request, response, store });
+  if (session === false) {
+    return null;
+  }
+  if (!session) {
+    response.status(401).json({ error: 'invalid_session' });
+    return null;
+  }
+  return session;
+}
+
 function requestContextMiddleware({ logger }) {
   return (request, response, next) => {
     const requestId = resolveRequestId(request);
@@ -417,7 +714,7 @@ function rejectMissingCredentialHeaders(request, response, next) {
 
 function corsMiddleware({ config }) {
   const allowedOrigin = config.corsAllowedOrigin ?? '*';
-  const allowedMethods = 'GET, POST, PUT, OPTIONS';
+  const allowedMethods = 'GET, POST, PUT, PATCH, OPTIONS';
   const allowedHeaders = [
     'content-type',
     'authorization',
@@ -549,4 +846,25 @@ function clampLimit(raw, min, max) {
     return min;
   }
   return Math.max(min, Math.min(max, parsed));
+}
+
+function validateArticleBody(body) {
+  return (
+    typeof body.title === 'string' && body.title.trim().length > 0 &&
+    typeof body.language === 'string' && body.language.trim().length > 0 &&
+    typeof body.raw_text === 'string' && body.raw_text.trim().length > 0
+  );
+}
+
+function normalizeVisibility(value) {
+  const raw = String(value ?? 'private').toLowerCase();
+  return ['private', 'shared', 'published'].includes(raw) ? raw : 'private';
+}
+
+function hasAdminAccess({ request, config }) {
+  if (config.adminApiTokens.size === 0) {
+    return false;
+  }
+  const token = request.get('x-expat8-admin-token') ?? request.get('x-admin-token');
+  return typeof token === 'string' && config.adminApiTokens.has(token);
 }

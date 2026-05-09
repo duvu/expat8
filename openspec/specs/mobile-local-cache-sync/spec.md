@@ -34,7 +34,7 @@ The mobile app MUST retain no more than 1000 vocabulary words in local storage.
 - **THEN** the app preserves the pending sync payload before removing the local word record
 
 ### Requirement: Card requests use local storage while backend refill is separate
-The mobile app SHALL serve visible new/review card requests from ObjectBox local storage and SHALL use backend `/v1/learning/cards` only for inventory refill/top-up paths.
+The mobile app SHALL serve visible new/review card requests from ObjectBox local storage and SHALL use backend `/v1/learning/cards` only for inventory refill/top-up paths. The sole condition for triggering a background refill SHALL be that the count of unstudied new words for the active learning language is strictly less than 100. Total pool size and global word-count targets SHALL NOT independently trigger a server fetch.
 
 #### Scenario: Local new word is available
 - **WHEN** the app requests a new word and local storage contains at least one eligible unstudied new word
@@ -51,6 +51,22 @@ The mobile app SHALL serve visible new/review card requests from ObjectBox local
 #### Scenario: Backend refill fails
 - **WHEN** inventory refill or top-up fails due to timeout, network error, or backend rejection
 - **THEN** the app logs the failure and continues serving any available local cards without blocking the visible session
+
+#### Scenario: Unstudied count below threshold triggers refill
+- **WHEN** the count of unstudied new words for the active language is strictly less than 100
+- **THEN** the app SHALL trigger a background refill from the server
+
+#### Scenario: Unstudied count at or above threshold suppresses refill
+- **WHEN** the count of unstudied new words for the active language is 100 or greater
+- **THEN** the app SHALL NOT make a backend request, even if the total local word count is below any pool-size target
+
+#### Scenario: Seed vocabulary is healthy at startup
+- **WHEN** the app seeds bundle vocabulary and the resulting unstudied count for the active language is 100 or greater
+- **THEN** the startup top-up path does NOT fetch from the backend
+
+#### Scenario: Refill check runs after new-word state transition
+- **WHEN** a new-word card is shown and `markWordAsLearning` completes
+- **THEN** the app runs the unstudied threshold check in the completion callback, ensuring the count has already been decremented before deciding whether to fetch
 
 ### Requirement: Sync queue retries failed uploads
 The mobile app SHALL sync pending study events to the backend in the background and retry failed sync attempts, and SHALL log sync batch execution, retry scheduling, and terminal failure conditions.

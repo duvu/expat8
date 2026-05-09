@@ -99,7 +99,8 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
       ]
     })
   });
-  assert.deepEqual(retry.accepted_event_ids, ['evt_1']);
+  assert.deepEqual(retry.accepted_event_ids, []);
+  assert.deepEqual(retry.duplicates, ['evt_1']);
   assert.equal(store.studyEventsByClientId.size, 1);
 
   const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=device_1&language=en`);
@@ -168,25 +169,13 @@ test('recent words only honor documented bootstrap query parameters', async (t) 
   assert.deepEqual(recent.items.map((item) => item.server_word_id), ['word_recent_en']);
 });
 
-test('calls AI generation when word pool is empty and returns generated words', async (t) => {
+test('does not call AI generation inline when word pool is empty', async (t) => {
   const store = new WordStore({ seed: false });
-  const generatedWords = [];
   const generationService = {
     calls: 0,
     async generateAndStore({ targetLanguage, limit }) {
       this.calls += 1;
-      for (let index = 0; index < limit; index += 1) {
-        const word = wordInput({
-          id: `gen_${index}`,
-          term: `generated ${index}`,
-          language: targetLanguage,
-          created_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`,
-          updated_at: `2026-05-04T10:${index.toString().padStart(2, '0')}:00.000Z`
-        });
-        const { word: inserted } = store.insertWord(word);
-        generatedWords.push(inserted);
-      }
-      return generatedWords;
+      return [];
     }
   };
   const server = http.createServer(
@@ -207,9 +196,8 @@ test('calls AI generation when word pool is empty and returns generated words', 
     card_mode: 'new'
   });
 
-  assert.equal(generationService.calls, 1);
-  assert.equal(next.items.length, 10);
-  assert.ok(next.items.every((item) => item.language === 'en'));
+  assert.equal(generationService.calls, 0);
+  assert.equal(next.items.length, 0);
 });
 
 test('serves backend-selected learning cards as ten new cards and records active claims', async (t) => {
@@ -601,6 +589,14 @@ test('registers, signs in, signs out, and associates signed-in learning with use
   });
   assert.equal(signedIn.user_id, registered.user_id);
 
+  const me = await fetchJson(`${baseUrl}/v1/me`, {
+    method: 'GET',
+    headers: bearerHeaders(signedIn.session_token)
+  });
+  assert.equal(me.user_id, registered.user_id);
+  assert.equal(me.identifier, 'learner@example.com');
+  assert.equal(me.display_name, 'Learner One');
+
   const first = await postLearningCards(baseUrl, {
     device_id: 'device_identity',
     target_language: 'en',
@@ -654,6 +650,16 @@ test('registers, signs in, signs out, and associates signed-in learning with use
     body: JSON.stringify({})
   });
   assert.equal(signOut.success, true);
+
+  const invalidMe = await fetch(
+    `${baseUrl}/v1/me`,
+    signedFetchOptions(`${baseUrl}/v1/me`, {
+      method: 'GET',
+      headers: bearerHeaders(signedIn.session_token)
+    })
+  );
+  assert.equal(invalidMe.status, 401);
+  assert.deepEqual(await invalidMe.json(), { error: 'invalid_session' });
 
   const afterSignOut = await fetch(`${baseUrl}/v1/proficiency?device_id=device_identity&language=en`, signedFetchOptions(`${baseUrl}/v1/proficiency?device_id=device_identity&language=en`, {
     headers: bearerHeaders(signedIn.session_token)
@@ -796,9 +802,7 @@ test('protects v1 routes with app credentials while leaving health open', async 
     body: cardBody
   }));
   assert.equal(valid.status, 200);
-  // learningCards is called twice when shortfall triggers generation: once to
-  // detect the gap, and once after generateAndStore to build the final response.
-  assert.equal(store.learningCardsCalls, 2);
+  assert.equal(store.learningCardsCalls, 1);
 
   const tampered = await fetch(
     cardUrl,
@@ -883,6 +887,338 @@ test('rejects invalid sync credentials before parsing study event payloads', asy
   assert.equal(store.syncStudyEventsCalls, 0);
 });
 
+test('allows authenticated users to create and read own articles', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const register = await fetchJson(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'article-owner@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_articles'
+    })
+  });
+
+  const created = await fetchJson(`${baseUrl}/v1/articles`, {
+    method: 'POST',
+    headers: {
+      ...bearerHeaders(register.session_token),
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      title: 'My first upload',
+      language: 'en',
+      raw_text: 'This is a learning article.',
+      visibility: 'private'
+    })
+  });
+
+  assert.equal(created.status, 'pending_processing');
+  const listed = await fetchJson(`${baseUrl}/v1/articles`, {
+    method: 'GET',
+    headers: bearerHeaders(register.session_token)
+  });
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].id, created.id);
+
+  const detail = await fetchJson(`${baseUrl}/v1/articles/${created.id}`, {
+    method: 'GET',
+    headers: bearerHeaders(register.session_token)
+  });
+  assert.equal(detail.id, created.id);
+  assert.equal(detail.visibility, 'private');
+});
+
+test('supports admin article workflow with admin token guard', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig({ ADMIN_API_TOKENS: 'admin-token-1' })
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const adminHeaders = {
+    'content-type': 'application/json',
+    'x-expat8-admin-token': 'admin-token-1'
+  };
+
+  const created = await fetchJson(`${baseUrl}/v1/admin/articles`, {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify({
+      title: 'Admin article',
+      language: 'en',
+      raw_text: 'Admin managed learning content.',
+      visibility: 'published'
+    })
+  });
+  assert.equal(created.status, 'pending_processing');
+
+  const listed = await fetchJson(`${baseUrl}/v1/admin/articles`, {
+    method: 'GET',
+    headers: { 'x-expat8-admin-token': 'admin-token-1' }
+  });
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].id, created.id);
+
+  const published = await fetchJson(`${baseUrl}/v1/admin/articles/${created.id}/publish`, {
+    method: 'POST',
+    headers: { 'x-expat8-admin-token': 'admin-token-1' }
+  });
+  assert.equal(published.status, 'published');
+
+  const patched = await fetchJson(`${baseUrl}/v1/admin/articles/${created.id}`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json',
+      'x-expat8-admin-token': 'admin-token-1'
+    },
+    body: JSON.stringify({
+      title: 'Admin article updated',
+      raw_text: 'ignored change'
+    })
+  });
+  assert.equal(patched.title, 'Admin article updated');
+  assert.equal(store.getArticleById({ articleId: created.id }).raw_text, 'Admin managed learning content.');
+
+  const invalidVisibility = await fetch(
+    `${baseUrl}/v1/admin/articles/${created.id}`,
+    signedFetchOptions(`${baseUrl}/v1/admin/articles/${created.id}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-expat8-admin-token': 'admin-token-1'
+      },
+      body: JSON.stringify({ visibility: 'secret' })
+    })
+  );
+  assert.equal(invalidVisibility.status, 400);
+
+  const notFound = await fetch(
+    `${baseUrl}/v1/admin/articles/missing_article`,
+    signedFetchOptions(`${baseUrl}/v1/admin/articles/missing_article`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-expat8-admin-token': 'admin-token-1'
+      },
+      body: JSON.stringify({ title: 'Still missing' })
+    })
+  );
+  assert.equal(notFound.status, 404);
+
+  const forbidden = await fetch(
+    `${baseUrl}/v1/admin/articles`,
+    signedFetchOptions(`${baseUrl}/v1/admin/articles`, {
+      method: 'GET',
+      headers: { 'x-expat8-admin-token': 'wrong-token' }
+    })
+  );
+  assert.equal(forbidden.status, 403);
+});
+
+test('exposes article vocabulary and soft deletion rules', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const owner = await fetchJson(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'owner@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_owner'
+    })
+  });
+  const viewer = await fetchJson(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'viewer@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_viewer'
+    })
+  });
+
+  const privateArticle = store.createArticle({
+    userId: owner.user_id,
+    title: 'Private article',
+    language: 'en',
+    rawText: 'Private article text',
+    visibility: 'private'
+  });
+  store.persistArticleVocabulary({
+    articleId: privateArticle.id,
+    items: [vocabItem('private term')]
+  });
+
+  const publishedArticle = store.createArticle({
+    userId: owner.user_id,
+    title: 'Published article',
+    language: 'en',
+    rawText: 'Published article text',
+    visibility: 'private'
+  });
+  store.persistArticleVocabulary({
+    articleId: publishedArticle.id,
+    items: [vocabItem('published term')]
+  });
+  store.publishArticle({ articleId: publishedArticle.id });
+
+  const ownerVocabulary = await fetchJson(
+    `${baseUrl}/v1/articles/${privateArticle.id}/vocabulary`,
+    {
+      method: 'GET',
+      headers: bearerHeaders(owner.session_token)
+    }
+  );
+  assert.equal(ownerVocabulary.article_id, privateArticle.id);
+  assert.equal(ownerVocabulary.items.length, 1);
+
+  const viewerVocabulary = await fetchJson(
+    `${baseUrl}/v1/articles/${publishedArticle.id}/vocabulary`,
+    {
+      method: 'GET',
+      headers: bearerHeaders(viewer.session_token)
+    }
+  );
+  assert.equal(viewerVocabulary.article_id, publishedArticle.id);
+  assert.equal(viewerVocabulary.items.length, 1);
+
+  const viewerPrivate = await fetch(
+    `${baseUrl}/v1/articles/${privateArticle.id}/vocabulary`,
+    signedFetchOptions(`${baseUrl}/v1/articles/${privateArticle.id}/vocabulary`, {
+      method: 'GET',
+      headers: bearerHeaders(viewer.session_token)
+    })
+  );
+  assert.equal(viewerPrivate.status, 404);
+
+  const unauthenticated = await fetch(
+    `${baseUrl}/v1/articles/${publishedArticle.id}/vocabulary`,
+    signedFetchOptions(`${baseUrl}/v1/articles/${publishedArticle.id}/vocabulary`, {
+      method: 'GET'
+    })
+  );
+  assert.equal(unauthenticated.status, 401);
+
+  const deniedDelete = await fetch(
+    `${baseUrl}/v1/articles/${privateArticle.id}`,
+    signedFetchOptions(`${baseUrl}/v1/articles/${privateArticle.id}`, {
+      method: 'DELETE',
+      headers: bearerHeaders(viewer.session_token)
+    })
+  );
+  assert.equal(deniedDelete.status, 404);
+
+  const deleted = await fetchJson(`${baseUrl}/v1/articles/${privateArticle.id}`, {
+    method: 'DELETE',
+    headers: bearerHeaders(owner.session_token)
+  });
+  assert.deepEqual(deleted, { success: true });
+
+  const listed = await fetchJson(`${baseUrl}/v1/articles`, {
+    method: 'GET',
+    headers: bearerHeaders(owner.session_token)
+  });
+  assert.equal(listed.items.some((item) => item.id === privateArticle.id), false);
+
+  const deletedVocabulary = await fetch(
+    `${baseUrl}/v1/articles/${privateArticle.id}/vocabulary`,
+    signedFetchOptions(`${baseUrl}/v1/articles/${privateArticle.id}/vocabulary`, {
+      method: 'GET',
+      headers: bearerHeaders(owner.session_token)
+    })
+  );
+  assert.equal(deletedVocabulary.status, 404);
+});
+
+test('returns readiness without app credentials', async (t) => {
+  const store = new WordStore();
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const ready = await fetch(`${baseUrl}/health/ready`);
+
+  assert.equal(ready.status, 200);
+  assert.deepEqual(await ready.json(), { ok: true, db: 'ok' });
+  assert.match(ready.headers.get('x-request-id') ?? '', /./);
+});
+
+test('sync processes out-of-order events deterministically', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_order_1', term: 'order one' }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_out_of_order',
+      events: [
+        {
+          client_event_id: 'evt_newer',
+          server_word_id: 'word_order_1',
+          rating: 'easy',
+          occurred_at: '2026-05-04T10:31:00.000Z'
+        },
+        {
+          client_event_id: 'evt_older',
+          server_word_id: 'word_order_1',
+          rating: 'easy',
+          occurred_at: '2026-05-04T10:30:00.000Z'
+        }
+      ]
+    })
+  });
+
+  assert.deepEqual(sync.accepted_event_ids, ['evt_older', 'evt_newer']);
+  assert.deepEqual(sync.duplicates, []);
+  assert.deepEqual(sync.rejected_events, []);
+});
+
 class AsyncStoreAdapter {
   constructor(store) {
     this.store = store;
@@ -912,6 +1248,50 @@ class AsyncStoreAdapter {
     return this.store.syncStudyEvents(input);
   }
 
+  async createArticle(input) {
+    return this.store.createArticle(input);
+  }
+
+  async listArticles(input) {
+    return this.store.listArticles(input);
+  }
+
+  async getArticleByIdForUser(input) {
+    return this.store.getArticleByIdForUser(input);
+  }
+
+  async createAdminArticle(input) {
+    return this.store.createAdminArticle(input);
+  }
+
+  async listAdminArticles(input) {
+    return this.store.listAdminArticles(input);
+  }
+
+  async reprocessArticle(input) {
+    return this.store.reprocessArticle(input);
+  }
+
+  async publishArticle(input) {
+    return this.store.publishArticle(input);
+  }
+
+  async listVocabularyReviewItems(input) {
+    return this.store.listVocabularyReviewItems(input);
+  }
+
+  async reviewVocabularyItem(input) {
+    return this.store.reviewVocabularyItem(input);
+  }
+
+  async listContentPacks(input) {
+    return this.store.listContentPacks(input);
+  }
+
+  async getContentPackById(input) {
+    return this.store.getContentPackById(input);
+  }
+
   async recordStudyEvent(input) {
     return this.store.recordStudyEvent(input);
   }
@@ -934,6 +1314,26 @@ class AsyncStoreAdapter {
 
   async revokeUserSession(input) {
     return this.store.revokeUserSession(input);
+  }
+
+  async getMe(input) {
+    return this.store.getMe(input);
+  }
+
+  async getArticleVocabulary(input) {
+    return this.store.getArticleVocabulary(input);
+  }
+
+  async softDeleteArticle(input) {
+    return this.store.softDeleteArticle(input);
+  }
+
+  async patchAdminArticle(input) {
+    return this.store.patchAdminArticle(input);
+  }
+
+  async healthCheck(input) {
+    return this.store.healthCheck(input);
   }
 }
 
@@ -976,6 +1376,22 @@ function wordInput(overrides = {}) {
     example_vi: 'Dinh danh giup theo doi tien do.',
     difficulty: 'A1',
     topics: ['account'],
+    ...overrides
+  };
+}
+
+function vocabItem(term, overrides = {}) {
+  return {
+    term,
+    language: 'en',
+    meaning_vi: `Nghia cua ${term}`,
+    part_of_speech: 'noun',
+    ipa: '/na/',
+    vietnamese_pronunciation: term,
+    example: `${term} in article`,
+    example_vi: `${term} trong bai viet`,
+    difficulty: 'A1',
+    topics: ['article-ingestion'],
     ...overrides
   };
 }

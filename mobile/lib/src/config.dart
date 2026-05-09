@@ -9,11 +9,6 @@ class AppConfig {
     required this.logLevel,
     required this.logMaxEntries,
     this.logRetention = defaultLogRetention,
-    required this.vocabFirstInstallSize,
-    required this.vocabPoolFullSize,
-    required this.vocabHourlyTopUpSize,
-    required this.vocabRotationSize,
-    required this.vocabRotationUnstudiedThreshold,
   });
 
   factory AppConfig.fromEnvironment() {
@@ -44,26 +39,6 @@ class AppConfig {
         'APP_LOG_MAX_ENTRIES',
         defaultValue: 5000,
       ),
-      vocabFirstInstallSize: int.fromEnvironment(
-        'VOCAB_FIRST_INSTALL_SIZE',
-        defaultValue: 200,
-      ),
-      vocabPoolFullSize: int.fromEnvironment(
-        'VOCAB_POOL_FULL_SIZE',
-        defaultValue: 1000,
-      ),
-      vocabHourlyTopUpSize: int.fromEnvironment(
-        'VOCAB_HOURLY_TOP_UP_SIZE',
-        defaultValue: 10,
-      ),
-      vocabRotationSize: int.fromEnvironment(
-        'VOCAB_ROTATION_SIZE',
-        defaultValue: 100,
-      ),
-      vocabRotationUnstudiedThreshold: int.fromEnvironment(
-        'VOCAB_ROTATION_UNSTUDIED_THRESHOLD',
-        defaultValue: 100,
-      ),
     );
   }
 
@@ -76,11 +51,6 @@ class AppConfig {
   final String logLevel;
   final int logMaxEntries;
   final Duration logRetention;
-  final int vocabFirstInstallSize;
-  final int vocabPoolFullSize;
-  final int vocabHourlyTopUpSize;
-  final int vocabRotationSize;
-  final int vocabRotationUnstudiedThreshold;
 
   static const Duration defaultLogRetention = Duration(minutes: 60);
 }

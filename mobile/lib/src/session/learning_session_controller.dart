@@ -40,6 +40,7 @@ class LearningSessionController extends ChangeNotifier {
   Timer? _inventoryTimer;
   bool _topUpInFlight = false;
   final Duration _inventoryTopUpInterval = const Duration(hours: 1);
+  final Duration _cardSelectionWatchdog = const Duration(seconds: 8);
   String? statusMessage;
   String? authSuccessMessage;
   String? authErrorMessage;
@@ -152,12 +153,14 @@ class LearningSessionController extends ChangeNotifier {
     if (word == null || isLoading) {
       return;
     }
+    final language = _activeLearningLanguage;
     try {
       _deviceId ??= await repository.getOrCreateDeviceId();
-      await repository.markRememberedLowFrequency(
+      await repository.recordRememberedGesture(
         word: word,
         now: DateTime.now().toUtc(),
         deviceId: _deviceId!,
+        onProficiency: (updated) => _applyGestureProficiency(updated, language),
       );
       await _logger.info(
         category: AppLogCategory.session,
@@ -166,6 +169,10 @@ class LearningSessionController extends ChangeNotifier {
             'Marked current word as remembered with low relearn frequency.',
         context: {'word_id': word.serverWordId ?? word.localId},
       );
+      _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
+        'rating': StudyRating.tooEasy.apiValue,
+        'word_id': word.serverWordId ?? word.localId,
+      });
     } catch (error) {
       await _logger.warning(
         category: AppLogCategory.session,
@@ -173,6 +180,7 @@ class LearningSessionController extends ChangeNotifier {
         message: 'Remembered gesture update failed.',
         context: {'error': '$error'},
       );
+      return;
     }
     await nextCard();
   }
@@ -182,12 +190,14 @@ class LearningSessionController extends ChangeNotifier {
     if (word == null || isLoading) {
       return;
     }
+    final language = _activeLearningLanguage;
     try {
       _deviceId ??= await repository.getOrCreateDeviceId();
-      await repository.markAsDifficultForRelearn(
+      await repository.recordDifficultGesture(
         word: word,
         now: DateTime.now().toUtc(),
         deviceId: _deviceId!,
+        onProficiency: (updated) => _applyGestureProficiency(updated, language),
       );
       await _logger.info(
         category: AppLogCategory.session,
@@ -195,6 +205,10 @@ class LearningSessionController extends ChangeNotifier {
         message: 'Marked current word as difficult for relearn group.',
         context: {'word_id': word.serverWordId ?? word.localId},
       );
+      _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
+        'rating': StudyRating.tooHard.apiValue,
+        'word_id': word.serverWordId ?? word.localId,
+      });
     } catch (error) {
       await _logger.warning(
         category: AppLogCategory.session,
@@ -202,6 +216,7 @@ class LearningSessionController extends ChangeNotifier {
         message: 'Difficult gesture update failed.',
         context: {'error': '$error'},
       );
+      return;
     }
     await nextCard();
   }
@@ -253,7 +268,16 @@ class LearningSessionController extends ChangeNotifier {
     isLoading = true;
     statusMessage = null;
     notifyListeners();
-
+    var didShowWord = false;
+    // Watchdog: under no circumstance should isLoading remain true beyond the
+    // configured timeout — the gesture surface gates on it and a stuck flag
+    // freezes the entire screen.
+    final watchdog = Timer(_cardSelectionWatchdog, () {
+      if (!isLoading) return;
+      isLoading = false;
+      statusMessage ??= emptyMessage;
+      notifyListeners();
+    });
     try {
       if (beforeSelect != null) {
         await beforeSelect();
@@ -263,7 +287,7 @@ class LearningSessionController extends ChangeNotifier {
       final preferredKind = mode == _CardSelectionMode.mixed
           ? _selectionWindow.preferredKind()
           : mode.preferredKind;
-      await _logger.info(
+      _safeLog(_logger.info(
         category: AppLogCategory.session,
         event: 'session.card_selection.start',
         message: 'Started learning card selection.',
@@ -277,7 +301,7 @@ class LearningSessionController extends ChangeNotifier {
           'new_count': _selectionWindow.newCount,
           'review_count': _selectionWindow.reviewCount,
         },
-      );
+      ));
 
       final selected = preferredKind == CardKind.newWord
           ? await _selectNewThenReview(now, emptyMessage: emptyMessage)
@@ -286,7 +310,7 @@ class LearningSessionController extends ChangeNotifier {
       final word = selected.word;
       final actualKind = selected.kind;
       if (word == null) {
-        await _logger.warning(
+        _safeLog(_logger.warning(
           category: AppLogCategory.session,
           event: 'session.card_selection.empty',
           message: 'No learning card was available after fallback attempts.',
@@ -296,9 +320,9 @@ class LearningSessionController extends ChangeNotifier {
             'preferred_kind': _kindName(preferredKind),
             'attempted_sources': selected.attemptedSources,
           },
-        );
+        ));
       } else {
-        await _logger.info(
+        _safeLog(_logger.info(
           category: AppLogCategory.session,
           event: 'session.card_selection.selected',
           message: 'Selected learning card.',
@@ -310,17 +334,18 @@ class LearningSessionController extends ChangeNotifier {
             'source': _sourceName(selected.source),
             'word_id': word.serverWordId ?? word.localId,
           },
-        );
+        ));
       }
 
       if (word != null && actualKind == CardKind.newWord) {
-        try {
-          await repository.markWordAsLearning(
-            word: word,
-            now: DateTime.now().toUtc(),
-          );
-        } catch (error) {
-          await _logger.warning(
+        // For new-word cards, run the threshold check only after the local
+        // state transition (newWord → learning) completes. This ensures the
+        // unstudied count has been decremented before we decide to fetch.
+        unawaited(repository
+            .markWordAsLearning(word: word, now: DateTime.now().toUtc())
+            .then((_) => _triggerInventoryTopUp())
+            .catchError((Object error) {
+          _safeLog(_logger.warning(
             category: AppLogCategory.session,
             event: 'session.card_selection.local_state_failed',
             message: 'Selected card could not be marked as learning.',
@@ -328,8 +353,13 @@ class LearningSessionController extends ChangeNotifier {
               'word_id': word.serverWordId ?? word.localId,
               'error': '$error',
             },
-          );
-        }
+          ));
+          // Still trigger even if the state transition failed.
+          _triggerInventoryTopUp();
+        }));
+      } else {
+        // Review cards and empty results: trigger immediately.
+        _triggerInventoryTopUp();
       }
 
       _showWord(
@@ -337,11 +367,9 @@ class LearningSessionController extends ChangeNotifier {
         actualKind,
         emptyMessage: selected.message ?? emptyMessage,
       );
-      // Always attempt a background top-up after a selection cycle, including
-      // empty results, so the UI does not get stuck waiting for manual retry.
-      _triggerInventoryTopUp();
+      didShowWord = true;
     } catch (error) {
-      await _logger.warning(
+      _safeLog(_logger.warning(
         category: AppLogCategory.session,
         event: 'session.card_selection.failed',
         message: 'Learning card selection failed.',
@@ -350,11 +378,24 @@ class LearningSessionController extends ChangeNotifier {
           'active_language': _activeLearningLanguage,
           'error': '$error',
         },
-      );
-      isLoading = false;
-      statusMessage = currentWord == null ? emptyMessage : null;
-      notifyListeners();
+      ));
+    } finally {
+      watchdog.cancel();
+      // _showWord already toggled isLoading=false on success. On any other
+      // path (early throw, log failure, watchdog already fired) ensure the UI
+      // gets unblocked so the next gesture can drive a new selection.
+      if (!didShowWord && isLoading) {
+        isLoading = false;
+        statusMessage ??= emptyMessage;
+        notifyListeners();
+      }
     }
+  }
+
+  /// Fire-and-forget log call that swallows any failure so the controller's
+  /// hot path is never broken by logger misbehaviour.
+  void _safeLog(Future<void> future) {
+    unawaited(future.catchError((_) {}));
   }
 
   Future<_CardSelectionResult> _selectNewThenReview(
@@ -493,28 +534,48 @@ class LearningSessionController extends ChangeNotifier {
       deviceId: _deviceId!,
     );
     if (updatedProficiency != null) {
-      final previousLevel = proficiency.level;
-      proficiency = updatedProficiency;
-      if (updatedProficiency.levelChanged &&
-          updatedProficiency.level != previousLevel) {
-        _levelChangeMessage =
-            'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
-        await _logger.info(
-          category: AppLogCategory.session,
-          event: 'session.proficiency.changed',
-          message: 'Proficiency level changed after rating submission.',
-          context: {
-            'previous_level': updatedProficiency.previousLevel ?? previousLevel,
-            'new_level': updatedProficiency.level,
-          },
-        );
-      }
+      _applyUpdatedProficiency(updatedProficiency);
     }
     _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
       'rating': rating.name,
       'word_id': word.serverWordId ?? word.localId,
     });
     await nextCard();
+  }
+
+  void _applyGestureProficiency(
+    ProficiencyState updatedProficiency,
+    String gestureLanguage,
+  ) {
+    if (_activeLearningLanguage != gestureLanguage) {
+      return;
+    }
+    _applyUpdatedProficiency(updatedProficiency, notify: true);
+  }
+
+  void _applyUpdatedProficiency(
+    ProficiencyState updatedProficiency, {
+    bool notify = false,
+  }) {
+    final previousLevel = proficiency.level;
+    proficiency = updatedProficiency;
+    if (updatedProficiency.levelChanged &&
+        updatedProficiency.level != previousLevel) {
+      _levelChangeMessage =
+          'Level changed: ${updatedProficiency.previousLevel ?? previousLevel} -> ${updatedProficiency.level}';
+      _safeLog(_logger.info(
+        category: AppLogCategory.session,
+        event: 'session.proficiency.changed',
+        message: 'Proficiency level changed after rating submission.',
+        context: {
+          'previous_level': updatedProficiency.previousLevel ?? previousLevel,
+          'new_level': updatedProficiency.level,
+        },
+      ));
+    }
+    if (notify) {
+      notifyListeners();
+    }
   }
 
   void _refreshProficiencyInBackground({

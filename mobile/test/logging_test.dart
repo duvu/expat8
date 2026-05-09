@@ -86,4 +86,23 @@ void main() {
 
     expect(captured.single.traceId, 'trace_sync_123');
   });
+
+  test('logger swallows write failures so callers never freeze', () async {
+    final logger = PersistedLogger(
+      minimumLevel: AppLogLevel.debug,
+      write: (_) async => throw StateError('disk locked'),
+    );
+
+    // Must not throw — logger must not break the hot path.
+    await logger.info(
+      category: AppLogCategory.app,
+      event: 'app.start',
+      message: 'App started',
+    );
+    await logger.warning(
+      category: AppLogCategory.session,
+      event: 'session.warn',
+      message: 'Should not throw',
+    );
+  });
 }

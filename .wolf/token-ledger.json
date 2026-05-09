@@ -1,0 +1,1075 @@
+{
+  "version": 1,
+  "created_at": "2026-05-09T04:21:23.026Z",
+  "lifetime": {
+    "total_tokens_estimated": 240643,
+    "total_reads": 58,
+    "total_writes": 114,
+    "total_sessions": 5,
+    "anatomy_hits": 33,
+    "anatomy_misses": 25,
+    "repeated_reads_blocked": 73,
+    "estimated_savings_vs_bare_cli": 568440
+  },
+  "sessions": [
+    {
+      "id": "session-2026-05-09-1135",
+      "started": "2026-05-09T04:35:01.419Z",
+      "ended": "2026-05-09T04:36:34.093Z",
+      "reads": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6960,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/db/schema.sql",
+          "tokens_estimated": 1223,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+          "tokens_estimated": 2394,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 6722,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/main.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/db/migrations/20260509_content_ingestion_v2_foundation.sql",
+          "tokens_estimated": 1246,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/config.js",
+          "tokens_estimated": 1058,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [],
+      "totals": {
+        "input_tokens_estimated": 19603,
+        "output_tokens_estimated": 0,
+        "reads_count": 7,
+        "writes_count": 0,
+        "repeated_reads_blocked": 0,
+        "anatomy_lookups": 6
+      }
+    },
+    {
+      "id": "session-2026-05-09-1135",
+      "started": "2026-05-09T04:35:01.419Z",
+      "ended": "2026-05-09T05:02:13.829Z",
+      "reads": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6960,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/db/schema.sql",
+          "tokens_estimated": 1223,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+          "tokens_estimated": 2394,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 6722,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/main.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/db/migrations/20260509_content_ingestion_v2_foundation.sql",
+          "tokens_estimated": 1246,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/config.js",
+          "tokens_estimated": 1058,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/.claude/projects/-home-beou-IdeaProjects-expat8/d9e5cab5-5a1d-459e-b8f5-a2f2cbe736b5/tool-results/bxcpbgx0f.txt",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 11965,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 8320,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/test/word_store.test.js",
+          "tokens_estimated": 3166,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/test/api.test.js",
+          "tokens_estimated": 9828,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 48,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 93,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 47,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 50,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 0,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 75,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 72,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 240,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 89,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 115,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 253,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 788,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 59,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 60,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 206,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/test/word_store.test.js",
+          "tokens_estimated": 88,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/test/word_store.test.js",
+          "tokens_estimated": 44,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/test/api.test.js",
+          "tokens_estimated": 46,
+          "action": "edit"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 52882,
+        "output_tokens_estimated": 2373,
+        "reads_count": 12,
+        "writes_count": 18,
+        "repeated_reads_blocked": 17,
+        "anatomy_lookups": 10
+      }
+    },
+    {
+      "id": "session-2026-05-09-1209",
+      "started": "2026-05-09T05:09:13.738Z",
+      "ended": "2026-05-09T05:12:07.817Z",
+      "reads": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/study-events-api",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/design.md",
+          "tokens_estimated": 1327,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/specs/user-profile/spec.md",
+          "tokens_estimated": 245,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/specs/article-vocabulary/spec.md",
+          "tokens_estimated": 538,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/specs/article-deletion/spec.md",
+          "tokens_estimated": 390,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/specs/article-admin-update/spec.md",
+          "tokens_estimated": 459,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/specs/backend-readiness-probe/spec.md",
+          "tokens_estimated": 297,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/specs/study-events-api/spec.md",
+          "tokens_estimated": 484,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/missing-api-endpoints/tasks.md",
+          "tokens_estimated": 929,
+          "action": "create"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 0,
+        "output_tokens_estimated": 4669,
+        "reads_count": 1,
+        "writes_count": 8,
+        "repeated_reads_blocked": 0,
+        "anatomy_lookups": 0
+      }
+    },
+    {
+      "id": "session-2026-05-09-1241",
+      "started": "2026-05-09T05:41:35.243Z",
+      "ended": "2026-05-09T06:12:19.017Z",
+      "reads": [
+        {
+          "file": "/home/beou/.claude/projects/-home-beou-IdeaProjects-expat8/d9e5cab5-5a1d-459e-b8f5-a2f2cbe736b5/tool-results/b3a51rmsq.txt",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 11300,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6901,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 8315,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 6,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 8,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 119,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 80,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 111,
+          "action": "edit"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 26516,
+        "output_tokens_estimated": 484,
+        "reads_count": 4,
+        "writes_count": 6,
+        "repeated_reads_blocked": 10,
+        "anatomy_lookups": 3
+      }
+    },
+    {
+      "id": "session-2026-05-09-1241",
+      "started": "2026-05-09T05:41:35.243Z",
+      "ended": "2026-05-09T06:20:47.457Z",
+      "reads": [
+        {
+          "file": "/home/beou/.claude/projects/-home-beou-IdeaProjects-expat8/d9e5cab5-5a1d-459e-b8f5-a2f2cbe736b5/tool-results/b3a51rmsq.txt",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 11300,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6901,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 8315,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 6,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 8,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 119,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 80,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 111,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 549,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 88,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 311,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 426,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 38,
+          "action": "edit"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 26516,
+        "output_tokens_estimated": 1896,
+        "reads_count": 4,
+        "writes_count": 11,
+        "repeated_reads_blocked": 10,
+        "anatomy_lookups": 3
+      }
+    },
+    {
+      "id": "session-2026-05-09-1241",
+      "started": "2026-05-09T05:41:35.243Z",
+      "ended": "2026-05-09T06:43:14.169Z",
+      "reads": [
+        {
+          "file": "/home/beou/.claude/projects/-home-beou-IdeaProjects-expat8/d9e5cab5-5a1d-459e-b8f5-a2f2cbe736b5/tool-results/b3a51rmsq.txt",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 11300,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6901,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 8315,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 6,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 8,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 119,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 80,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 111,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 549,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 88,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 311,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 426,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 38,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/proposal.md",
+          "tokens_estimated": 680,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/.openspec.yaml",
+          "tokens_estimated": 12,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/design.md",
+          "tokens_estimated": 1227,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 740,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 622,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 596,
+          "action": "create"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 26516,
+        "output_tokens_estimated": 5773,
+        "reads_count": 6,
+        "writes_count": 17,
+        "repeated_reads_blocked": 10,
+        "anatomy_lookups": 3
+      }
+    },
+    {
+      "id": "session-2026-05-09-1241",
+      "started": "2026-05-09T05:41:35.243Z",
+      "ended": "2026-05-09T06:49:51.300Z",
+      "reads": [
+        {
+          "file": "/home/beou/.claude/projects/-home-beou-IdeaProjects-expat8/d9e5cab5-5a1d-459e-b8f5-a2f2cbe736b5/tool-results/b3a51rmsq.txt",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 11300,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6901,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 8315,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/session/learning_session_controller.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/config.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/local_database.dart",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/test/learning_session_controller_test.dart",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 6,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 8,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 119,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 80,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 111,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 549,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 88,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 311,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 426,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 38,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/proposal.md",
+          "tokens_estimated": 680,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/.openspec.yaml",
+          "tokens_estimated": 12,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/design.md",
+          "tokens_estimated": 1227,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 740,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 622,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 596,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart",
+          "tokens_estimated": 251,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart",
+          "tokens_estimated": 12,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/config.dart",
+          "tokens_estimated": 482,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/session/learning_session_controller.dart",
+          "tokens_estimated": 349,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 115,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 95,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/test/learning_session_controller_test.dart",
+          "tokens_estimated": 1500,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 186,
+          "action": "edit"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 26516,
+        "output_tokens_estimated": 8923,
+        "reads_count": 11,
+        "writes_count": 26,
+        "repeated_reads_blocked": 13,
+        "anatomy_lookups": 3
+      }
+    },
+    {
+      "id": "session-2026-05-09-1241",
+      "started": "2026-05-09T05:41:35.243Z",
+      "ended": "2026-05-09T06:54:10.468Z",
+      "reads": [
+        {
+          "file": "/home/beou/.claude/projects/-home-beou-IdeaProjects-expat8/d9e5cab5-5a1d-459e-b8f5-a2f2cbe736b5/tool-results/b3a51rmsq.txt",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 11300,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 6901,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 8315,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/session/learning_session_controller.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/config.dart",
+          "tokens_estimated": 0,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/local_database.dart",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/test/learning_session_controller_test.dart",
+          "tokens_estimated": 0,
+          "was_repeated": true,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 647,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 544,
+          "was_repeated": false,
+          "anatomy_had_description": false
+        }
+      ],
+      "writes": [
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+          "tokens_estimated": 6,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 8,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 119,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 80,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+          "tokens_estimated": 111,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 549,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 88,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 311,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 426,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/docs/architecture.md",
+          "tokens_estimated": 38,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/proposal.md",
+          "tokens_estimated": 680,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/.openspec.yaml",
+          "tokens_estimated": 12,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/design.md",
+          "tokens_estimated": 1227,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 740,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 622,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 596,
+          "action": "create"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart",
+          "tokens_estimated": 251,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart",
+          "tokens_estimated": 12,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/config.dart",
+          "tokens_estimated": 482,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 160,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/session/learning_session_controller.dart",
+          "tokens_estimated": 349,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 115,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 95,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/mobile/test/learning_session_controller_test.dart",
+          "tokens_estimated": 1500,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/tasks.md",
+          "tokens_estimated": 186,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-local-cache-sync/spec.md",
+          "tokens_estimated": 732,
+          "action": "edit"
+        },
+        {
+          "file": "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-learning-session/spec.md",
+          "tokens_estimated": 614,
+          "action": "edit"
+        }
+      ],
+      "totals": {
+        "input_tokens_estimated": 27707,
+        "output_tokens_estimated": 10269,
+        "reads_count": 13,
+        "writes_count": 28,
+        "repeated_reads_blocked": 13,
+        "anatomy_lookups": 5
+      }
+    }
+  ],
+  "daemon_usage": [],
+  "waste_flags": [],
+  "optimization_report": {
+    "last_generated": null,
+    "patterns": []
+  }
+}

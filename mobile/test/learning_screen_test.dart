@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:expat8_language_app/src/ui/learning_screen.dart';
@@ -44,7 +46,8 @@ void main() {
     expect(find.text('Too Hard'), findsNothing);
   });
 
-  testWidgets('renders HSK proficiency label for Chinese learning state', (tester) async {
+  testWidgets('renders HSK proficiency label for Chinese learning state',
+      (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -60,7 +63,8 @@ void main() {
     expect(find.text('Level HSK3'), findsOneWidget);
   });
 
-  testWidgets('language selector shows current learning language prominently', (tester) async {
+  testWidgets('language selector shows current learning language prominently',
+      (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -79,7 +83,8 @@ void main() {
     expect(find.text('Change'), findsOneWidget);
   });
 
-  testWidgets('language selector opens choices and reports selection changes', (tester) async {
+  testWidgets('language selector opens choices and reports selection changes',
+      (tester) async {
     String? selectedLanguage;
 
     await tester.pumpWidget(
@@ -107,7 +112,8 @@ void main() {
     expect(selectedLanguage, 'zh');
   });
 
-  testWidgets('drawer shows vocabulary and anonymous identity actions', (tester) async {
+  testWidgets('drawer shows vocabulary and anonymous identity actions',
+      (tester) async {
     final scaffoldKey = GlobalKey<ScaffoldState>();
     await tester.pumpWidget(
       MaterialApp(
@@ -169,7 +175,9 @@ void main() {
     expect(find.text('Sign in'), findsNothing);
   });
 
-  testWidgets('horizontal card gestures route right-to-left and left-to-right intents', (tester) async {
+  testWidgets(
+      'horizontal card gestures route right-to-left and left-to-right intents',
+      (tester) async {
     var rightToLeftCount = 0;
     var leftToRightCount = 0;
     var bottomToTopCount = 0;
@@ -187,9 +195,11 @@ void main() {
       ),
     );
 
-    await tester.fling(find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
     await tester.pumpAndSettle();
-    await tester.fling(find.byType(LearningCardGestureSurface), const Offset(300, 0), 1200);
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(300, 0), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 1);
@@ -198,7 +208,9 @@ void main() {
     expect(topToBottomCount, 0);
   });
 
-  testWidgets('vertical card gestures route bottom-to-top and top-to-bottom intents', (tester) async {
+  testWidgets(
+      'vertical card gestures route bottom-to-top and top-to-bottom intents',
+      (tester) async {
     var rightToLeftCount = 0;
     var leftToRightCount = 0;
     var bottomToTopCount = 0;
@@ -216,9 +228,11 @@ void main() {
       ),
     );
 
-    await tester.fling(find.byType(LearningCardGestureSurface), const Offset(0, -320), 1200);
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(0, -320), 1200);
     await tester.pumpAndSettle();
-    await tester.fling(find.byType(LearningCardGestureSurface), const Offset(0, 320), 1200);
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(0, 320), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 0);
@@ -227,7 +241,77 @@ void main() {
     expect(topToBottomCount, 1);
   });
 
-  testWidgets('drawer disables auth actions while auth is in progress', (tester) async {
+  testWidgets(
+      'gesture surface ignores duplicate swipes while callback is active',
+      (tester) async {
+    var rightToLeftCount = 0;
+    final firstGesture = Completer<void>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningCardGestureSurface(
+          onSwipeRightToLeft: () async {
+            rightToLeftCount += 1;
+            await firstGesture.future;
+          },
+          onSwipeLeftToRight: () async {},
+          onSwipeBottomToTop: () async {},
+          onSwipeTopToBottom: () async {},
+          child: const SizedBox(width: 300, height: 300),
+        ),
+      ),
+    );
+
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+    await tester.pump();
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+    await tester.pump();
+
+    expect(rightToLeftCount, 1);
+
+    firstGesture.complete();
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+    await tester.pumpAndSettle();
+
+    expect(rightToLeftCount, 2);
+  });
+
+  testWidgets('gesture surface recovers after async callback failure',
+      (tester) async {
+    var rightToLeftCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningCardGestureSurface(
+          onSwipeRightToLeft: () async {
+            rightToLeftCount += 1;
+            throw StateError('forced gesture failure');
+          },
+          onSwipeLeftToRight: () async {},
+          onSwipeBottomToTop: () async {},
+          onSwipeTopToBottom: () async {},
+          child: const SizedBox(width: 300, height: 300),
+        ),
+      ),
+    );
+
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+    await tester.pump();
+    await tester.fling(
+        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+    await tester.pump();
+
+    expect(rightToLeftCount, 2);
+  });
+
+  testWidgets('drawer disables auth actions while auth is in progress',
+      (tester) async {
     final scaffoldKey = GlobalKey<ScaffoldState>();
     var registerCount = 0;
     var signInCount = 0;
@@ -261,7 +345,8 @@ void main() {
     expect(signInCount, 0);
   });
 
-  testWidgets('identity dialog validates input before submitting auth', (tester) async {
+  testWidgets('identity dialog validates input before submitting auth',
+      (tester) async {
     var submitCount = 0;
 
     await tester.pumpWidget(
@@ -282,16 +367,20 @@ void main() {
     await tester.pump();
 
     expect(find.text('Enter an email address.'), findsOneWidget);
-    expect(find.text('Password must be at least 8 characters.'), findsOneWidget);
+    expect(
+        find.text('Password must be at least 8 characters.'), findsOneWidget);
     expect(submitCount, 0);
 
-    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'not-an-email');
-    await tester.enterText(find.widgetWithText(TextField, 'Password'), '1234567');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Email'), 'not-an-email');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Password'), '1234567');
     await tester.tap(find.widgetWithText(FilledButton, 'Register'));
     await tester.pump();
 
     expect(find.text('Enter a valid email address.'), findsOneWidget);
-    expect(find.text('Password must be at least 8 characters.'), findsOneWidget);
+    expect(
+        find.text('Password must be at least 8 characters.'), findsOneWidget);
     expect(submitCount, 0);
   });
 
@@ -311,8 +400,10 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.widgetWithText(TextField, 'Email'), 'Learner@Example.com');
-    await tester.enterText(find.widgetWithText(TextField, 'Password'), 'correct-password');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Email'), 'Learner@Example.com');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Password'), 'correct-password');
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pump();
 
@@ -320,7 +411,9 @@ void main() {
     expect(submitted?.password, 'correct-password');
   });
 
-  testWidgets('auth progress indicator is visible only while auth is in progress', (tester) async {
+  testWidgets(
+      'auth progress indicator is visible only while auth is in progress',
+      (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(

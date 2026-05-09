@@ -43,7 +43,8 @@ test('postgres store syncs study events idempotently', async () => {
   const second = await store.syncStudyEvents(payload);
 
   assert.deepEqual(first.accepted_event_ids, ['evt_1']);
-  assert.deepEqual(second.accepted_event_ids, ['evt_1']);
+  assert.deepEqual(second.accepted_event_ids, []);
+  assert.deepEqual(second.duplicates, ['evt_1']);
   assert.equal(pool.studyEvents.size, 1);
   assert.equal(first.proficiency.level, 'A1');
 });
@@ -81,6 +82,7 @@ test('postgres store returns current proficiency when all study events are rejec
   assert.deepEqual(result.rejected_events, [
     {
       client_event_id: 'evt_rejected_pg',
+      event_id: null,
       reason: 'invalid_rating'
     }
   ]);
@@ -400,8 +402,9 @@ class FakePool {
 
     if (normalizedSql.startsWith('INSERT INTO study_events')) {
       const row = studyEventRowFromParams(params);
-      if (!this.studyEvents.has(row.client_event_id)) {
-        this.studyEvents.set(row.client_event_id, row);
+      const key = row.event_id ?? row.client_event_id;
+      if (!this.studyEvents.has(key)) {
+        this.studyEvents.set(key, row);
         return { rows: [row] };
       }
       return { rows: [] };
@@ -462,7 +465,14 @@ class FakePool {
           .filter((event) => event[ownerField] === params[0])
           .sort((left, right) => {
             const occurred = right.occurred_at.localeCompare(left.occurred_at);
-            return occurred !== 0 ? occurred : right.received_at.localeCompare(left.received_at);
+            if (occurred !== 0) {
+              return occurred;
+            }
+            const received = right.received_at.localeCompare(left.received_at);
+            if (received !== 0) {
+              return received;
+            }
+            return right.id.localeCompare(left.id);
           })
           .slice(0, 10)
       };
@@ -601,6 +611,7 @@ function wordRowFromParams(params) {
 function studyEventRowFromParams(params) {
   const [
     id,
+    event_id,
     client_event_id,
     device_id,
     user_id,
@@ -612,6 +623,7 @@ function studyEventRowFromParams(params) {
   ] = params;
   return {
     id,
+    event_id,
     client_event_id,
     device_id,
     user_id,

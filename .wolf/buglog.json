@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "bugs": [
+    {
+      "id": "bug-012",
+      "timestamp": "2026-05-09T07:15:07Z",
+      "error_message": "Permission denied (publickey,password) when SSHing to Z440 for deploy",
+      "file": "deployment/worker-z440/ssh/id_ed25519",
+      "root_cause": "Initial deploy attempt used password-based SSH from the shell, but the host required the pre-provisioned key path from the deployment repo",
+      "fix": "Deployed with `ssh -i /home/beou/deployment/worker-z440/ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes beou@10.113.213.9` and then ran `git pull && docker compose up -d --force-recreate expat8-backend`",
+      "tags": ["deploy", "ssh", "z440", "expat8"],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T07:15:07Z"
+    },
+    {
+      "id": "bug-001",
+      "timestamp": "2026-05-09T04:47:31.296Z",
+      "error_message": "Significant refactor of ",
+      "file": "backend/src/postgres_word_store.js",
+      "root_cause": "34 lines replaced/restructured",
+      "fix": "Rewrote 38→5 lines (34 removed) | Also: const now = new Date().toISOString();; const result = await this.pool.query( | Also: if (status) {; WHERE status = $1 | Also: if (afterVersion == null) {; LIMIT $2`,",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 4,
+      "last_seen": "2026-05-09T04:48:00.767Z"
+    },
+    {
+      "id": "bug-002",
+      "timestamp": "2026-05-09T04:47:46.044Z",
+      "error_message": "Missing await",
+      "file": "backend/src/postgres_word_store.js",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T04:47:46.044Z"
+    },
+    {
+      "id": "bug-003",
+      "timestamp": "2026-05-09T04:48:42.915Z",
+      "error_message": "Significant refactor of ",
+      "file": "backend/src/app.js",
+      "root_cause": "5 lines replaced/restructured",
+      "fix": "Rewrote 10→6 lines (5 removed) | Also: if (; typeof body.title !== 'string' || body.title.trim(",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-05-09T04:48:48.203Z"
+    },
+    {
+      "id": "bug-004",
+      "timestamp": "2026-05-09T06:09:24.834Z",
+      "error_message": "Significant refactor of ",
+      "file": "backend/src/postgres_word_store.js",
+      "root_cause": "15 lines replaced/restructured",
+      "fix": "Rewrote 23→13 lines (15 removed) | Also: processing_error = $3,; updated_at = $4",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-05-09T06:09:38.135Z"
+    },
+    {
+      "id": "bug-005",
+      "timestamp": "2026-05-09T06:19:40.982Z",
+      "error_message": "Significant refactor of ",
+      "file": "docs/architecture.md",
+      "root_cause": "52 lines replaced/restructured",
+      "fix": "Rewrote 66→35 lines (52 removed) | Also: | Method | Path                    | Mục đích     ; | ------ | ----------------------- | ------------- | Also: ### 9.1 Updated module structure; mobile/lib/src/",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 3,
+      "last_seen": "2026-05-09T06:20:19.791Z"
+    },
+    {
+      "id": "bug-006",
+      "timestamp": "2026-05-09T06:47:07.665Z",
+      "error_message": "Wrong operator: == should be >=",
+      "file": "mobile/lib/src/data/word_repository.dart",
+      "root_cause": "Used \"==\" instead of \">=\"",
+      "fix": "Changed operator == → >=",
+      "tags": [
+        "auto-detected",
+        "operator-fix",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T06:47:07.665Z"
+    },
+    {
+      "id": "bug-007",
+      "timestamp": "2026-05-09T06:47:15.194Z",
+      "error_message": "Wrong reference: firstInstall should be thresholdTopUp",
+      "file": "mobile/lib/src/data/word_repository.dart",
+      "root_cause": "Used \"firstInstall\" instead of \"thresholdTopUp\"",
+      "fix": "Changed firstInstall → thresholdTopUp",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T06:47:15.194Z"
+    },
+    {
+      "id": "bug-008",
+      "timestamp": "2026-05-09T06:47:32.765Z",
+      "error_message": "Significant refactor of ",
+      "file": "mobile/lib/src/config.dart",
+      "root_cause": "25 lines replaced/restructured",
+      "fix": "Rewrote 86→56 lines (25 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T06:47:32.765Z"
+    },
+    {
+      "id": "bug-009",
+      "timestamp": "2026-05-09T06:48:01.160Z",
+      "error_message": "Significant refactor of ",
+      "file": "mobile/lib/src/session/learning_session_controller.dart",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 25→31 lines (2 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T06:48:01.160Z"
+    },
+    {
+      "id": "bug-010",
+      "timestamp": "2026-05-09T06:48:47.761Z",
+      "error_message": "Null/undefined access in ",
+      "file": "mobile/test/learning_session_controller_test.dart",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T06:48:47.761Z"
+    },
+    {
+      "id": "bug-011",
+      "timestamp": "2026-05-09T06:53:31.554Z",
+      "error_message": "Missing await",
+      "file": "openspec/specs/mobile-learning-session/spec.md",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T06:53:31.554Z"
+    }
+  ]
+}

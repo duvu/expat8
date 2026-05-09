@@ -45,6 +45,9 @@ export function loadConfig(env = process.env) {
     dbConnectionTimeoutMs: Number.parseInt(env.DB_CONNECTION_TIMEOUT_MS ?? '5000', 10),
     validLanguages: new Set(
       String(env.VALID_LANGUAGES ?? 'en,vi,fr,de,es,ja,ko,zh,pt,it,ru,ar').split(',').map((l) => l.trim()).filter(Boolean)
+    ),
+    adminApiTokens: new Set(
+      String(env.ADMIN_API_TOKENS ?? '').split(',').map((token) => token.trim()).filter(Boolean)
     )
   };
 }

@@ -299,6 +299,65 @@ void main() {
     expect(apiClient.lastSyncedCachedServerWordIds, isEmpty);
   });
 
+  test('remembered gesture queues too_easy event and marks word mastered',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_remembered_gesture_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient(failSubmit: true);
+    final repository = WordRepository(database: database, apiClient: apiClient);
+    final now = DateTime.utc(2026, 5, 4);
+    final word = _word('remembered_gesture_word');
+    await database.upsertWord(word);
+
+    await repository.recordRememberedGesture(
+      word: word,
+      now: now,
+      deviceId: 'device_repo',
+    );
+
+    final dueEntries = await database.dueSyncEntries(
+      DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+    final payload =
+        jsonDecode(dueEntries.single.payload) as Map<String, dynamic>;
+
+    expect(payload['rating'], 'too_easy');
+    expect(await database.randomNotMasteredWord(), isNull);
+  });
+
+  test('difficult gesture queues too_hard event and schedules relearn',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_difficult_gesture_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient(failSubmit: true);
+    final repository = WordRepository(database: database, apiClient: apiClient);
+    final now = DateTime.utc(2026, 5, 4);
+    final word = _word('difficult_gesture_word');
+    await database.upsertWord(word);
+
+    await repository.recordDifficultGesture(
+      word: word,
+      now: now,
+      deviceId: 'device_repo',
+    );
+
+    final dueEntries = await database.dueSyncEntries(
+      DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+    final payload =
+        jsonDecode(dueEntries.single.payload) as Map<String, dynamic>;
+    final dueDifficult = await database.nextDifficultRelearnWord(
+      now.add(const Duration(minutes: 11)),
+    );
+
+    expect(payload['rating'], 'too_hard');
+    expect(dueDifficult?.localId, 'difficult_gesture_word');
+  });
+
   test('syncs cache inventory from local active words', () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -460,7 +519,7 @@ void main() {
     expect(exported.payload.contains('# Entries: 0'), true);
   });
 
-  test('topUpInventoryIfNeeded loads first-install size when DB is empty',
+  test('topUpInventoryIfNeeded loads threshold batch when DB is empty',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
@@ -472,17 +531,18 @@ void main() {
     final repository = WordRepository(
       database: database,
       apiClient: apiClient,
-      config: _testConfig(firstInstallSize: 20, poolFullSize: 50),
+      config: _testConfig(),
     );
     repository.initRefreshWorker('device_test');
 
     final result = await repository.topUpInventoryIfNeeded();
 
-    expect(result.action, TopUpAction.firstInstall);
+    expect(result.action, TopUpAction.thresholdTopUp);
+    expect(result.loaded, 100);
     expect(apiClient.lastLearningCardsLimit, 20);
   });
 
-  test('topUpInventoryIfNeeded loads hourly size when DB is below pool target',
+  test('topUpInventoryIfNeeded loads threshold batch when unstudied is low',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
@@ -497,18 +557,15 @@ void main() {
     final repository = WordRepository(
       database: database,
       apiClient: apiClient,
-      config: _testConfig(
-        firstInstallSize: 20,
-        poolFullSize: 50,
-        hourlyTopUpSize: 3,
-      ),
+      config: _testConfig(),
     );
     repository.initRefreshWorker('device_test');
 
     final result = await repository.topUpInventoryIfNeeded();
 
-    expect(result.action, TopUpAction.hourlyTopUp);
-    expect(apiClient.lastLearningCardsLimit, 3);
+    expect(result.action, TopUpAction.thresholdTopUp);
+    expect(result.loaded, 100);
+    expect(apiClient.lastLearningCardsLimit, 1);
   });
 
   test(
@@ -518,17 +575,14 @@ void main() {
     final database = await LocalDatabase.open(
       databaseName: 'word_repository_test_topup_idle_$ts.db',
     );
-    for (var i = 0; i < 50; i++) {
+    for (var i = 0; i < 100; i++) {
       await database.upsertWord(_word('idle_$i'));
     }
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(
       database: database,
       apiClient: apiClient,
-      config: _testConfig(
-        poolFullSize: 50,
-        rotationUnstudiedThreshold: 10,
-      ),
+      config: _testConfig(),
     );
 
     final result = await repository.topUpInventoryIfNeeded();
@@ -538,7 +592,7 @@ void main() {
   });
 
   test(
-      'topUpInventoryIfNeeded rotates: deletes mastered words and loads new ones',
+      'topUpInventoryIfNeeded threshold top-up does not report rotation deletes',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
@@ -570,19 +624,16 @@ void main() {
     final repository = WordRepository(
       database: database,
       apiClient: apiClient,
-      config: _testConfig(
-        poolFullSize: 15,
-        rotationUnstudiedThreshold: 5,
-        rotationSize: 3,
-      ),
+      config: _testConfig(),
     );
     repository.initRefreshWorker('device_test');
 
     final result = await repository.topUpInventoryIfNeeded();
 
-    expect(result.action, TopUpAction.rotation);
-    expect(result.deleted, 3);
-    expect(apiClient.lastLearningCardsLimit, 3);
+    expect(result.action, TopUpAction.thresholdTopUp);
+    expect(result.deleted, 0);
+    expect(result.loaded, 100);
+    expect(apiClient.lastLearningCardsLimit, 1);
   });
 
   test('seedFromBundleIfEmpty inserts words for empty languages only',
@@ -804,13 +855,7 @@ VocabularyWord _word(String id, [DateTime? timestamp, String language = 'en']) {
   );
 }
 
-AppConfig _testConfig({
-  int firstInstallSize = 200,
-  int poolFullSize = 1000,
-  int hourlyTopUpSize = 10,
-  int rotationSize = 100,
-  int rotationUnstudiedThreshold = 100,
-}) {
+AppConfig _testConfig() {
   return AppConfig(
     backendBaseUrl: 'http://unused',
     newWordTimeout: Duration.zero,
@@ -820,10 +865,5 @@ AppConfig _testConfig({
     supportedLearningLanguages: const ['en', 'zh', 'vi'],
     logLevel: 'info',
     logMaxEntries: 100,
-    vocabFirstInstallSize: firstInstallSize,
-    vocabPoolFullSize: poolFullSize,
-    vocabHourlyTopUpSize: hourlyTopUpSize,
-    vocabRotationSize: rotationSize,
-    vocabRotationUnstudiedThreshold: rotationUnstudiedThreshold,
   );
 }

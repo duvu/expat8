@@ -294,7 +294,14 @@ class PersistedLogger extends Logger {
         traceId: traceId,
       ),
     );
-    await write(entry);
+    // Logging must never propagate I/O failures to the hot path. If the
+    // underlying sink is slow or temporarily unavailable, we silently drop the
+    // entry rather than freeze the UI on `await logger.info(...)`.
+    try {
+      await write(entry);
+    } catch (_) {
+      // ignore: persistence errors must not break the app
+    }
   }
 }
 

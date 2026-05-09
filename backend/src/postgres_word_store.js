@@ -1,5 +1,6 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
+import { compareEventsForProjection, resolveEventKey } from './word_store.js';
 import {
   decrementLevel,
   getDefaultProficiencyLevel,
@@ -374,13 +375,18 @@ export class PostgresWordStore {
   async syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
     const startedAt = Date.now();
     const accepted = [];
+    const duplicates = [];
     const rejected = [];
     let latestProficiency = await this.getProficiency({ deviceId, userId, language });
 
-    for (const event of events) {
-      if (!event.client_event_id || !event.rating || !event.occurred_at) {
+    const orderedEvents = [...events].sort(compareEventsForProjection);
+
+    for (const event of orderedEvents) {
+      const eventKey = resolveEventKey(event);
+      if (!eventKey || !event.rating || !event.occurred_at) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
           reason: 'missing_required_field'
         });
         continue;
@@ -388,14 +394,19 @@ export class PostgresWordStore {
       try {
         const result = await this.recordStudyEvent({ deviceId, userId, event, language });
         latestProficiency = result.proficiency;
+        if (result.idempotent) {
+          duplicates.push(eventKey);
+        } else {
+          accepted.push(eventKey);
+        }
       } catch (error) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
           reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
         });
         continue;
       }
-      accepted.push(event.client_event_id);
     }
 
     this.logger.info?.('db_sync_study_events_completed', {
@@ -406,6 +417,7 @@ export class PostgresWordStore {
     });
     return {
       accepted_event_ids: accepted,
+      duplicates,
       rejected_events: rejected,
       proficiency: latestProficiency
     };
@@ -413,6 +425,10 @@ export class PostgresWordStore {
 
   async recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
     requireStudyRating(event.rating);
+    const eventKey = resolveEventKey(event);
+    if (!eventKey) {
+      throw new Error('missing_event_id');
+    }
 
     return this.#withOptionalTransaction(async (client) => {
       const startedAt = Date.now();
@@ -420,6 +436,7 @@ export class PostgresWordStore {
       const inserted = await client.query(
         `INSERT INTO study_events (
           id,
+          event_id,
           client_event_id,
           device_id,
           user_id,
@@ -429,12 +446,13 @@ export class PostgresWordStore {
           occurred_at,
           received_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (client_event_id) DO NOTHING
         RETURNING *`,
         [
           createId('study_event'),
-          event.client_event_id,
+          event.event_id ?? eventKey,
+          event.client_event_id ?? eventKey,
           deviceId,
           userId ?? event.user_id ?? null,
           event.server_word_id ?? null,
@@ -456,7 +474,8 @@ export class PostgresWordStore {
       if (!inserted.rows[0]) {
         this.logger.debug?.('db_record_study_event_idempotent', {
           device_id: deviceId,
-          client_event_id: event.client_event_id,
+          client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
           elapsed_ms: Date.now() - startedAt
         });
         return {
@@ -484,7 +503,8 @@ export class PostgresWordStore {
 
       this.logger.debug?.('db_record_study_event_completed', {
         device_id: deviceId,
-        client_event_id: event.client_event_id,
+        client_event_id: event.client_event_id ?? null,
+        event_id: event.event_id ?? null,
         elapsed_ms: Date.now() - startedAt
       });
       return {
@@ -640,6 +660,117 @@ export class PostgresWordStore {
     return { revoked: result.rows.length > 0 };
   }
 
+  async getArticleVocabulary({ articleId, userId }) {
+    if (!userId) {
+      return null;
+    }
+    const result = await this.pool.query(
+      `SELECT
+        articles.id AS article_id,
+        articles.owner_user_id,
+        articles.visibility,
+        articles.status,
+        article_terms.id AS article_term_id,
+        article_terms.created_at AS article_term_created_at,
+        terms.id AS term_id,
+        terms.display_term,
+        word_senses.id AS word_sense_id,
+        word_senses.meaning_vi,
+        word_senses.part_of_speech,
+        word_senses.ipa,
+        word_senses.level,
+        word_senses.status AS word_sense_status
+      FROM articles
+      JOIN article_terms ON article_terms.article_id = articles.id
+      JOIN terms ON terms.id = article_terms.term_id
+      JOIN word_senses ON word_senses.id = article_terms.word_sense_id
+      WHERE articles.id = $1
+        AND articles.status <> 'deleted'
+        AND (
+          articles.owner_user_id = $2
+          OR articles.visibility = 'published'
+        )
+        AND (
+          articles.visibility <> 'published'
+          OR word_senses.status = 'approved'
+        )
+      ORDER BY article_terms.created_at ASC, article_terms.id ASC`,
+      [articleId, userId]
+    );
+    if (result.rows.length === 0) {
+      const accessCheck = await this.pool.query(
+        `SELECT id FROM articles
+        WHERE id = $1 AND status <> 'deleted'
+          AND (owner_user_id = $2 OR visibility = 'published')
+        LIMIT 1`,
+        [articleId, userId]
+      );
+      if (!accessCheck.rows[0]) {
+        return null;
+      }
+      return { article_id: accessCheck.rows[0].id, items: [] };
+    }
+
+    return {
+      article_id: result.rows[0].article_id,
+      items: result.rows.map((row) => ({
+        term_id: row.term_id,
+        display_term: row.display_term,
+        word_sense_id: row.word_sense_id,
+        meaning_vi: row.meaning_vi,
+        part_of_speech: row.part_of_speech,
+        ipa: row.ipa,
+        level: row.level,
+        status: row.word_sense_status
+      }))
+    };
+  }
+
+  async softDeleteArticle({ articleId, userId }) {
+    const result = await this.pool.query(
+      `UPDATE articles
+      SET status = 'deleted', visibility = 'private', updated_at = $3
+      WHERE id = $1 AND owner_user_id = $2 AND status <> 'deleted'
+      RETURNING *`,
+      [articleId, userId, new Date().toISOString()]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async patchAdminArticle({ articleId, patch }) {
+    const allowed = ['title', 'language', 'visibility', 'status'];
+    const assignments = [];
+    const values = [articleId];
+    for (const field of allowed) {
+      if (patch[field] !== undefined) {
+        values.push(patch[field]);
+        assignments.push(`${field} = $${values.length}`);
+      }
+    }
+    if (assignments.length === 0) {
+      const existing = await this.pool.query(
+        `SELECT * FROM articles WHERE id = $1 LIMIT 1`,
+        [articleId]
+      );
+      return existing.rows[0] ?? null;
+    }
+    values.push(new Date().toISOString());
+    assignments.push(`updated_at = $${values.length}`);
+    const result = await this.pool.query(
+      `UPDATE articles
+      SET ${assignments.join(', ')}
+      WHERE id = $1
+      RETURNING *`,
+      values
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async healthCheck() {
+    await this.pool.query('SELECT 1');
+    return true;
+  }
+
   async getOrInitializeProficiency({ deviceId, userId = null, language = 'en', client = this.pool }) {
     const existing = userId
       ? await client.query(
@@ -750,18 +881,350 @@ export class PostgresWordStore {
       ? await client.query(
           `SELECT * FROM study_events
           WHERE user_id = $1
-          ORDER BY occurred_at DESC, received_at DESC
+          ORDER BY occurred_at DESC, received_at DESC, id DESC
           LIMIT 10`,
           [userId]
         )
       : await client.query(
           `SELECT * FROM study_events
           WHERE device_id = $1
-          ORDER BY occurred_at DESC, received_at DESC
+          ORDER BY occurred_at DESC, received_at DESC, id DESC
           LIMIT 10`,
           [deviceId]
         );
     return result.rows;
+  }
+
+  async createArticle({ userId, title, sourceUrl = null, language, rawText, visibility = 'private' }) {
+    return this.#insertArticle({ ownerUserId: userId, title, sourceUrl, language, rawText, visibility });
+  }
+
+  async listArticles({ userId, limit = 50 }) {
+    const result = await this.pool.query(
+      `SELECT * FROM articles
+      WHERE owner_user_id = $1 AND status <> 'deleted'
+      ORDER BY created_at DESC
+      LIMIT $2`,
+      [userId, Math.max(1, Math.min(limit, 100))]
+    );
+    return result.rows;
+  }
+
+  async getArticleByIdForUser({ articleId, userId }) {
+    const result = await this.pool.query(
+      `SELECT * FROM articles
+      WHERE id = $1 AND owner_user_id = $2 AND status <> 'deleted'
+      LIMIT 1`,
+      [articleId, userId]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async getArticleById({ articleId }) {
+    const result = await this.pool.query(
+      `SELECT * FROM articles WHERE id = $1 LIMIT 1`,
+      [articleId]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async createAdminArticle({ adminUserId = null, title, sourceUrl = null, language, rawText, visibility = 'published' }) {
+    return this.#insertArticle({ adminUserId, title, sourceUrl, language, rawText, visibility });
+  }
+
+  async listAdminArticles({ limit = 50, status = null }) {
+    const result = await this.pool.query(
+      `SELECT * FROM articles
+      WHERE ($1::text IS NULL OR status = $1)
+      ORDER BY created_at DESC
+      LIMIT $2`,
+      [status, Math.max(1, Math.min(limit, 100))]
+    );
+    return result.rows;
+  }
+
+  async reprocessArticle({ articleId }) {
+    const result = await this.pool.query(
+      `UPDATE articles
+      SET status = 'pending_processing', processing_error = NULL, updated_at = $2
+      WHERE id = $1
+      RETURNING *`,
+      [articleId, new Date().toISOString()]
+    );
+    const article = result.rows[0] ?? null;
+    if (!article) {
+      return null;
+    }
+    await this.enqueueArticleProcessingJob({ articleId: article.id });
+    return article;
+  }
+
+  async publishArticle({ articleId }) {
+    const result = await this.pool.query(
+      `UPDATE articles
+      SET status = 'published', visibility = 'published', updated_at = $2
+      WHERE id = $1
+      RETURNING *`,
+      [articleId, new Date().toISOString()]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async listVocabularyReviewItems({ status = 'pending', limit = 100 }) {
+    const result = await this.pool.query(
+      `SELECT * FROM vocabulary_review_items
+      WHERE status = $1
+      ORDER BY created_at DESC
+      LIMIT $2`,
+      [status, Math.max(1, Math.min(limit, 200))]
+    );
+    return result.rows;
+  }
+
+  async reviewVocabularyItem({ itemId, status, reviewNote = null, reviewerUserId = null }) {
+    const now = new Date().toISOString();
+    const result = await this.pool.query(
+      `UPDATE vocabulary_review_items
+      SET status = $2,
+          review_note = $3,
+          reviewer_user_id = $4,
+          reviewed_at = $5,
+          updated_at = $5
+      WHERE id = $1
+      RETURNING *`,
+      [itemId, status, reviewNote, reviewerUserId, now]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
+    const result = await this.pool.query(
+      `SELECT * FROM content_packs
+      WHERE status = 'published' AND language = $1
+        AND ($2::int IS NULL OR version > $2)
+      ORDER BY version DESC
+      LIMIT $3`,
+      [language, afterVersion, Math.max(1, Math.min(limit, 200))]
+    );
+    return result.rows;
+  }
+
+  async getContentPackById({ id }) {
+    const packResult = await this.pool.query(
+      `SELECT * FROM content_packs
+      WHERE id = $1 AND status = 'published'
+      LIMIT 1`,
+      [id]
+    );
+    const pack = packResult.rows[0];
+    if (!pack) {
+      return null;
+    }
+
+    const items = await this.pool.query(
+      `SELECT cpi.id, cpi.word_sense_id, cpi.created_at
+      FROM content_pack_items cpi
+      JOIN word_senses ws ON ws.id = cpi.word_sense_id
+      WHERE cpi.content_pack_id = $1 AND ws.status = 'approved'
+      ORDER BY cpi.created_at ASC`,
+      [id]
+    );
+
+    return {
+      ...pack,
+      items: items.rows
+    };
+  }
+
+  async enqueueArticleProcessingJob({ articleId }) {
+    const now = new Date().toISOString();
+    const result = await this.pool.query(
+      `INSERT INTO article_processing_jobs (
+        id,
+        article_id,
+        status,
+        attempt_count,
+        queued_at,
+        started_at,
+        finished_at,
+        error_message,
+        created_at,
+        updated_at
+      )
+      VALUES ($1, $2, 'pending_processing', 0, $3, NULL, NULL, NULL, $3, $3)
+      RETURNING *`,
+      [createId('article_job'), articleId, now]
+    );
+    return result.rows[0];
+  }
+
+  async claimNextArticleProcessingJob() {
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      const updated = await client.query(
+        `UPDATE article_processing_jobs
+        SET status = 'processing',
+            attempt_count = attempt_count + 1,
+            started_at = $1,
+            updated_at = $1
+        WHERE id = (
+          SELECT id FROM article_processing_jobs
+          WHERE status = 'pending_processing'
+          ORDER BY queued_at ASC
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )
+        RETURNING *`,
+        [now]
+      );
+      const job = updated.rows[0];
+      if (!job) {
+        return null;
+      }
+      await client.query(
+        `UPDATE articles
+        SET status = CASE WHEN status = 'deleted' THEN status ELSE 'processing' END,
+            updated_at = CASE WHEN status = 'deleted' THEN updated_at ELSE $2 END
+        WHERE id = $1`,
+        [job.article_id, now]
+      );
+      return job;
+    });
+  }
+
+  async completeArticleProcessingJob({ jobId, status = 'processed', errorMessage = null }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      const updated = await client.query(
+        `UPDATE article_processing_jobs
+        SET status = $2,
+            error_message = $3,
+            finished_at = $4,
+            updated_at = $4
+        WHERE id = $1
+        RETURNING *`,
+        [jobId, status, errorMessage, now]
+      );
+      const job = updated.rows[0];
+      if (!job) {
+        return null;
+      }
+      await client.query(
+        `UPDATE articles
+        SET status = CASE WHEN status = 'deleted' THEN status ELSE $2 END,
+            processing_error = CASE WHEN status = 'deleted' THEN processing_error ELSE $3 END,
+            updated_at = CASE WHEN status = 'deleted' THEN updated_at ELSE $4 END
+        WHERE id = $1`,
+        [job.article_id, status, errorMessage, now]
+      );
+      return job;
+    });
+  }
+
+  async persistArticleVocabulary({ articleId, items = [] }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const articleResult = await client.query(
+        `SELECT * FROM articles WHERE id = $1 LIMIT 1`,
+        [articleId]
+      );
+      const article = articleResult.rows[0];
+      if (!article) {
+        throw new Error('article_not_found');
+      }
+
+      const now = new Date().toISOString();
+      const isAdmin = Boolean(article.created_by_admin_id);
+      const senseStatus = isAdmin ? 'pending_review' : 'approved';
+      const reviewStatus = isAdmin ? 'pending' : 'approved';
+      const reviewedAt = isAdmin ? null : now;
+      let persistedCount = 0;
+
+      for (const item of items) {
+        const normalized = normalizeTerm(item.term);
+        const termResult = await client.query(
+          `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
+          VALUES ($1, $2, $3, $4, NULL, $5)
+          ON CONFLICT (language, normalized_term) DO UPDATE SET display_term = EXCLUDED.display_term
+          RETURNING *`,
+          [createId('term'), item.language, item.term, normalized, now]
+        );
+        const term = termResult.rows[0];
+
+        const sense = await client.query(
+          `INSERT INTO word_senses (
+            id, term_id, part_of_speech, meaning_vi, short_definition,
+            pronunciation, ipa, pinyin, level_scale, level,
+            quality_score, status, created_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+          RETURNING *`,
+          [
+            createId('sense'),
+            term.id,
+            item.part_of_speech ?? null,
+            item.meaning_vi,
+            item.short_definition ?? null,
+            item.vietnamese_pronunciation ?? null,
+            item.ipa ?? null,
+            item.pinyin ?? null,
+            item.level_scale ?? 'cefr',
+            item.difficulty ?? 'A1',
+            Number(item.quality_score ?? item.confidence ?? 0.5),
+            senseStatus,
+            now
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO article_terms (
+            id, article_id, term_id, word_sense_id, surface_text,
+            sentence_context, start_offset, end_offset, frequency, extraction_confidence, created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, $8, $9)`,
+          [
+            createId('article_term'),
+            articleId,
+            term.id,
+            sense.rows[0].id,
+            item.term,
+            item.example ?? null,
+            Number(item.frequency ?? 1),
+            Number(item.confidence ?? 0.5),
+            now
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO vocabulary_review_items (
+            id, word_sense_id, article_id, status,
+            reviewer_user_id, review_note, reviewed_at, created_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $6)`,
+          [createId('review_item'), sense.rows[0].id, articleId, reviewStatus, reviewedAt, now]
+        );
+
+        persistedCount += 1;
+      }
+
+      return { count: persistedCount };
+    });
+  }
+
+  async #insertArticle({ ownerUserId = null, adminUserId = null, title, sourceUrl, language, rawText, visibility }) {
+    const now = new Date().toISOString();
+    const result = await this.pool.query(
+      `INSERT INTO articles (
+        id, owner_user_id, created_by_admin_id,
+        title, source_url, language, raw_text, cleaned_text,
+        visibility, status, processing_error, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, 'pending_processing', NULL, $9, $9)
+      RETURNING *`,
+      [createId('article'), ownerUserId, adminUserId, title, sourceUrl, language, rawText, visibility, now]
+    );
+    const article = result.rows[0];
+    await this.enqueueArticleProcessingJob({ articleId: article.id });
+    return article;
   }
 
   async #cachedWordIdsForSelection({ deviceId, userId = null }) {

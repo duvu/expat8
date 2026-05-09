@@ -78,53 +78,27 @@ class WordRepository {
     return totalLoaded;
   }
 
-  /// Decides whether the local cache needs more words and acts accordingly.
+  /// Refills the local cache when the unstudied new-word count for the active
+  /// language drops below [_refillThreshold]. All other conditions (total pool
+  /// size, pool-full target) no longer gate a server fetch.
   ///
-  /// Rules (per active language):
-  ///   1. DB empty           → load [vocabFirstInstallSize] words.
-  ///   2. DB < poolFullSize  → load [vocabHourlyTopUpSize] words.
-  ///   3. DB ≥ poolFullSize and unstudied < [vocabRotationUnstudiedThreshold]
-  ///      → delete the oldest [vocabRotationSize] mastered words, then load
-  ///        [vocabRotationSize] new words.
-  ///   4. Otherwise          → no action.
+  /// [addBatch] already prunes the local store to 1000 words per language, so
+  /// no separate mastered-word deletion is needed here.
+  static const int _refillThreshold = 100;
+
   Future<TopUpResult> topUpInventoryIfNeeded() async {
     final language = _activeLanguage;
-    final total = await database.countWords(language: language);
     final unstudied = await database.countUnstudiedNewWords(language: language);
 
-    if (total == 0) {
-      final loaded = await _safeRefill(
-        limit: _config.vocabFirstInstallSize,
-        eventTag: 'first_install',
-      );
-      return TopUpResult(action: TopUpAction.firstInstall, loaded: loaded);
+    if (unstudied >= _refillThreshold) {
+      return const TopUpResult(action: TopUpAction.none);
     }
 
-    if (total < _config.vocabPoolFullSize) {
-      final loaded = await _safeRefill(
-        limit: _config.vocabHourlyTopUpSize,
-        eventTag: 'hourly_top_up',
-      );
-      return TopUpResult(action: TopUpAction.hourlyTopUp, loaded: loaded);
-    }
-
-    if (unstudied < _config.vocabRotationUnstudiedThreshold) {
-      final deleted = await database.deleteOldestMasteredWords(
-        language: language,
-        limit: _config.vocabRotationSize,
-      );
-      final loaded = await _safeRefill(
-        limit: _config.vocabRotationSize,
-        eventTag: 'rotation',
-      );
-      return TopUpResult(
-        action: TopUpAction.rotation,
-        loaded: loaded,
-        deleted: deleted,
-      );
-    }
-
-    return const TopUpResult(action: TopUpAction.none);
+    final loaded = await _safeRefill(
+      limit: _refillThreshold,
+      eventTag: 'threshold_top_up',
+    );
+    return TopUpResult(action: TopUpAction.thresholdTopUp, loaded: loaded);
   }
 
   Future<int> _safeRefill({
@@ -256,8 +230,7 @@ class WordRepository {
         source: WordLookupSource.localFallback,
       );
     }
-    final randomWord =
-        await database.randomNotMasteredWord(language: language);
+    final randomWord = await database.randomNotMasteredWord(language: language);
     if (randomWord != null) {
       await _logger.info(
         category: AppLogCategory.api,
@@ -386,7 +359,8 @@ class WordRepository {
     const apiBatchCap = 100;
     final allItems = <VocabularyWord>[];
     while (allItems.length < limit) {
-      final batchLimit = (limit - allItems.length).clamp(1, apiBatchCap).toInt();
+      final batchLimit =
+          (limit - allItems.length).clamp(1, apiBatchCap).toInt();
       final batch = await apiClient.fetchLearningCards(
         deviceId: deviceId,
         limit: batchLimit,
@@ -416,7 +390,27 @@ class WordRepository {
     required DateTime now,
     required String deviceId,
   }) async {
-    final event = StudyEvent(
+    final event = _createStudyEvent(word: word, rating: rating, now: now);
+    await database.insertStudyEvent(event);
+    await _applyRatingLocalState(
+      word: word,
+      rating: rating,
+      now: now,
+      deviceId: deviceId,
+    );
+    return _submitStudyEvent(
+      event: event,
+      rating: rating,
+      deviceId: deviceId,
+    );
+  }
+
+  StudyEvent _createStudyEvent({
+    required VocabularyWord word,
+    required StudyRating rating,
+    required DateTime now,
+  }) {
+    return StudyEvent(
       clientEventId: _uuid.v4(),
       localWordId: word.localId,
       serverWordId: word.serverWordId,
@@ -424,7 +418,14 @@ class WordRepository {
       occurredAt: now,
       syncStatus: SyncStatus.pending,
     );
-    await database.insertStudyEvent(event);
+  }
+
+  Future<void> _applyRatingLocalState({
+    required VocabularyWord word,
+    required StudyRating rating,
+    required DateTime now,
+    required String deviceId,
+  }) async {
     if (rating == StudyRating.easy) {
       await database.deleteLocalWord(word.localId);
       try {
@@ -452,11 +453,19 @@ class WordRepository {
       await database.updateWordAfterRating(
           word: word, rating: rating, now: now);
     }
+  }
+
+  Future<ProficiencyState?> _submitStudyEvent({
+    required StudyEvent event,
+    required StudyRating rating,
+    required String deviceId,
+  }) async {
     try {
       final session = await database.loadUserSession();
       final result = await apiClient.submitStudyEvent(
         deviceId: deviceId,
         event: event.toSyncJson(),
+        language: _activeLanguage,
         sessionToken: session?.sessionToken,
       );
       await database.markEventSynced(event.clientEventId);
@@ -482,6 +491,108 @@ class WordRepository {
       );
       return null;
     }
+  }
+
+  Future<void> recordRememberedGesture({
+    required VocabularyWord word,
+    required DateTime now,
+    required String deviceId,
+    void Function(ProficiencyState proficiency)? onProficiency,
+  }) {
+    return _recordGestureStudyAction(
+      word: word,
+      rating: StudyRating.tooEasy,
+      now: now,
+      deviceId: deviceId,
+      applyLocalTransition: () =>
+          database.markWordRememberedLowFrequency(word: word, now: now),
+      localLogEvent: 'gesture.remembered.local_state_updated',
+      localLogMessage: 'Applied remembered gesture update locally.',
+      localLogContext: {
+        'word_id': word.serverWordId ?? word.localId,
+        'relearn_frequency_percent': 10,
+      },
+      cacheSyncDeferredEvent: 'gesture.remembered.sync_deferred',
+      cacheSyncDeferredMessage: 'Deferred cache sync after remembered gesture.',
+      onProficiency: onProficiency,
+    );
+  }
+
+  Future<void> recordDifficultGesture({
+    required VocabularyWord word,
+    required DateTime now,
+    required String deviceId,
+    void Function(ProficiencyState proficiency)? onProficiency,
+  }) {
+    return _recordGestureStudyAction(
+      word: word,
+      rating: StudyRating.tooHard,
+      now: now,
+      deviceId: deviceId,
+      applyLocalTransition: () =>
+          database.markWordDifficultForRelearn(word: word, now: now),
+      localLogEvent: 'gesture.difficult.local_state_updated',
+      localLogMessage: 'Applied difficult gesture update locally.',
+      localLogContext: {
+        'word_id': word.serverWordId ?? word.localId,
+      },
+      cacheSyncDeferredEvent: 'gesture.difficult.sync_deferred',
+      cacheSyncDeferredMessage: 'Deferred cache sync after difficult gesture.',
+      onProficiency: onProficiency,
+    );
+  }
+
+  Future<void> _recordGestureStudyAction({
+    required VocabularyWord word,
+    required StudyRating rating,
+    required DateTime now,
+    required String deviceId,
+    required Future<void> Function() applyLocalTransition,
+    required String localLogEvent,
+    required String localLogMessage,
+    required Map<String, Object?> localLogContext,
+    required String cacheSyncDeferredEvent,
+    required String cacheSyncDeferredMessage,
+    void Function(ProficiencyState proficiency)? onProficiency,
+  }) async {
+    final event = _createStudyEvent(word: word, rating: rating, now: now);
+    await database.insertStudyEvent(event);
+    await applyLocalTransition();
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: localLogEvent,
+      message: localLogMessage,
+      context: localLogContext,
+    );
+    _submitStudyEventInBackground(
+      event: event,
+      rating: rating,
+      deviceId: deviceId,
+      onProficiency: onProficiency,
+    );
+    _syncCacheInventoryInBackground(
+      deviceId: deviceId,
+      event: cacheSyncDeferredEvent,
+      message: cacheSyncDeferredMessage,
+    );
+  }
+
+  void _submitStudyEventInBackground({
+    required StudyEvent event,
+    required StudyRating rating,
+    required String deviceId,
+    void Function(ProficiencyState proficiency)? onProficiency,
+  }) {
+    unawaited(() async {
+      final updated = await _submitStudyEvent(
+        event: event,
+        rating: rating,
+        deviceId: deviceId,
+      );
+      if (updated != null) {
+        onProficiency?.call(updated);
+      }
+    }());
   }
 
   Future<void> markRememberedLowFrequency({
@@ -687,7 +798,7 @@ enum WordLookupSource {
   none,
 }
 
-enum TopUpAction { none, firstInstall, hourlyTopUp, rotation }
+enum TopUpAction { none, thresholdTopUp }
 
 class TopUpResult {
   const TopUpResult({
