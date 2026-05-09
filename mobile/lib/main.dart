@@ -79,8 +79,8 @@ Future<void> main() async {
   // Build speaking infrastructure (gated by feature flag).
   SpeakingRepository? speakingRepository;
   if (config.speakingFoundationEnabled) {
-    final audioService = SpeakingAudioService();
     final fileManager = AudioFileManager();
+    final audioService = SpeakingAudioService(fileManager: fileManager);
     speakingRepository = SpeakingRepository(
       database: database,
       audioService: audioService,
