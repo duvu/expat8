@@ -2,6 +2,44 @@ enum WordStatus { newWord, learning, review, mastered }
 
 enum LearningCardType { newCard, review }
 
+/// A speaking prompt supplied by the backend for a vocabulary card.
+/// All fields are optional — absence means no approved prompt exists and the
+/// UI falls back to the card's [VocabularyWord.example] sentence.
+class SpeakingPrompt {
+  const SpeakingPrompt({
+    required this.promptId,
+    this.targetText,
+    this.viHint,
+    this.targetPhrase,
+    this.pronunciationTip,
+    this.commonMistake,
+    this.difficulty,
+    this.topic,
+  });
+
+  factory SpeakingPrompt.fromJson(Map<String, dynamic> json) {
+    return SpeakingPrompt(
+      promptId: json['prompt_id'] as String,
+      targetText: json['target_text'] as String?,
+      viHint: json['vi_hint'] as String?,
+      targetPhrase: json['target_phrase'] as String?,
+      pronunciationTip: json['pronunciation_tip'] as String?,
+      commonMistake: json['common_mistake'] as String?,
+      difficulty: json['difficulty'] as String?,
+      topic: json['topic'] as String?,
+    );
+  }
+
+  final String promptId;
+  final String? targetText;
+  final String? viHint;
+  final String? targetPhrase;
+  final String? pronunciationTip;
+  final String? commonMistake;
+  final String? difficulty;
+  final String? topic;
+}
+
 class VocabularyWord {
   const VocabularyWord({
     required this.localId,
@@ -23,10 +61,12 @@ class VocabularyWord {
     required this.updatedAt,
     this.cardType,
     this.selectionReason,
+    this.speakingPrompt,
   });
 
   factory VocabularyWord.fromJson(Map<String, dynamic> json) {
     final now = DateTime.now().toUtc();
+    final spJson = json['speaking_prompt'] as Map<String, dynamic>?;
     return VocabularyWord(
       localId: (json['local_id'] ?? json['server_word_id'] ?? json['term']) as String,
       serverWordId: json['server_word_id'] as String?,
@@ -45,6 +85,7 @@ class VocabularyWord {
       updatedAt: now,
       cardType: _cardTypeFromJson(json['card_type'] as String?),
       selectionReason: json['selection_reason'] as String?,
+      speakingPrompt: spJson != null ? SpeakingPrompt.fromJson(spJson) : null,
     );
   }
 
@@ -68,6 +109,10 @@ class VocabularyWord {
   final LearningCardType? cardType;
   final String? selectionReason;
 
+  /// Optional speaking prompt from the backend.
+  /// Null when no approved prompt exists — UI falls back to [example].
+  final SpeakingPrompt? speakingPrompt;
+
   VocabularyWord copyWith({
     String? localId,
     String? serverWordId,
@@ -88,6 +133,7 @@ class VocabularyWord {
     DateTime? updatedAt,
     LearningCardType? cardType,
     String? selectionReason,
+    SpeakingPrompt? speakingPrompt,
   }) {
     return VocabularyWord(
       localId: localId ?? this.localId,
@@ -110,6 +156,7 @@ class VocabularyWord {
       updatedAt: updatedAt ?? this.updatedAt,
       cardType: cardType ?? this.cardType,
       selectionReason: selectionReason ?? this.selectionReason,
+      speakingPrompt: speakingPrompt ?? this.speakingPrompt,
     );
   }
 }

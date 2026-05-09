@@ -206,6 +206,19 @@ class WordRepository {
     );
   }
 
+  /// Fetches the weekly speaking summary from the backend.
+  Future<SpeakingWeeklySummary> fetchSpeakingSummary({
+    required String deviceId,
+    String language = 'en',
+  }) async {
+    final session = await database.loadUserSession();
+    return apiClient.fetchSpeakingSummary(
+      deviceId: deviceId,
+      language: language,
+      sessionToken: session?.sessionToken,
+    );
+  }
+
   Future<VocabularyWord?> getNewWordWithFallback(
       {String language = 'en'}) async {
     return (await getNewWordWithFallbackResult(language: language)).word;

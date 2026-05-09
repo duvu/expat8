@@ -863,6 +863,7 @@ AppConfig _testConfig() {
     appCredentialSecret: 'test-secret',
     defaultLearningLanguage: 'en',
     supportedLearningLanguages: const ['en', 'zh', 'vi'],
+    speakingFoundationEnabled: false,
     logLevel: 'info',
     logMaxEntries: 100,
   );

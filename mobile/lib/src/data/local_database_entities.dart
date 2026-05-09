@@ -150,3 +150,95 @@ class AppLogEntity {
   String? traceId;
   String contextJson;
 }
+
+/// Local cache of a speaking prompt received from the backend.
+/// Keyed by [promptId] (the server-assigned UUID).
+/// Updated whenever the vocabulary card response includes a speaking prompt.
+@Entity()
+class SpeakingPromptEntity {
+  SpeakingPromptEntity({
+    this.id = 0,
+    required this.promptId,
+    this.wordSenseId,
+    this.serverWordId,
+    this.targetText,
+    this.viHint,
+    this.targetPhrase,
+    this.pronunciationTip,
+    this.commonMistake,
+    this.difficulty,
+    this.topic,
+    required this.cachedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String promptId;
+
+  @Index()
+  String? wordSenseId;
+
+  @Index()
+  String? serverWordId;
+
+  String? targetText;
+  String? viHint;
+  String? targetPhrase;
+  String? pronunciationTip;
+  String? commonMistake;
+  String? difficulty;
+  String? topic;
+
+  @Index()
+  int cachedAtMs;
+}
+
+/// Metadata for a single speaking attempt recorded by the user.
+///
+/// [localAudioPath] is device-local only — it MUST NEVER be included in:
+///   • backend API request bodies
+///   • sync queue payloads
+///   • application logs
+@Entity()
+class SpeakingAttemptEntity {
+  SpeakingAttemptEntity({
+    this.id = 0,
+    required this.attemptId,
+    this.promptId,
+    this.serverWordId,
+    required this.occurredAtMs,
+    this.durationMs,
+    required this.retryCount,
+    this.selfRating,
+    required this.syncStatus,
+    this.localAudioPath,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String attemptId;
+
+  @Index()
+  String? promptId;
+
+  @Index()
+  String? serverWordId;
+
+  @Index()
+  int occurredAtMs;
+
+  int? durationMs;
+  int retryCount;
+
+  /// null = not yet rated; values: "easy", "ok", "hard"
+  String? selfRating;
+
+  @Index()
+  String syncStatus;
+
+  /// Local file path — kept here for playback ONLY.
+  /// Strip this field before any network transmission.
+  String? localAudioPath;
+}

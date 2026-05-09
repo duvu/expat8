@@ -20,7 +20,9 @@ class LocalDatabase {
         _studyEvents = _store.box<StudyEventEntity>(),
         _syncQueue = _store.box<SyncQueueEntity>(),
         _settings = _store.box<AppSettingEntity>(),
-        _logs = _store.box<AppLogEntity>();
+        _logs = _store.box<AppLogEntity>(),
+        _speakingPrompts = _store.box<SpeakingPromptEntity>(),
+        _speakingAttempts = _store.box<SpeakingAttemptEntity>();
 
   final Store _store;
   Logger _logger;
@@ -30,6 +32,8 @@ class LocalDatabase {
   final Box<SyncQueueEntity> _syncQueue;
   final Box<AppSettingEntity> _settings;
   final Box<AppLogEntity> _logs;
+  final Box<SpeakingPromptEntity> _speakingPrompts;
+  final Box<SpeakingAttemptEntity> _speakingAttempts;
 
   void attachLogger(Logger logger) {
     _logger = logger;
@@ -901,4 +905,109 @@ class LocalDatabase {
     }
     return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
   }
+
+  // ---- Speaking prompt cache ----
+
+  /// Upserts a speaking prompt into the local cache.
+  void cacheSpeakingPrompt(SpeakingPromptEntity entity) {
+    _speakingPrompts.put(entity);
+  }
+
+  /// Returns the cached prompt for [promptId], or null if not cached.
+  SpeakingPromptEntity? getCachedPrompt(String promptId) {
+    return _speakingPrompts
+        .query(SpeakingPromptEntity_.promptId.equals(promptId))
+        .build()
+        .findFirst();
+  }
+
+  /// Returns up to [limit] cached prompts linked to [serverWordId].
+  List<SpeakingPromptEntity> promptsForWord(String serverWordId,
+      {int limit = 5}) {
+    return _speakingPrompts
+        .query(SpeakingPromptEntity_.serverWordId.equals(serverWordId))
+        .build()
+        .find()
+        .take(limit)
+        .toList(growable: false);
+  }
+
+  /// Returns up to [limit] cached prompts, most recently cached first.
+  /// Used by drill selection when choosing from the local cache.
+  List<SpeakingPromptEntity> recentCachedPrompts({int limit = 10}) {
+    return _speakingPrompts
+        .query()
+        .order(SpeakingPromptEntity_.cachedAtMs, flags: Order.descending)
+        .build()
+        .find()
+        .take(limit)
+        .toList(growable: false);
+  }
+
+  // ---- Speaking attempt storage ----
+
+  /// Saves a new speaking attempt entity, returning the ObjectBox id.
+  int saveSpeakingAttempt(SpeakingAttemptEntity entity) {
+    return _speakingAttempts.put(entity);
+  }
+
+  /// Updates an existing speaking attempt (by ObjectBox id).
+  void updateSpeakingAttempt(SpeakingAttemptEntity entity) {
+    _speakingAttempts.put(entity);
+  }
+
+  /// Returns the attempt entity with [attemptId], or null.
+  SpeakingAttemptEntity? getSpeakingAttempt(String attemptId) {
+    return _speakingAttempts
+        .query(SpeakingAttemptEntity_.attemptId.equals(attemptId))
+        .build()
+        .findFirst();
+  }
+
+  /// Marks the attempt identified by [attemptId] as synced and removes its
+  /// sync queue entry.
+  void markSpeakingAttemptSynced(String attemptId) {
+    final entity = getSpeakingAttempt(attemptId);
+    if (entity != null) {
+      entity.syncStatus = SyncStatus.synced.name;
+      _speakingAttempts.put(entity);
+    }
+    // Remove from sync queue (payload contains the attempt_id).
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.payload.contains('"attempt_id":"$attemptId"')) {
+        _syncQueue.remove(item.id);
+      }
+    }
+  }
+
+  /// Queues a speaking event payload (JSON string) for background sync.
+  void enqueueSpeakingEvent(String payloadJson) {
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'speaking_event',
+        payload: payloadJson,
+        retryCount: 0,
+        nextRetryAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  /// Deletes all speaking attempt entities and clears their sync queue
+  /// entries. Audio files are managed by [AudioFileManager] separately.
+  Future<int> deleteAllSpeakingAttempts() async {
+    final count = _speakingAttempts.count();
+    _speakingAttempts.removeAll();
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.type == 'speaking_event') {
+        _syncQueue.remove(item.id);
+      }
+    }
+    return count;
+  }
+
+  /// Returns the total number of speaking attempts stored locally.
+  int countSpeakingAttempts() => _speakingAttempts.count();
 }

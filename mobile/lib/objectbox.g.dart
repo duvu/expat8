@@ -335,6 +335,167 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(6, 184519167541283189),
+    name: 'SpeakingAttemptEntity',
+    lastPropertyId: const obx_int.IdUid(10, 4571414392161499582),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 4860408431035195995),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 7751347899719781995),
+        name: 'attemptId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(15, 136311804813454643),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 1345673362050694855),
+        name: 'promptId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(16, 6217275210855706911),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 7887357254154021418),
+        name: 'serverWordId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(17, 5254615947711722057),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 2774356376887323931),
+        name: 'occurredAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(18, 775476222157682369),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 7850533391135794604),
+        name: 'durationMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 2976845626310034898),
+        name: 'retryCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 3897988403733548072),
+        name: 'selfRating',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 2978807451352632217),
+        name: 'syncStatus',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(19, 6835893711145020477),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 4571414392161499582),
+        name: 'localAudioPath',
+        type: 9,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(7, 5907671979540824477),
+    name: 'SpeakingPromptEntity',
+    lastPropertyId: const obx_int.IdUid(12, 5819468243168209987),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 718334415471620391),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 1300126683820559034),
+        name: 'promptId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(20, 4210664322592183295),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 3997792870214344037),
+        name: 'wordSenseId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(21, 8218318912247925168),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 8975047045818945915),
+        name: 'serverWordId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(22, 6566907388555771660),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 3212794834144958348),
+        name: 'targetText',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 3155788786499248033),
+        name: 'viHint',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 3692318380675609575),
+        name: 'targetPhrase',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 2489710014958849740),
+        name: 'pronunciationTip',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 5273269794502570518),
+        name: 'commonMistake',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 5391782460491484301),
+        name: 'difficulty',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 331387211832234939),
+        name: 'topic',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 5819468243168209987),
+        name: 'cachedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(23, 6588260673035546186),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -375,8 +536,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(5, 1182565041746058355),
-    lastIndexId: const obx_int.IdUid(14, 1997602164196919271),
+    lastEntityId: const obx_int.IdUid(7, 5907671979540824477),
+    lastIndexId: const obx_int.IdUid(23, 6588260673035546186),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -787,6 +948,219 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    SpeakingAttemptEntity: obx_int.EntityDefinition<SpeakingAttemptEntity>(
+      model: _entities[5],
+      toOneRelations: (SpeakingAttemptEntity object) => [],
+      toManyRelations: (SpeakingAttemptEntity object) => {},
+      getId: (SpeakingAttemptEntity object) => object.id,
+      setId: (SpeakingAttemptEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (SpeakingAttemptEntity object, fb.Builder fbb) {
+        final attemptIdOffset = fbb.writeString(object.attemptId);
+        final promptIdOffset = object.promptId == null
+            ? null
+            : fbb.writeString(object.promptId!);
+        final serverWordIdOffset = object.serverWordId == null
+            ? null
+            : fbb.writeString(object.serverWordId!);
+        final selfRatingOffset = object.selfRating == null
+            ? null
+            : fbb.writeString(object.selfRating!);
+        final syncStatusOffset = fbb.writeString(object.syncStatus);
+        final localAudioPathOffset = object.localAudioPath == null
+            ? null
+            : fbb.writeString(object.localAudioPath!);
+        fbb.startTable(11);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, attemptIdOffset);
+        fbb.addOffset(2, promptIdOffset);
+        fbb.addOffset(3, serverWordIdOffset);
+        fbb.addInt64(4, object.occurredAtMs);
+        fbb.addInt64(5, object.durationMs);
+        fbb.addInt64(6, object.retryCount);
+        fbb.addOffset(7, selfRatingOffset);
+        fbb.addOffset(8, syncStatusOffset);
+        fbb.addOffset(9, localAudioPathOffset);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final attemptIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final promptIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 8);
+        final serverWordIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 10);
+        final occurredAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          12,
+          0,
+        );
+        final durationMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          14,
+        );
+        final retryCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          16,
+          0,
+        );
+        final selfRatingParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 18);
+        final syncStatusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 20, '');
+        final localAudioPathParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 22);
+        final object = SpeakingAttemptEntity(
+          id: idParam,
+          attemptId: attemptIdParam,
+          promptId: promptIdParam,
+          serverWordId: serverWordIdParam,
+          occurredAtMs: occurredAtMsParam,
+          durationMs: durationMsParam,
+          retryCount: retryCountParam,
+          selfRating: selfRatingParam,
+          syncStatus: syncStatusParam,
+          localAudioPath: localAudioPathParam,
+        );
+
+        return object;
+      },
+    ),
+    SpeakingPromptEntity: obx_int.EntityDefinition<SpeakingPromptEntity>(
+      model: _entities[6],
+      toOneRelations: (SpeakingPromptEntity object) => [],
+      toManyRelations: (SpeakingPromptEntity object) => {},
+      getId: (SpeakingPromptEntity object) => object.id,
+      setId: (SpeakingPromptEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (SpeakingPromptEntity object, fb.Builder fbb) {
+        final promptIdOffset = fbb.writeString(object.promptId);
+        final wordSenseIdOffset = object.wordSenseId == null
+            ? null
+            : fbb.writeString(object.wordSenseId!);
+        final serverWordIdOffset = object.serverWordId == null
+            ? null
+            : fbb.writeString(object.serverWordId!);
+        final targetTextOffset = object.targetText == null
+            ? null
+            : fbb.writeString(object.targetText!);
+        final viHintOffset = object.viHint == null
+            ? null
+            : fbb.writeString(object.viHint!);
+        final targetPhraseOffset = object.targetPhrase == null
+            ? null
+            : fbb.writeString(object.targetPhrase!);
+        final pronunciationTipOffset = object.pronunciationTip == null
+            ? null
+            : fbb.writeString(object.pronunciationTip!);
+        final commonMistakeOffset = object.commonMistake == null
+            ? null
+            : fbb.writeString(object.commonMistake!);
+        final difficultyOffset = object.difficulty == null
+            ? null
+            : fbb.writeString(object.difficulty!);
+        final topicOffset = object.topic == null
+            ? null
+            : fbb.writeString(object.topic!);
+        fbb.startTable(13);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, promptIdOffset);
+        fbb.addOffset(2, wordSenseIdOffset);
+        fbb.addOffset(3, serverWordIdOffset);
+        fbb.addOffset(4, targetTextOffset);
+        fbb.addOffset(5, viHintOffset);
+        fbb.addOffset(6, targetPhraseOffset);
+        fbb.addOffset(7, pronunciationTipOffset);
+        fbb.addOffset(8, commonMistakeOffset);
+        fbb.addOffset(9, difficultyOffset);
+        fbb.addOffset(10, topicOffset);
+        fbb.addInt64(11, object.cachedAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final promptIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final wordSenseIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 8);
+        final serverWordIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 10);
+        final targetTextParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 12);
+        final viHintParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 14);
+        final targetPhraseParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 16);
+        final pronunciationTipParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 18);
+        final commonMistakeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 20);
+        final difficultyParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 22);
+        final topicParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 24);
+        final cachedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          26,
+          0,
+        );
+        final object = SpeakingPromptEntity(
+          id: idParam,
+          promptId: promptIdParam,
+          wordSenseId: wordSenseIdParam,
+          serverWordId: serverWordIdParam,
+          targetText: targetTextParam,
+          viHint: viHintParam,
+          targetPhrase: targetPhraseParam,
+          pronunciationTip: pronunciationTipParam,
+          commonMistake: commonMistakeParam,
+          difficulty: difficultyParam,
+          topic: topicParam,
+          cachedAtMs: cachedAtMsParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -1013,5 +1387,121 @@ class SyncQueueEntity_ {
   /// See [SyncQueueEntity.createdAtMs].
   static final createdAtMs = obx.QueryIntegerProperty<SyncQueueEntity>(
     _entities[4].properties[5],
+  );
+}
+
+/// [SpeakingAttemptEntity] entity fields to define ObjectBox queries.
+class SpeakingAttemptEntity_ {
+  /// See [SpeakingAttemptEntity.id].
+  static final id = obx.QueryIntegerProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[0],
+  );
+
+  /// See [SpeakingAttemptEntity.attemptId].
+  static final attemptId = obx.QueryStringProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[1],
+  );
+
+  /// See [SpeakingAttemptEntity.promptId].
+  static final promptId = obx.QueryStringProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[2],
+  );
+
+  /// See [SpeakingAttemptEntity.serverWordId].
+  static final serverWordId = obx.QueryStringProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[3],
+  );
+
+  /// See [SpeakingAttemptEntity.occurredAtMs].
+  static final occurredAtMs = obx.QueryIntegerProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[4],
+  );
+
+  /// See [SpeakingAttemptEntity.durationMs].
+  static final durationMs = obx.QueryIntegerProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[5],
+  );
+
+  /// See [SpeakingAttemptEntity.retryCount].
+  static final retryCount = obx.QueryIntegerProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[6],
+  );
+
+  /// See [SpeakingAttemptEntity.selfRating].
+  static final selfRating = obx.QueryStringProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[7],
+  );
+
+  /// See [SpeakingAttemptEntity.syncStatus].
+  static final syncStatus = obx.QueryStringProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[8],
+  );
+
+  /// See [SpeakingAttemptEntity.localAudioPath].
+  static final localAudioPath = obx.QueryStringProperty<SpeakingAttemptEntity>(
+    _entities[5].properties[9],
+  );
+}
+
+/// [SpeakingPromptEntity] entity fields to define ObjectBox queries.
+class SpeakingPromptEntity_ {
+  /// See [SpeakingPromptEntity.id].
+  static final id = obx.QueryIntegerProperty<SpeakingPromptEntity>(
+    _entities[6].properties[0],
+  );
+
+  /// See [SpeakingPromptEntity.promptId].
+  static final promptId = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[1],
+  );
+
+  /// See [SpeakingPromptEntity.wordSenseId].
+  static final wordSenseId = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[2],
+  );
+
+  /// See [SpeakingPromptEntity.serverWordId].
+  static final serverWordId = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[3],
+  );
+
+  /// See [SpeakingPromptEntity.targetText].
+  static final targetText = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[4],
+  );
+
+  /// See [SpeakingPromptEntity.viHint].
+  static final viHint = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[5],
+  );
+
+  /// See [SpeakingPromptEntity.targetPhrase].
+  static final targetPhrase = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[6],
+  );
+
+  /// See [SpeakingPromptEntity.pronunciationTip].
+  static final pronunciationTip = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[7],
+  );
+
+  /// See [SpeakingPromptEntity.commonMistake].
+  static final commonMistake = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[8],
+  );
+
+  /// See [SpeakingPromptEntity.difficulty].
+  static final difficulty = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[9],
+  );
+
+  /// See [SpeakingPromptEntity.topic].
+  static final topic = obx.QueryStringProperty<SpeakingPromptEntity>(
+    _entities[6].properties[10],
+  );
+
+  /// See [SpeakingPromptEntity.cachedAtMs].
+  static final cachedAtMs = obx.QueryIntegerProperty<SpeakingPromptEntity>(
+    _entities[6].properties[11],
   );
 }

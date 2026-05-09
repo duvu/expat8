@@ -1,6 +1,15 @@
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
-import { compareEventsForProjection, resolveEventKey } from './word_store.js';
+import {
+  compareEventsForProjection,
+  isPromptMissingRequiredFields,
+  isSpeakingEvent,
+  isUnknownSpeakingEvent,
+  normalizeSpeakingEvent,
+  normalizeSpeakingPromptInput,
+  resolveEventKey,
+  toApiSpeakingPrompt
+} from './word_store.js';
 import {
   decrementLevel,
   getDefaultProficiencyLevel,
@@ -383,6 +392,39 @@ export class PostgresWordStore {
 
     for (const event of orderedEvents) {
       const eventKey = resolveEventKey(event);
+      if (isSpeakingEvent(event)) {
+        if (!eventKey || !event.occurred_at) {
+          rejected.push({
+            client_event_id: event.client_event_id ?? null,
+            event_id: event.event_id ?? null,
+            reason: 'missing_required_field'
+          });
+          continue;
+        }
+        try {
+          const result = await this.recordSpeakingEvent({ deviceId, userId, event, language });
+          if (result.idempotent) {
+            duplicates.push(eventKey);
+          } else {
+            accepted.push(eventKey);
+          }
+        } catch (error) {
+          rejected.push({
+            client_event_id: event.client_event_id ?? null,
+            event_id: event.event_id ?? null,
+            reason: error.message === 'forbidden_audio_field' ? 'forbidden_audio_field' : 'invalid_speaking_event'
+          });
+        }
+        continue;
+      }
+      if (isUnknownSpeakingEvent(event)) {
+        rejected.push({
+          client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
+          reason: 'invalid_speaking_event_type'
+        });
+        continue;
+      }
       if (!eventKey || !event.rating || !event.occurred_at) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
@@ -521,8 +563,116 @@ export class PostgresWordStore {
     });
   }
 
+  async recordSpeakingEvent({ deviceId, event, language = 'en', userId = null }) {
+    const eventKey = resolveEventKey(event);
+    if (!eventKey) {
+      throw new Error('missing_event_id');
+    }
+    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId });
+    const eventId = event.event_id ?? eventKey;
+    const clientEventId = event.client_event_id ?? eventKey;
+    const existing = await this.pool.query(
+      `SELECT id FROM speaking_events
+      WHERE event_id = $1 OR client_event_id = $2
+      LIMIT 1`,
+      [eventId, clientEventId]
+    );
+    if (existing.rows[0]) {
+      return { eventId: existing.rows[0].id, idempotent: true };
+    }
+    const receivedAt = new Date().toISOString();
+    const inserted = await this.pool.query(
+      `INSERT INTO speaking_events (
+        id,
+        event_id,
+        client_event_id,
+        device_id,
+        user_id,
+        event_type,
+        attempt_id,
+        prompt_id,
+        word_sense_id,
+        server_word_id,
+        duration_ms,
+        retry_count,
+        self_rating,
+        language,
+        occurred_at,
+        received_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      RETURNING id`,
+      [
+        createId('speaking_event'),
+        eventId,
+        clientEventId,
+        normalized.device_id,
+        normalized.user_id,
+        normalized.event_type,
+        normalized.attempt_id,
+        normalized.prompt_id,
+        normalized.word_sense_id,
+        normalized.server_word_id,
+        normalized.duration_ms,
+        normalized.retry_count,
+        normalized.self_rating,
+        normalized.language,
+        normalized.occurred_at,
+        receivedAt
+      ]
+    );
+    return { eventId: inserted.rows[0].id, idempotent: false };
+  }
+
   async getProficiency({ deviceId, language = 'en', userId = null }) {
     return this.#buildProficiencyResponse({ deviceId, userId, language });
+  }
+
+  async getSpeakingSummary({ deviceId, language = 'en', userId = null, weekStart = null }) {
+    const start = normalizeWeekStart(weekStart);
+    const result = userId
+      ? await this.pool.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE event_type = 'speaking_recorded')::int AS spoken_sentence_count,
+            COUNT(*) FILTER (WHERE event_type = 'speaking_retried')::int AS retry_count,
+            COALESCE(SUM(duration_ms) FILTER (WHERE event_type = 'speaking_recorded'), 0)::int AS approximate_duration_ms,
+            COUNT(*) FILTER (WHERE self_rating = 'clear')::int AS clear_count,
+            COUNT(*) FILTER (WHERE self_rating = 'hesitated')::int AS hesitated_count,
+            COUNT(*) FILTER (WHERE self_rating = 'could_not_say')::int AS could_not_say_count,
+            MAX(occurred_at) AS latest_activity_at
+          FROM speaking_events
+          WHERE user_id = $1 AND language = $2 AND occurred_at >= $3`,
+          [userId, language, start]
+        )
+      : await this.pool.query(
+          `SELECT
+            COUNT(*) FILTER (WHERE event_type = 'speaking_recorded')::int AS spoken_sentence_count,
+            COUNT(*) FILTER (WHERE event_type = 'speaking_retried')::int AS retry_count,
+            COALESCE(SUM(duration_ms) FILTER (WHERE event_type = 'speaking_recorded'), 0)::int AS approximate_duration_ms,
+            COUNT(*) FILTER (WHERE self_rating = 'clear')::int AS clear_count,
+            COUNT(*) FILTER (WHERE self_rating = 'hesitated')::int AS hesitated_count,
+            COUNT(*) FILTER (WHERE self_rating = 'could_not_say')::int AS could_not_say_count,
+            MAX(occurred_at) AS latest_activity_at
+          FROM speaking_events
+          WHERE device_id = $1 AND user_id IS NULL AND language = $2 AND occurred_at >= $3`,
+          [deviceId, language, start]
+        );
+    const row = result.rows[0] ?? {};
+    return {
+      device_id: deviceId,
+      user_id: userId,
+      language,
+      week_start: start.slice(0, 10),
+      spoken_sentence_count: Number(row.spoken_sentence_count ?? 0),
+      recording_count: Number(row.spoken_sentence_count ?? 0),
+      retry_count: Number(row.retry_count ?? 0),
+      approximate_duration_ms: Number(row.approximate_duration_ms ?? 0),
+      self_rating_counts: {
+        clear: Number(row.clear_count ?? 0),
+        hesitated: Number(row.hesitated_count ?? 0),
+        could_not_say: Number(row.could_not_say_count ?? 0)
+      },
+      latest_activity_at: row.latest_activity_at ?? null
+    };
   }
 
   async countConsecutiveRatings({ deviceId, rating, userId = null, client = this.pool }) {
@@ -679,11 +829,26 @@ export class PostgresWordStore {
         word_senses.part_of_speech,
         word_senses.ipa,
         word_senses.level,
-        word_senses.status AS word_sense_status
+        word_senses.status AS word_sense_status,
+        speaking_prompt.id AS speaking_prompt_id,
+        speaking_prompt.target_text AS speaking_prompt_target_text,
+        speaking_prompt.vi_hint AS speaking_prompt_vi_hint,
+        speaking_prompt.target_phrase AS speaking_prompt_target_phrase,
+        speaking_prompt.pronunciation_tip_vi AS speaking_prompt_pronunciation_tip_vi,
+        speaking_prompt.common_mistake_vi AS speaking_prompt_common_mistake_vi,
+        speaking_prompt.difficulty AS speaking_prompt_difficulty,
+        speaking_prompt.topic AS speaking_prompt_topic
       FROM articles
       JOIN article_terms ON article_terms.article_id = articles.id
       JOIN terms ON terms.id = article_terms.term_id
       JOIN word_senses ON word_senses.id = article_terms.word_sense_id
+      LEFT JOIN LATERAL (
+        SELECT * FROM speaking_prompts
+        WHERE speaking_prompts.word_sense_id = word_senses.id
+          AND speaking_prompts.status = 'approved'
+        ORDER BY speaking_prompts.updated_at DESC, speaking_prompts.id ASC
+        LIMIT 1
+      ) speaking_prompt ON true
       WHERE articles.id = $1
         AND articles.status <> 'deleted'
         AND (
@@ -721,7 +886,19 @@ export class PostgresWordStore {
         part_of_speech: row.part_of_speech,
         ipa: row.ipa,
         level: row.level,
-        status: row.word_sense_status
+        status: row.word_sense_status,
+        speaking_prompt: row.speaking_prompt_id
+          ? toApiSpeakingPrompt({
+              id: row.speaking_prompt_id,
+              target_text: row.speaking_prompt_target_text,
+              vi_hint: row.speaking_prompt_vi_hint,
+              target_phrase: row.speaking_prompt_target_phrase,
+              pronunciation_tip_vi: row.speaking_prompt_pronunciation_tip_vi,
+              common_mistake_vi: row.speaking_prompt_common_mistake_vi,
+              difficulty: row.speaking_prompt_difficulty,
+              topic: row.speaking_prompt_topic
+            })
+          : null
       }))
     };
   }
@@ -762,6 +939,116 @@ export class PostgresWordStore {
       WHERE id = $1
       RETURNING *`,
       values
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async listSpeakingPrompts({ status = null, missingRequired = false, limit = 100 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(limit, 200));
+    const result = status
+      ? await this.pool.query(
+          `SELECT * FROM speaking_prompts
+          WHERE status = $1
+          ORDER BY updated_at DESC
+          LIMIT $2`,
+          [status, cappedLimit]
+        )
+      : await this.pool.query(
+          `SELECT * FROM speaking_prompts
+          ORDER BY updated_at DESC
+          LIMIT $1`,
+          [cappedLimit]
+        );
+    let rows = result.rows;
+    if (missingRequired) {
+      rows = rows.filter(isPromptMissingRequiredFields);
+    }
+    return rows;
+  }
+
+  async createSpeakingPrompt(input) {
+    const now = new Date().toISOString();
+    const normalized = normalizeSpeakingPromptInput({
+      ...input,
+      id: input.id ?? createId('speaking_prompt'),
+      status: input.status ?? 'pending_review',
+      created_at: input.created_at ?? now,
+      updated_at: input.updated_at ?? now
+    });
+    const result = await this.pool.query(
+      `INSERT INTO speaking_prompts (
+        id, word_sense_id, article_term_id, target_text, vi_hint, target_phrase,
+        pronunciation_tip_vi, common_mistake_vi, difficulty, topic, status,
+        reviewer_user_id, reviewed_at, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      RETURNING *`,
+      [
+        normalized.id,
+        normalized.word_sense_id,
+        normalized.article_term_id,
+        normalized.target_text,
+        normalized.vi_hint,
+        normalized.target_phrase,
+        normalized.pronunciation_tip_vi,
+        normalized.common_mistake_vi,
+        normalized.difficulty,
+        normalized.topic,
+        normalized.status,
+        normalized.reviewer_user_id,
+        normalized.reviewed_at,
+        normalized.created_at,
+        normalized.updated_at
+      ]
+    );
+    return result.rows[0];
+  }
+
+  async updateSpeakingPrompt({ promptId, patch, reviewerUserId = null }) {
+    const existing = await this.pool.query(
+      `SELECT * FROM speaking_prompts WHERE id = $1 LIMIT 1`,
+      [promptId]
+    );
+    if (!existing.rows[0]) {
+      return null;
+    }
+    const now = new Date().toISOString();
+    const updated = normalizeSpeakingPromptInput({
+      ...existing.rows[0],
+      ...patch,
+      reviewer_user_id: patch.status ? reviewerUserId : existing.rows[0].reviewer_user_id,
+      reviewed_at: patch.status ? now : existing.rows[0].reviewed_at,
+      updated_at: now
+    });
+    const result = await this.pool.query(
+      `UPDATE speaking_prompts
+      SET
+        target_text = $2,
+        vi_hint = $3,
+        target_phrase = $4,
+        pronunciation_tip_vi = $5,
+        common_mistake_vi = $6,
+        difficulty = $7,
+        topic = $8,
+        status = $9,
+        reviewer_user_id = $10,
+        reviewed_at = $11,
+        updated_at = $12
+      WHERE id = $1
+      RETURNING *`,
+      [
+        promptId,
+        updated.target_text,
+        updated.vi_hint,
+        updated.target_phrase,
+        updated.pronunciation_tip_vi,
+        updated.common_mistake_vi,
+        updated.difficulty,
+        updated.topic,
+        updated.status,
+        updated.reviewer_user_id,
+        updated.reviewed_at,
+        updated.updated_at
+      ]
     );
     return result.rows[0] ?? null;
   }
@@ -1393,4 +1680,19 @@ function nextReviewForRating(rating, occurredAt) {
     return new Date(occurredAt.getTime() + 5 * 60 * 1000);
   }
   return new Date(occurredAt.getTime() + 24 * 60 * 60 * 1000);
+}
+
+function normalizeWeekStart(value) {
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  const now = new Date();
+  const day = now.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  now.setUTCDate(now.getUTCDate() - diff);
+  now.setUTCHours(0, 0, 0, 0);
+  return now.toISOString();
 }

@@ -8,6 +8,9 @@ import 'src/data/local_database.dart';
 import 'src/data/word_repository.dart';
 import 'src/logging/logger.dart';
 import 'src/session/learning_session_controller.dart';
+import 'src/speaking/audio_file_manager.dart';
+import 'src/speaking/speaking_audio_service.dart';
+import 'src/speaking/speaking_repository.dart';
 import 'src/ui/learning_screen.dart';
 
 Future<void> main() async {
@@ -73,19 +76,41 @@ Future<void> main() async {
     );
   }
 
+  // Build speaking infrastructure (gated by feature flag).
+  SpeakingRepository? speakingRepository;
+  if (config.speakingFoundationEnabled) {
+    final audioService = SpeakingAudioService();
+    final fileManager = AudioFileManager();
+    speakingRepository = SpeakingRepository(
+      database: database,
+      audioService: audioService,
+      fileManager: fileManager,
+    );
+    // Run 30-day audio retention cleanup once at startup — out of band.
+    unawaited(speakingRepository.runRetentionCleanup());
+  }
+
   await logger.info(
     category: AppLogCategory.app,
     event: 'app.start',
     message: 'App bootstrap completed.',
   );
 
-  runApp(LanguageLearningApp(controller: controller));
+  runApp(LanguageLearningApp(
+    controller: controller,
+    speakingRepository: speakingRepository,
+  ));
 }
 
 class LanguageLearningApp extends StatelessWidget {
-  const LanguageLearningApp({required this.controller, super.key});
+  const LanguageLearningApp({
+    required this.controller,
+    this.speakingRepository,
+    super.key,
+  });
 
   final LearningSessionController controller;
+  final SpeakingRepository? speakingRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +121,10 @@ class LanguageLearningApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF256D5A)),
         useMaterial3: true,
       ),
-      home: LearningScreen(controller: controller),
+      home: LearningScreen(
+        controller: controller,
+        speakingRepository: speakingRepository,
+      ),
     );
   }
 }

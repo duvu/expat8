@@ -20,6 +20,18 @@ import {
   verifyPassword
 } from './user_identity.js';
 
+export const SPEAKING_EVENT_TYPES = [
+  'speaking_prompt_viewed',
+  'speaking_sample_played',
+  'speaking_recorded',
+  'speaking_retried',
+  'speaking_self_rated_clear',
+  'speaking_self_rated_hesitated',
+  'speaking_self_rated_could_not_say'
+];
+
+export const SPEAKING_SELF_RATINGS = ['clear', 'hesitated', 'could_not_say'];
+
 export class WordStore {
   constructor({ seed = true } = {}) {
     this.words = new Map();
@@ -32,6 +44,8 @@ export class WordStore {
     this.termsById = new Map();
     this.wordSensesById = new Map();
     this.articleTermsById = new Map();
+    this.speakingPromptsById = new Map();
+    this.speakingEventsByKey = new Map();
     this.usersById = new Map();
     this.usersByIdentifier = new Map();
     this.userSessionsByTokenHash = new Map();
@@ -244,6 +258,39 @@ export class WordStore {
 
     for (const event of orderedEvents) {
       const eventKey = resolveEventKey(event);
+      if (isSpeakingEvent(event)) {
+        if (!eventKey || !event.occurred_at) {
+          rejected.push({
+            client_event_id: event.client_event_id ?? null,
+            event_id: event.event_id ?? null,
+            reason: 'missing_required_field'
+          });
+          continue;
+        }
+        try {
+          const result = this.recordSpeakingEvent({ deviceId, userId, event, language });
+          if (result.idempotent) {
+            duplicates.push(eventKey);
+          } else {
+            accepted.push(eventKey);
+          }
+        } catch (error) {
+          rejected.push({
+            client_event_id: event.client_event_id ?? null,
+            event_id: event.event_id ?? null,
+            reason: error.message === 'forbidden_audio_field' ? 'forbidden_audio_field' : 'invalid_speaking_event'
+          });
+        }
+        continue;
+      }
+      if (isUnknownSpeakingEvent(event)) {
+        rejected.push({
+          client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
+          reason: 'invalid_speaking_event_type'
+        });
+        continue;
+      }
       if (!eventKey || !event.rating || !event.occurred_at) {
         rejected.push({
           client_event_id: event.client_event_id ?? null,
@@ -276,6 +323,36 @@ export class WordStore {
       rejected_events: rejected,
       proficiency: latestProficiency
     };
+  }
+
+  recordSpeakingEvent({ deviceId, event, language = 'en', userId = null }) {
+    const eventKey = resolveEventKey(event);
+    if (!eventKey) {
+      throw new Error('missing_event_id');
+    }
+    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId });
+    const existing = this.speakingEventsByKey.get(eventKey);
+    if (existing) {
+      return { eventId: existing.id, idempotent: true };
+    }
+    const stored = {
+      id: createId('speaking_event'),
+      ...normalized,
+      event_id: event.event_id ?? eventKey,
+      client_event_id: event.client_event_id ?? eventKey,
+      received_at: new Date().toISOString()
+    };
+    this.speakingEventsByKey.set(eventKey, stored);
+    return { eventId: stored.id, idempotent: false };
+  }
+
+  getSpeakingSummary({ deviceId, language = 'en', userId = null, weekStart = null }) {
+    const start = normalizeWeekStart(weekStart);
+    const events = [...this.speakingEventsByKey.values()]
+      .filter((event) => event.language === language)
+      .filter((event) => event.occurred_at >= start)
+      .filter((event) => userId ? event.user_id === userId : event.device_id === deviceId && !event.user_id);
+    return buildSpeakingSummary({ deviceId, userId, language, weekStart: start, events });
   }
 
   recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
@@ -615,6 +692,7 @@ export class WordStore {
         if (article.visibility === 'published' && sense.status !== 'approved') {
           return [];
         }
+        const speakingPrompt = this.#approvedSpeakingPromptForSense(sense.id);
         return [{
           term_id: term.id,
           display_term: term.display_term,
@@ -623,7 +701,8 @@ export class WordStore {
           part_of_speech: sense.part_of_speech,
           ipa: sense.ipa,
           level: sense.level,
-          status: sense.status
+          status: sense.status,
+          speaking_prompt: speakingPrompt ? toApiSpeakingPrompt(speakingPrompt) : null
         }];
       });
 
@@ -631,6 +710,12 @@ export class WordStore {
       article_id: article.id,
       items
     };
+  }
+
+  #approvedSpeakingPromptForSense(wordSenseId) {
+    return [...this.speakingPromptsById.values()]
+      .filter((prompt) => prompt.word_sense_id === wordSenseId && prompt.status === 'approved')
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0] ?? null;
   }
 
   softDeleteArticle({ articleId, userId }) {
@@ -681,6 +766,44 @@ export class WordStore {
     item.reviewed_at = new Date().toISOString();
     item.updated_at = item.reviewed_at;
     return item;
+  }
+
+  listSpeakingPrompts({ status = null, missingRequired = false, limit = 100 } = {}) {
+    return [...this.speakingPromptsById.values()]
+      .filter((prompt) => status ? prompt.status === status : true)
+      .filter((prompt) => missingRequired ? isPromptMissingRequiredFields(prompt) : true)
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+      .slice(0, Math.max(1, Math.min(limit, 200)));
+  }
+
+  createSpeakingPrompt(input) {
+    const now = new Date().toISOString();
+    const prompt = normalizeSpeakingPromptInput({
+      ...input,
+      id: input.id ?? createId('speaking_prompt'),
+      status: input.status ?? 'pending_review',
+      created_at: now,
+      updated_at: now
+    });
+    this.speakingPromptsById.set(prompt.id, prompt);
+    return prompt;
+  }
+
+  updateSpeakingPrompt({ promptId, patch, reviewerUserId = null }) {
+    const existing = this.speakingPromptsById.get(promptId);
+    if (!existing) {
+      return null;
+    }
+    const now = new Date().toISOString();
+    const updated = normalizeSpeakingPromptInput({
+      ...existing,
+      ...patch,
+      reviewer_user_id: patch.status ? reviewerUserId : existing.reviewer_user_id,
+      reviewed_at: patch.status ? now : existing.reviewed_at,
+      updated_at: now
+    });
+    this.speakingPromptsById.set(updated.id, updated);
+    return updated;
   }
 
   listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
@@ -933,8 +1056,69 @@ export function compareEventsForProjection(left, right) {
   return resolveEventKey(left)?.localeCompare(resolveEventKey(right) ?? '') ?? -1;
 }
 
-export function toApiWord(word) {
+export function isSpeakingEvent(event) {
+  return SPEAKING_EVENT_TYPES.includes(event?.event_type);
+}
+
+export function isUnknownSpeakingEvent(event) {
+  return typeof event?.event_type === 'string' && event.event_type.startsWith('speaking_') && !isSpeakingEvent(event);
+}
+
+export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null }) {
+  if (!isSpeakingEvent(event)) {
+    throw new Error('invalid_speaking_event_type');
+  }
+  if (containsForbiddenAudioField(event)) {
+    throw new Error('forbidden_audio_field');
+  }
+  const speaking = event.speaking ?? {};
+  const attemptId = normalizeOptionalText(speaking.attempt_id ?? event.attempt_id);
+  if (!attemptId || !event.occurred_at) {
+    throw new Error('missing_required_field');
+  }
+  const selfRating = normalizeOptionalText(speaking.self_rating ?? event.self_rating);
+  if (selfRating && !SPEAKING_SELF_RATINGS.includes(selfRating)) {
+    throw new Error('invalid_self_rating');
+  }
+  const durationMs = normalizeOptionalInteger(speaking.duration_ms ?? event.duration_ms);
+  const retryCount = normalizeOptionalInteger(speaking.retry_count ?? event.retry_count) ?? 0;
+  if ((durationMs !== null && durationMs < 0) || retryCount < 0) {
+    throw new Error('invalid_speaking_event');
+  }
   return {
+    device_id: deviceId,
+    user_id: userId,
+    event_type: event.event_type,
+    attempt_id: attemptId,
+    prompt_id: normalizeOptionalText(speaking.prompt_id ?? event.prompt_id),
+    word_sense_id: normalizeOptionalText(speaking.word_sense_id ?? event.word_sense_id),
+    server_word_id: normalizeOptionalText(speaking.server_word_id ?? event.server_word_id),
+    duration_ms: durationMs,
+    retry_count: retryCount,
+    self_rating: selfRating,
+    language: normalizeOptionalText(event.language) ?? language,
+    occurred_at: event.occurred_at
+  };
+}
+
+export function toApiSpeakingPrompt(prompt) {
+  if (!prompt) {
+    return null;
+  }
+  return {
+    id: prompt.id,
+    target_text: prompt.target_text,
+    vi_hint: prompt.vi_hint,
+    target_phrase: prompt.target_phrase,
+    pronunciation_tip_vi: prompt.pronunciation_tip_vi,
+    common_mistake_vi: prompt.common_mistake_vi,
+    difficulty: prompt.difficulty,
+    topic: prompt.topic
+  };
+}
+
+export function toApiWord(word) {
+  const result = {
     server_word_id: word.id,
     term: word.term,
     language: word.language,
@@ -947,6 +1131,129 @@ export function toApiWord(word) {
     difficulty: word.difficulty,
     topics: word.topics,
     created_at: word.created_at
+  };
+  if (word.speaking_prompt) {
+    result.speaking_prompt = toApiSpeakingPrompt(word.speaking_prompt);
+  }
+  return result;
+}
+
+function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, events }) {
+  const selfRatingCounts = { clear: 0, hesitated: 0, could_not_say: 0 };
+  let spokenSentenceCount = 0;
+  let retryCount = 0;
+  let approximateDurationMs = 0;
+  let latestActivityAt = null;
+  for (const event of events) {
+    if (event.event_type === 'speaking_recorded') {
+      spokenSentenceCount += 1;
+      approximateDurationMs += Number(event.duration_ms ?? 0);
+    }
+    if (event.event_type === 'speaking_retried') {
+      retryCount += 1;
+    }
+    if (event.self_rating && selfRatingCounts[event.self_rating] !== undefined) {
+      selfRatingCounts[event.self_rating] += 1;
+    }
+    if (!latestActivityAt || event.occurred_at > latestActivityAt) {
+      latestActivityAt = event.occurred_at;
+    }
+  }
+  return {
+    device_id: deviceId,
+    user_id: userId,
+    language,
+    week_start: weekStart.slice(0, 10),
+    spoken_sentence_count: spokenSentenceCount,
+    recording_count: spokenSentenceCount,
+    retry_count: retryCount,
+    approximate_duration_ms: approximateDurationMs,
+    self_rating_counts: selfRatingCounts,
+    latest_activity_at: latestActivityAt
+  };
+}
+
+function containsForbiddenAudioField(value) {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  for (const [key, nested] of Object.entries(value)) {
+    const normalized = key.toLowerCase();
+    if ([
+      'audio',
+      'audio_bytes',
+      'audio_base64',
+      'audio_blob',
+      'local_audio_path',
+      'local_file_path',
+      'file_path'
+    ].includes(normalized)) {
+      return true;
+    }
+    if (typeof nested === 'object' && containsForbiddenAudioField(nested)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function normalizeOptionalText(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function normalizeOptionalInteger(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function normalizeWeekStart(value) {
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  const now = new Date();
+  const day = now.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  now.setUTCDate(now.getUTCDate() - diff);
+  now.setUTCHours(0, 0, 0, 0);
+  return now.toISOString();
+}
+
+export function isPromptMissingRequiredFields(prompt) {
+  if (!prompt) {
+    return true;
+  }
+  const text = typeof prompt.target_text === 'string' ? prompt.target_text.trim() : '';
+  const hint = typeof prompt.vi_hint === 'string' ? prompt.vi_hint.trim() : '';
+  return !text || !hint;
+}
+
+export function normalizeSpeakingPromptInput(input) {
+  return {
+    id: input.id,
+    word_sense_id: input.word_sense_id ?? null,
+    article_term_id: input.article_term_id ?? null,
+    target_text: input.target_text ?? null,
+    vi_hint: input.vi_hint ?? null,
+    target_phrase: input.target_phrase ?? null,
+    pronunciation_tip_vi: input.pronunciation_tip_vi ?? null,
+    common_mistake_vi: input.common_mistake_vi ?? null,
+    difficulty: input.difficulty ?? null,
+    topic: input.topic ?? null,
+    status: input.status ?? 'pending_review',
+    reviewer_user_id: input.reviewer_user_id ?? null,
+    reviewed_at: input.reviewed_at ?? null,
+    created_at: input.created_at,
+    updated_at: input.updated_at
   };
 }
 

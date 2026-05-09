@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../api/backend_api_client.dart';
+import '../data/word_repository.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
+import '../speaking/speaking_repository.dart';
 import 'logs_screen.dart';
 import 'vocabulary_card.dart';
 
@@ -14,9 +17,14 @@ const Map<String, String> kLearningLanguageLabels = {
 };
 
 class LearningScreen extends StatefulWidget {
-  const LearningScreen({required this.controller, super.key});
+  const LearningScreen({
+    required this.controller,
+    this.speakingRepository,
+    super.key,
+  });
 
   final LearningSessionController controller;
+  final SpeakingRepository? speakingRepository;
 
   @override
   State<LearningScreen> createState() => _LearningScreenState();
@@ -80,6 +88,8 @@ class _LearningScreenState extends State<LearningScreen> {
         isSignedIn: controller.userSession != null,
         userSession: controller.userSession,
         isAuthInProgress: controller.isAuthInProgress,
+        speakingRepository: widget.speakingRepository,
+        wordRepository: controller.repository,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onLogs: () {
           Navigator.of(context).maybePop();
@@ -119,7 +129,10 @@ class _LearningScreenState extends State<LearningScreen> {
             if (controller.isLoading)
               const Center(child: CircularProgressIndicator())
             else if (controller.currentWord != null)
-              VocabularyCardView(word: controller.currentWord!)
+              VocabularyCardView(
+                word: controller.currentWord!,
+                speakingRepository: widget.speakingRepository,
+              )
             else
               Padding(
                 padding: const EdgeInsets.all(24),
@@ -365,6 +378,8 @@ class LearningDrawer extends StatelessWidget {
     required this.onRegister,
     required this.onSignIn,
     required this.onSignOut,
+    this.speakingRepository,
+    this.wordRepository,
     this.userSession,
     this.isAuthInProgress = false,
     super.key,
@@ -373,6 +388,8 @@ class LearningDrawer extends StatelessWidget {
   final bool isSignedIn;
   final UserSession? userSession;
   final bool isAuthInProgress;
+  final SpeakingRepository? speakingRepository;
+  final WordRepository? wordRepository; // for speaking stats fetch
   final VoidCallback onVocabulary;
   final VoidCallback onLogs;
   final VoidCallback onRegister;
@@ -395,6 +412,24 @@ class LearningDrawer extends StatelessWidget {
               title: const Text('Logs'),
               onTap: onLogs,
             ),
+            if (speakingRepository != null) ...[
+              ListTile(
+                leading: const Icon(Icons.bar_chart_outlined),
+                title: const Text('Speaking stats'),
+                onTap: () {
+                  Navigator.of(context).maybePop();
+                  _showSpeakingStats(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete all recordings'),
+                onTap: () async {
+                  Navigator.of(context).maybePop();
+                  await _confirmDeleteAll(context);
+                },
+              ),
+            ],
             if (isSignedIn)
               _DrawerUserInfo(
                 userSession: userSession,
@@ -422,6 +457,136 @@ class LearningDrawer extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showSpeakingStats(BuildContext context) async {
+    // Try fetching weekly summary from backend; fall back to a local-only message.
+    SpeakingWeeklySummary? summary;
+    String? errorMessage;
+    try {
+      if (wordRepository != null) {
+        final deviceId = await wordRepository!.getOrCreateDeviceId();
+        summary = await wordRepository!.fetchSpeakingSummary(
+          deviceId: deviceId,
+        );
+      }
+    } catch (_) {
+      errorMessage = 'Could not load speaking stats. Check your connection.';
+    }
+    if (!context.mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => _SpeakingStatsSheet(
+        summary: summary,
+        errorMessage: errorMessage,
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteAll(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete all recordings?'),
+        content: const Text(
+          'This removes all speaking audio files and attempt records from this device. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && context.mounted) {
+      await speakingRepository!.deleteAllRecordings();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All recordings deleted.')),
+        );
+      }
+    }
+  }
+}
+
+class _SpeakingStatsSheet extends StatelessWidget {
+  const _SpeakingStatsSheet({this.summary, this.errorMessage});
+
+  final SpeakingWeeklySummary? summary;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('This week\'s speaking', style: theme.textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            'Your recordings are private and stored on this device only.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
+          const SizedBox(height: 16),
+          if (errorMessage != null)
+            Text(errorMessage!, style: theme.textTheme.bodyMedium)
+          else if (summary == null)
+            const CircularProgressIndicator()
+          else ...[
+            _stat(theme, 'Sentences spoken',
+                '${summary!.spokenSentenceCount}'),
+            _stat(theme, 'Retries', '${summary!.retryCount}'),
+            if (summary!.approximateDurationMs > 0)
+              _stat(
+                theme,
+                'Approx. speaking time',
+                _formatDuration(summary!.approximateDurationMs),
+              ),
+            if (summary!.selfRatingCounts.isNotEmpty)
+              _stat(
+                theme,
+                'Self-ratings',
+                summary!.selfRatingCounts.entries
+                    .map((e) => '${e.key}: ${e.value}')
+                    .join(', '),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _stat(ThemeData theme, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodyMedium),
+          Text(value,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(int ms) {
+    final seconds = ms ~/ 1000;
+    if (seconds < 60) return '${seconds}s';
+    final minutes = seconds ~/ 60;
+    final rem = seconds % 60;
+    return rem == 0 ? '${minutes}m' : '${minutes}m ${rem}s';
   }
 }
 

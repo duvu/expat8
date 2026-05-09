@@ -6,6 +6,7 @@ class AppConfig {
     required this.appCredentialSecret,
     required this.defaultLearningLanguage,
     required this.supportedLearningLanguages,
+    required this.speakingFoundationEnabled,
     required this.logLevel,
     required this.logMaxEntries,
     this.logRetention = defaultLogRetention,
@@ -31,6 +32,10 @@ class AppConfig {
       ),
       defaultLearningLanguage: 'en',
       supportedLearningLanguages: ['en', 'zh', 'vi'],
+      speakingFoundationEnabled: bool.fromEnvironment(
+        'SPEAKING_FOUNDATION_ENABLED',
+        defaultValue: false,
+      ),
       logLevel: String.fromEnvironment(
         'APP_LOG_LEVEL',
         defaultValue: 'info',
@@ -48,6 +53,7 @@ class AppConfig {
   final String appCredentialSecret;
   final String defaultLearningLanguage;
   final List<String> supportedLearningLanguages;
+  final bool speakingFoundationEnabled;
   final String logLevel;
   final int logMaxEntries;
   final Duration logRetention;

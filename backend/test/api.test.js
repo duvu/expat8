@@ -107,6 +107,128 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
   assert.equal(proficiency.level, 'A1');
 });
 
+test('syncs speaking events separately from rating study events', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.insertWord(wordInput({ id: 'word_speaking', term: 'speaking' }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_speaking',
+      events: [
+        {
+          client_event_id: 'evt_rating_for_speaking_test',
+          server_word_id: 'word_speaking',
+          rating: 'easy',
+          occurred_at: '2026-05-04T10:00:00.000Z'
+        },
+        {
+          client_event_id: 'evt_speaking_recorded',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-04T10:01:00.000Z',
+          language: 'en',
+          speaking: {
+            attempt_id: 'attempt_1',
+            prompt_id: 'prompt_1',
+            server_word_id: 'word_speaking',
+            duration_ms: 4300,
+            retry_count: 0,
+            self_rating: null
+          }
+        },
+        {
+          client_event_id: 'evt_speaking_clear',
+          event_type: 'speaking_self_rated_clear',
+          occurred_at: '2026-05-04T10:01:05.000Z',
+          language: 'en',
+          speaking: {
+            attempt_id: 'attempt_1',
+            prompt_id: 'prompt_1',
+            server_word_id: 'word_speaking',
+            duration_ms: 4300,
+            retry_count: 0,
+            self_rating: 'clear'
+          }
+        },
+        {
+          client_event_id: 'evt_speaking_unknown',
+          event_type: 'speaking_magic_score',
+          occurred_at: '2026-05-04T10:01:10.000Z',
+          speaking: { attempt_id: 'attempt_invalid' }
+        },
+        {
+          client_event_id: 'evt_speaking_audio_path',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-04T10:01:15.000Z',
+          speaking: {
+            attempt_id: 'attempt_2',
+            local_audio_path: '/tmp/private-recording.m4a'
+          }
+        }
+      ]
+    })
+  });
+
+  assert.deepEqual(sync.accepted_event_ids, [
+    'evt_rating_for_speaking_test',
+    'evt_speaking_recorded',
+    'evt_speaking_clear'
+  ]);
+  assert.equal(sync.rejected_events.length, 2);
+  assert.deepEqual(
+    sync.rejected_events.map((event) => event.reason).sort(),
+    ['forbidden_audio_field', 'invalid_speaking_event_type']
+  );
+  assert.equal(store.studyEventsByClientId.size, 1);
+  assert.equal(store.speakingEventsByKey.size, 2);
+  assert.equal(sync.proficiency.level, 'A1');
+
+  const retry = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_speaking',
+      events: [
+        {
+          client_event_id: 'evt_speaking_recorded',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-04T10:01:00.000Z',
+          language: 'en',
+          speaking: {
+            attempt_id: 'attempt_1',
+            duration_ms: 4300,
+            retry_count: 0
+          }
+        }
+      ]
+    })
+  });
+  assert.deepEqual(retry.accepted_event_ids, []);
+  assert.deepEqual(retry.duplicates, ['evt_speaking_recorded']);
+
+  const summary = await fetchJson(`${baseUrl}/v1/speaking/summary?device_id=device_speaking&language=en&week_start=2026-05-04`);
+  assert.equal(summary.spoken_sentence_count, 1);
+  assert.equal(summary.recording_count, 1);
+  assert.equal(summary.retry_count, 0);
+  assert.equal(summary.approximate_duration_ms, 4300);
+  assert.deepEqual(summary.self_rating_counts, {
+    clear: 1,
+    hesitated: 0,
+    could_not_say: 0
+  });
+});
+
 test('rejects unsupported learning card modes before store selection', async (t) => {
   const store = new WordStore({ seed: false });
   store.insertWord(wordInput({ id: 'word_card_mode', term: 'mode' }));
@@ -1084,9 +1206,25 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
     rawText: 'Published article text',
     visibility: 'private'
   });
-  store.persistArticleVocabulary({
+  const publishedVocabulary = store.persistArticleVocabulary({
     articleId: publishedArticle.id,
     items: [vocabItem('published term')]
+  });
+  const publishedSenseId = publishedVocabulary.items[0].sense.id;
+  store.speakingPromptsById.set('prompt_published_term', {
+    id: 'prompt_published_term',
+    word_sense_id: publishedSenseId,
+    article_term_id: publishedVocabulary.items[0].articleTerm.id,
+    target_text: 'This is a useful published term.',
+    vi_hint: 'Day la mot cum tu huu ich da xuat ban.',
+    target_phrase: 'published term',
+    pronunciation_tip_vi: 'Noi cham va ro am cuoi.',
+    common_mistake_vi: 'Dung doc thieu am cuoi.',
+    difficulty: 'A1',
+    topic: 'article-ingestion',
+    status: 'approved',
+    created_at: '2026-05-04T10:00:00.000Z',
+    updated_at: '2026-05-04T10:00:00.000Z'
   });
   store.publishArticle({ articleId: publishedArticle.id });
 
@@ -1109,6 +1247,16 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   );
   assert.equal(viewerVocabulary.article_id, publishedArticle.id);
   assert.equal(viewerVocabulary.items.length, 1);
+  assert.deepEqual(viewerVocabulary.items[0].speaking_prompt, {
+    id: 'prompt_published_term',
+    target_text: 'This is a useful published term.',
+    vi_hint: 'Day la mot cum tu huu ich da xuat ban.',
+    target_phrase: 'published term',
+    pronunciation_tip_vi: 'Noi cham va ro am cuoi.',
+    common_mistake_vi: 'Dung doc thieu am cuoi.',
+    difficulty: 'A1',
+    topic: 'article-ingestion'
+  });
 
   const viewerPrivate = await fetch(
     `${baseUrl}/v1/articles/${privateArticle.id}/vocabulary`,

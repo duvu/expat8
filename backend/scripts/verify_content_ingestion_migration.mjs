@@ -10,7 +10,9 @@ const REQUIRED_TABLES = [
   'article_terms',
   'vocabulary_review_items',
   'content_packs',
-  'content_pack_items'
+  'content_pack_items',
+  'speaking_prompts',
+  'speaking_events'
 ];
 
 const REQUIRED_INDEXES = [
@@ -22,7 +24,15 @@ const REQUIRED_INDEXES = [
   'idx_article_processing_jobs_status_queued',
   'idx_word_senses_status_level',
   'idx_vocabulary_review_items_status_created',
-  'idx_content_packs_language_version'
+  'idx_content_packs_language_version',
+  'idx_speaking_events_client_event_id',
+  'idx_speaking_prompts_word_sense_status',
+  'idx_speaking_prompts_article_term',
+  'idx_speaking_prompts_status_updated',
+  'idx_speaking_events_device_occurred',
+  'idx_speaking_events_user_occurred',
+  'idx_speaking_events_prompt_occurred',
+  'idx_speaking_events_attempt'
 ];
 
 async function main() {

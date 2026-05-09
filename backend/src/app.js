@@ -466,6 +466,82 @@ function createV1Router({ store, config }) {
     })
   );
 
+  router.get(
+    '/admin/speaking-prompts',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const limit = clampLimit(request.query.limit, 1, 200);
+      const status = typeof request.query.status === 'string' ? request.query.status : null;
+      const missingRequired = request.query.missing_required === 'true';
+      const items = await store.listSpeakingPrompts({ status, missingRequired, limit });
+      return response.json({ items });
+    })
+  );
+
+  router.post(
+    '/admin/speaking-prompts',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const body = request.body ?? {};
+      if (!body.word_sense_id || typeof body.word_sense_id !== 'string') {
+        return response.status(400).json({ error: 'bad_request', message: 'word_sense_id required' });
+      }
+      const prompt = await store.createSpeakingPrompt({
+        word_sense_id: body.word_sense_id,
+        article_term_id: typeof body.article_term_id === 'string' ? body.article_term_id : null,
+        target_text: typeof body.target_text === 'string' ? body.target_text : null,
+        vi_hint: typeof body.vi_hint === 'string' ? body.vi_hint : null,
+        target_phrase: typeof body.target_phrase === 'string' ? body.target_phrase : null,
+        pronunciation_tip_vi: typeof body.pronunciation_tip_vi === 'string' ? body.pronunciation_tip_vi : null,
+        common_mistake_vi: typeof body.common_mistake_vi === 'string' ? body.common_mistake_vi : null,
+        difficulty: typeof body.difficulty === 'string' ? body.difficulty : null,
+        topic: typeof body.topic === 'string' ? body.topic : null,
+        status: typeof body.status === 'string' ? body.status : 'pending_review'
+      });
+      return response.status(201).json(prompt);
+    })
+  );
+
+  router.patch(
+    '/admin/speaking-prompts/:id',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const body = request.body ?? {};
+      const patch = {};
+      const textFields = [
+        'target_text', 'vi_hint', 'target_phrase',
+        'pronunciation_tip_vi', 'common_mistake_vi', 'difficulty', 'topic'
+      ];
+      for (const field of textFields) {
+        if (body[field] !== undefined) {
+          patch[field] = typeof body[field] === 'string' ? body[field].trim() || null : null;
+        }
+      }
+      if (body.status !== undefined) {
+        const validStatuses = ['pending_review', 'approved', 'rejected'];
+        if (!validStatuses.includes(body.status)) {
+          return response.status(400).json({ error: 'bad_request', message: 'invalid_status' });
+        }
+        patch.status = body.status;
+      }
+      const prompt = await store.updateSpeakingPrompt({
+        promptId: request.params.id,
+        patch,
+        reviewerUserId: null
+      });
+      if (!prompt) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(prompt);
+    })
+  );
+
   router.post(
     '/study-events',
     asyncHandler(async (request, response) => {
@@ -543,6 +619,27 @@ function createV1Router({ store, config }) {
         }
         throw error;
       }
+    })
+  );
+
+  router.get(
+    '/speaking/summary',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveOptionalUserSession({ request, response, store });
+      if (userSession === false) {
+        return;
+      }
+      const deviceId = request.query.device_id;
+      if (!deviceId || typeof deviceId !== 'string') {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+      const summary = await store.getSpeakingSummary({
+        deviceId,
+        userId: userSession?.user.id ?? null,
+        language: request.query.language ?? config.defaultTargetLanguage,
+        weekStart: typeof request.query.week_start === 'string' ? request.query.week_start : null
+      });
+      return response.json(summary);
     })
   );
 

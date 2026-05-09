@@ -285,10 +285,156 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "6:184519167541283189",
+      "lastPropertyId": "10:4571414392161499582",
+      "name": "SpeakingAttemptEntity",
+      "properties": [
+        {
+          "id": "1:4860408431035195995",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7751347899719781995",
+          "name": "attemptId",
+          "indexId": "15:136311804813454643",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:1345673362050694855",
+          "name": "promptId",
+          "indexId": "16:6217275210855706911",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7887357254154021418",
+          "name": "serverWordId",
+          "indexId": "17:5254615947711722057",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:2774356376887323931",
+          "name": "occurredAtMs",
+          "indexId": "18:775476222157682369",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "6:7850533391135794604",
+          "name": "durationMs",
+          "type": 6
+        },
+        {
+          "id": "7:2976845626310034898",
+          "name": "retryCount",
+          "type": 6
+        },
+        {
+          "id": "8:3897988403733548072",
+          "name": "selfRating",
+          "type": 9
+        },
+        {
+          "id": "9:2978807451352632217",
+          "name": "syncStatus",
+          "indexId": "19:6835893711145020477",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "10:4571414392161499582",
+          "name": "localAudioPath",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "7:5907671979540824477",
+      "lastPropertyId": "12:5819468243168209987",
+      "name": "SpeakingPromptEntity",
+      "properties": [
+        {
+          "id": "1:718334415471620391",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1300126683820559034",
+          "name": "promptId",
+          "indexId": "20:4210664322592183295",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:3997792870214344037",
+          "name": "wordSenseId",
+          "indexId": "21:8218318912247925168",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:8975047045818945915",
+          "name": "serverWordId",
+          "indexId": "22:6566907388555771660",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:3212794834144958348",
+          "name": "targetText",
+          "type": 9
+        },
+        {
+          "id": "6:3155788786499248033",
+          "name": "viHint",
+          "type": 9
+        },
+        {
+          "id": "7:3692318380675609575",
+          "name": "targetPhrase",
+          "type": 9
+        },
+        {
+          "id": "8:2489710014958849740",
+          "name": "pronunciationTip",
+          "type": 9
+        },
+        {
+          "id": "9:5273269794502570518",
+          "name": "commonMistake",
+          "type": 9
+        },
+        {
+          "id": "10:5391782460491484301",
+          "name": "difficulty",
+          "type": 9
+        },
+        {
+          "id": "11:331387211832234939",
+          "name": "topic",
+          "type": 9
+        },
+        {
+          "id": "12:5819468243168209987",
+          "name": "cachedAtMs",
+          "indexId": "23:6588260673035546186",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "5:1182565041746058355",
-  "lastIndexId": "14:1997602164196919271",
+  "lastEntityId": "7:5907671979540824477",
+  "lastIndexId": "23:6588260673035546186",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

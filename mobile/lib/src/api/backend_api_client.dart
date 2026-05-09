@@ -596,6 +596,62 @@ class BackendApiClient {
     _throwIfFailed(response, 'Sign-out failed');
   }
 
+  /// Fetches the weekly speaking summary for [deviceId] (and optionally
+  /// a signed-in user via [sessionToken]).
+  Future<SpeakingWeeklySummary> fetchSpeakingSummary({
+    required String deviceId,
+    String language = 'en',
+    String period = 'week',
+    String? sessionToken,
+  }) async {
+    final traceId = _newTraceId();
+    final uri =
+        Uri.parse('$baseUrl/v1/speaking/summary').replace(queryParameters: {
+      'device_id': deviceId,
+      'language': language,
+      'period': period,
+    });
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'speaking.summary.request',
+      message: 'Fetching weekly speaking summary.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'speaking.summary.response',
+      message: 'Received weekly speaking summary.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Fetch speaking summary failed');
+    return SpeakingWeeklySummary.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
   void _throwIfFailed(http.Response response, String context) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return;
@@ -779,4 +835,34 @@ class BackendApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Weekly speaking summary returned by `GET /v1/speaking/summary`.
+class SpeakingWeeklySummary {
+  const SpeakingWeeklySummary({
+    required this.spokenSentenceCount,
+    required this.retryCount,
+    required this.approximateDurationMs,
+    required this.selfRatingCounts,
+    this.latestSpeakingAt,
+  });
+
+  factory SpeakingWeeklySummary.fromJson(Map<String, dynamic> json) {
+    final raw = json['self_rating_counts'] as Map<String, dynamic>? ?? {};
+    return SpeakingWeeklySummary(
+      spokenSentenceCount: json['spoken_sentence_count'] as int? ?? 0,
+      retryCount: json['retry_count'] as int? ?? 0,
+      approximateDurationMs: json['approximate_duration_ms'] as int? ?? 0,
+      selfRatingCounts: raw.map((k, v) => MapEntry(k, (v as num).toInt())),
+      latestSpeakingAt: json['latest_speaking_at'] == null
+          ? null
+          : DateTime.tryParse(json['latest_speaking_at'] as String),
+    );
+  }
+
+  final int spokenSentenceCount;
+  final int retryCount;
+  final int approximateDurationMs;
+  final Map<String, int> selfRatingCounts;
+  final DateTime? latestSpeakingAt;
 }

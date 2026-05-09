@@ -1,7 +1,7 @@
 import pg from 'pg';
 
 import { getAdminConfig } from './config';
-import type { AdminArticle, VocabularyReviewItem } from '../types';
+import type { AdminArticle, SpeakingPrompt, VocabularyReviewItem } from '../types';
 
 type ArticleRow = {
   id: string;
@@ -29,6 +29,26 @@ type VocabularyRow = {
   example_vi: string | null;
   part_of_speech: string | null;
   ipa: string | null;
+};
+
+type SpeakingPromptRow = {
+  id: string;
+  word_sense_id: string;
+  article_term_id: string | null;
+  target_text: string | null;
+  vi_hint: string | null;
+  target_phrase: string | null;
+  pronunciation_tip_vi: string | null;
+  common_mistake_vi: string | null;
+  difficulty: string | null;
+  topic: string | null;
+  status: string;
+  reviewer_user_id: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  display_term: string | null;
+  meaning_vi: string | null;
 };
 
 let pool: pg.Pool | null = null;
@@ -152,5 +172,57 @@ function mapVocabularyRow(row: VocabularyRow): VocabularyReviewItem {
     example_vi: row.example_vi,
     part_of_speech: row.part_of_speech,
     ipa: row.ipa
+  };
+}
+
+export async function listSpeakingPrompts({
+  status = null,
+  missingRequired = false,
+  limit = 100
+}: {
+  status?: string | null;
+  missingRequired?: boolean;
+  limit?: number;
+} = {}) {
+  const cappedLimit = Math.max(1, Math.min(limit, 200));
+  const missingClause = missingRequired
+    ? `AND (sp.target_text IS NULL OR sp.target_text = '' OR sp.vi_hint IS NULL OR sp.vi_hint = '')`
+    : '';
+  const result = await getPool().query<SpeakingPromptRow>(
+    `SELECT
+       sp.*,
+       t.display_term,
+       ws.meaning_vi
+     FROM speaking_prompts sp
+     JOIN word_senses ws ON ws.id = sp.word_sense_id
+     JOIN terms t ON t.id = ws.term_id
+     WHERE ($1::text IS NULL OR sp.status = $1)
+     ${missingClause}
+     ORDER BY sp.updated_at DESC
+     LIMIT $2`,
+    [status, cappedLimit]
+  );
+  return result.rows.map(mapSpeakingPromptRow);
+}
+
+function mapSpeakingPromptRow(row: SpeakingPromptRow): SpeakingPrompt {
+  return {
+    id: row.id,
+    word_sense_id: row.word_sense_id,
+    article_term_id: row.article_term_id,
+    target_text: row.target_text,
+    vi_hint: row.vi_hint,
+    target_phrase: row.target_phrase,
+    pronunciation_tip_vi: row.pronunciation_tip_vi,
+    common_mistake_vi: row.common_mistake_vi,
+    difficulty: row.difficulty,
+    topic: row.topic,
+    status: row.status,
+    reviewer_user_id: row.reviewer_user_id,
+    reviewed_at: row.reviewed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    display_term: row.display_term,
+    meaning_vi: row.meaning_vi
   };
 }

@@ -236,11 +236,25 @@ Response:
   "vietnamese_pronunciation": "ri-lai-uh-bol",
   "example": "She is a reliable teammate.",
   "example_vi": "Co ay la mot dong doi dang tin cay.",
+  "speaking_prompt": {
+    "id": "prompt_123",
+    "target_text": "She is a reliable teammate.",
+    "vi_hint": "Co ay la mot dong doi dang tin cay.",
+    "target_phrase": "reliable teammate",
+    "pronunciation_tip_vi": "Tap trung noi ro am cuoi /l/ trong reliable.",
+    "common_mistake_vi": "Nguoi Viet de bo am cuoi hoac nhan sai trong am.",
+    "difficulty": "B1",
+    "topic": "work"
+  },
   "difficulty": "B1",
   "topics": ["work", "people"],
   "created_at": "2026-05-04T00:00:00.000Z"
 }
 ```
+
+`speaking_prompt` is optional. When present, it contains an approved prompt for
+local speaking practice. Mobile clients MUST treat it as practice text only; no
+audio recording is uploaded as part of card loading or study-event sync.
 
 ## POST /v1/learning/cards
 
@@ -296,6 +310,16 @@ Response:
       "vietnamese_pronunciation": "ri-lai-uh-bol",
       "example": "She is a reliable teammate.",
       "example_vi": "Co ay la mot dong doi dang tin cay.",
+      "speaking_prompt": {
+        "id": "prompt_123",
+        "target_text": "She is a reliable teammate.",
+        "vi_hint": "Co ay la mot dong doi dang tin cay.",
+        "target_phrase": "reliable teammate",
+        "pronunciation_tip_vi": "Tap trung noi ro am cuoi /l/ trong reliable.",
+        "common_mistake_vi": "Nguoi Viet de bo am cuoi hoac nhan sai trong am.",
+        "difficulty": "B1",
+        "topic": "work"
+      },
       "difficulty": "B1",
       "topics": ["work", "people"],
       "created_at": "2026-05-04T00:00:00.000Z",
@@ -416,6 +440,64 @@ Valid rating values:
 - `hard`
 - `too_hard`
 
+The sync endpoint also accepts non-rating speaking events in the same `events`
+array. Speaking events MUST include `event_type` and `speaking` metadata, MUST
+NOT include raw audio bytes, and MUST NOT include local audio file paths.
+
+Supported speaking event types:
+
+- `speaking_prompt_viewed`
+- `speaking_sample_played`
+- `speaking_recorded`
+- `speaking_retried`
+- `speaking_self_rated_clear`
+- `speaking_self_rated_hesitated`
+- `speaking_self_rated_could_not_say`
+
+Speaking event example:
+
+```json
+{
+  "device_id": "device_abc",
+  "events": [
+    {
+      "client_event_id": "evt_speak_001",
+      "event_type": "speaking_recorded",
+      "occurred_at": "2026-05-04T10:32:00.000Z",
+      "language": "en",
+      "speaking": {
+        "attempt_id": "attempt_001",
+        "prompt_id": "prompt_123",
+        "word_sense_id": "sense_123",
+        "server_word_id": "word_123",
+        "duration_ms": 4200,
+        "retry_count": 0,
+        "self_rating": null
+      }
+    },
+    {
+      "client_event_id": "evt_speak_002",
+      "event_type": "speaking_self_rated_clear",
+      "occurred_at": "2026-05-04T10:32:08.000Z",
+      "language": "en",
+      "speaking": {
+        "attempt_id": "attempt_001",
+        "prompt_id": "prompt_123",
+        "word_sense_id": "sense_123",
+        "duration_ms": 4200,
+        "retry_count": 0,
+        "self_rating": "clear"
+      }
+    }
+  ]
+}
+```
+
+Allowed `speaking.self_rating` values are `clear`, `hesitated`,
+`could_not_say`, or `null` when the event is not a self-rating event. The backend
+stores speaking events separately from rating study events, so speaking events do
+not update memory scheduling or proficiency.
+
 ## POST /v1/study-events
 
 Request:
@@ -430,6 +512,45 @@ Request:
   "rating": "too_easy",
   "occurred_at": "2026-05-04T10:31:00.000Z",
   "language": "en"
+}
+```
+
+`POST /v1/study-events` remains a single rating-event endpoint and requires a
+valid `rating`. Use `POST /v1/study-events/sync` for speaking events.
+
+## GET /v1/speaking/summary
+
+Returns a weekly local-speaking summary derived from accepted speaking events.
+No learner audio is returned or stored by this endpoint.
+
+Query parameters:
+
+- `device_id`: required stable device identifier for anonymous learners.
+- `language`: optional language code, default `en`.
+- `week_start`: optional ISO date for the requested week. If omitted, the
+  backend uses the current week.
+
+When signed in, include `Authorization: Bearer <session_token>`; the backend
+uses the user context while retaining `device_id` for offline/device continuity.
+
+Response:
+
+```json
+{
+  "device_id": "device_abc",
+  "user_id": "user_123",
+  "language": "en",
+  "week_start": "2026-05-04",
+  "spoken_sentence_count": 12,
+  "recording_count": 12,
+  "retry_count": 3,
+  "approximate_duration_ms": 52200,
+  "self_rating_counts": {
+    "clear": 7,
+    "hesitated": 4,
+    "could_not_say": 1
+  },
+  "latest_activity_at": "2026-05-09T08:15:00.000Z"
 }
 ```
 
