@@ -14,8 +14,14 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Copy the entire build output — newer Next.js versions place standalone files
+# under .next/app instead of .next/standalone. Using `next start` is the
+# simplest compatible runtime for the built output.
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+# package.json is needed at runtime for `npm run start` to read the start script
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["npm", "run", "start"]
