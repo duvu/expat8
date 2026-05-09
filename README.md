@@ -1,6 +1,6 @@
 # Expat8 Language Learning MVP
 
-This workspace contains the OpenSpec-driven MVP implementation for a Flutter vocabulary learning app and a lightweight backend service.
+This workspace contains the OpenSpec-driven MVP implementation for a Flutter vocabulary learning app, an `expat8-dashboard` admin web app, and a lightweight backend service.
 
 ## Adaptive Proficiency
 
@@ -24,6 +24,7 @@ See `contracts/api.md` for the request and response shapes.
 
 - `mobile/`: Flutter app source for Android and iOS using ObjectBox local storage.
 - `backend/`: Node.js backend service using ExpressJS and `node:test`.
+- `expat8-dashboard/`: Next.js admin dashboard for article upload and vocabulary review.
 - `contracts/`: mobile-backend API contracts.
 - `docs/`: product and technical documentation.
 - `openspec/`: change proposal, design, specs, and tasks.
@@ -77,7 +78,8 @@ docker compose down
 
 The Compose stack builds the ExpressJS backend image, starts PostgreSQL,
 initializes the database from `backend/db/schema.sql`, and exposes the backend
-on `http://localhost:${BACKEND_PORT:-8787}`. LiteLLM is optional for local smoke
-tests. Without a reachable LiteLLM server or API key, the backend falls back to
-stored words and rejects failed generation attempts without exposing sensitive
-data.
+on `http://localhost:${BACKEND_PORT:-8787}`. The dashboard can be started in the
+same Compose stack once the `expat8-dashboard` service is added. LiteLLM is
+optional for local smoke tests. Without a reachable LiteLLM server or API key,
+the backend falls back to stored words and rejects failed generation attempts
+without exposing sensitive data.

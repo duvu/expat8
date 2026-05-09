@@ -94,3 +94,101 @@ Rollback strategy:
 - What is the default publication policy when an article has mixed-confidence extracted senses?
 - Which queue implementation should be canonical for MVP (Redis-based queue vs Postgres job table) given current infra constraints?
 - Do we need per-language extraction strategy configuration in MVP, or one shared baseline extractor with language-specific stopword sets?
+
+## Admin Web Dashboard Exploration
+
+The admin dashboard should be a browser surface for content editors and reviewers, not a second content system. It should orchestrate the existing backend article pipeline and expose the workflow state already persisted by the backend.
+
+### Core flow
+
+```text
+Admin paste/import article
+  -> POST /v1/admin/articles
+  -> article row created with pending_processing
+  -> processing job enqueued automatically
+  -> worker extracts terms/phrases
+  -> LLM enriches candidates
+  -> backend persists article_terms + word_senses + review items
+  -> GET /v1/admin/review/vocabulary?status=pending
+  -> PATCH /v1/admin/vocabulary/:id
+  -> POST /v1/admin/articles/:id/publish
+```
+
+### Recommended pages
+
+| Page | Purpose | Backend shape |
+| --- | --- | --- |
+| Login | Acquire admin access | app credential headers + admin token |
+| Articles | List and filter articles | `GET /v1/admin/articles` |
+| New article | Paste raw text or import from URL | `POST /v1/admin/articles` |
+| Article detail | Show article state and actions | list response + `PATCH`/reprocess/publish responses |
+| Vocabulary review | Review extracted terms and phrases | `GET /v1/admin/review/vocabulary` |
+
+### Article editor contract
+
+The create form should only promise fields the backend already accepts:
+
+- `title`
+- `language`
+- `raw_text`
+- `source_url` optional
+- `visibility`
+
+If the UI shows `topic`, `target level`, or similar metadata, it should be treated as future-facing helper metadata until the API supports it.
+
+### Vocabulary item contract
+
+The dashboard should render the validated item shape, not raw LLM output. The practical display fields are:
+
+- term or phrase
+- explanation: `meaning_vi` plus optional `short_definition`
+- usage: `example` and `example_vi`
+- `part_of_speech`
+- `ipa`
+- `vietnamese_pronunciation`
+- `difficulty`
+- `topics`
+- `quality_score` / confidence
+- review `status`
+- `review_note`
+
+The backend validator currently expects required content, a valid difficulty, a topics array, and a language-appropriate pronunciation field. For non-Chinese items it requires IPA; for Chinese items it expects pinyin-like pronunciation.
+
+### State model
+
+```text
+draft -> pending_processing -> processing -> pending_review -> published
+                         \-> processing_failed
+                         \-> dead_lettered
+```
+
+The dashboard should treat these as explicit states, not a single generic processing badge.
+
+### Auth and transport
+
+Current backend rules still require app credential headers on `/v1/*`, while admin routes additionally require `x-expat8-admin-token` or `x-admin-token`.
+
+For a browser dashboard there are two viable shapes:
+
+1. Direct browser client with CORS plus signed requests.
+2. Small backend-for-frontend or reverse proxy that injects app credentials server-side.
+
+The first matches the current contract and is the fastest path. The second is cleaner if we want to keep signing material out of the browser bundle.
+
+### Important gaps
+
+- There is no dedicated `GET /v1/admin/articles/:id` endpoint yet.
+- There is no article-scoped admin vocabulary endpoint yet.
+- The dashboard can start with the article list and the global pending-review queue, but drill-down likely wants new admin read endpoints later.
+- The worker, not the dashboard, is responsible for calling the LLM.
+
+### Practical recommendation
+
+For MVP, a `web-admin/` Next.js app should cover:
+
+- article composer
+- article list/detail
+- vocabulary review table
+- publish controls
+
+Keep it thin: orchestrate workflow and display state, but do not duplicate enrichment or review logic in the browser.

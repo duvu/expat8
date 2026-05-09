@@ -48,5 +48,23 @@ services:
       timeout: 5s
       retries: 6
 
+  expat8-dashboard:
+    build:
+      context: ./expat8-dashboard
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      BACKEND_BASE_URL: ${DASHBOARD_BACKEND_BASE_URL:-http://backend:8787}
+      EXPAT8_DASHBOARD_DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      APP_CREDENTIAL_APP_ID: ${DASHBOARD_APP_CREDENTIAL_APP_ID:-}
+      APP_CREDENTIAL_SECRET: ${DASHBOARD_APP_CREDENTIAL_SECRET:-}
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+
 volumes:
   postgres_data:

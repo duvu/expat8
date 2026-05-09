@@ -1,17 +1,4 @@
-## Purpose
-Define how the backend image and root Compose stack package the backend, dashboard, and PostgreSQL services with environment-driven runtime settings, including LiteLLM configuration.
-
-## Requirements
-### Requirement: Backend image can be built with Docker
-The backend SHALL provide Docker packaging that builds a runnable backend service image.
-
-#### Scenario: Backend image is built
-- **WHEN** an operator runs the documented Docker build command or Compose build
-- **THEN** Docker produces a backend image containing the Node.js service and production dependencies
-
-#### Scenario: Backend container starts
-- **WHEN** the backend image is run with required environment variables
-- **THEN** the container starts the backend HTTP server on the configured port
+## MODIFIED Requirements
 
 ### Requirement: Compose runs backend, dashboard, and PostgreSQL together
 The repository SHALL provide a root `docker-compose.yml` that orchestrates the backend service, dashboard service, and PostgreSQL database.

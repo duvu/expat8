@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-09T08:34:59.295Z
-> Files: 545 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-09T11:00:00.676Z
+> Files: 520 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -14,11 +14,34 @@
 ## .claude/
 
 - `settings.json` (~441 tok)
-- `settings.local.json` (~29 tok)
+- `settings.local.json` (~380 tok)
+
+## .claude/commands/opsx/
+
+- `apply.md` — Implementing: <change-name> (schema: <schema-name>) (~1146 tok)
+- `archive.md` — Archive Complete (~1254 tok)
+- `explore.md` — The Stance (~1586 tok)
+- `propose.md` (~1104 tok)
 
 ## .claude/rules/
 
 - `openwolf.md` (~313 tok)
+
+## .claude/skills/openspec-apply-change/
+
+- `SKILL.md` — Implementing: <change-name> (schema: <schema-name>) (~1190 tok)
+
+## .claude/skills/openspec-archive-change/
+
+- `SKILL.md` — Archive Complete (~1039 tok)
+
+## .claude/skills/openspec-explore/
+
+- `SKILL.md` — The Stance (~2309 tok)
+
+## .claude/skills/openspec-propose/
+
+- `SKILL.md` (~1161 tok)
 
 ## .codex/skills/openspec-apply-change/
 
@@ -63,11 +86,49 @@
 
 - `SKILL.md` (~1161 tok)
 
+## .opencode/
+
+- `.gitignore` — Git ignore rules (~17 tok)
+- `package-lock.json` — npm lock file (~4435 tok)
+- `package.json` — Node.js package manifest (~29 tok)
+
+## .opencode/commands/
+
+- `opsx-apply.md` — Implementing: <change-name> (schema: <schema-name>) (~1126 tok)
+- `opsx-archive.md` — Archive Complete (~1233 tok)
+- `opsx-explore.md` — The Stance (~1563 tok)
+- `opsx-propose.md` (~1084 tok)
+
+## .opencode/skills/openspec-apply-change/
+
+- `SKILL.md` — Implementing: <change-name> (schema: <schema-name>) (~1190 tok)
+
+## .opencode/skills/openspec-archive-change/
+
+- `SKILL.md` — Archive Complete (~1039 tok)
+
+## .opencode/skills/openspec-explore/
+
+- `SKILL.md` — The Stance (~2309 tok)
+
+## .opencode/skills/openspec-propose/
+
+- `SKILL.md` (~1161 tok)
+
 ## .serena/
 
 - `.gitignore` — Git ignore rules (~7 tok)
 - `project.local.yml` — This file allows you to locally override settings in project.yml for development purposes. (~115 tok)
 - `project.yml` — the name by which the project can be referenced within Serena (~2661 tok)
+
+## .serena/cache/typescript/
+
+- `document_symbols.pkl` — Exports createApp (~114249 tok)
+- `raw_document_symbols.pkl` (~41732 tok)
+
+## .serena/memories/expat8/deploy/
+
+- `2026-05-09-expat8-backend-fresh-deploy.md` (~219 tok)
 
 ## backend/
 
@@ -91,6 +152,10 @@
 - `20260506_user_proficiency_owner_indexes.sql` — SQL: 1 alter(s) (~358 tok)
 - `20260507_fix_codebase_review_issues.sql` — Migration: fix-codebase-review-issues (~58 tok)
 - `20260509_content_ingestion_v2_foundation.sql` — Migration: content-ingestion-v2-foundation (~1246 tok)
+
+## backend/openspec/changes/mobile-local-first-card-selection/
+
+- `.openspec.yaml` (~12 tok)
 
 ## backend/scripts/
 
@@ -125,11 +190,11 @@
 ## backend/test/
 
 - `api_logging.test.js` — lines: listen (~757 tok)
-- `api.test.js` — Declares store (~9833 tok)
+- `api.test.js` — Declares store (~11874 tok)
 - `app_credentials.test.js` — activeCredential: signedHeaders (~1406 tok)
 - `article_processing_worker.test.js` — Declares store (~1055 tok)
 - `config.test.js` — Declares config (~720 tok)
-- `database.test.js` — Declares schemaSql (~236 tok)
+- `database.test.js` — Declares schemaSql (~237 tok)
 - `e2e_prod_test.mjs` — E2E test against production backend at https://expat8.x51.vn (~4170 tok)
 - `e2e_smoke.test.js` — backendStore: listen, fetchJson, wordInput (~2597 tok)
 - `generation_service.test.js` — items: wordInput (~1764 tok)
@@ -150,7 +215,7 @@
 
 ## contracts/
 
-- `api.md` — API Contracts (~2394 tok)
+- `api.md` — API Contracts (~2675 tok)
 
 ## docs/
 
@@ -163,10 +228,15 @@
 - `20260507-mobile-backend-request-investigation.md` — 2026-05-07 Mobile Backend Request Investigation (~2715 tok)
 - `20260508-app-runtime-review.md` — App Runtime Status Review - 2026-05-08 23:30 (~2186 tok)
 - `20260509-card-freeze-investigation.md` — Investigation: App "treo" sau vài từ (~1507 tok)
+- `20260509-expat8-backend-fresh-deploy-1507.md` — Deploy Report: expat8-backend Fresh Deploy (~330 tok)
+- `20260509-mobile-local-first-word-loading.md` — Mobile Local-First Word Loading Exploration (~3304 tok)
+- `20260509-mobile-swipe-activity-uiux-investigation.md` — Mobile Swipe Activity UI/UX Investigation (~3344 tok)
 - `20260509-swipe-right-to-left-new-word-invariant.md` — Investigation: Swipe Phải→Trái Chỉ Load Được 3 Từ Mới (~1542 tok)
 - `app-credential-security.md` — App Credential Security (~3196 tok)
 - `architecture.md` — Kiến trúc hệ thống Expat8 — Version 2 (~7138 tok)
 - `chinese-language-e2e-investigation.md` — Investigation: Tiếng Trung E2E Flow (~2188 tok)
+- `COMMIT_REPORT_20260509_1510.md` — Commit Report (~1377 tok)
+- `COMMIT_REPORT_20260509_155944.md` — Commit Report (~1191 tok)
 - `expat8_logs_2026_05_07T16_39_51_937450Z_1.txt` — Expat8 mobile logs (~3682 tok)
 - `mobile-system-logging.md` — Mobile System Logging (~670 tok)
 - `mvp-setup.md` — MVP Setup and Limitations (~2300 tok)
@@ -268,6 +338,36 @@
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~316 tok)
 
+## mobile/.dart_tool/flutter_build/4d8981d66d9f999b855af23ea80fc5b7/
+
+- `_composite.stamp` (~7 tok)
+- `.filecache` (~51399 tok)
+- `android_aot_bundle_release_android-arm.stamp` (~64 tok)
+- `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
+- `android_aot_bundle_release_android-x64.stamp` (~62 tok)
+- `android_aot_release_android-arm.stamp` (~150 tok)
+- `android_aot_release_android-arm64.stamp` (~150 tok)
+- `android_aot_release_android-x64.stamp` (~149 tok)
+- `aot_android_asset_bundle.stamp` (~2196 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `flutter_android_aot_bundle_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-x64.d` (~1 tok)
+- `flutter_android_aot_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_release_android-x64.d` (~1 tok)
+- `flutter_assets.d` (~2036 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~29604 tok)
+- `kernel_snapshot_program.stamp` (~30427 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~420 tok)
+
 ## mobile/.dart_tool/flutter_build/63c1ecaa6bef3e93c090e5a2945ced77/
 
 - `.filecache` (~39236 tok)
@@ -339,6 +439,36 @@
 - `kernel_snapshot_program.stamp` (~23141 tok)
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~324 tok)
+
+## mobile/.dart_tool/flutter_build/de7444b6117f57ce06f9919e918495e0/
+
+- `_composite.stamp` (~7 tok)
+- `.filecache` (~51399 tok)
+- `android_aot_bundle_release_android-arm.stamp` (~64 tok)
+- `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
+- `android_aot_bundle_release_android-x64.stamp` (~62 tok)
+- `android_aot_release_android-arm.stamp` (~150 tok)
+- `android_aot_release_android-arm64.stamp` (~150 tok)
+- `android_aot_release_android-x64.stamp` (~149 tok)
+- `aot_android_asset_bundle.stamp` (~2196 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `flutter_android_aot_bundle_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-x64.d` (~1 tok)
+- `flutter_android_aot_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_release_android-x64.d` (~1 tok)
+- `flutter_assets.d` (~2036 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~29604 tok)
+- `kernel_snapshot_program.stamp` (~30427 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~420 tok)
 
 ## mobile/.dart_tool/flutter_build/e6b60fcd623eab66cfaafe1a51316e44/
 
@@ -716,221 +846,3 @@
 
 - `CMakeCXXCompilerId.cpp` (~7028 tok)
 - `CMakeCXXCompilerId.o` (~1615 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~171 tok)
-- `android_gradle_build.json` (~272 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6222 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~485 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4146 tok)
-- `metadata_generation_command.txt` (~266 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~24 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/.cmake/api/v1/reply/
-
-- `cache-v2-20b0d9f30737d123ca68.json` — Declares of (~7784 tok)
-- `cmakeFiles-v1-472dd979af832b5ac82a.json` (~7544 tok)
-- `codemodel-v2-33493940d7123aa0023d.json` (~207 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-06T13-40-06-0104.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~12266 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~405 tok)
-- `TargetDirectories.txt` (~55 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~919 tok)
-- `CMakeCXXCompiler.cmake` (~1772 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/CMakeFiles/3.22.1-g37088a8/CompilerIdC/
-
-- `CMakeCCompilerId.c` — ifdef __cplusplus (~7101 tok)
-- `CMakeCCompilerId.o` (~1104 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/
-
-- `CMakeCXXCompilerId.cpp` (~7028 tok)
-- `CMakeCXXCompilerId.o` (~1114 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~166 tok)
-- `android_gradle_build.json` (~267 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6211 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~483 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4132 tok)
-- `metadata_generation_command.txt` (~256 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~22 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/.cmake/api/v1/reply/
-
-- `cache-v2-c86f0bad380c22b585de.json` — Declares of (~7770 tok)
-- `cmakeFiles-v1-139e6883f1ce30a06c82.json` (~7530 tok)
-- `codemodel-v2-cf2c48e1ac49616a40be.json` (~205 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-06T13-40-06-0437.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~11121 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~403 tok)
-- `TargetDirectories.txt` (~51 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~917 tok)
-- `CMakeCXXCompiler.cmake` (~1770 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/CMakeFiles/3.22.1-g37088a8/CompilerIdC/
-
-- `CMakeCCompilerId.c` — ifdef __cplusplus (~7101 tok)
-- `CMakeCCompilerId.o` (~1047 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/
-
-- `CMakeCXXCompilerId.cpp` (~7028 tok)
-- `CMakeCXXCompilerId.o` (~1055 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86_64/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~168 tok)
-- `android_gradle_build.json` (~269 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6215 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~484 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4138 tok)
-- `metadata_generation_command.txt` (~260 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~23 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86_64/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86_64/.cmake/api/v1/reply/
-
-- `cache-v2-f53919c5440044ad0f35.json` — Declares of (~7776 tok)
-- `cmakeFiles-v1-aebeb5599f08de56afef.json` (~7535 tok)
-- `codemodel-v2-b2a25f546464a99b9944.json` (~206 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-06T13-40-06-0717.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86_64/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~11995 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~404 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/x86_64/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~974 tok)
-- `CMakeCXXCompiler.cmake` (~1827 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/lib/src/
-
-- `config.dart` — Class: AppConfig (~450 tok)
-
-## mobile/lib/src/data/
-
-- `word_repository.dart` — Class: WordRepository (~5525 tok)
-
-## mobile/lib/src/session/
-
-- `learning_session_controller.dart` — Class: LearningSessionController (~7284 tok)
-
-## mobile/test/
-
-- `learning_session_controller_test.dart` — Declares Duration (~7655 tok)
-
-## openspec/changes/fix-swipe-right-to-left-new-word/
-
-- `design.md` — Context (~459 tok)
-- `proposal.md` — Why (~355 tok)
-- `tasks.md` — 1. Fix gesture mode (~129 tok)
-
-## openspec/changes/fix-swipe-right-to-left-new-word/specs/mobile-learning-session/
-
-- `spec.md` — MODIFIED Requirements (~674 tok)
-
-## openspec/changes/missing-api-endpoints/
-
-- `design.md` — Context (~1161 tok)
-- `proposal.md` — Why (~590 tok)
-- `tasks.md` — 1. Store methods (~813 tok)
-
-## openspec/changes/missing-api-endpoints/specs/article-admin-update/
-
-- `spec.md` — ADDED Requirements (~402 tok)
-
-## openspec/changes/missing-api-endpoints/specs/article-deletion/
-
-- `spec.md` — ADDED Requirements (~342 tok)
-
-## openspec/changes/missing-api-endpoints/specs/article-vocabulary/
-
-- `spec.md` — ADDED Requirements (~471 tok)
-
-## openspec/changes/missing-api-endpoints/specs/backend-readiness-probe/
-
-- `spec.md` — ADDED Requirements (~260 tok)
-
-## openspec/changes/missing-api-endpoints/specs/study-events-api/
-
-- `spec.md` — MODIFIED Requirements (~424 tok)
-
-## openspec/changes/missing-api-endpoints/specs/user-profile/
-
-- `spec.md` — ADDED Requirements (~215 tok)
-
-## openspec/changes/mobile-local-first-card-selection/
-
-- `.openspec.yaml` (~12 tok)
-- `design.md` — Context (~1074 tok)
-- `proposal.md` — Why (~595 tok)
-- `tasks.md` — 1. Simplify refill trigger condition (~521 tok)
-
-## openspec/changes/mobile-local-first-card-selection/specs/mobile-learning-session/
-
-- `spec.md` — MODIFIED Requirements (~544 tok)
-
-## openspec/changes/mobile-local-first-card-selection/specs/mobile-local-cache-sync/
-
-- `spec.md` — MODIFIED Requirements (~647 tok)
-
-## openspec/specs/mobile-learning-session/
-
-- `spec.md` — Purpose (~1334 tok)
-
-## openspec/specs/mobile-local-cache-sync/
-
-- `spec.md` — ADDED Requirements (~1318 tok)
