@@ -98,3 +98,15 @@
 | Time | Action | File(s) | Outcome | ~Tokens |
 |------|--------|---------|---------|--------|
 | 14:15 | Recorded host mapping for deploy ops | .wolf/cerebrum.md, .wolf/memory.md | `10.113.213.9` treated as local machine in this workspace | ~120 |
+| 15:24 | Created docs/20260509-swipe-right-to-left-new-word-invariant.md | — | ~1645 |
+| 15:24 | Session end: 29 writes across 14 files (word_store.js, postgres_word_store.js, app.js, architecture.md, proposal.md) | 14 reads | ~39738 tok |
+| 15:29 | Created openspec/changes/fix-swipe-right-to-left-new-word/proposal.md | — | ~379 |
+| 15:29 | Created openspec/changes/fix-swipe-right-to-left-new-word/design.md | — | ~489 |
+| 15:30 | Created openspec/changes/fix-swipe-right-to-left-new-word/specs/mobile-learning-session/spec.md | — | ~719 |
+| 15:30 | Created openspec/changes/fix-swipe-right-to-left-new-word/tasks.md | — | ~137 |
+| 15:30 | Session end: 33 writes across 14 files (word_store.js, postgres_word_store.js, app.js, architecture.md, proposal.md) | 14 reads | ~41585 tok |
+| 15:32 | Edited mobile/lib/src/session/learning_session_controller.dart | 9→9 lines | ~90 |
+| 15:32 | Edited openspec/changes/fix-swipe-right-to-left-new-word/tasks.md | inline fix | ~39 |
+| 15:34 | Edited mobile/test/learning_session_controller_test.dart | added optional chaining | ~558 |
+| 15:34 | Edited openspec/changes/fix-swipe-right-to-left-new-word/tasks.md | 3→3 lines | ~88 |
+| 15:35 | Session end: 37 writes across 14 files (word_store.js, postgres_word_store.js, app.js, architecture.md, proposal.md) | 14 reads | ~48046 tok |

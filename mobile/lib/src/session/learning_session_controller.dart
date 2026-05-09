@@ -135,7 +135,7 @@ class LearningSessionController extends ChangeNotifier {
       event: 'session.gesture.right_to_left',
       message: 'Swipe right-to-left received.',
     );
-    await _showSelectedCard(mode: _CardSelectionMode.mixed);
+    await _showSelectedCard(mode: _CardSelectionMode.newFirst);
   }
 
   Future<void> onSwipeLeftToRight() async {

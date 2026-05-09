@@ -633,6 +633,64 @@ void main() {
         jsonDecode(dueEntries.single.payload) as Map<String, dynamic>;
     expect(payload['rating'], 'too_easy');
   });
+
+  // Swipe right-to-left invariant tests (fix-swipe-right-to-left-new-word)
+
+  test(
+      'onSwipeRightToLeft shows a new word on the 4th consecutive swipe (not capped at 3)',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'swipe_rtl_beyond_3_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    for (var i = 0; i < 5; i++) {
+      await database.upsertWord(
+          _wordAt('rtl_word_$i', base.add(Duration(seconds: i))));
+    }
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
+      ),
+    );
+
+    // 4 consecutive right-to-left swipes — newFirst mode is not gated by the
+    // 3-card window target, so all 4 should show a non-null word.
+    for (var i = 0; i < 4; i++) {
+      await controller.onSwipeRightToLeft();
+      expect(controller.currentWord, isNotNull,
+          reason: 'swipe $i: expected a word, got empty state');
+      expect(controller.isLoading, false,
+          reason: 'isLoading must reset after swipe $i');
+    }
+  });
+
+  test(
+      'onSwipeRightToLeft falls back gracefully to non-mastered word when no new words exist',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'swipe_rtl_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final word = _word('fallback_rtl_word');
+    await database.upsertWord(word);
+    await database.markWordAsLearning(
+        word: word, now: DateTime.utc(2026, 5, 5));
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
+      ),
+    );
+
+    await controller.onSwipeRightToLeft();
+
+    expect(controller.isLoading, false);
+    expect(controller.currentWord?.localId, 'fallback_rtl_word',
+        reason:
+            'should fall back to non-mastered word when no new words exist');
+  });
 }
 
 int _databaseCounter = 0;

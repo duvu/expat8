@@ -53,8 +53,8 @@
       "first_read": "2026-05-09T06:45:04.015Z"
     },
     "/home/beou/IdeaProjects/expat8/mobile/test/learning_session_controller_test.dart": {
-      "count": 3,
-      "tokens": 0,
+      "count": 6,
+      "tokens": 5631,
       "first_read": "2026-05-09T06:45:34.267Z"
     },
     "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-local-first-card-selection/specs/mobile-local-cache-sync/spec.md": {
@@ -66,6 +66,11 @@
       "count": 1,
       "tokens": 544,
       "first_read": "2026-05-09T06:52:54.101Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/session/card_selection.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-09T08:22:41.364Z"
     }
   },
   "files_written": [
@@ -236,6 +241,60 @@
       "action": "edit",
       "tokens": 614,
       "at": "2026-05-09T06:53:31.552Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260509-swipe-right-to-left-new-word-invariant.md",
+      "action": "create",
+      "tokens": 1762,
+      "at": "2026-05-09T08:24:30.882Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/fix-swipe-right-to-left-new-word/proposal.md",
+      "action": "create",
+      "tokens": 406,
+      "at": "2026-05-09T08:29:13.665Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/fix-swipe-right-to-left-new-word/design.md",
+      "action": "create",
+      "tokens": 524,
+      "at": "2026-05-09T08:29:36.902Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/fix-swipe-right-to-left-new-word/specs/mobile-learning-session/spec.md",
+      "action": "create",
+      "tokens": 770,
+      "at": "2026-05-09T08:30:03.060Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/fix-swipe-right-to-left-new-word/tasks.md",
+      "action": "create",
+      "tokens": 147,
+      "at": "2026-05-09T08:30:12.402Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/session/learning_session_controller.dart",
+      "action": "edit",
+      "tokens": 96,
+      "at": "2026-05-09T08:32:27.911Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/fix-swipe-right-to-left-new-word/tasks.md",
+      "action": "edit",
+      "tokens": 41,
+      "at": "2026-05-09T08:32:36.272Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/test/learning_session_controller_test.dart",
+      "action": "edit",
+      "tokens": 598,
+      "at": "2026-05-09T08:34:34.354Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/fix-swipe-right-to-left-new-word/tasks.md",
+      "action": "edit",
+      "tokens": 95,
+      "at": "2026-05-09T08:34:59.312Z"
     }
   ],
   "edit_counts": {
@@ -251,14 +310,19 @@
     "openspec/changes/mobile-local-first-card-selection/tasks.md": 5,
     "mobile/lib/src/data/word_repository.dart": 2,
     "mobile/lib/src/config.dart": 1,
-    "mobile/lib/src/session/learning_session_controller.dart": 1,
-    "mobile/test/learning_session_controller_test.dart": 1,
+    "mobile/lib/src/session/learning_session_controller.dart": 2,
+    "mobile/test/learning_session_controller_test.dart": 2,
     "openspec/specs/mobile-local-cache-sync/spec.md": 1,
-    "openspec/specs/mobile-learning-session/spec.md": 1
+    "openspec/specs/mobile-learning-session/spec.md": 1,
+    "docs/20260509-swipe-right-to-left-new-word-invariant.md": 1,
+    "openspec/changes/fix-swipe-right-to-left-new-word/proposal.md": 1,
+    "openspec/changes/fix-swipe-right-to-left-new-word/design.md": 1,
+    "openspec/changes/fix-swipe-right-to-left-new-word/specs/mobile-learning-session/spec.md": 1,
+    "openspec/changes/fix-swipe-right-to-left-new-word/tasks.md": 3
   },
   "anatomy_hits": 5,
-  "anatomy_misses": 8,
-  "repeated_reads_warned": 13,
+  "anatomy_misses": 9,
+  "repeated_reads_warned": 16,
   "cerebrum_warnings": 0,
-  "stop_count": 5
+  "stop_count": 8
 }

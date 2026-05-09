@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-09T06:53:31.535Z
-> Files: 540 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-09T08:34:59.295Z
+> Files: 545 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -163,6 +163,7 @@
 - `20260507-mobile-backend-request-investigation.md` — 2026-05-07 Mobile Backend Request Investigation (~2715 tok)
 - `20260508-app-runtime-review.md` — App Runtime Status Review - 2026-05-08 23:30 (~2186 tok)
 - `20260509-card-freeze-investigation.md` — Investigation: App "treo" sau vài từ (~1507 tok)
+- `20260509-swipe-right-to-left-new-word-invariant.md` — Investigation: Swipe Phải→Trái Chỉ Load Được 3 Từ Mới (~1542 tok)
 - `app-credential-security.md` — App Credential Security (~3196 tok)
 - `architecture.md` — Kiến trúc hệ thống Expat8 — Version 2 (~7138 tok)
 - `chinese-language-e2e-investigation.md` — Investigation: Tiếng Trung E2E Flow (~2188 tok)
@@ -865,11 +866,21 @@
 
 ## mobile/lib/src/session/
 
-- `learning_session_controller.dart` — Class: LearningSessionController (~7000 tok)
+- `learning_session_controller.dart` — Class: LearningSessionController (~7284 tok)
 
 ## mobile/test/
 
-- `learning_session_controller_test.dart` — Declares Duration (~5631 tok)
+- `learning_session_controller_test.dart` — Declares Duration (~7655 tok)
+
+## openspec/changes/fix-swipe-right-to-left-new-word/
+
+- `design.md` — Context (~459 tok)
+- `proposal.md` — Why (~355 tok)
+- `tasks.md` — 1. Fix gesture mode (~129 tok)
+
+## openspec/changes/fix-swipe-right-to-left-new-word/specs/mobile-learning-session/
+
+- `spec.md` — MODIFIED Requirements (~674 tok)
 
 ## openspec/changes/missing-api-endpoints/
 

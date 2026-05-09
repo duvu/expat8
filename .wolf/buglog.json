@@ -8,7 +8,12 @@
       "file": "deployment/worker-z440/ssh/id_ed25519",
       "root_cause": "Initial deploy attempt used password-based SSH from the shell, but the host required the pre-provisioned key path from the deployment repo",
       "fix": "Deployed with `ssh -i /home/beou/deployment/worker-z440/ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes beou@10.113.213.9` and then ran `git pull && docker compose up -d --force-recreate expat8-backend`",
-      "tags": ["deploy", "ssh", "z440", "expat8"],
+      "tags": [
+        "deploy",
+        "ssh",
+        "z440",
+        "expat8"
+      ],
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-05-09T07:15:07Z"
@@ -188,6 +193,22 @@
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-05-09T06:53:31.554Z"
+    },
+    {
+      "id": "bug-013",
+      "timestamp": "2026-05-09T08:34:34.356Z",
+      "error_message": "Null/undefined access in ",
+      "file": "mobile/test/learning_session_controller_test.dart",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-09T08:34:34.356Z"
     }
   ]
 }
