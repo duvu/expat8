@@ -34,7 +34,7 @@ class AppConfig {
       supportedLearningLanguages: ['en', 'zh', 'vi'],
       speakingFoundationEnabled: bool.fromEnvironment(
         'SPEAKING_FOUNDATION_ENABLED',
-        defaultValue: false,
+        defaultValue: true,
       ),
       logLevel: String.fromEnvironment(
         'APP_LOG_LEVEL',

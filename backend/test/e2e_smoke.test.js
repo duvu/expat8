@@ -145,15 +145,61 @@ test('e2e: chinese HSK progression reaches HSK2 and drives level-aware selection
 });
 
 test('e2e: proficiency stays isolated by language for the same device', async (t) => {
+   const backendStore = new WordStore({ seed: false });
+   backendStore.insertWord(wordInput({ id: 'word_en_isolation', term: 'focus', language: 'en', difficulty: 'A1' }));
+   backendStore.insertWord(wordInput({
+     id: 'word_zh_isolation',
+     term: '专注',
+     language: 'zh',
+     difficulty: 'HSK1',
+     ipa: '',
+     vietnamese_pronunciation: 'zhuan zhu'
+   }));
+   const server = http.createServer(
+     createApp({
+       store: backendStore,
+       generationService: null,
+       config: loadTestConfig()
+     })
+   );
+   await listen(server);
+   t.after(() => server.close());
+
+   const baseUrl = `http://127.0.0.1:${server.address().port}`;
+   const deviceId = 'device_e2e_isolation';
+
+   for (let index = 0; index < 5; index += 1) {
+     await fetchJson(`${baseUrl}/v1/study-events`, {
+       method: 'POST',
+       headers: { 'content-type': 'application/json' },
+       body: JSON.stringify({
+         device_id: deviceId,
+         language: 'en',
+         client_event_id: `evt_isolation_en_${index + 1}`,
+         server_word_id: 'word_en_isolation',
+         local_word_id: `local_iso_en_${index + 1}`,
+         rating: 'too_easy',
+         occurred_at: `2026-05-06T10:4${index}:00.000Z`
+       })
+     });
+   }
+
+   const english = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
+   const chinese = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=zh`);
+
+   assert.equal(english.scale, 'cefr');
+   assert.equal(english.level, 'A2');
+   assert.equal(chinese.scale, 'hsk');
+   assert.equal(chinese.level, 'HSK1');
+});
+
+test('smoke: mixed rating and speaking event batch sync without audio payloads', async (t) => {
   const backendStore = new WordStore({ seed: false });
-  backendStore.insertWord(wordInput({ id: 'word_en_isolation', term: 'focus', language: 'en', difficulty: 'A1' }));
   backendStore.insertWord(wordInput({
-    id: 'word_zh_isolation',
-    term: '专注',
-    language: 'zh',
-    difficulty: 'HSK1',
-    ipa: '',
-    vietnamese_pronunciation: 'zhuan zhu'
+    id: 'word_speaking_smoke',
+    term: 'hello',
+    language: 'en',
+    difficulty: 'A1'
   }));
   const server = http.createServer(
     createApp({
@@ -166,31 +212,100 @@ test('e2e: proficiency stays isolated by language for the same device', async (t
   t.after(() => server.close());
 
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  const deviceId = 'device_e2e_isolation';
+  const deviceId = 'device_smoke_speaking';
 
-  for (let index = 0; index < 5; index += 1) {
-    await fetchJson(`${baseUrl}/v1/study-events`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        device_id: deviceId,
-        language: 'en',
-        client_event_id: `evt_isolation_en_${index + 1}`,
-        server_word_id: 'word_en_isolation',
-        local_word_id: `local_iso_en_${index + 1}`,
-        rating: 'too_easy',
-        occurred_at: `2026-05-06T10:4${index}:00.000Z`
-      })
-    });
-  }
+  // Send mixed batch with 5 rating events and speaking events (need 5 to level up)
+  const url = `${baseUrl}/v1/study-events/sync`;
+  const options = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: deviceId,
+      events: [
+        {
+          client_event_id: 'evt_rating_smoke_1',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_1',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:00.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_2',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_2',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:01.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_3',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_3',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:02.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_4',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_4',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:03.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_5',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_5',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:04.000Z'
+        },
+        {
+          client_event_id: 'evt_speaking_1',
+          event_type: 'speaking_recorded',
+          language: 'en',
+          occurred_at: '2026-05-06T11:01:00.000Z',
+          speaking: {
+            attempt_id: 'attempt_1',
+            prompt_id: 'prompt_1',
+            word_sense_id: 'sense_1',
+            duration_ms: 3500,
+            retry_count: 0
+          }
+        },
+        {
+          client_event_id: 'evt_speaking_2',
+          event_type: 'speaking_self_rated_clear',
+          language: 'en',
+          occurred_at: '2026-05-06T11:01:05.000Z',
+          speaking: {
+            attempt_id: 'attempt_1',
+            prompt_id: 'prompt_1',
+            self_rating: 'clear'
+          }
+        }
+      ]
+    })
+  };
+  const response = await fetch(url, signedFetchOptions(url, options));
+  assert.equal(response.status, 200);
+  const body = await response.json();
 
-  const english = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
-  const chinese = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=zh`);
+  // Verify all events were accepted
+  assert.equal(body.accepted_event_ids.length, 7, 'expected 7 accepted events');
+  assert.ok(
+    body.accepted_event_ids.includes('evt_rating_smoke_1'),
+    'expected rating event to be accepted'
+  );
+  assert.ok(
+    body.accepted_event_ids.includes('evt_speaking_1'),
+    'expected speaking_recorded to be accepted'
+  );
+  assert.ok(
+    body.accepted_event_ids.includes('evt_speaking_2'),
+    'expected speaking_self_rated_clear to be accepted'
+  );
 
-  assert.equal(english.scale, 'cefr');
-  assert.equal(english.level, 'A2');
-  assert.equal(chinese.scale, 'hsk');
-  assert.equal(chinese.level, 'HSK1');
+  // Verify speaking events do not affect proficiency, only rating events do
+  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
+  assert.equal(proficiency.level, 'A2', 'expected proficiency to progress only from rating events (5 easy ratings)');
 });
 
 class SmokeLocalClient {
