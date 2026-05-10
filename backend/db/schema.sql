@@ -105,6 +105,99 @@ CREATE TABLE user_cached_words (
   FOREIGN KEY (word_id) REFERENCES words(id)
 );
 
+CREATE TABLE articles (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT,
+  created_by_admin_id TEXT,
+  title TEXT NOT NULL,
+  source_url TEXT,
+  language TEXT NOT NULL,
+  raw_text TEXT NOT NULL,
+  cleaned_text TEXT,
+  visibility TEXT NOT NULL DEFAULT 'private',
+  status TEXT NOT NULL DEFAULT 'pending_processing',
+  processing_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE article_processing_jobs (
+  id TEXT PRIMARY KEY,
+  article_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  queued_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (article_id) REFERENCES articles(id)
+);
+
+CREATE TABLE terms (
+  id TEXT PRIMARY KEY,
+  language TEXT NOT NULL,
+  display_term TEXT NOT NULL,
+  normalized_term TEXT NOT NULL,
+  lemma TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(language, normalized_term)
+);
+
+CREATE TABLE word_senses (
+  id TEXT PRIMARY KEY,
+  term_id TEXT NOT NULL,
+  part_of_speech TEXT,
+  meaning_vi TEXT NOT NULL,
+  short_definition TEXT,
+  pronunciation TEXT,
+  ipa TEXT,
+  pinyin TEXT,
+  level_scale TEXT,
+  level TEXT,
+  quality_score REAL,
+  status TEXT NOT NULL DEFAULT 'pending_review',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (term_id) REFERENCES terms(id)
+);
+
+CREATE TABLE article_terms (
+  id TEXT PRIMARY KEY,
+  article_id TEXT NOT NULL,
+  term_id TEXT NOT NULL,
+  word_sense_id TEXT,
+  surface_text TEXT NOT NULL,
+  sentence_context TEXT,
+  start_offset INTEGER,
+  end_offset INTEGER,
+  frequency INTEGER NOT NULL DEFAULT 1,
+  extraction_confidence REAL,
+  classification TEXT,
+  suggestion_type TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (article_id) REFERENCES articles(id),
+  FOREIGN KEY (term_id) REFERENCES terms(id),
+  FOREIGN KEY (word_sense_id) REFERENCES word_senses(id)
+);
+
+CREATE TABLE vocabulary_review_items (
+  id TEXT PRIMARY KEY,
+  word_sense_id TEXT NOT NULL,
+  article_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  reviewer_user_id TEXT,
+  review_note TEXT,
+  reviewed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (word_sense_id) REFERENCES word_senses(id),
+  FOREIGN KEY (article_id) REFERENCES articles(id),
+  FOREIGN KEY (reviewer_user_id) REFERENCES users(id)
+);
+
 CREATE INDEX idx_words_recent ON words(created_at DESC);
 CREATE INDEX idx_words_language_normalized ON words(language, normalized_term);
 CREATE INDEX idx_study_events_device ON study_events(device_id, occurred_at DESC);

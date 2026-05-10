@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/backend_api_client.dart';
+import '../data/article_repository.dart';
 import '../data/word_repository.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
+import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
+import 'articles_screen.dart';
 import 'logs_screen.dart';
 import 'vocabulary_card.dart';
 
@@ -19,11 +22,13 @@ const Map<String, String> kLearningLanguageLabels = {
 class LearningScreen extends StatefulWidget {
   const LearningScreen({
     required this.controller,
+    required this.articleRepository,
     this.speakingRepository,
     super.key,
   });
 
   final LearningSessionController controller;
+  final ArticleRepository articleRepository;
   final SpeakingRepository? speakingRepository;
 
   @override
@@ -90,6 +95,7 @@ class _LearningScreenState extends State<LearningScreen> {
         isAuthInProgress: controller.isAuthInProgress,
         speakingRepository: widget.speakingRepository,
         wordRepository: controller.repository,
+        onArticles: _openArticles,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onLogs: () {
           Navigator.of(context).maybePop();
@@ -190,6 +196,24 @@ class _LearningScreenState extends State<LearningScreen> {
     await widget.controller.signIn(
       identifier: credentials.identifier,
       password: credentials.password,
+    );
+  }
+
+  Future<void> _openArticles() async {
+    final session = widget.controller.userSession;
+    if (session == null) {
+      return;
+    }
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArticleManagementScreen(
+          repository: widget.articleRepository,
+          sessionToken: session.sessionToken,
+          initialLanguage: widget.controller.activeLearningLanguage,
+          supportedLanguages: widget.controller.supportedLearningLanguages,
+        ),
+      ),
     );
   }
 }
@@ -375,6 +399,7 @@ class LearningDrawer extends StatelessWidget {
     required this.isSignedIn,
     required this.onVocabulary,
     required this.onLogs,
+    required this.onArticles,
     required this.onRegister,
     required this.onSignIn,
     required this.onSignOut,
@@ -392,6 +417,7 @@ class LearningDrawer extends StatelessWidget {
   final WordRepository? wordRepository; // for speaking stats fetch
   final VoidCallback onVocabulary;
   final VoidCallback onLogs;
+  final VoidCallback onArticles;
   final VoidCallback onRegister;
   final VoidCallback onSignIn;
   final VoidCallback onSignOut;
@@ -407,12 +433,32 @@ class LearningDrawer extends StatelessWidget {
               title: const Text('Vocabulary'),
               onTap: onVocabulary,
             ),
+            if (isSignedIn)
+              ListTile(
+                leading: const Icon(Icons.article_outlined),
+                title: const Text('Articles'),
+                onTap: onArticles,
+              ),
             ListTile(
               leading: const Icon(Icons.bug_report_outlined),
               title: const Text('Logs'),
               onTap: onLogs,
             ),
             if (speakingRepository != null) ...[
+              ListTile(
+                leading: const Icon(Icons.mic_outlined),
+                title: const Text('3-minute drill'),
+                onTap: () {
+                  Navigator.of(context).maybePop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SpeakingDrillScreen(
+                        repository: speakingRepository!,
+                      ),
+                    ),
+                  );
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.bar_chart_outlined),
                 title: const Text('Speaking stats'),

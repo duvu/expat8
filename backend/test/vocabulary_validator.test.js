@@ -42,6 +42,20 @@ test('rejects Chinese item without pinyin even when IPA is present', () => {
   );
 });
 
+test('accepts article suggestions with explicit classification and suggestion type', () => {
+  assert.deepEqual(
+    validateVocabularyItem(wordInput({
+      term: 'share knowledge',
+      example: 'Teams share knowledge across functions.',
+      classification: 'article_phrase',
+      suggestion_type: 'phrase',
+      difficulty: 'A1',
+      level: 'A1'
+    }), { requireSuggestionMetadata: true }),
+    { ok: true }
+  );
+});
+
 function wordInput(overrides = {}) {
   return {
     term: 'reliable',

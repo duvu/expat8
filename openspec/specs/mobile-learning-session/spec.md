@@ -2,27 +2,23 @@
 Define how the mobile learning session selects cards, handles gestures, updates local learning state, and renders language-native proficiency labels.
 ## Requirements
 ### Requirement: Swipe advances the learning session
-The mobile app SHALL provide a primary learning screen where horizontal swipes advance through a 15% new-card / 85% review-card session mix, vertical swipes persist study activity for the current card, and session navigation stays scoped to the active learning language and proficiency scale. Card selection SHALL never await or invoke any server request; background inventory maintenance and background study-event sync are the only permitted network paths from swipe handling. Gesture dispatch MUST be single-flight so one recognized gesture is processed at a time.
+The mobile app SHALL provide a primary learning screen where directional gestures drive session actions: right-to-left selects another card biased to 15% learned-word review, left-to-right routes to review flow with 15% new-word weighting, bottom-to-top marks remembered and reduces relearning frequency to 10%, and top-to-bottom marks difficult and adds the word to relearn group. The app SHALL log session navigation actions and card-source decisions for troubleshooting.
 
-#### Scenario: User swipes right-to-left for the next mixed card
+#### Scenario: User swipes right-to-left for another card
 - **WHEN** the user performs a right-to-left swipe on the learning screen
-- **THEN** the app requests the next card through the 15% new-card / 85% review-card selector using the active language and current scale-native proficiency state
+- **THEN** the app selects and displays the next vocabulary card and records a session-navigation log event with learned-word review weighting at 15%
 
-#### Scenario: User swipes left-to-right for review
+#### Scenario: User swipes left-to-right for review flow
 - **WHEN** the user performs a left-to-right swipe on the learning screen
-- **THEN** the app requests a review-first selection using the active language and current scale-native proficiency state while preserving fallback to another available card type
+- **THEN** the app advances to the next card using review flow selection and records a session-navigation log event with new-word weighting at 15%
 
-#### Scenario: User swipes vertically on current card
-- **WHEN** the user performs a vertical swipe on the current card
-- **THEN** the app writes the corresponding local study event and local learning-state transition before advancing to another locally selected card without showing an empty card while any learned or new fallback card exists
+#### Scenario: User swipes bottom-to-top to mark remembered
+- **WHEN** the user performs a bottom-to-top swipe on the learning screen
+- **THEN** the app updates local word state as remembered, reduces relearning frequency to 10% for that word, and records scheduling and navigation log events
 
-#### Scenario: Remembered swipe records a strong positive study action
-- **WHEN** the user performs a bottom-to-top swipe on the current card
-- **THEN** the app records a local `too_easy` study event, applies the remembered low-frequency local transition, schedules background sync, and advances locally without awaiting the network
-
-#### Scenario: Difficult swipe records a strong negative study action
-- **WHEN** the user performs a top-to-bottom swipe on the current card
-- **THEN** the app records a local `too_hard` study event, applies the difficult relearn local transition, schedules background sync, and advances locally without awaiting the network
+#### Scenario: User swipes top-to-bottom to mark difficult
+- **WHEN** the user performs a top-to-bottom swipe on the learning screen
+- **THEN** the app updates local word state as difficult, assigns the word to relearn group, and records scheduling and navigation log events
 
 #### Scenario: Rapid duplicate gestures are ignored while one gesture is active
 - **WHEN** a recognized gesture callback is still in progress and the user performs another swipe
@@ -34,7 +30,7 @@ The mobile app SHALL provide a primary learning screen where horizontal swipes a
 
 #### Scenario: App starts with local state
 - **WHEN** the user opens the app
-- **THEN** the app restores session state including active language and associated proficiency scale metadata before continuing the session
+- **THEN** the app loads the most recent local learning state before starting the session and records initialization log events for restored state
 
 #### Scenario: Card selection never blocks on network
 - **WHEN** the app selects the next card and a background refill is in progress or pending
@@ -56,19 +52,15 @@ The mobile app SHALL display all required vocabulary fields on each card when th
 - **THEN** the card displays the part of speech with the vocabulary term
 
 ### Requirement: Review scheduling updates after ratings
-The mobile app SHALL allow the user to submit a memory rating, including gesture-submitted remembered and difficult study actions, and SHALL update local proficiency state from backend scale-native responses when those responses are available.
+The mobile app SHALL derive remembered/difficult scheduling updates from gesture intents and update the word review schedule locally, and SHALL log gesture-derived scheduling decisions.
 
-#### Scenario: User rates a card
-- **WHEN** the user submits a rating for the current card
-- **THEN** the app records the rating locally and applies returned `proficiency.scale`, `proficiency.level`, and `proficiency.level_index` to session state when the backend response is available
+#### Scenario: User marks a card as difficult
+- **WHEN** the user performs the top-to-bottom difficult gesture for the current card
+- **THEN** the app schedules that word for near-term relearn review and logs the resulting schedule change
 
-#### Scenario: User rates a card through a vertical gesture while offline
-- **WHEN** the user submits a remembered or difficult vertical swipe and the backend is unavailable
-- **THEN** the app records the study event locally, keeps it queued for retry, applies the local learning-state transition, and continues the session without blocking on sync
-
-#### Scenario: Proficiency level changes
-- **WHEN** the backend reports a level change after rating submission or study-event sync
-- **THEN** the app updates the displayed level label according to the returned scale without assuming CEFR-only semantics
+#### Scenario: User marks a card as remembered
+- **WHEN** the user performs the bottom-to-top remembered gesture for the current card
+- **THEN** the app schedules that word farther in the future with relearning frequency reduced to 10% and logs the resulting schedule change
 
 ### Requirement: Mobile renders proficiency labels by language scale
 The mobile app SHALL render proficiency labels using language-native scale conventions.

@@ -11,7 +11,9 @@ type BackendRequestOptions = {
 export async function backendFetch(path: string, options: BackendRequestOptions = {}) {
   const config = getAdminConfig();
   if (!config.appId || !config.appSecret) {
-    throw new Error('APP_CREDENTIAL_APP_ID and APP_CREDENTIAL_SECRET are required');
+    throw new Error(
+      'Missing dashboard backend credentials: APP_CREDENTIAL_APP_ID and APP_CREDENTIAL_SECRET are required'
+    );
   }
   const url = new URL(path, config.backendBaseUrl);
   const body = options.body === undefined ? undefined : JSON.stringify(options.body);

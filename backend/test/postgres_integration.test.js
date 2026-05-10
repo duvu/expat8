@@ -106,7 +106,7 @@ test('API routes work with postgres store when a test database is available', pg
 });
 
 async function resetSchema(pool) {
-  await pool.query('DROP TABLE IF EXISTS user_cached_words, user_word_states, user_proficiency, study_events, words CASCADE');
+  await pool.query('DROP TABLE IF EXISTS vocabulary_review_items, article_terms, word_senses, terms, article_processing_jobs, articles, user_cached_words, user_word_states, user_proficiency, study_events, words CASCADE');
   await initializeDatabaseSchema({ pool });
 }
 

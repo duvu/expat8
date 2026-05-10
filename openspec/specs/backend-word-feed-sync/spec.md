@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: Backend provides new vocabulary feed
-The backend SHALL provide an API endpoint that returns new vocabulary items for the mobile app and SHALL apply proficiency filtering within the active language scale.
+The backend SHALL provide an API endpoint that returns vocabulary items for mobile learning flows, including batch retrieval for local top-up requests.
 
-#### Scenario: Mobile requests a new word
-- **WHEN** the mobile app calls the new-word feed endpoint with source language, target language, mode, and limit
-- **THEN** the backend returns vocabulary items matching request parameters and filtered by the learner's proficiency scale and level for that target language
+#### Scenario: Mobile requests top-up batch
+- **WHEN** the mobile app requests learning cards with a top-up limit of 100
+- **THEN** the backend returns up to 100 vocabulary items matching request parameters and availability constraints
 
 #### Scenario: Existing suitable words are available
-- **WHEN** the backend has suitable stored words available for a new-word request at the learner's resolved scale level
+- **WHEN** the backend has suitable stored words available for a learning-card request
 - **THEN** the backend can return stored words without calling AI generation
 
 ### Requirement: Backend stores vocabulary records
@@ -45,11 +45,15 @@ The backend SHALL return proficiency using language-native scale semantics when 
 - **THEN** the backend returns proficiency with `scale=hsk` and an HSK level value
 
 ### Requirement: Backend supports recent-word bootstrap
-The backend SHALL provide an API endpoint that returns recent vocabulary items for bootstrapping or restoring a local mobile cache.
+The backend SHALL support mobile local-cache bootstrap and refill behavior by returning bounded recent vocabulary datasets compatible with 1000-word local cache policy.
 
 #### Scenario: Mobile requests recent words
-- **WHEN** the mobile app requests recent words with a limit of 1000
+- **WHEN** the mobile app requests recent words for cache bootstrap with limit up to 1000
 - **THEN** the backend returns no more than 1000 recent vocabulary items
+
+#### Scenario: Mobile requests incremental refill
+- **WHEN** the mobile app requests incremental refill with limit 100
+- **THEN** the backend returns a bounded set that can be merged locally without requiring server-side session state
 
 ### Requirement: Backend data model supports future authentication
 The backend SHALL support unauthenticated device-based usage while preserving a path to future user-based personalization.

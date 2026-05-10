@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 
 import 'src/api/backend_api_client.dart';
 import 'src/config.dart';
+import 'src/data/article_repository.dart';
 import 'src/data/local_database.dart';
 import 'src/data/word_repository.dart';
 import 'src/logging/logger.dart';
 import 'src/session/learning_session_controller.dart';
 import 'src/speaking/audio_file_manager.dart';
 import 'src/speaking/speaking_audio_service.dart';
+import 'src/speaking/speaking_prompt_sync_service.dart';
 import 'src/speaking/speaking_repository.dart';
 import 'src/ui/learning_screen.dart';
 
@@ -47,6 +49,7 @@ Future<void> main() async {
     appSecret: config.appCredentialSecret,
     logger: logger,
   );
+  final articleRepository = ArticleRepository(apiClient: apiClient);
   final repository = WordRepository(
     database: database,
     apiClient: apiClient,
@@ -88,6 +91,13 @@ Future<void> main() async {
     );
     // Run 30-day audio retention cleanup once at startup — out of band.
     unawaited(speakingRepository.runRetentionCleanup());
+    // Sync approved prompts for offline drill use — out of band.
+    unawaited(
+      SpeakingPromptSyncService(
+        apiClient: apiClient,
+        speakingRepository: speakingRepository,
+      ).syncIfNeeded(),
+    );
   }
 
   await logger.info(
@@ -98,6 +108,7 @@ Future<void> main() async {
 
   runApp(LanguageLearningApp(
     controller: controller,
+    articleRepository: articleRepository,
     speakingRepository: speakingRepository,
   ));
 }
@@ -105,11 +116,13 @@ Future<void> main() async {
 class LanguageLearningApp extends StatelessWidget {
   const LanguageLearningApp({
     required this.controller,
+    required this.articleRepository,
     this.speakingRepository,
     super.key,
   });
 
   final LearningSessionController controller;
+  final ArticleRepository articleRepository;
   final SpeakingRepository? speakingRepository;
 
   @override
@@ -123,6 +136,7 @@ class LanguageLearningApp extends StatelessWidget {
       ),
       home: LearningScreen(
         controller: controller,
+        articleRepository: articleRepository,
         speakingRepository: speakingRepository,
       ),
     );

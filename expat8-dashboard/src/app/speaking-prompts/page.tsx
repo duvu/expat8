@@ -28,10 +28,11 @@ async function updateSpeakingPrompt(formData: FormData) {
 export default async function SpeakingPromptsPage({
   searchParams
 }: {
-  searchParams?: { status?: string; missing?: string };
+  searchParams?: Promise<{ status?: string; missing?: string }>;
 }) {
-  const status = searchParams?.status ?? 'pending_review';
-  const missingRequired = searchParams?.missing === 'true';
+  const params = await searchParams;
+  const status = params?.status ?? 'pending_review';
+  const missingRequired = params?.missing === 'true';
 
   const items = await listSpeakingPrompts({ status, missingRequired });
 

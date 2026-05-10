@@ -1010,4 +1010,41 @@ class LocalDatabase {
 
   /// Returns the total number of speaking attempts stored locally.
   int countSpeakingAttempts() => _speakingAttempts.count();
+
+  /// Returns all cached prompts linked to [wordSenseId].
+  List<SpeakingPromptEntity> getPromptsByWordSenseId(String wordSenseId) {
+    return _speakingPrompts
+        .query(SpeakingPromptEntity_.wordSenseId.equals(wordSenseId))
+        .build()
+        .find();
+  }
+
+  /// Upserts a batch of speaking prompts from the server sync endpoint.
+  ///
+  /// Existing entries are updated in-place (preserving their ObjectBox id);
+  /// new entries are inserted.
+  void upsertAllSpeakingPrompts(List<SpeakingPromptEntity> prompts) {
+    for (final prompt in prompts) {
+      final existing = _speakingPrompts
+          .query(SpeakingPromptEntity_.promptId.equals(prompt.promptId))
+          .build()
+          .findFirst();
+      _speakingPrompts.put(
+        SpeakingPromptEntity(
+          id: existing?.id ?? 0,
+          promptId: prompt.promptId,
+          wordSenseId: prompt.wordSenseId,
+          serverWordId: prompt.serverWordId,
+          targetText: prompt.targetText,
+          viHint: prompt.viHint,
+          targetPhrase: prompt.targetPhrase,
+          pronunciationTip: prompt.pronunciationTip,
+          commonMistake: prompt.commonMistake,
+          difficulty: prompt.difficulty,
+          topic: prompt.topic,
+          cachedAtMs: prompt.cachedAtMs,
+        ),
+      );
+    }
+  }
 }

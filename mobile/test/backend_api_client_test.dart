@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
+import 'package:expat8_language_app/src/models/article.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -350,6 +351,171 @@ void main() {
       expect(error.statusCode, 401);
       expect(error.backendError, 'invalid_credentials');
       expect(error.message, 'Sign-in failed: 401');
+    }
+  });
+
+  test('creates, lists, fetches, and deletes managed articles', () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.url.path == '/v1/articles' && request.method == 'POST') {
+        return http.Response(
+          jsonEncode({
+            'id': 'article_1',
+            'title': 'My article',
+            'source_url': 'https://example.com/article',
+            'language': 'en',
+            'visibility': 'private',
+            'status': 'pending_processing',
+            'processing_error': null,
+            'created_at': '2026-05-10T00:00:00.000Z',
+            'updated_at': '2026-05-10T00:00:00.000Z',
+          }),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.url.path == '/v1/articles' && request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 'article_1',
+                'title': 'My article',
+                'source_url': 'https://example.com/article',
+                'language': 'en',
+                'visibility': 'private',
+                'status': 'processed',
+                'processing_error': null,
+                'created_at': '2026-05-10T00:00:00.000Z',
+                'updated_at': '2026-05-10T00:10:00.000Z',
+              }
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.url.path == '/v1/articles/article_1' && request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'id': 'article_1',
+            'title': 'My article',
+            'source_url': 'https://example.com/article',
+            'language': 'en',
+            'visibility': 'private',
+            'status': 'processed',
+            'processing_error': null,
+            'created_at': '2026-05-10T00:00:00.000Z',
+            'updated_at': '2026-05-10T00:10:00.000Z',
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.url.path == '/v1/articles/article_1/vocabulary' && request.method == 'GET') {
+        return http.Response(
+          jsonEncode({
+            'article_id': 'article_1',
+            'items': [
+              {
+                'term_id': 'term_1',
+                'display_term': 'reliable',
+                'word_sense_id': 'sense_1',
+                'meaning_vi': 'dang tin cay',
+                'part_of_speech': 'adjective',
+                'ipa': '/rɪˈlaɪəbl/',
+                'level': 'A1',
+                'status': 'approved',
+                'classification': 'article_keyword',
+                'suggestion_type': 'word',
+              }
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.url.path == '/v1/articles/article_1' && request.method == 'DELETE') {
+        return http.Response(
+          jsonEncode({'success': true}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response(
+        jsonEncode({'error': 'bad_request'}),
+        400,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://expat8.x51.vn',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'expat8-mobile-secret',
+      httpClient: client,
+    );
+
+    final created = await apiClient.createArticle(
+      sessionToken: 'session_1',
+      title: 'My article',
+      language: 'en',
+      rawText: 'some text',
+      sourceUrl: 'https://example.com/article',
+    );
+    final articles = await apiClient.listArticles(sessionToken: 'session_1');
+    final detail = await apiClient.getArticle(
+      sessionToken: 'session_1',
+      articleId: 'article_1',
+    );
+    final vocabulary = await apiClient.getArticleVocabulary(
+      sessionToken: 'session_1',
+      articleId: 'article_1',
+    );
+    await apiClient.deleteArticle(
+      sessionToken: 'session_1',
+      articleId: 'article_1',
+    );
+
+    expect(created.id, 'article_1');
+    expect(articles.single.status, 'processed');
+    expect(detail.title, 'My article');
+    expect(vocabulary.items.single.displayTerm, 'reliable');
+    expect(requests.first.headers['authorization'], 'Bearer session_1');
+    expect(requests.last.method, 'DELETE');
+  });
+
+  test('surfaces bad-request metadata from article creation errors', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'error': 'bad_request'}),
+        400,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://expat8.x51.vn',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'expat8-mobile-secret',
+      httpClient: client,
+    );
+
+    try {
+      await apiClient.createArticle(
+        sessionToken: 'session_1',
+        title: 'My article',
+        language: 'en',
+        rawText: 'some text',
+      );
+      fail('Expected createArticle to throw');
+    } on BackendApiException catch (error) {
+      expect(error.statusCode, 400);
+      expect(error.backendError, 'bad_request');
+      expect(error.message, 'Create article failed: 400');
     }
   });
 }

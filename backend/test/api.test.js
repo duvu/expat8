@@ -1196,7 +1196,7 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   });
   store.persistArticleVocabulary({
     articleId: privateArticle.id,
-    items: [vocabItem('private term')]
+    items: [vocabItem('private term', { classification: 'article_keyword', suggestion_type: 'word' })]
   });
 
   const publishedArticle = store.createArticle({
@@ -1208,7 +1208,7 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   });
   const publishedVocabulary = store.persistArticleVocabulary({
     articleId: publishedArticle.id,
-    items: [vocabItem('published term')]
+    items: [vocabItem('published term', { classification: 'article_phrase', suggestion_type: 'phrase' })]
   });
   const publishedSenseId = publishedVocabulary.items[0].sense.id;
   store.speakingPromptsById.set('prompt_published_term', {
@@ -1237,6 +1237,8 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   );
   assert.equal(ownerVocabulary.article_id, privateArticle.id);
   assert.equal(ownerVocabulary.items.length, 1);
+  assert.equal(ownerVocabulary.items[0].classification, 'article_keyword');
+  assert.equal(ownerVocabulary.items[0].suggestion_type, 'word');
 
   const viewerVocabulary = await fetchJson(
     `${baseUrl}/v1/articles/${publishedArticle.id}/vocabulary`,
@@ -1247,6 +1249,8 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   );
   assert.equal(viewerVocabulary.article_id, publishedArticle.id);
   assert.equal(viewerVocabulary.items.length, 1);
+  assert.equal(viewerVocabulary.items[0].classification, 'article_phrase');
+  assert.equal(viewerVocabulary.items[0].suggestion_type, 'phrase');
   assert.deepEqual(viewerVocabulary.items[0].speaking_prompt, {
     id: 'prompt_published_term',
     target_text: 'This is a useful published term.',
@@ -1365,6 +1369,180 @@ test('sync processes out-of-order events deterministically', async (t) => {
   assert.deepEqual(sync.accepted_event_ids, ['evt_older', 'evt_newer']);
   assert.deepEqual(sync.duplicates, []);
   assert.deepEqual(sync.rejected_events, []);
+});
+
+test('speaking_drill_completed event is accepted and reflected in summary', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_drill',
+      events: [
+        {
+          client_event_id: 'drill_rec1',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-10T09:00:00.000Z',
+          language: 'en',
+          speaking: { attempt_id: 'att1', duration_ms: 3000, retry_count: 0 }
+        },
+        {
+          client_event_id: 'drill_rec2',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-10T09:01:00.000Z',
+          language: 'en',
+          speaking: { attempt_id: 'att2', duration_ms: 4000, retry_count: 0 }
+        },
+        {
+          client_event_id: 'drill_retry',
+          event_type: 'speaking_retried',
+          occurred_at: '2026-05-10T09:01:30.000Z',
+          language: 'en',
+          speaking: { attempt_id: 'att2', retry_count: 1 }
+        },
+        {
+          client_event_id: 'drill_done',
+          event_type: 'speaking_drill_completed',
+          occurred_at: '2026-05-10T09:05:00.000Z',
+          language: 'en',
+          speaking: { attempt_id: 'sess1', prompts_attempted: 5, prompts_completed: 4, total_duration_ms: 300000 }
+        }
+      ]
+    })
+  });
+
+  assert.deepEqual(sync.accepted_event_ids, ['drill_rec1', 'drill_rec2', 'drill_retry', 'drill_done']);
+  assert.equal(sync.rejected_events.length, 0);
+  assert.equal(store.speakingEventsByKey.size, 4);
+
+  const summary = await fetchJson(`${baseUrl}/v1/speaking/summary?device_id=device_drill&language=en&week_start=2026-05-05`);
+  assert.equal(summary.spoken_sentence_count, 2);
+  assert.equal(summary.retry_count, 1);
+  assert.equal(summary.retry_rate, 0.5);
+  assert.equal(summary.drill_sessions_completed, 1);
+  assert.equal(summary.first_recording_at, '2026-05-10T09:00:00.000Z');
+});
+
+test('speaking summary returns zeroed response for new device', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const summary = await fetchJson(`${baseUrl}/v1/speaking/summary?device_id=device_zero&language=en`);
+  assert.equal(summary.spoken_sentence_count, 0);
+  assert.equal(summary.retry_rate, 0);
+  assert.equal(summary.drill_sessions_completed, 0);
+  assert.equal(summary.first_recording_at, null);
+});
+
+test('speaking summary returns 400 when device_id is missing', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const response = await fetch(`${baseUrl}/v1/speaking/summary?language=en`, {
+    headers: signedFetchOptions(`${baseUrl}/v1/speaking/summary`, {}).headers
+  });
+  assert.equal(response.status, 400);
+});
+
+test('GET /v1/speaking/prompts returns only approved prompts', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.createSpeakingPrompt({ word_sense_id: null, target_text: 'Hello world.', vi_hint: 'Xin chào.', status: 'approved' });
+  store.createSpeakingPrompt({ word_sense_id: null, target_text: 'Draft prompt.', vi_hint: 'Nháp.', status: 'pending_review' });
+  store.createSpeakingPrompt({ word_sense_id: null, target_text: 'Rejected prompt.', vi_hint: 'Bị loại.', status: 'rejected' });
+
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const url = `${baseUrl}/v1/speaking/prompts`;
+  const result = await fetchJson(url, signedFetchOptions(url, {}));
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].target_text, 'Hello world.');
+});
+
+test('GET /v1/admin/speaking-prompts filters by status', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.createSpeakingPrompt({ word_sense_id: null, target_text: 'Prompt A', vi_hint: 'A', status: 'approved' });
+  store.createSpeakingPrompt({ word_sense_id: null, target_text: 'Prompt P', vi_hint: 'P', status: 'pending_review' });
+
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig({ ADMIN_API_TOKENS: 'admin-tok-1' }) })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const adminHeader = { 'x-expat8-admin-token': 'admin-tok-1' };
+
+  const all = await fetchJson(`${baseUrl}/v1/admin/speaking-prompts`, { headers: adminHeader });
+  assert.equal(all.items.length, 2);
+
+  const approved = await fetchJson(`${baseUrl}/v1/admin/speaking-prompts?status=approved`, { headers: adminHeader });
+  assert.equal(approved.items.length, 1);
+  assert.equal(approved.items[0].target_text, 'Prompt A');
+
+  const pending = await fetchJson(`${baseUrl}/v1/admin/speaking-prompts?status=pending_review`, { headers: adminHeader });
+  assert.equal(pending.items.length, 1);
+});
+
+test('PATCH /v1/admin/speaking-prompts/:id updates fields and returns updated object', async (t) => {
+  const store = new WordStore({ seed: false });
+  const created = store.createSpeakingPrompt({ word_sense_id: null, target_text: 'Old text.', vi_hint: 'Cũ.', status: 'pending_review' });
+
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig({ ADMIN_API_TOKENS: 'admin-tok-2' }) })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const updated = await fetchJson(`${baseUrl}/v1/admin/speaking-prompts/${created.id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', 'x-expat8-admin-token': 'admin-tok-2' },
+    body: JSON.stringify({ target_text: 'New text.', status: 'approved' })
+  });
+
+  assert.equal(updated.target_text, 'New text.');
+  assert.equal(updated.status, 'approved');
+});
+
+test('admin speaking-prompts endpoint rejects missing app credentials with 400', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig({ ADMIN_API_TOKENS: 'admin-tok-3' }) })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  // Sending no app credentials at all → 400 (credential guard fires before admin check)
+  const response = await fetch(`${baseUrl}/v1/admin/speaking-prompts`);
+  assert.equal(response.status, 400);
+
+  // Sending app credentials but wrong admin token → 403
+  const withAppCred = await fetch(`${baseUrl}/v1/admin/speaking-prompts`,
+    signedFetchOptions(`${baseUrl}/v1/admin/speaking-prompts`, {})
+  );
+  assert.equal(withAppCred.status, 403);
 });
 
 class AsyncStoreAdapter {

@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import 'package:expat8_language_app/src/api/backend_api_client.dart';
+import 'package:expat8_language_app/src/data/article_repository.dart';
+import 'package:expat8_language_app/src/models/article.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:expat8_language_app/src/ui/articles_screen.dart';
 import 'package:expat8_language_app/src/ui/learning_screen.dart';
 import 'package:expat8_language_app/src/ui/vocabulary_card.dart';
 import 'package:flutter/material.dart';
@@ -123,6 +127,7 @@ void main() {
             isSignedIn: false,
             onVocabulary: () {},
             onLogs: () {},
+            onArticles: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -135,6 +140,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Vocabulary'), findsOneWidget);
+    expect(find.text('Articles'), findsNothing);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
@@ -157,6 +163,7 @@ void main() {
             ),
             onVocabulary: () {},
             onLogs: () {},
+            onArticles: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -171,8 +178,59 @@ void main() {
     expect(find.text('Sign out'), findsOneWidget);
     expect(find.text('Learner'), findsOneWidget);
     expect(find.text('learner@example.com'), findsOneWidget);
+    expect(find.text('Articles'), findsOneWidget);
     expect(find.text('Register'), findsNothing);
     expect(find.text('Sign in'), findsNothing);
+  });
+
+  testWidgets('drawer opens article management flow', (tester) async {
+    final scaffoldKey = GlobalKey<ScaffoldState>();
+    final articleRepository = _TestArticleRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            key: scaffoldKey,
+            drawer: LearningDrawer(
+              isSignedIn: true,
+              userSession: const UserSession(
+                userId: 'user_1',
+                identifier: 'learner@example.com',
+                displayName: 'Learner',
+                sessionToken: 'session_1',
+              ),
+              onVocabulary: () {},
+              onLogs: () {},
+              onArticles: () {
+                Navigator.of(context).maybePop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ArticleManagementScreen(
+                      repository: articleRepository,
+                      sessionToken: 'session_1',
+                      initialLanguage: 'en',
+                      supportedLanguages: const ['en', 'zh', 'vi'],
+                    ),
+                  ),
+                );
+              },
+              onRegister: () {},
+              onSignIn: () {},
+              onSignOut: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    scaffoldKey.currentState!.openDrawer();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Articles'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Drawer article'), findsOneWidget);
   });
 
   testWidgets(
@@ -325,6 +383,7 @@ void main() {
             isAuthInProgress: true,
             onVocabulary: () {},
             onLogs: () {},
+            onArticles: () {},
             onRegister: () => registerCount += 1,
             onSignIn: () => signInCount += 1,
             onSignOut: () {},
@@ -450,6 +509,69 @@ void main() {
 
     expect(find.byType(OutlinedButton), findsNothing);
   });
+}
+
+class _TestArticleRepository extends ArticleRepository {
+  _TestArticleRepository()
+      : super(
+          apiClient: BackendApiClient(
+            baseUrl: 'http://unused',
+            timeout: Duration.zero,
+            appId: 'test-app',
+            appSecret: 'test-secret',
+          ),
+        );
+
+  @override
+  Future<List<ManagedArticle>> listArticles({required String sessionToken}) async {
+    return [
+      ManagedArticle(
+        id: 'article_1',
+        title: 'Drawer article',
+        sourceUrl: 'https://example.com',
+        language: 'en',
+        visibility: 'private',
+        status: 'processed',
+        createdAt: DateTime.utc(2026, 5, 10),
+        updatedAt: DateTime.utc(2026, 5, 10),
+      ),
+    ];
+  }
+
+  @override
+  Future<ManagedArticle> createArticle({
+    required String sessionToken,
+    required String title,
+    required String language,
+    required String rawText,
+    String? sourceUrl,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ManagedArticle> getArticle({
+    required String sessionToken,
+    required String articleId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ArticleVocabularyResponse> getArticleVocabulary({
+    required String sessionToken,
+    required String articleId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> deleteArticle({
+    required String sessionToken,
+    required String articleId,
+  }) {
+    throw UnimplementedError();
+  }
 }
 
 VocabularyWord _word() {

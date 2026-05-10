@@ -10,7 +10,7 @@ import {
   InvalidRegistrationInputError
 } from './user_identity.js';
 import { createLogger } from './logger.js';
-import { toApiWord } from './word_store.js';
+import { toApiWord, toApiSpeakingPrompt } from './word_store.js';
 
 export function createApp({
   store,
@@ -472,7 +472,7 @@ function createV1Router({ store, config }) {
       if (!hasAdminAccess({ request, config })) {
         return response.status(403).json({ error: 'forbidden' });
       }
-      const limit = clampLimit(request.query.limit, 1, 200);
+      const limit = clampLimit(request.query.limit ?? 100, 1, 200);
       const status = typeof request.query.status === 'string' ? request.query.status : null;
       const missingRequired = request.query.missing_required === 'true';
       const items = await store.listSpeakingPrompts({ status, missingRequired, limit });
@@ -539,6 +539,20 @@ function createV1Router({ store, config }) {
         return response.status(404).json({ error: 'not_found' });
       }
       return response.json(prompt);
+    })
+  );
+
+  // Mobile: approved speaking prompts for offline drill sync
+  router.get(
+    '/speaking/prompts',
+    asyncHandler(async (request, response) => {
+      const limit = clampLimit(request.query.limit ?? 100, 1, 200);
+      const wordSenseId = typeof request.query.word_sense_id === 'string' ? request.query.word_sense_id : null;
+      let prompts = await store.listSpeakingPrompts({ status: 'approved', limit });
+      if (wordSenseId) {
+        prompts = prompts.filter((p) => p.word_sense_id === wordSenseId);
+      }
+      return response.json({ items: prompts.map(toApiSpeakingPrompt) });
     })
   );
 

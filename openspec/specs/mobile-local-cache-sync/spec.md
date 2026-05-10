@@ -23,46 +23,30 @@ The mobile app MUST NOT read, migrate, or preserve legacy SQLite local data once
 - **THEN** the app does not execute SQLite schema creation or SQL migration logic
 
 ### Requirement: Mobile retains at most one thousand local words
-The mobile app MUST retain no more than 1000 vocabulary words in local storage.
+The mobile app MUST retain no more than 1000 vocabulary words in local storage and MUST execute pruning in local database paths while preserving unsynced study payloads.
 
 #### Scenario: Local word count exceeds limit
-- **WHEN** the local vocabulary store contains more than 1000 words
-- **THEN** the app retains the 1000 most recent words and removes older local word records
+- **WHEN** local vocabulary exceeds 1000 records after insertion
+- **THEN** the app retains the 1000 most recent eligible words and removes older local records
 
 #### Scenario: Removed word has pending sync data
 - **WHEN** an older local word is eligible for removal and has unsynced study data
-- **THEN** the app preserves the pending sync payload before removing the local word record
+- **THEN** the app preserves pending sync payload before removing that local word record
 
-### Requirement: Card requests use local storage while backend refill is separate
-The mobile app SHALL serve visible new/review card requests from ObjectBox local storage and SHALL use backend `/v1/learning/cards` only for inventory refill/top-up paths. The sole condition for triggering a background refill SHALL be that the count of unstudied new words for the active learning language is strictly less than 100. Total pool size and global word-count targets SHALL NOT independently trigger a server fetch.
+### Requirement: New-word requests fall back to local storage
+The mobile app SHALL keep local-first study continuity and SHALL execute a daily cache refill check where unlearned-word count below 100 triggers fetching and storing 100 new words from backend.
 
-#### Scenario: Local new word is available
-- **WHEN** the app requests a new word and local storage contains at least one eligible unstudied new word
-- **THEN** the app serves the word from local storage without making a backend request in the visible card path
+#### Scenario: Daily check threshold reached
+- **WHEN** the daily refresh worker runs and local unlearned-word count is below 100
+- **THEN** the app requests 100 words from backend, stores returned words in local database, and records refill telemetry
 
-#### Scenario: Local new word is unavailable
-- **WHEN** the app requests a new word and local storage has no eligible unstudied new word
-- **THEN** the app may display an eligible review word if one is available and records a local-empty diagnostic log
+#### Scenario: Daily check threshold not reached
+- **WHEN** the daily refresh worker runs and local unlearned-word count is 100 or higher
+- **THEN** the app skips backend refill and records a no-op refresh event
 
-#### Scenario: Backend refill succeeds
-- **WHEN** inventory refill or top-up requests `/v1/learning/cards` and the backend returns a valid batch
-- **THEN** the app saves the returned words locally through the capped ObjectBox write path
-
-#### Scenario: Backend refill fails
-- **WHEN** inventory refill or top-up fails due to timeout, network error, or backend rejection
-- **THEN** the app logs the failure and continues serving any available local cards without blocking the visible session
-
-#### Scenario: Unstudied count below threshold triggers refill
-- **WHEN** the count of unstudied new words for the active language is strictly less than 100
-- **THEN** the app SHALL trigger a background refill from the server
-
-#### Scenario: Unstudied count at or above threshold suppresses refill
-- **WHEN** the count of unstudied new words for the active language is 100 or greater
-- **THEN** the app SHALL NOT make a backend request, even if the total local word count is below any pool-size target
-
-#### Scenario: Seed vocabulary is healthy at startup
-- **WHEN** the app seeds bundle vocabulary and the resulting unstudied count for the active language is 100 or greater
-- **THEN** the startup top-up path does NOT fetch from the backend
+#### Scenario: Backend refill fails during daily check
+- **WHEN** daily refill is required and backend request fails or times out
+- **THEN** the app preserves existing local pool, records failure telemetry, and retries at next scheduled daily run without blocking learning session
 
 #### Scenario: Refill check runs after new-word state transition
 - **WHEN** a new-word card is shown and `markWordAsLearning` completes

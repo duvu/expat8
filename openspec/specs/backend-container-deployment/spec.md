@@ -3,30 +3,30 @@ Define how the backend image and root Compose stack package the backend, dashboa
 
 ## Requirements
 ### Requirement: Backend image can be built with Docker
-The backend SHALL provide Docker packaging that builds a runnable backend service image.
+The backend SHALL provide Docker packaging that builds a runnable backend service image and supports tagged publication to `docker.x51.vn/x-ai/expat8-backend`.
 
-#### Scenario: Backend image is built
-- **WHEN** an operator runs the documented Docker build command or Compose build
-- **THEN** Docker produces a backend image containing the Node.js service and production dependencies
+#### Scenario: Backend image is built and tagged
+- **WHEN** an operator builds backend image with a timestamp tag
+- **THEN** Docker produces an image tagged as `docker.x51.vn/x-ai/expat8-backend:<YYYYMMDD.HHMM>`
+
+#### Scenario: Tagged image is pushed to registry
+- **WHEN** operator executes push for the tagged image
+- **THEN** the registry stores the image and returns a valid digest for deployment tracking
 
 #### Scenario: Backend container starts
 - **WHEN** the backend image is run with required environment variables
 - **THEN** the container starts the backend HTTP server on the configured port
 
-### Requirement: Compose runs backend, dashboard, and PostgreSQL together
-The repository SHALL provide a root `docker-compose.yml` that orchestrates the backend service, dashboard service, and PostgreSQL database.
+### Requirement: Compose runs backend and PostgreSQL together
+The deployment process SHALL recreate `expat8-backend` from `~/deployment/worker-z440` using the image tag updated in `docker-compose.yml`, instead of relying on local repository compose stack.
 
-#### Scenario: Compose stack starts
-- **WHEN** an operator runs the documented Compose start command
-- **THEN** Compose starts PostgreSQL, the backend service, and the dashboard service with the backend connected to PostgreSQL
+#### Scenario: Worker-z440 deploy is updated
+- **WHEN** operator updates `~/deployment/worker-z440/docker-compose.yml` image tag for `expat8-backend`
+- **THEN** `docker compose up -d --force-recreate expat8-backend` from that directory starts container with the new image tag
 
-#### Scenario: Backend health is checked
-- **WHEN** the Compose stack is running
-- **THEN** an HTTP request to the backend health endpoint returns a successful health response
-
-#### Scenario: Dashboard becomes available
-- **WHEN** the Compose stack is running
-- **THEN** the dashboard service is reachable on its configured host port
+#### Scenario: Deployment verification passes
+- **WHEN** backend redeploy finishes
+- **THEN** `docker compose ps expat8-backend` shows healthy status and `curl` against `http://10.113.213.9:18787/health` returns success
 
 ### Requirement: Compose configuration keeps deployment settings environment-configurable
 The Compose deployment SHALL read runtime-specific values from environment variables instead of hard-coding secrets or service URLs.

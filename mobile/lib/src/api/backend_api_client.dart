@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../logging/logger.dart';
+import '../models/article.dart';
 import '../models/proficiency_state.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
@@ -670,6 +671,249 @@ class BackendApiClient {
     );
   }
 
+  /// Fetches approved speaking prompts for offline drill sync.
+  ///
+  /// Calls `GET /v1/speaking/prompts?limit=[limit]` and returns all items.
+  Future<List<SpeakingPromptItem>> fetchSpeakingPrompts({
+    int limit = 100,
+  }) async {
+    final traceId = _newTraceId();
+    final uri =
+        Uri.parse('$baseUrl/v1/speaking/prompts').replace(queryParameters: {
+      'limit': '$limit',
+    });
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'speaking.prompts.request',
+      message: 'Fetching approved speaking prompts.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'speaking.prompts.response',
+      message: 'Received approved speaking prompts.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Fetch speaking prompts failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (body['items'] as List<dynamic>?) ?? [];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(SpeakingPromptItem.fromJson)
+        .toList();
+  }
+
+  Future<List<ManagedArticle>> listArticles({
+    required String sessionToken,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/articles');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.list.request',
+      message: 'Requesting user articles.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.list.response',
+      message: 'Received user articles.',
+      traceId: traceId,
+      context: {'status_code': response.statusCode},
+    );
+    _throwIfFailed(response, 'List articles failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['items'] as List? ?? const [];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(ManagedArticle.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<ManagedArticle> createArticle({
+    required String sessionToken,
+    required String title,
+    required String language,
+    required String rawText,
+    String? sourceUrl,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/articles');
+    final payload = jsonEncode({
+      'title': title,
+      'language': language,
+      'raw_text': rawText,
+      if (sourceUrl != null && sourceUrl.trim().isNotEmpty)
+        'source_url': sourceUrl.trim(),
+    });
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.create.request',
+      message: 'Creating article.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'language': language,
+      },
+    );
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: Uint8List.fromList(utf8.encode(payload)),
+              sessionToken: sessionToken,
+            ),
+          },
+          body: payload,
+        )
+        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.create.response',
+      message: 'Received article creation response.',
+      traceId: traceId,
+      context: {'status_code': response.statusCode},
+    );
+    _throwIfFailed(response, 'Create article failed');
+    return ManagedArticle.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<ManagedArticle> getArticle({
+    required String sessionToken,
+    required String articleId,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/articles/$articleId');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.detail.request',
+      message: 'Requesting article detail.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.detail.response',
+      message: 'Received article detail response.',
+      traceId: traceId,
+      context: {'status_code': response.statusCode},
+    );
+    _throwIfFailed(response, 'Fetch article failed');
+    return ManagedArticle.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<ArticleVocabularyResponse> getArticleVocabulary({
+    required String sessionToken,
+    required String articleId,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/articles/$articleId/vocabulary');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.vocabulary.request',
+      message: 'Requesting article vocabulary.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.vocabulary.response',
+      message: 'Received article vocabulary response.',
+      traceId: traceId,
+      context: {'status_code': response.statusCode},
+    );
+    _throwIfFailed(response, 'Fetch article vocabulary failed');
+    return ArticleVocabularyResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteArticle({
+    required String sessionToken,
+    required String articleId,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/articles/$articleId');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.delete.request',
+      message: 'Deleting article.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final response = await _httpClient
+        .delete(
+          uri,
+          headers: _signedHeaders(
+            method: 'DELETE',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'articles.delete.response',
+      message: 'Received article delete response.',
+      traceId: traceId,
+      context: {'status_code': response.statusCode},
+    );
+    _throwIfFailed(response, 'Delete article failed');
+  }
+
   String _newTraceId() {
     return 'api_${DateTime.now().microsecondsSinceEpoch}';
   }
@@ -865,4 +1109,40 @@ class SpeakingWeeklySummary {
   final int approximateDurationMs;
   final Map<String, int> selfRatingCounts;
   final DateTime? latestSpeakingAt;
+}
+
+/// A single speaking prompt item returned by `GET /v1/speaking/prompts`.
+class SpeakingPromptItem {
+  const SpeakingPromptItem({
+    required this.id,
+    this.wordSenseId,
+    required this.targetText,
+    this.viHint,
+    this.pronunciationTip,
+    this.commonMistake,
+    this.difficulty,
+    this.topic,
+  });
+
+  factory SpeakingPromptItem.fromJson(Map<String, dynamic> json) {
+    return SpeakingPromptItem(
+      id: json['id'] as String? ?? '',
+      wordSenseId: json['word_sense_id'] as String?,
+      targetText: json['target_text'] as String? ?? '',
+      viHint: json['vi_hint'] as String?,
+      pronunciationTip: json['pronunciation_tip_vi'] as String?,
+      commonMistake: json['common_mistake_vi'] as String?,
+      difficulty: json['difficulty'] as String?,
+      topic: json['topic'] as String?,
+    );
+  }
+
+  final String id;
+  final String? wordSenseId;
+  final String targetText;
+  final String? viHint;
+  final String? pronunciationTip;
+  final String? commonMistake;
+  final String? difficulty;
+  final String? topic;
 }

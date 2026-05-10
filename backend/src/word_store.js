@@ -9,6 +9,7 @@ import {
   normalizeDifficultyLevel,
   requireStudyRating
 } from './proficiency.js';
+import { normalizeSuggestionType } from './vocabulary_validator.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -27,7 +28,8 @@ export const SPEAKING_EVENT_TYPES = [
   'speaking_retried',
   'speaking_self_rated_clear',
   'speaking_self_rated_hesitated',
-  'speaking_self_rated_could_not_say'
+  'speaking_self_rated_could_not_say',
+  'speaking_drill_completed'
 ];
 
 export const SPEAKING_SELF_RATINGS = ['clear', 'hesitated', 'could_not_say'];
@@ -348,11 +350,21 @@ export class WordStore {
 
   getSpeakingSummary({ deviceId, language = 'en', userId = null, weekStart = null }) {
     const start = normalizeWeekStart(weekStart);
-    const events = [...this.speakingEventsByKey.values()]
+    const allEvents = [...this.speakingEventsByKey.values()]
       .filter((event) => event.language === language)
-      .filter((event) => event.occurred_at >= start)
       .filter((event) => userId ? event.user_id === userId : event.device_id === deviceId && !event.user_id);
-    return buildSpeakingSummary({ deviceId, userId, language, weekStart: start, events });
+    const weekEvents = allEvents.filter((event) => event.occurred_at >= start);
+    const firstRecordingEvent = allEvents
+      .filter((e) => e.event_type === 'speaking_recorded')
+      .sort((a, b) => String(a.occurred_at).localeCompare(String(b.occurred_at)))[0] ?? null;
+    return buildSpeakingSummary({
+      deviceId,
+      userId,
+      language,
+      weekStart: start,
+      events: weekEvents,
+      firstRecordingAt: firstRecordingEvent?.occurred_at ?? null
+    });
   }
 
   recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
@@ -702,6 +714,8 @@ export class WordStore {
           ipa: sense.ipa,
           level: sense.level,
           status: sense.status,
+          classification: articleTerm.classification ?? null,
+          suggestion_type: articleTerm.suggestion_type ?? null,
           speaking_prompt: speakingPrompt ? toApiSpeakingPrompt(speakingPrompt) : null
         }];
       });
@@ -894,8 +908,14 @@ export class WordStore {
       throw new Error('article_not_found');
     }
     const persisted = [];
+    const seen = new Set();
     for (const item of items) {
       const normalized = normalizeTerm(item.term);
+      const dedupeKey = `${item.language}:${normalized}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
       let term = [...this.termsById.values()].find(
         (entry) => entry.language === item.language && entry.normalized_term === normalized
       );
@@ -921,7 +941,7 @@ export class WordStore {
         ipa: item.ipa ?? null,
         pinyin: item.pinyin ?? null,
         level_scale: item.level_scale ?? 'cefr',
-        level: item.difficulty ?? 'A1',
+        level: item.level ?? item.difficulty ?? 'A1',
         quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
         status: article.created_by_admin_id ? 'pending_review' : 'approved',
         created_at: now,
@@ -940,6 +960,8 @@ export class WordStore {
         end_offset: null,
         frequency: Number(item.frequency ?? 1),
         extraction_confidence: Number(item.confidence ?? 0.5),
+        classification: item.classification ?? null,
+        suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term),
         created_at: now
       };
       this.articleTermsById.set(articleTerm.id, articleTerm);
@@ -1085,6 +1107,23 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
   if ((durationMs !== null && durationMs < 0) || retryCount < 0) {
     throw new Error('invalid_speaking_event');
   }
+
+  // drill_completed-specific fields
+  let promptsAttempted = null;
+  let promptsCompleted = null;
+  let totalDurationMs = null;
+  if (event.event_type === 'speaking_drill_completed') {
+    promptsAttempted = normalizeOptionalInteger(speaking.prompts_attempted ?? event.prompts_attempted);
+    promptsCompleted = normalizeOptionalInteger(speaking.prompts_completed ?? event.prompts_completed);
+    totalDurationMs = normalizeOptionalInteger(speaking.total_duration_ms ?? event.total_duration_ms);
+    if (promptsAttempted === null || totalDurationMs === null) {
+      throw new Error('missing_required_field');
+    }
+    if (promptsAttempted < 0 || totalDurationMs < 0) {
+      throw new Error('invalid_speaking_event');
+    }
+  }
+
   return {
     device_id: deviceId,
     user_id: userId,
@@ -1095,6 +1134,9 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     server_word_id: normalizeOptionalText(speaking.server_word_id ?? event.server_word_id),
     duration_ms: durationMs,
     retry_count: retryCount,
+    prompts_attempted: promptsAttempted,
+    prompts_completed: promptsCompleted,
+    total_duration_ms: totalDurationMs,
     self_rating: selfRating,
     language: normalizeOptionalText(event.language) ?? language,
     occurred_at: event.occurred_at
@@ -1138,12 +1180,13 @@ export function toApiWord(word) {
   return result;
 }
 
-function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, events }) {
+function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, events, firstRecordingAt = null }) {
   const selfRatingCounts = { clear: 0, hesitated: 0, could_not_say: 0 };
   let spokenSentenceCount = 0;
   let retryCount = 0;
   let approximateDurationMs = 0;
   let latestActivityAt = null;
+  let drillSessionsCompleted = 0;
   for (const event of events) {
     if (event.event_type === 'speaking_recorded') {
       spokenSentenceCount += 1;
@@ -1152,6 +1195,9 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
     if (event.event_type === 'speaking_retried') {
       retryCount += 1;
     }
+    if (event.event_type === 'speaking_drill_completed') {
+      drillSessionsCompleted += 1;
+    }
     if (event.self_rating && selfRatingCounts[event.self_rating] !== undefined) {
       selfRatingCounts[event.self_rating] += 1;
     }
@@ -1159,6 +1205,7 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
       latestActivityAt = event.occurred_at;
     }
   }
+  const retryRate = spokenSentenceCount > 0 ? retryCount / spokenSentenceCount : 0;
   return {
     device_id: deviceId,
     user_id: userId,
@@ -1167,8 +1214,11 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
     spoken_sentence_count: spokenSentenceCount,
     recording_count: spokenSentenceCount,
     retry_count: retryCount,
+    retry_rate: retryRate,
+    drill_sessions_completed: drillSessionsCompleted,
     approximate_duration_ms: approximateDurationMs,
     self_rating_counts: selfRatingCounts,
+    first_recording_at: firstRecordingAt ?? null,
     latest_activity_at: latestActivityAt
   };
 }

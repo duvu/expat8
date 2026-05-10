@@ -10,6 +10,7 @@ import {
   resolveEventKey,
   toApiSpeakingPrompt
 } from './word_store.js';
+import { normalizeSuggestionType } from './vocabulary_validator.js';
 import {
   decrementLevel,
   getDefaultProficiencyLevel,
@@ -830,6 +831,8 @@ export class PostgresWordStore {
         word_senses.ipa,
         word_senses.level,
         word_senses.status AS word_sense_status,
+        article_terms.classification AS article_term_classification,
+        article_terms.suggestion_type AS article_term_suggestion_type,
         speaking_prompt.id AS speaking_prompt_id,
         speaking_prompt.target_text AS speaking_prompt_target_text,
         speaking_prompt.vi_hint AS speaking_prompt_vi_hint,
@@ -887,6 +890,8 @@ export class PostgresWordStore {
         ipa: row.ipa,
         level: row.level,
         status: row.word_sense_status,
+        classification: row.article_term_classification ?? null,
+        suggestion_type: row.article_term_suggestion_type ?? null,
         speaking_prompt: row.speaking_prompt_id
           ? toApiSpeakingPrompt({
               id: row.speaking_prompt_id,
@@ -1425,9 +1430,16 @@ export class PostgresWordStore {
       const reviewStatus = isAdmin ? 'pending' : 'approved';
       const reviewedAt = isAdmin ? null : now;
       let persistedCount = 0;
+      const seen = new Set();
 
       for (const item of items) {
         const normalized = normalizeTerm(item.term);
+        const dedupeKey = `${item.language}:${normalized}`;
+        if (seen.has(dedupeKey)) {
+          continue;
+        }
+        seen.add(dedupeKey);
+        const suggestionType = normalizeSuggestionType(item.suggestion_type, item.term);
         const termResult = await client.query(
           `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
           VALUES ($1, $2, $3, $4, NULL, $5)
@@ -1455,7 +1467,7 @@ export class PostgresWordStore {
             item.ipa ?? null,
             item.pinyin ?? null,
             item.level_scale ?? 'cefr',
-            item.difficulty ?? 'A1',
+            item.level ?? item.difficulty ?? 'A1',
             Number(item.quality_score ?? item.confidence ?? 0.5),
             senseStatus,
             now
@@ -1465,9 +1477,10 @@ export class PostgresWordStore {
         await client.query(
           `INSERT INTO article_terms (
             id, article_id, term_id, word_sense_id, surface_text,
-            sentence_context, start_offset, end_offset, frequency, extraction_confidence, created_at
+            sentence_context, start_offset, end_offset, frequency, extraction_confidence,
+            classification, suggestion_type, created_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, $8, $9)`,
+          VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, $8, $9, $10, $11)`,
           [
             createId('article_term'),
             articleId,
@@ -1477,6 +1490,8 @@ export class PostgresWordStore {
             item.example ?? null,
             Number(item.frequency ?? 1),
             Number(item.confidence ?? 0.5),
+            item.classification ?? null,
+            suggestionType,
             now
           ]
         );

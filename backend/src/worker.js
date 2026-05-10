@@ -25,7 +25,7 @@ const enrichmentAdapter = new VocabularyEnrichmentAdapter({
 });
 const pipeline = new ArticleProcessingPipeline({
   store,
-  enrichmentAdapter,
+  suggestionAdapter: enrichmentAdapter,
   logger: logger.child({ component: 'article_processing_pipeline' })
 });
 const worker = new ArticleProcessingWorker({

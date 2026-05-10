@@ -194,7 +194,9 @@ Response:
       "part_of_speech": "adjective",
       "ipa": "/rɪˈlaɪəbl/",
       "level": "A1",
-      "status": "approved"
+      "status": "approved",
+      "classification": "article_keyword",
+      "suggestion_type": "word"
     }
   ]
 }
@@ -453,6 +455,7 @@ Supported speaking event types:
 - `speaking_self_rated_clear`
 - `speaking_self_rated_hesitated`
 - `speaking_self_rated_could_not_say`
+- `speaking_drill_completed`
 
 Speaking event example:
 
@@ -544,33 +547,109 @@ Response:
   "spoken_sentence_count": 12,
   "recording_count": 12,
   "retry_count": 3,
+  "retry_rate": 0.25,
+  "drill_sessions_completed": 2,
   "approximate_duration_ms": 52200,
   "self_rating_counts": {
     "clear": 7,
     "hesitated": 4,
     "could_not_say": 1
   },
+  "first_recording_at": "2026-05-01T09:00:00.000Z",
   "latest_activity_at": "2026-05-09T08:15:00.000Z"
 }
 ```
+
+`retry_rate` is `retry_count / recording_count` (0 when no recordings).
+`drill_sessions_completed` counts `speaking_drill_completed` events in the
+requested week. `first_recording_at` is the ISO timestamp of the earliest
+`speaking_recorded` event for the device across all time, or `null`.
+
+Missing `device_id` returns `400 { "error": "bad_request" }`.
+
+## GET /v1/speaking/prompts
+
+Returns approved speaking prompts for mobile offline drill sync.
+
+Query parameters:
+
+- `limit`: optional maximum returned prompts, capped at `200`, default `100`.
+- `word_sense_id`: optional filter to prompts for a specific word sense.
 
 Response:
 
 ```json
 {
-  "success": true,
-  "event_id": "study_event_123",
-  "idempotent": false,
-  "proficiency": {
-    "level": "A2",
-    "level_changed": true,
-    "previous_level": "A1",
-    "triggered_by": "5x consecutive too_easy",
-    "consecutive_count": 0,
-    "consecutive_rating_type": null,
-    "language": "en",
-    "last_updated": "2026-05-04T10:31:00.000Z"
-  }
+  "items": [
+    {
+      "id": "speaking_prompt_123",
+      "target_text": "She is a reliable teammate.",
+      "vi_hint": "Co ay la mot dong doi dang tin cay.",
+      "target_phrase": "reliable teammate",
+      "pronunciation_tip_vi": "Tap trung noi ro am cuoi /l/ trong reliable.",
+      "common_mistake_vi": "Nguoi Viet de bo am cuoi hoac nhan sai trong am.",
+      "difficulty": "B1",
+      "topic": "work"
+    }
+  ]
+}
+```
+
+## GET /v1/admin/speaking-prompts
+
+Admin-only. Lists speaking prompts with optional filters.
+
+Query parameters:
+
+- `status`: optional filter — `pending_review`, `approved`, or `rejected`.
+- `missing_required`: `true` to return only prompts missing `target_text` or `vi_hint`.
+- `limit`: optional maximum returned, capped at `200`, default `100`.
+
+Requires app credentials and admin token (`X-Expat8-Admin-Token`).
+Missing app credentials return `400`. Valid app credentials without admin token return `403`.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "speaking_prompt_123",
+      "word_sense_id": "sense_123",
+      "target_text": "She is a reliable teammate.",
+      "vi_hint": "Co ay la mot dong doi dang tin cay.",
+      "target_phrase": "reliable teammate",
+      "pronunciation_tip_vi": "...",
+      "common_mistake_vi": "...",
+      "difficulty": "B1",
+      "topic": "work",
+      "status": "pending_review",
+      "created_at": "2026-05-04T00:00:00.000Z",
+      "updated_at": "2026-05-04T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+## PATCH /v1/admin/speaking-prompts/:id
+
+Admin-only. Updates speaking prompt fields.
+
+Patchable fields: `target_text`, `vi_hint`, `target_phrase`, `pronunciation_tip_vi`,
+`common_mistake_vi`, `difficulty`, `topic`, `status`.
+
+Valid `status` values: `pending_review`, `approved`, `rejected`.
+Invalid status returns `400 { "error": "bad_request", "message": "invalid_status" }`.
+Unknown prompt ID returns `404 { "error": "not_found" }`.
+
+Response:
+
+```json
+{
+  "id": "speaking_prompt_123",
+  "status": "approved",
+  "target_text": "She is a reliable teammate.",
+  "updated_at": "2026-05-09T10:00:00.000Z"
 }
 ```
 

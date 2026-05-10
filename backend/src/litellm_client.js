@@ -81,6 +81,86 @@ export class LiteLLMClient {
     });
     return body.choices?.[0]?.message?.content ?? '';
   }
+
+  async generateArticleVocabularySuggestions({
+    sourceLanguage = 'vi',
+    targetLanguage = 'en',
+    chunk,
+    chunkIndex = 0,
+    maxSuggestions = 10,
+    articleTitle = null,
+    articleLanguage = targetLanguage
+  }) {
+    const startedAt = Date.now();
+    const profile = getProficiencyProfile({ language: targetLanguage });
+    const difficultyLevel = getDefaultArticleDifficulty({ language: targetLanguage });
+    const userPromptLines = buildArticleSuggestionPromptLines({
+      sourceLanguage,
+      targetLanguage,
+      chunk,
+      chunkIndex,
+      maxSuggestions,
+      profile,
+      difficultyLevel,
+      articleTitle,
+      articleLanguage
+    });
+
+    this.logger.debug?.('litellm_article_suggestion_started', {
+      source_language: sourceLanguage,
+      target_language: targetLanguage,
+      chunk_index: chunkIndex,
+      max_suggestions: maxSuggestions,
+      proficiency_scale: profile.scale
+    });
+
+    let response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Suggest article vocabulary for Vietnamese learners. Return valid JSON only.'
+            },
+            {
+              role: 'user',
+              content: userPromptLines.join('\n')
+            }
+          ],
+          temperature: 0.4
+        })
+      });
+    } catch (error) {
+      this.logger.error?.('litellm_article_suggestion_failed', {
+        elapsed_ms: Date.now() - startedAt,
+        error
+      });
+      throw error;
+    }
+
+    if (!response.ok) {
+      this.logger.error?.('litellm_article_suggestion_failed', {
+        status_code: response.status,
+        elapsed_ms: Date.now() - startedAt
+      });
+      throw new Error(`LiteLLM request failed: ${response.status}`);
+    }
+
+    const body = await response.json();
+    this.logger.debug?.('litellm_article_suggestion_completed', {
+      status_code: response.status,
+      elapsed_ms: Date.now() - startedAt
+    });
+    return body.choices?.[0]?.message?.content ?? '';
+  }
 }
 
 function buildPromptLines({
@@ -113,4 +193,35 @@ function buildPromptLines({
       : 'Return terms that are different from previously generated results.',
     `Return a JSON array of ${limit} objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics.`
   ];
+}
+
+function buildArticleSuggestionPromptLines({
+  sourceLanguage,
+  targetLanguage,
+  chunk,
+  chunkIndex,
+  maxSuggestions,
+  profile,
+  difficultyLevel,
+  articleTitle,
+  articleLanguage
+}) {
+  const difficultyLevels = profile.levels.join('/');
+  return [
+    `Analyze article chunk ${chunkIndex + 1} and suggest up to ${maxSuggestions} useful ${targetLanguage} words or phrases for ${sourceLanguage} speakers.`,
+    articleTitle ? `Article title: ${articleTitle}.` : null,
+    `Article language is ${articleLanguage}. Target proficiency scale is ${profile.scale.toUpperCase()} and target level is ${difficultyLevel}.`,
+    'Each suggestion must be directly supported by the chunk and should be useful for vocabulary study.',
+    'Return a JSON array of objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, level, topics, classification, suggestion_type.',
+    `Use difficulty and level values from ${difficultyLevels} or the nearest valid level for the article language.`,
+    'Use classification values like article_keyword, article_phrase, or article_concept when appropriate.',
+    'Use suggestion_type word for single words and phrase for multiword expressions.',
+    'Chunk text:',
+    chunk
+  ].filter(Boolean);
+}
+
+function getDefaultArticleDifficulty({ language }) {
+  const profile = getProficiencyProfile({ language });
+  return profile.defaultLevel;
 }
