@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
@@ -8,6 +10,9 @@ import {
   normalizeSpeakingEvent,
   normalizeSpeakingPromptInput,
   resolveEventKey,
+  selectDistractors,
+  shuffleArray,
+  shuffleChoices,
   toApiSpeakingPrompt
 } from './word_store.js';
 import { normalizeSuggestionType } from './vocabulary_validator.js';
@@ -475,6 +480,7 @@ export class PostgresWordStore {
     this.logger.info?.('db_sync_study_events_completed', {
       device_id: deviceId,
       accepted_count: accepted.length,
+      duplicate_count: duplicates.length,
       rejected_count: rejected.length,
       elapsed_ms: Date.now() - startedAt
     });
@@ -1295,18 +1301,33 @@ export class PostgresWordStore {
 
   async reviewVocabularyItem({ itemId, status, reviewNote = null, reviewerUserId = null }) {
     const now = new Date().toISOString();
-    const result = await this.pool.query(
-      `UPDATE vocabulary_review_items
-      SET status = $2,
-          review_note = $3,
-          reviewer_user_id = $4,
-          reviewed_at = $5,
-          updated_at = $5
-      WHERE id = $1
-      RETURNING *`,
-      [itemId, status, reviewNote, reviewerUserId, now]
-    );
-    return result.rows[0] ?? null;
+    // Update the review item and sync word_senses.status so that
+    // getArticleVocabulary visibility filtering (word_senses.status = 'approved')
+    // reflects the admin decision. Mirrors InMemory WordStore behaviour.
+    const senseStatus = status === 'approved' ? 'approved' : 'rejected';
+    const result = await this.#withOptionalTransaction(async (client) => {
+      const itemResult = await client.query(
+        `UPDATE vocabulary_review_items
+        SET status = $2,
+            review_note = $3,
+            reviewer_user_id = $4,
+            reviewed_at = $5,
+            updated_at = $5
+        WHERE id = $1
+        RETURNING *`,
+        [itemId, status, reviewNote, reviewerUserId, now]
+      );
+      const item = itemResult.rows[0];
+      if (!item) {
+        return null;
+      }
+      await client.query(
+        `UPDATE word_senses SET status = $1, updated_at = $2 WHERE id = $3`,
+        [senseStatus, now, item.word_sense_id]
+      );
+      return item;
+    });
+    return result;
   }
 
   async listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
@@ -1433,6 +1454,13 @@ export class PostgresWordStore {
     });
   }
 
+  async countPendingArticleJobs() {
+    const result = await this.pool.query(
+      `SELECT COUNT(*) AS count FROM article_processing_jobs WHERE status = 'pending_processing'`
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async persistArticleVocabulary({ articleId, items = [] }) {
     return this.#withOptionalTransaction(async (client) => {
       const articleResult = await client.query(
@@ -1538,6 +1566,33 @@ export class PostgresWordStore {
           VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $6)`,
           [createId('review_item'), sense.rows[0].id, articleId, reviewStatus, reviewedAt, now]
         );
+
+        // Bridge approved sense into the words pool so learningCards can serve it
+        if (!requiresReview) {
+          await client.query(
+            `INSERT INTO words (
+              id, term, normalized_term, language, meaning_vi,
+              part_of_speech, ipa, vietnamese_pronunciation,
+              example, example_vi, difficulty, topics_json,
+              generation_source, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', $10, '[]', 'article_vocabulary', $11, $11)
+            ON CONFLICT (language, normalized_term) DO NOTHING`,
+            [
+              createId('word'),
+              item.term,
+              normalized,
+              item.language,
+              item.meaning_vi ?? '',
+              item.part_of_speech ?? null,
+              item.ipa ?? '',
+              item.vietnamese_pronunciation ?? '',
+              item.example ?? '',
+              item.level ?? item.difficulty ?? 'A1',
+              now
+            ]
+          );
+        }
 
         persistedCount += 1;
       }
@@ -1691,6 +1746,232 @@ export class PostgresWordStore {
     } finally {
       client.release();
     }
+  }
+
+  // ─── Exam methods ──────────────────────────────────────────────────────────
+
+  async examTopics({ userId, language = 'en' }) {
+    const result = await this.pool.query(
+      `SELECT DISTINCT w.topics_json
+       FROM user_word_states uws
+       JOIN words w ON w.id = uws.word_id
+       WHERE uws.user_id = $1 AND uws.language = $2`,
+      [userId, language]
+    );
+    const topicsSet = new Set();
+    for (const row of result.rows) {
+      let topics;
+      try {
+        topics = JSON.parse(row.topics_json ?? '[]');
+      } catch {
+        topics = [];
+      }
+      for (const t of topics) {
+        const norm = String(t).trim().toLowerCase();
+        if (norm) topicsSet.add(norm);
+      }
+    }
+    return [...topicsSet].sort();
+  }
+
+  async startExamSession({ userId, topic, language = 'en', now = new Date().toISOString(), sessionTtlMs = 7200000 }) {
+    const normTopic = String(topic).trim().toLowerCase();
+    const expiresAt = new Date(new Date(now).getTime() + sessionTtlMs).toISOString();
+
+    return this.#withOptionalTransaction(async (client) => {
+      // Find studied words matching topic+language
+      const sourceResult = await client.query(
+        `SELECT w.id, w.term, w.meaning_vi, w.difficulty, w.topics_json, w.language
+         FROM user_word_states uws
+         JOIN words w ON w.id = uws.word_id
+         WHERE uws.user_id = $1 AND uws.language = $2`,
+        [userId, language]
+      );
+      const matchingWords = sourceResult.rows
+        .map((r) => {
+          let topics;
+          try { topics = JSON.parse(r.topics_json ?? '[]'); } catch { topics = []; }
+          return { ...r, topics };
+        })
+        .filter((w) => w.topics.map((t) => String(t).trim().toLowerCase()).includes(normTopic));
+
+      if (matchingWords.length < 5) {
+        return { error: 'INSUFFICIENT_WORDS', found: matchingWords.length };
+      }
+
+      const shuffledSource = shuffleArray([...matchingWords]).slice(0, 20);
+      const sourceIds = new Set(shuffledSource.map((w) => w.id));
+
+      // Distractor pool: same language, not a source word
+      const distResult = await client.query(
+        `SELECT id, term, meaning_vi, difficulty FROM words WHERE language = $1`,
+        [language]
+      );
+      const distractorPool = distResult.rows.filter((w) => !sourceIds.has(w.id));
+
+      // Create session
+      const sessionId = createId('exam_sess');
+      await client.query(
+        `INSERT INTO exam_sessions (id, user_id, topic, language, difficulty_level, created_at, expires_at, submitted_at)
+         VALUES ($1, $2, $3, $4, NULL, $5, $6, NULL)`,
+        [sessionId, userId, normTopic, language, now, expiresAt]
+      );
+
+      const questions = [];
+      for (let i = 0; i < shuffledSource.length; i++) {
+        const src = shuffledSource[i];
+        const distractors = selectDistractors({ source: src, pool: distractorPool, count: 3 });
+        const correctMeaning = src.meaning_vi ?? src.term;
+        const choicesRaw = [correctMeaning, ...distractors.map((d) => d.meaning_vi ?? d.term)];
+        const { choices, correctIndex } = shuffleChoices(choicesRaw);
+        const question = {
+          id: createId('exam_q'),
+          session_id: sessionId,
+          word_id: src.id,
+          prompt_word: src.term,
+          choices_json: JSON.stringify(choices),
+          correct_index: correctIndex,
+          ordinal: i,
+          created_at: now
+        };
+        await client.query(
+          `INSERT INTO exam_questions (id, session_id, word_id, prompt_word, choices_json, correct_index, ordinal, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [question.id, question.session_id, question.word_id, question.prompt_word,
+            question.choices_json, question.correct_index, question.ordinal, question.created_at]
+        );
+        questions.push(question);
+      }
+
+      return {
+        session_id: sessionId,
+        topic: normTopic,
+        language,
+        question_count: questions.length,
+        expires_at: expiresAt,
+        questions: questions.map((q) => ({
+          question_id: q.id,
+          ordinal: q.ordinal,
+          prompt_word: q.prompt_word,
+          choices: JSON.parse(q.choices_json)
+        }))
+      };
+    });
+  }
+
+  async submitExamSession({ sessionId, userId, answers, now = new Date().toISOString(), passPct = 70, disclaimer = '' }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const sessResult = await client.query(
+        `SELECT * FROM exam_sessions WHERE id = $1`, [sessionId]
+      );
+      if (sessResult.rows.length === 0) return { error: 'NOT_FOUND' };
+      const session = sessResult.rows[0];
+      if (session.submitted_at) return { error: 'ALREADY_SUBMITTED' };
+      if (now > session.expires_at) return { error: 'SESSION_EXPIRED' };
+
+      const qResult = await client.query(
+        `SELECT * FROM exam_questions WHERE session_id = $1 ORDER BY ordinal`, [sessionId]
+      );
+      const questions = qResult.rows;
+      if (answers.length !== questions.length) {
+        return { error: 'ANSWER_COUNT_MISMATCH', expected: questions.length, received: answers.length };
+      }
+
+      let correctCount = 0;
+      for (let i = 0; i < questions.length; i++) {
+        if (Number(answers[i]) === questions[i].correct_index) correctCount += 1;
+      }
+      const totalQuestions = questions.length;
+      const scorePct = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
+      const passed = scorePct >= passPct;
+
+      await client.query(
+        `UPDATE exam_sessions SET submitted_at = $1 WHERE id = $2`, [now, sessionId]
+      );
+
+      const attemptId = createId('exam_att');
+      await client.query(
+        `INSERT INTO exam_attempts (id, session_id, user_id, topic, language, difficulty_level, total_questions, correct_count, score_pct, passed, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [attemptId, sessionId, userId, session.topic, session.language, session.difficulty_level,
+          totalQuestions, correctCount, scorePct, passed ? 1 : 0, now]
+      );
+
+      let certificateId = null;
+      if (passed) {
+        certificateId = crypto.randomUUID();
+        await client.query(
+          `INSERT INTO exam_certificates (id, attempt_id, user_id, topic, language, difficulty_level, score_pct, issued_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [certificateId, attemptId, userId, session.topic, session.language,
+            session.difficulty_level, scorePct, now]
+        );
+      }
+
+      return {
+        attempt_id: attemptId,
+        session_id: sessionId,
+        topic: session.topic,
+        language: session.language,
+        difficulty_level: session.difficulty_level,
+        total_questions: totalQuestions,
+        correct_count: correctCount,
+        score_pct: scorePct,
+        passed,
+        certificate_id: certificateId,
+        created_at: now
+      };
+    });
+  }
+
+  async getExamResults({ userId, page = 1, limit = 20 }) {
+    const offset = (page - 1) * limit;
+    const countResult = await this.pool.query(
+      `SELECT COUNT(*) AS total FROM exam_attempts WHERE user_id = $1`, [userId]
+    );
+    const total = Number(countResult.rows[0]?.total ?? 0);
+    const itemsResult = await this.pool.query(
+      `SELECT ea.id AS attempt_id, ea.topic, ea.language, ea.difficulty_level, ea.score_pct,
+              ea.passed, ea.created_at, ec.id AS certificate_id
+       FROM exam_attempts ea
+       LEFT JOIN exam_certificates ec ON ec.attempt_id = ea.id
+       WHERE ea.user_id = $1
+       ORDER BY ea.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+    const items = itemsResult.rows.map((r) => ({
+      attempt_id: r.attempt_id,
+      topic: r.topic,
+      language: r.language,
+      difficulty_level: r.difficulty_level,
+      score_pct: r.score_pct,
+      passed: r.passed === 1 || r.passed === true,
+      created_at: r.created_at,
+      certificate_id: r.certificate_id ?? null
+    }));
+    return { items, total, page, limit };
+  }
+
+  async getExamCertificate({ id }) {
+    const result = await this.pool.query(
+      `SELECT id, topic, language, difficulty_level, score_pct, issued_at
+       FROM exam_certificates WHERE id = $1`,
+      [id]
+    );
+    if (result.rows.length === 0) return null;
+    const r = result.rows[0];
+    const CERTIFICATE_DISCLAIMER =
+      'This is an internal Expat8 completion certificate. It does not represent an official CEFR or HSK examination result.';
+    return {
+      certificate_id: r.id,
+      topic: r.topic,
+      language: r.language,
+      difficulty_level: r.difficulty_level,
+      score_pct: r.score_pct,
+      issued_at: r.issued_at,
+      disclaimer: CERTIFICATE_DISCLAIMER
+    };
   }
 }
 

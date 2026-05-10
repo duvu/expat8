@@ -3,6 +3,7 @@ import http from 'node:http';
 import pg from 'pg';
 
 import { createApp } from './app.js';
+import { PostgresNonceCache } from './app_credentials.js';
 import { loadConfig } from './config.js';
 import { VocabularyGenerationService } from './generation_service.js';
 import { LiteLLMClient } from './litellm_client.js';
@@ -19,13 +20,14 @@ export function createStore({ config, logger, poolFactory = (options) => new pg.
   });
 
   if (config.databaseUrl) {
+    const pool = poolFactory({
+      connectionString: config.databaseUrl,
+      max: config.dbPoolMax,
+      idleTimeoutMillis: config.dbIdleTimeoutMs,
+      connectionTimeoutMillis: config.dbConnectionTimeoutMs
+    });
     return new PostgresWordStore({
-      pool: poolFactory({
-        connectionString: config.databaseUrl,
-        max: config.dbPoolMax,
-        idleTimeoutMillis: config.dbIdleTimeoutMs,
-        connectionTimeoutMillis: config.dbConnectionTimeoutMs
-      }),
+      pool,
       logger: storeLogger.child({ component: 'postgres_word_store' }),
       strictAttemptId: config.speakingEventsStrictAttemptId
     });
@@ -57,11 +59,18 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     config,
     logger: runtimeLogger.child({ component: 'vocabulary_scheduler' })
   });
+
+  // Use Postgres-backed nonce cache when a database is configured so replay
+  // protection survives process restarts and works across multiple instances.
+  // Falls back to the in-memory implementation for local/test environments.
+  const nonceCache = store.pool ? new PostgresNonceCache(store.pool) : undefined;
+
   const server = http.createServer(createApp({
     store,
     generationService,
     config,
-    logger: runtimeLogger.child({ component: 'api' })
+    logger: runtimeLogger.child({ component: 'api' }),
+    ...(nonceCache ? { nonceCache } : {})
   }));
 
   return {

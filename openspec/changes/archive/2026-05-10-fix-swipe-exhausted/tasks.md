@@ -19,4 +19,4 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Manual test trên emulator: swipe right-to-left liên tiếp 5 lần, confirm 5 từ khác nhau xuất hiện
+- [x] 5.1 Manual test trên emulator: swipe right-to-left liên tiếp 5 lần, confirm 5 từ khác nhau xuất hiện

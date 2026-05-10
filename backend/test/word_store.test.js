@@ -458,6 +458,57 @@ test('stub vocabulary items have approved=false regardless of article type', () 
   assert.equal(userStubReview.status, 'pending', 'user article stub should also be pending');
 });
 
+test('approved article vocabulary is bridged into words pool and served by learningCards', () => {
+  const store = new WordStore({ seed: false });
+  const user = store.registerUser({ identifier: 'bridge_user@test.com', password: 'pass_bridge_123!' });
+  const article = store.createArticle({
+    userId: user.user.id,
+    title: 'Bridge Test Article',
+    language: 'en',
+    rawText: 'Resilience and tenacity matter.'
+  });
+
+  const items = [
+    { term: 'resilience', language: 'en', meaning_vi: 'suc ben bi', ipa: '/rɪˈzɪliəns/', level: 'B2' },
+    { term: 'tenacity', language: 'en', meaning_vi: 'su kien tri', ipa: '/tɪˈnæsɪti/', level: 'C1' }
+  ];
+  store.persistArticleVocabulary({ articleId: article.id, items });
+
+  // Both words should now be in the words pool
+  const wordTerms = [...store.words.values()].map((w) => w.term);
+  assert.ok(wordTerms.includes('resilience'), 'resilience should be in words pool');
+  assert.ok(wordTerms.includes('tenacity'), 'tenacity should be in words pool');
+
+  // learningCards should serve them as new cards for a fresh device
+  const result = store.learningCards({ deviceId: 'device_bridge_test', targetLanguage: 'en' });
+  const cardTerms = result.items.map((c) => c.word.term);
+  assert.ok(cardTerms.includes('resilience'), 'learningCards should include resilience');
+  assert.ok(cardTerms.includes('tenacity'), 'learningCards should include tenacity');
+
+  // generation_source should identify article-sourced words
+  const bridgedWord = [...store.words.values()].find((w) => w.term === 'resilience');
+  assert.equal(bridgedWord.generation_source, 'article_vocabulary');
+});
+
+test('admin article vocabulary is NOT bridged into words pool (requires review)', () => {
+  const store = new WordStore({ seed: false });
+  const adminArticle = store.createAdminArticle({
+    adminUserId: 'admin_bridge',
+    title: 'Admin Bridge Article',
+    language: 'en',
+    rawText: 'Some curated content.'
+  });
+
+  store.persistArticleVocabulary({
+    articleId: adminArticle.id,
+    items: [{ term: 'curation', language: 'en', meaning_vi: 'su tuyen chon', ipa: '/kjʊˈreɪʃn/', level: 'B2' }]
+  });
+
+  // Word should NOT be in the words pool (pending_review)
+  const wordTerms = [...store.words.values()].map((w) => w.term);
+  assert.ok(!wordTerms.includes('curation'), 'admin article vocab should NOT be in words pool');
+});
+
 test('additive cache claims are idempotent and filter unknown words', () => {
   const store = new WordStore({ seed: false });
   store.insertWord(wordInput({ id: 'word_claim', term: 'claim' }));

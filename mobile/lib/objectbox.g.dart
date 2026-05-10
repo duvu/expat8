@@ -496,6 +496,93 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(8, 3288235631848983449),
+    name: 'ExamAttemptEntity',
+    lastPropertyId: const obx_int.IdUid(12, 7588106210396541618),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3915316147005991805),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 7593726105439092256),
+        name: 'attemptId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(24, 7324109485228087763),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 9106092122372414060),
+        name: 'sessionId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(25, 7825048621324828907),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 7888529095864896888),
+        name: 'topic',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(26, 4700645075651854157),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 8661363817368612234),
+        name: 'language',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(27, 701676634767163217),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 583399123505937220),
+        name: 'difficultyLevel',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 6460503402813561281),
+        name: 'totalQuestions',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 2527633305818626451),
+        name: 'correctCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 6656541848572048795),
+        name: 'scorePct',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 1470170022498231884),
+        name: 'passed',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 1273051271994143427),
+        name: 'createdAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(28, 3393559323606846162),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 7588106210396541618),
+        name: 'certificateId',
+        type: 9,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -536,8 +623,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(7, 5907671979540824477),
-    lastIndexId: const obx_int.IdUid(23, 6588260673035546186),
+    lastEntityId: const obx_int.IdUid(8, 3288235631848983449),
+    lastIndexId: const obx_int.IdUid(28, 3393559323606846162),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -1161,6 +1248,116 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    ExamAttemptEntity: obx_int.EntityDefinition<ExamAttemptEntity>(
+      model: _entities[7],
+      toOneRelations: (ExamAttemptEntity object) => [],
+      toManyRelations: (ExamAttemptEntity object) => {},
+      getId: (ExamAttemptEntity object) => object.id,
+      setId: (ExamAttemptEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (ExamAttemptEntity object, fb.Builder fbb) {
+        final attemptIdOffset = fbb.writeString(object.attemptId);
+        final sessionIdOffset = fbb.writeString(object.sessionId);
+        final topicOffset = fbb.writeString(object.topic);
+        final languageOffset = fbb.writeString(object.language);
+        final difficultyLevelOffset = object.difficultyLevel == null
+            ? null
+            : fbb.writeString(object.difficultyLevel!);
+        final certificateIdOffset = object.certificateId == null
+            ? null
+            : fbb.writeString(object.certificateId!);
+        fbb.startTable(13);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, attemptIdOffset);
+        fbb.addOffset(2, sessionIdOffset);
+        fbb.addOffset(3, topicOffset);
+        fbb.addOffset(4, languageOffset);
+        fbb.addOffset(5, difficultyLevelOffset);
+        fbb.addInt64(6, object.totalQuestions);
+        fbb.addInt64(7, object.correctCount);
+        fbb.addFloat64(8, object.scorePct);
+        fbb.addInt64(9, object.passed);
+        fbb.addInt64(10, object.createdAtMs);
+        fbb.addOffset(11, certificateIdOffset);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final attemptIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final sessionIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final topicParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final languageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final difficultyLevelParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 14);
+        final totalQuestionsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          16,
+          0,
+        );
+        final correctCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          18,
+          0,
+        );
+        final scorePctParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          20,
+          0,
+        );
+        final passedParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          22,
+          0,
+        );
+        final createdAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          24,
+          0,
+        );
+        final certificateIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 26);
+        final object = ExamAttemptEntity(
+          id: idParam,
+          attemptId: attemptIdParam,
+          sessionId: sessionIdParam,
+          topic: topicParam,
+          language: languageParam,
+          difficultyLevel: difficultyLevelParam,
+          totalQuestions: totalQuestionsParam,
+          correctCount: correctCountParam,
+          scorePct: scorePctParam,
+          passed: passedParam,
+          createdAtMs: createdAtMsParam,
+          certificateId: certificateIdParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -1503,5 +1700,68 @@ class SpeakingPromptEntity_ {
   /// See [SpeakingPromptEntity.cachedAtMs].
   static final cachedAtMs = obx.QueryIntegerProperty<SpeakingPromptEntity>(
     _entities[6].properties[11],
+  );
+}
+
+/// [ExamAttemptEntity] entity fields to define ObjectBox queries.
+class ExamAttemptEntity_ {
+  /// See [ExamAttemptEntity.id].
+  static final id = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[0],
+  );
+
+  /// See [ExamAttemptEntity.attemptId].
+  static final attemptId = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[1],
+  );
+
+  /// See [ExamAttemptEntity.sessionId].
+  static final sessionId = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[2],
+  );
+
+  /// See [ExamAttemptEntity.topic].
+  static final topic = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[3],
+  );
+
+  /// See [ExamAttemptEntity.language].
+  static final language = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[4],
+  );
+
+  /// See [ExamAttemptEntity.difficultyLevel].
+  static final difficultyLevel = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[5],
+  );
+
+  /// See [ExamAttemptEntity.totalQuestions].
+  static final totalQuestions = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[6],
+  );
+
+  /// See [ExamAttemptEntity.correctCount].
+  static final correctCount = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[7],
+  );
+
+  /// See [ExamAttemptEntity.scorePct].
+  static final scorePct = obx.QueryDoubleProperty<ExamAttemptEntity>(
+    _entities[7].properties[8],
+  );
+
+  /// See [ExamAttemptEntity.passed].
+  static final passed = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[9],
+  );
+
+  /// See [ExamAttemptEntity.createdAtMs].
+  static final createdAtMs = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[10],
+  );
+
+  /// See [ExamAttemptEntity.certificateId].
+  static final certificateId = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[11],
   );
 }

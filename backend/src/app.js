@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 
-import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
+import { InMemoryNonceCache, PostgresNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
 import { InvalidStudyRatingError } from './proficiency.js';
 import {
   DuplicateUserError,
@@ -11,6 +11,8 @@ import {
 } from './user_identity.js';
 import { createLogger } from './logger.js';
 import { toApiWord, toApiSpeakingPrompt } from './word_store.js';
+import { createExamRouter } from './routes/exam.js';
+import { InMemoryRateLimiter, rateLimitMiddleware } from './rate_limit.js';
 
 export function createApp({
   store,
@@ -43,6 +45,19 @@ export function createApp({
     }
   });
 
+  // Public exam certificate endpoint — no app-credential auth required.
+  app.get('/v1/exam/certificate/:id', async (request, response) => {
+    try {
+      const cert = await store.getExamCertificate({ id: request.params.id });
+      if (!cert) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(cert);
+    } catch (_err) {
+      return response.status(500).json({ error: 'internal_error' });
+    }
+  });
+
   app.use(
     '/v1',
     corsMiddleware({ config }),
@@ -51,7 +66,7 @@ export function createApp({
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
     parseJsonFromCapturedBody,
-    createV1Router({ store, generationService, config })
+    createV1Router({ store, generationService, config, rateLimiters: createRateLimiters() })
   );
 
   app.use((request, response) => {
@@ -83,11 +98,39 @@ export function createApp({
   return app;
 }
 
-function createV1Router({ store, config }) {
+/**
+ * Create the default rate limiter set for production use.
+ * Returns an object of named InMemoryRateLimiter instances.
+ * Individual limiters can be replaced or disabled by passing null via rateLimiters.
+ */
+function createRateLimiters() {
+  return {
+    // Auth: 10 requests per minute per IP — protects against brute-force
+    authLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 10 }),
+    // Article upload: 20 uploads per minute per device/IP
+    articleUploadLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 20 }),
+    // Learning cards: 60 fetches per minute per device — supports fast offline refill
+    learningCardsLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 60 }),
+    // Study event sync: 30 batches per minute per device
+    studyEventSyncLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 30 })
+  };
+}
+
+function createV1Router({ store, config, rateLimiters = {} }) {
+  const {
+    authLimiter,
+    articleUploadLimiter,
+    learningCardsLimiter,
+    studyEventSyncLimiter
+  } = rateLimiters;
   const router = express.Router();
+
+  // Exam routes (authenticated; public certificate is mounted separately above).
+  router.use('/exam', createExamRouter({ store }));
 
   router.post(
     '/users/register',
+    ...(authLimiter ? [rateLimitMiddleware(authLimiter, { keyPrefix: 'register' })] : []),
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -112,6 +155,7 @@ function createV1Router({ store, config }) {
 
   router.post(
     '/users/sign-in',
+    ...(authLimiter ? [rateLimitMiddleware(authLimiter, { keyPrefix: 'signin' })] : []),
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -164,6 +208,7 @@ function createV1Router({ store, config }) {
 
   router.post(
     '/learning/cards',
+    ...(learningCardsLimiter ? [rateLimitMiddleware(learningCardsLimiter, { keyPrefix: 'cards' })] : []),
     asyncHandler(async (request, response) => {
       const userSession = await resolveOptionalUserSession({ request, response, store });
       if (userSession === false) {
@@ -249,6 +294,7 @@ function createV1Router({ store, config }) {
 
   router.post(
     '/articles',
+    ...(articleUploadLimiter ? [rateLimitMiddleware(articleUploadLimiter, { keyPrefix: 'articles' })] : []),
     asyncHandler(async (request, response) => {
       const userSession = await resolveRequiredUserSession({ request, response, store });
       if (!userSession) {
@@ -605,6 +651,7 @@ function createV1Router({ store, config }) {
 
   router.post(
     '/study-events/sync',
+    ...(studyEventSyncLimiter ? [rateLimitMiddleware(studyEventSyncLimiter, { keyPrefix: 'sync' })] : []),
     asyncHandler(async (request, response) => {
       const userSession = await resolveOptionalUserSession({ request, response, store });
       if (userSession === false) {
@@ -887,9 +934,9 @@ function captureRawBody({ config }) {
 }
 
 function appCredentialGuard({ config, nonceCache }) {
-  return (request, response, next) => {
+  return async (request, response, next) => {
     const url = new URL(request.originalUrl, 'http://localhost');
-    const result = verifyAppCredentialRequest({
+    const result = await verifyAppCredentialRequest({
       method: request.method,
       url,
       headers: request.headers,

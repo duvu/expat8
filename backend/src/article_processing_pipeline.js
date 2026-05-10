@@ -1,4 +1,3 @@
-import { extractCandidateTerms } from './article_term_extractor.js';
 import { normalizeTerm } from './normalize.js';
 import { normalizeDifficultyLevel } from './proficiency.js';
 import {
@@ -13,14 +12,12 @@ export class ArticleProcessingPipeline {
   constructor({
     store,
     suggestionAdapter = null,
-    enrichmentAdapter = null,
     logger = console,
     maxChunkChars = DEFAULT_MAX_CHUNK_CHARS,
     maxSuggestionsPerChunk = DEFAULT_MAX_SUGGESTIONS_PER_CHUNK
   }) {
     this.store = store;
-    this.suggestionAdapter = suggestionAdapter ?? enrichmentAdapter;
-    this.enrichmentAdapter = enrichmentAdapter ?? suggestionAdapter;
+    this.suggestionAdapter = suggestionAdapter;
     this.logger = logger;
     this.maxChunkChars = Math.max(1, maxChunkChars);
     this.maxSuggestionsPerChunk = Math.max(1, maxSuggestionsPerChunk);
@@ -111,11 +108,18 @@ export class ArticleProcessingPipeline {
       await this.store.persistArticleVocabulary({ articleId, items: accepted });
     }
 
+    const rejectedByReason = rejected.reduce((acc, r) => {
+      const key = r.classification ?? r.reason ?? 'unknown';
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+
     this.logger.info?.('article_processing_pipeline_completed', {
       article_id: articleId,
       extracted_count: extracted.length,
       accepted_count: accepted.length,
-      rejected_count: rejected.length
+      rejected_count: rejected.length,
+      rejected_by_reason: rejectedByReason
     });
 
     return {
@@ -140,34 +144,6 @@ export class ArticleProcessingPipeline {
         return { ok: true, items: result };
       }
       return result;
-    }
-
-    if (this.enrichmentAdapter?.enrichTerm) {
-      const candidates = extractCandidateTerms({
-        text: chunk,
-        maxTerms: maxSuggestions,
-        language: article.language
-      });
-      const results = [];
-      for (const candidate of candidates) {
-        const enriched = await this.enrichmentAdapter.enrichTerm({
-          term: candidate.term,
-          language: article.language,
-          context: extractContextSnippet(chunk, candidate.term),
-          frequency: candidate.frequency,
-          confidence: candidate.confidence
-        });
-        if (!enriched?.ok) {
-          continue;
-        }
-        const item = enriched.item ?? enriched;
-        results.push({
-          ...item,
-          classification: item.classification ?? 'article_suggestion',
-          suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term)
-        });
-      }
-      return { ok: true, items: results };
     }
 
     return {
@@ -276,15 +252,4 @@ function splitByLength(text, maxChars) {
     index += maxChars;
   }
   return chunks.filter(Boolean);
-}
-
-function extractContextSnippet(rawText, term) {
-  const text = String(rawText ?? '');
-  const index = text.toLowerCase().indexOf(String(term).toLowerCase());
-  if (index < 0) {
-    return text.slice(0, 120);
-  }
-  const start = Math.max(0, index - 40);
-  const end = Math.min(text.length, index + term.length + 80);
-  return text.slice(start, end).trim();
 }

@@ -20,4 +20,4 @@
 
 - [x] 4.1 Ensure proficiency labels and subsequent card/review requests use the newly selected language immediately after a switch
 - [x] 4.2 Validate restored or selected language values against the supported-language list and fall back to the default when invalid
-- [ ] 4.3 Run the relevant mobile test suite to verify persistence, controller, and learning-screen behavior end to end
+- [x] 4.3 Run the relevant mobile test suite to verify persistence, controller, and learning-screen behavior end to end

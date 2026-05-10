@@ -431,10 +431,89 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "8:3288235631848983449",
+      "lastPropertyId": "12:7588106210396541618",
+      "name": "ExamAttemptEntity",
+      "properties": [
+        {
+          "id": "1:3915316147005991805",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7593726105439092256",
+          "name": "attemptId",
+          "indexId": "24:7324109485228087763",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:9106092122372414060",
+          "name": "sessionId",
+          "indexId": "25:7825048621324828907",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7888529095864896888",
+          "name": "topic",
+          "indexId": "26:4700645075651854157",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:8661363817368612234",
+          "name": "language",
+          "indexId": "27:701676634767163217",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:583399123505937220",
+          "name": "difficultyLevel",
+          "type": 9
+        },
+        {
+          "id": "7:6460503402813561281",
+          "name": "totalQuestions",
+          "type": 6
+        },
+        {
+          "id": "8:2527633305818626451",
+          "name": "correctCount",
+          "type": 6
+        },
+        {
+          "id": "9:6656541848572048795",
+          "name": "scorePct",
+          "type": 8
+        },
+        {
+          "id": "10:1470170022498231884",
+          "name": "passed",
+          "type": 6
+        },
+        {
+          "id": "11:1273051271994143427",
+          "name": "createdAtMs",
+          "indexId": "28:3393559323606846162",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "12:7588106210396541618",
+          "name": "certificateId",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "7:5907671979540824477",
-  "lastIndexId": "23:6588260673035546186",
+  "lastEntityId": "8:3288235631848983449",
+  "lastIndexId": "28:3393559323606846162",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

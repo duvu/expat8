@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   InMemoryNonceCache,
+  PostgresNonceCache,
   buildCanonicalRequest,
   canonicalPathWithSortedQuery,
   hashBody,
@@ -55,7 +56,7 @@ test('hashes body and signs canonical requests', () => {
   assert.match(signCanonicalRequest({ secret: activeCredential.secret, canonicalRequest }), /^v1=/);
 });
 
-test('verifies valid credentials and rejects tampering, expiry, unknown apps, and replay', () => {
+test('verifies valid credentials and rejects tampering, expiry, unknown apps, and replay', async () => {
   const now = new Date('2026-05-04T10:30:00.000Z');
   const url = new URL('http://localhost/v1/learning/cards');
   const rawBody = Buffer.from('{"device_id":"anonymous_test","limit":10}');
@@ -69,7 +70,7 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
   });
 
   assert.deepEqual(
-    verifyAppCredentialRequest({
+    await verifyAppCredentialRequest({
       method: 'POST',
       url,
       headers,
@@ -82,7 +83,7 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
   );
 
   assert.equal(
-    verifyAppCredentialRequest({
+    (await verifyAppCredentialRequest({
       method: 'POST',
       url,
       headers,
@@ -90,12 +91,12 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
       config: baseConfig,
       nonceCache,
       now
-    }).ok,
+    })).ok,
     false
   );
 
   assert.equal(
-    verifyAppCredentialRequest({
+    (await verifyAppCredentialRequest({
       method: 'POST',
       url: new URL('http://localhost/v1/learning/cards?limit=2'),
       headers: signedHeaders({
@@ -109,12 +110,12 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
       config: baseConfig,
       nonceCache: new InMemoryNonceCache(),
       now
-    }).ok,
+    })).ok,
     false
   );
 
   assert.equal(
-    verifyAppCredentialRequest({
+    (await verifyAppCredentialRequest({
       method: 'POST',
       url,
       headers: signedHeaders({
@@ -128,12 +129,12 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
       config: baseConfig,
       nonceCache: new InMemoryNonceCache(),
       now
-    }).ok,
+    })).ok,
     false
   );
 
   assert.equal(
-    verifyAppCredentialRequest({
+    (await verifyAppCredentialRequest({
       method: 'POST',
       url,
       headers: {
@@ -150,12 +151,12 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
       config: baseConfig,
       nonceCache: new InMemoryNonceCache(),
       now
-    }).ok,
+    })).ok,
     false
   );
 });
 
-test('timingSafeEqual rejects mismatched signatures of different byte lengths without throwing', () => {
+test('timingSafeEqual rejects mismatched signatures of different byte lengths without throwing', async () => {
   // Verify signature with a shorter tampered value — should return false, not throw
   const now = new Date('2026-05-04T10:30:00.000Z');
   const url = new URL('http://localhost/v1/words/next?limit=1');
@@ -165,7 +166,7 @@ test('timingSafeEqual rejects mismatched signatures of different byte lengths wi
   headers['x-expat8-signature'] = 'v1=short';
 
   assert.equal(
-    verifyAppCredentialRequest({
+    (await verifyAppCredentialRequest({
       method: 'GET',
       url,
       headers,
@@ -173,9 +174,45 @@ test('timingSafeEqual rejects mismatched signatures of different byte lengths wi
       config: baseConfig,
       nonceCache: new InMemoryNonceCache(),
       now
-    }).ok,
+    })).ok,
     false
   );
+});
+
+test('PostgresNonceCache uses INSERT ON CONFLICT to detect replays', async () => {
+  const rows = new Map();
+  let pruneCallCount = 0;
+
+  // Minimal pool stub
+  const pool = {
+    query: async (sql, params) => {
+      if (sql.includes('DELETE')) {
+        pruneCallCount++;
+        return { rowCount: 0 };
+      }
+      // INSERT … ON CONFLICT: claim the slot if not taken
+      const key = `${params[0]}:${params[1]}`;
+      if (rows.has(key)) {
+        return { rowCount: 0 };
+      }
+      rows.set(key, params[2]);
+      return { rowCount: 1 };
+    }
+  };
+
+  const cache = new PostgresNonceCache(pool, { pruneIntervalMs: 0 });
+  const nowMs = Date.now();
+
+  assert.equal(await cache.use('app1', 'nonce_a', nowMs, 300), true, 'first use accepted');
+  assert.equal(await cache.use('app1', 'nonce_a', nowMs, 300), false, 'replay rejected');
+  assert.equal(await cache.use('app1', 'nonce_b', nowMs, 300), true, 'different nonce accepted');
+  assert.ok(pruneCallCount >= 1, 'prune was triggered');
+});
+
+test('PostgresNonceCache fails open on database error', async () => {
+  const pool = { query: async () => { throw new Error('db down'); } };
+  const cache = new PostgresNonceCache(pool);
+  assert.equal(await cache.use('app1', 'nonce_x', Date.now(), 300), true, 'fails open on error');
 });
 
 function signedHeaders({ method, url, rawBody, timestamp, nonce }) {

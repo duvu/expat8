@@ -16,7 +16,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <nav>
           <Link href="/articles/new">New article</Link>{' '}
           <Link href="/review">Vocabulary review</Link>{' '}
-          <Link href="/speaking-prompts">Speaking prompts</Link>
+          <Link href="/speaking-prompts">Speaking prompts</Link>{' '}
+          <Link href="/exam">Exam results</Link>
         </nav>
       </header>
 

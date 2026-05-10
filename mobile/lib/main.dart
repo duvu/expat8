@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'src/api/backend_api_client.dart';
 import 'src/config.dart';
 import 'src/data/article_repository.dart';
+import 'src/data/content_pack_sync_service.dart';
 import 'src/data/local_database.dart';
 import 'src/data/word_repository.dart';
 import 'src/logging/logger.dart';
@@ -59,6 +60,9 @@ Future<void> main() async {
   final controller =
       LearningSessionController(repository: repository, logger: logger);
 
+  // Callback invoked on app resume to flush the pending event queue promptly.
+  VoidCallback? onAppResumeSyncEvents;
+
   // Seed bundled vocabulary on first launch so the user can start studying
   // immediately — no waiting on a backend round-trip. The periodic top-up
   // timer in the controller refreshes inventory in the background afterwards.
@@ -69,6 +73,16 @@ Future<void> main() async {
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
     unawaited(repository.syncCacheInventory(deviceId: deviceId));
+    // Flush the study/speaking event queue at startup and every 3 minutes so
+    // events from drill sessions reach the backend even when no card swipe
+    // triggers a cache sync.
+    unawaited(repository.syncPendingEvents(deviceId: deviceId));
+    Timer.periodic(const Duration(minutes: 3), (_) {
+      unawaited(repository.syncPendingEvents(deviceId: deviceId));
+    });
+    onAppResumeSyncEvents = () {
+      unawaited(repository.syncPendingEvents(deviceId: deviceId));
+    };
     unawaited(repository.topUpInventoryIfNeeded());
   } catch (error) {
     await logger.warning(
@@ -78,6 +92,18 @@ Future<void> main() async {
       context: {'error': '$error'},
     );
   }
+
+  // Sync content-pack version watermarks in background so the app knows when
+  // new vocabulary is available without blocking the local card session.
+  final contentPackSyncService = ContentPackSyncService(
+    apiClient: apiClient,
+    database: database,
+    logger: logger,
+    language: config.supportedLearningLanguages.isNotEmpty
+        ? config.supportedLearningLanguages.first
+        : 'en',
+  );
+  unawaited(contentPackSyncService.sync());
 
   // Build speaking infrastructure (gated by feature flag).
   SpeakingRepository? speakingRepository;
@@ -109,8 +135,10 @@ Future<void> main() async {
   runApp(LanguageLearningApp(
     controller: controller,
     articleRepository: articleRepository,
+    contentPackSyncService: contentPackSyncService,
     speakingRepository: speakingRepository,
     speakingPromptSyncService: speakingPromptSyncService,
+    onResumeSyncEvents: onAppResumeSyncEvents,
   ));
 }
 
@@ -118,15 +146,19 @@ class LanguageLearningApp extends StatefulWidget {
   const LanguageLearningApp({
     required this.controller,
     required this.articleRepository,
+    required this.contentPackSyncService,
     this.speakingRepository,
     this.speakingPromptSyncService,
+    this.onResumeSyncEvents,
     super.key,
   });
 
   final LearningSessionController controller;
   final ArticleRepository articleRepository;
+  final ContentPackSyncService contentPackSyncService;
   final SpeakingRepository? speakingRepository;
   final SpeakingPromptSyncService? speakingPromptSyncService;
+  final VoidCallback? onResumeSyncEvents;
 
   @override
   State<LanguageLearningApp> createState() => _LanguageLearningAppState();
@@ -149,9 +181,14 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Re-sync content-pack watermarks on foreground to pick up new vocabulary
+      // published since the last session — non-blocking, local session unaffected.
+      unawaited(widget.contentPackSyncService.sync());
       // Re-sync speaking prompts when the app comes back to the foreground
       // so stale prompts are removed and new ones are picked up.
       unawaited(widget.speakingPromptSyncService?.sync());
+      // Flush queued study/speaking events to the backend.
+      widget.onResumeSyncEvents?.call();
     }
   }
 

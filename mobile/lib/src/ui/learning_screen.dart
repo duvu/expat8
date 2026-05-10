@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../api/backend_api_client.dart';
 import '../data/article_repository.dart';
 import '../data/word_repository.dart';
+import '../exam/exam_session_controller.dart';
+import '../exam/exam_topic_screen.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
@@ -105,6 +107,7 @@ class _LearningScreenState extends State<LearningScreen> {
             ),
           );
         },
+        onExam: controller.userSession == null ? null : _openExam,
         onRegister: _register,
         onSignIn: _signIn,
         onSignOut: () async {
@@ -215,6 +218,27 @@ class _LearningScreenState extends State<LearningScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openExam() async {
+    final session = widget.controller.userSession;
+    if (session == null) {
+      return;
+    }
+    final repository = widget.controller.repository;
+    final examController = ExamSessionController(
+      apiClient: repository.apiClient,
+      database: repository.database,
+    );
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ExamTopicScreen(
+          controller: examController,
+          userSession: session,
+        ),
+      ),
+    );
+    examController.dispose();
   }
 }
 
@@ -407,6 +431,7 @@ class LearningDrawer extends StatelessWidget {
     this.wordRepository,
     this.userSession,
     this.isAuthInProgress = false,
+    this.onExam,
     super.key,
   });
 
@@ -421,6 +446,9 @@ class LearningDrawer extends StatelessWidget {
   final VoidCallback onRegister;
   final VoidCallback onSignIn;
   final VoidCallback onSignOut;
+
+  /// Called when the user taps "Take Exam". Only shown when signed in.
+  final VoidCallback? onExam;
 
   @override
   Widget build(BuildContext context) {
@@ -438,6 +466,15 @@ class LearningDrawer extends StatelessWidget {
                 leading: const Icon(Icons.article_outlined),
                 title: const Text('Articles'),
                 onTap: onArticles,
+              ),
+            if (isSignedIn && onExam != null)
+              ListTile(
+                leading: const Icon(Icons.quiz_outlined),
+                title: const Text('Take Exam'),
+                onTap: () {
+                  Navigator.of(context).maybePop();
+                  onExam!();
+                },
               ),
             ListTile(
               leading: const Icon(Icons.bug_report_outlined),

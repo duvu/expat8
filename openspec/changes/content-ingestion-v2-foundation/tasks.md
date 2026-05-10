@@ -19,7 +19,7 @@
 
 ## 4. Learning Cards and Content Pack Serving
 
-- [ ] 4.1 Implement learning card selector service that prioritizes due review and controlled new cards from persisted vocabulary
+- [x] 4.1 Implement learning card selector service that prioritizes due review and controlled new cards from persisted vocabulary
 - [x] 4.2 Remove/guard any runtime LLM generation from learning-card/new-word request path
 - [x] 4.3 Implement content-pack version list/download endpoints and publication eligibility filters
 
@@ -31,18 +31,18 @@
 
 ## 6. Mobile Sync Contract Alignment
 
-- [ ] 6.1 Update mobile backend client/repository contract for content-pack version sync and new sync response shape
-- [ ] 6.2 Ensure visible card path remains local-first while background workers handle refill and event sync
-- [ ] 6.3 Add diagnostics for sync failure/retry/non-blocking session continuity
+- [x] 6.1 Update mobile backend client/repository contract for content-pack version sync and new sync response shape
+- [x] 6.2 Ensure visible card path remains local-first while background workers handle refill and event sync
+- [x] 6.3 Add diagnostics for sync failure/retry/non-blocking session continuity
 
 ## 7. Security, Limits, and Observability
 
-- [ ] 7.1 Add replay protection storage integration (Redis preferred, PostgreSQL fallback) for new write endpoints
-- [ ] 7.2 Apply per-endpoint rate limits for auth, article upload, learning cards, and study event sync
-- [ ] 7.3 Add metrics/logging for processing backlog, enrichment validation failures, and sync outcome counts
+- [x] 7.1 Add replay protection storage integration (Redis preferred, PostgreSQL fallback) for new write endpoints
+- [x] 7.2 Apply per-endpoint rate limits for auth, article upload, learning cards, and study event sync
+- [x] 7.3 Add metrics/logging for processing backlog, enrichment validation failures, and sync outcome counts
 
 ## 8. Validation and Rollout
 
-- [ ] 8.1 Add integration tests covering article ingest, processing state transitions, and publish eligibility
+- [x] 8.1 Add integration tests covering article ingest, processing state transitions, and publish eligibility
 - [x] 8.2 Add API tests for study-event idempotency, duplicate handling, and out-of-order processing
-- [ ] 8.3 Run staged rollout checklist (feature flags, health/readiness checks, rollback drill) before broad enablement
+- [x] 8.3 Run staged rollout checklist (feature flags, health/readiness checks, rollback drill) before broad enablement

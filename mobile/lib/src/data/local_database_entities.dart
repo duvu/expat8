@@ -242,3 +242,52 @@ class SpeakingAttemptEntity {
   /// Strip this field before any network transmission.
   String? localAudioPath;
 }
+
+@Entity()
+class ExamAttemptEntity {
+  ExamAttemptEntity({
+    this.id = 0,
+    required this.attemptId,
+    required this.sessionId,
+    required this.topic,
+    required this.language,
+    this.difficultyLevel,
+    required this.totalQuestions,
+    required this.correctCount,
+    required this.scorePct,
+    required this.passed,
+    required this.createdAtMs,
+    this.certificateId,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String attemptId;
+
+  @Index()
+  String sessionId;
+
+  @Index()
+  String topic;
+
+  @Index()
+  String language;
+
+  String? difficultyLevel;
+
+  int totalQuestions;
+  int correctCount;
+
+  /// Score as a percentage (0–100).
+  double scorePct;
+
+  /// 1 = passed, 0 = failed.
+  int passed;
+
+  @Index()
+  int createdAtMs;
+
+  /// Non-null when the attempt produced a certificate.
+  String? certificateId;
+}

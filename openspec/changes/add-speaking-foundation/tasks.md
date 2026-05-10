@@ -76,10 +76,10 @@
 
 - [x] 9.1 Run focused backend tests for speaking prompt and speaking event behavior.
 - [x] 9.2 Run full backend test suite with `cd backend && npm test`.
-- [ ] 9.3 Run backend migration verification with `cd backend && npm run verify:migrations` after updating migration checks.
+- [x] 9.3 Run backend migration verification with `cd backend && npm run verify:migrations` after updating migration checks.
 - [x] 9.4 Run focused mobile tests for speaking card, local audio service, local storage, sync queue, and drill behavior.
 - [x] 9.5 Run full mobile test suite with `cd mobile && flutter test`.
 - [x] 9.6 Run mobile ObjectBox code generation if entity changes were made.
 - [x] 9.7 Run dashboard build/test verification for prompt review UI.
-- [ ] 9.8 Smoke test signed study-event sync for mixed rating/speaking batches against a local or dev backend.
-- [ ] 9.9 Update release notes and beta rollout documentation with feature flag, privacy behavior, and known limitations.
+- [x] 9.8 Smoke test signed study-event sync for mixed rating/speaking batches against a local or dev backend.
+- [x] 9.9 Update release notes and beta rollout documentation with feature flag, privacy behavior, and known limitations.

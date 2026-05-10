@@ -22,7 +22,8 @@ class LocalDatabase {
         _settings = _store.box<AppSettingEntity>(),
         _logs = _store.box<AppLogEntity>(),
         _speakingPrompts = _store.box<SpeakingPromptEntity>(),
-        _speakingAttempts = _store.box<SpeakingAttemptEntity>();
+        _speakingAttempts = _store.box<SpeakingAttemptEntity>(),
+        _examAttempts = _store.box<ExamAttemptEntity>();
 
   final Store _store;
   Logger _logger;
@@ -34,6 +35,7 @@ class LocalDatabase {
   final Box<AppLogEntity> _logs;
   final Box<SpeakingPromptEntity> _speakingPrompts;
   final Box<SpeakingAttemptEntity> _speakingAttempts;
+  final Box<ExamAttemptEntity> _examAttempts;
 
   void attachLogger(Logger logger) {
     _logger = logger;
@@ -1058,4 +1060,35 @@ class LocalDatabase {
       _speakingPrompts.removeMany(staleObjectIds);
     }
   }
+
+  // ─── Exam Attempts ──────────────────────────────────────────────────────────
+
+  /// Persists a new exam attempt. Returns the ObjectBox id.
+  int saveExamAttempt(ExamAttemptEntity entity) {
+    return _examAttempts.put(entity);
+  }
+
+  /// Returns an exam attempt by its server-assigned [attemptId], or null.
+  ExamAttemptEntity? getExamAttempt(String attemptId) {
+    return _examAttempts
+        .query(ExamAttemptEntity_.attemptId.equals(attemptId))
+        .build()
+        .findFirst();
+  }
+
+  /// Returns all locally cached exam attempts, newest first.
+  List<ExamAttemptEntity> getAllExamAttempts() {
+    return _examAttempts
+        .query()
+        .order(ExamAttemptEntity_.createdAtMs, flags: Order.descending)
+        .build()
+        .find();
+  }
+
+  /// Returns the total number of exam attempts stored locally.
+  int countExamAttempts() => _examAttempts.count();
+
+  /// Deletes all locally cached exam attempts.
+  void deleteAllExamAttempts() => _examAttempts.removeAll();
 }
+

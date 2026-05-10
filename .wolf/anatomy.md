@@ -1,6 +1,6 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-10T11:00:00.506Z
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-10T23:00:00.613Z
 > Files: 518 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
@@ -128,15 +128,15 @@
 
 ## .serena/cache/typescript/
 
-- `raw_document_symbols.pkl` (~212488 tok)
+- `raw_document_symbols.pkl` (~266526 tok)
 
 ## .serena/memories/expat8/deploy/
 
-- `2026-05-09-expat8-backend-fresh-deploy.md` (~219 tok)
+- `2026-05-09-expat8-backend-fresh-deploy.md` (~373 tok)
 
 ## .serena/memories/expat8/speaking-foundation/
 
-- `status.md` — Speaking Foundation Phase 0-3 — Status (~2228 tok)
+- `status.md` — Speaking Foundation Phase 0-3 — Status (~1156 tok)
 
 ## backend/
 
@@ -162,8 +162,10 @@
 - `20260509_content_ingestion_v2_foundation.sql` — Migration: content-ingestion-v2-foundation (~1246 tok)
 - `20260509_speaking_foundation.sql` — Migration: speaking-foundation (~858 tok)
 - `20260510_article_vocabulary_suggestion_metadata.sql` — Migration: article-vocabulary-suggestion-metadata (~83 tok)
+- `20260510_postgres_nonce_cache.sql` — Postgres-backed nonce cache for distributed replay protection. (~167 tok)
 - `20260510_speaking_drill_completed.sql` — Migration: speaking-drill-completed (~478 tok)
 - `20260510_srs_review_index.sql` — Partial index to speed up due-review-item queries in learningCards. (~85 tok)
+- `20260511_exam_tables.sql` — Migration: add-vocabulary-exam (~691 tok)
 
 ## backend/db/seeds/
 
@@ -179,10 +181,10 @@
 
 ## backend/src/
 
-- `app_credentials.js` — Exports InMemoryNonceCache, canonicalPathWithSortedQuery, hashBody, buildCanonicalRequest + 2 more (~1119 tok)
-- `app.js` — API routes: GET, POST, DELETE (18 endpoints) (~9065 tok)
-- `article_processing_pipeline.js` — Exports ArticleProcessingPipeline (~2356 tok)
-- `article_processing_worker.js` — Exports ArticleProcessingWorker (~624 tok)
+- `app_credentials.js` — PostgreSQL-backed nonce cache for multi-instance replay protection. (~1614 tok)
+- `app.js` — Create the default rate limiter set for production use. (~9731 tok)
+- `article_processing_pipeline.js` — Exports ArticleProcessingPipeline (~1998 tok)
+- `article_processing_worker.js` — Exports ArticleProcessingWorker (~691 tok)
 - `article_term_extractor.js` — Exports extractCandidateTerms (~384 tok)
 - `config.js` — Exports loadConfig (~1087 tok)
 - `database.js` — Exports readSchemaSql, initializeDatabaseSchema (~142 tok)
@@ -192,27 +194,35 @@
 - `litellm_client.js` — Exports LiteLLMClient (~2506 tok)
 - `logger.js` — Exports createLogger, sanitizeFields (~987 tok)
 - `normalize.js` — Exports normalizeTerm (~32 tok)
-- `postgres_word_store.js` — Exports PostgresWordStore (~16167 tok)
+- `postgres_word_store.js` — Exports PostgresWordStore (~19250 tok)
 - `proficiency.js` — Exports CEFR_LEVELS, HSK_LEVELS, DEFAULT_PROFICIENCY_LEVEL, VALID_STUDY_RATINGS + 16 more (~1416 tok)
-- `runtime.js` — Exports createStore, createBackendRuntime (~698 tok)
+- `rate_limit.js` — Simple in-process sliding-window rate limiter. (~906 tok)
+- `runtime.js` — Exports createStore, createBackendRuntime (~820 tok)
 - `server.js` (~148 tok)
 - `user_identity.js` — Exports DuplicateUserError, InvalidCredentialsError, InvalidRegistrationInputError, normalizeUserIdentifier + 5 more (~618 tok)
 - `vocabulary_enrichment_adapter.js` — Exports VocabularyEnrichmentAdapter (~1498 tok)
 - `vocabulary_pool_scheduler.js` — Exports VocabularyPoolScheduler (~1207 tok)
 - `vocabulary_validator.js` — Exports validateVocabularyItem, normalizeSuggestionType (~692 tok)
-- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~13132 tok)
+- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~16188 tok)
 - `worker.js` — config: tick (~478 tok)
+
+## backend/src/routes/
+
+- `exam.js` — API routes: GET, POST (6 endpoints) (~1635 tok)
 
 ## backend/test/
 
 - `api_logging.test.js` — lines: listen (~757 tok)
 - `api.test.js` — Declares store (~15707 tok)
-- `app_credentials.test.js` — activeCredential: signedHeaders (~1406 tok)
+- `app_credentials.test.js` — activeCredential: signedHeaders (~1798 tok)
+- `article_ingest_integration.test.js` — Integration tests: article ingest → processing state transitions → publish eligibility. (~2219 tok)
+- `article_processing_pipeline.test.js` — Helpers (~2544 tok)
 - `article_processing_worker.test.js` — Declares store (~1621 tok)
 - `config.test.js` — Declares config (~720 tok)
 - `database.test.js` — Declares schemaSql (~237 tok)
 - `e2e_prod_test.mjs` — E2E test against production backend at https://expat8.x51.vn (~4170 tok)
 - `e2e_smoke.test.js` — backendStore: listen, fetchJson, wordInput (~3683 tok)
+- `exam.test.js` — Directly inject a user word state (bypasses SRS logic for speed). (~4212 tok)
 - `generation_service.test.js` — items: wordInput (~1764 tok)
 - `litellm_client.test.js` — Declares client (~571 tok)
 - `logger.test.js` — Declares chunks (~484 tok)
@@ -223,7 +233,7 @@
 - `user_identity.test.js` (~112 tok)
 - `vocabulary_pool_scheduler.test.js` — store: schedulerConfig, wordInput (~798 tok)
 - `vocabulary_validator.test.js` — Declares wordInput (~551 tok)
-- `word_store.test.js` — Declares store (~7332 tok)
+- `word_store.test.js` — Declares store (~8006 tok)
 
 ## backend/test/support/
 
@@ -231,7 +241,7 @@
 
 ## contracts/
 
-- `api.md` — API Contracts (~4296 tok)
+- `api.md` — API Contracts (~5419 tok)
 
 ## docs/
 
@@ -262,6 +272,7 @@
 - `COMMIT_REPORT_20260509_192657.md` — Commit Report (~1488 tok)
 - `COMMIT_REPORT_20260509_204126.md` — Commit Report (~2312 tok)
 - `COMMIT_REPORT_20260510_131500.md` — Commit Report (~1331 tok)
+- `COMMIT_REPORT_20260510_202545.md` — Commit Report (~1373 tok)
 - `expat8_logs_2026_05_07T16_39_51_937450Z_1.txt` — Expat8 mobile logs (~3682 tok)
 - `mobile-system-logging.md` — Mobile System Logging (~670 tok)
 - `mvp-setup.md` — MVP Setup and Limitations (~2300 tok)
@@ -280,7 +291,7 @@
 - `package-lock.json` — npm lock file (~55905 tok)
 - `package.json` — Node.js package manifest (~159 tok)
 - `tsconfig.json` — TypeScript configuration (~208 tok)
-- `tsconfig.tsbuildinfo` (~24868 tok)
+- `tsconfig.tsbuildinfo` (~25042 tok)
 
 ## expat8-dashboard/public/
 
@@ -288,13 +299,13 @@
 
 ## expat8-dashboard/src/
 
-- `types.ts` — Exports AdminArticle, VocabularyReviewItem, SpeakingPrompt (~326 tok)
+- `types.ts` — Exports AdminArticle, VocabularyReviewItem, ExamResult, SpeakingPrompt (~406 tok)
 
 ## expat8-dashboard/src/app/
 
 - `globals.css` — Styles: 21 rules, 14 vars, 1 media queries (~1710 tok)
 - `layout.tsx` — metadata (~114 tok)
-- `page.tsx` — dynamic — renders form, table (~770 tok)
+- `page.tsx` — dynamic — renders form, table (~785 tok)
 
 ## expat8-dashboard/src/app/articles/[id]/
 
@@ -303,6 +314,10 @@
 ## expat8-dashboard/src/app/articles/new/
 
 - `page.tsx` — createArticle — renders form (~452 tok)
+
+## expat8-dashboard/src/app/exam/
+
+- `page.tsx` — dynamic — renders form, table (~861 tok)
 
 ## expat8-dashboard/src/app/review/
 
@@ -316,7 +331,7 @@
 
 - `backend.ts` — Exports backendFetch (~695 tok)
 - `config.ts` — Exports getAdminConfig (~119 tok)
-- `db.ts` — Exports listAdminArticles, getAdminArticle, listArticleVocabulary, listPendingVocabulary, listSpeakingPrompts (~1979 tok)
+- `db.ts` — Exports listAdminArticles, getAdminArticle, listArticleVocabulary, listPendingVocabulary + 2 more (~2457 tok)
 
 ## mobile/
 
@@ -374,6 +389,10 @@
 - `package_config.json` (~6278 tok)
 - `version` (~2 tok)
 
+## mobile/.dart_tool/build_resolvers/
+
+- `sdk.sum.deps` (~58 tok)
+
 ## mobile/.dart_tool/dartpad/
 
 - `web_plugin_registrant.dart` — Flutter web plugin registrant file. (~282 tok)
@@ -385,7 +404,7 @@
 ## mobile/.dart_tool/flutter_build/07428d6725df74e11cbe763f9411fbe4/
 
 - `_composite.stamp` (~7 tok)
-- `.filecache` (~56852 tok)
+- `.filecache` (~57235 tok)
 - `android_aot_bundle_release_android-arm.stamp` (~64 tok)
 - `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
 - `android_aot_bundle_release_android-x64.stamp` (~62 tok)
@@ -407,8 +426,8 @@
 - `gen_localizations.stamp` (~7 tok)
 - `install_code_assets.d` (~32 tok)
 - `install_code_assets.stamp` (~119 tok)
-- `kernel_snapshot_program.d` (~32529 tok)
-- `kernel_snapshot_program.stamp` (~33418 tok)
+- `kernel_snapshot_program.d` (~32710 tok)
+- `kernel_snapshot_program.stamp` (~33604 tok)
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
@@ -527,8 +546,8 @@
 - `gen_localizations.stamp` (~7 tok)
 - `install_code_assets.d` (~32 tok)
 - `install_code_assets.stamp` (~119 tok)
-- `kernel_snapshot_program.d` (~32585 tok)
-- `kernel_snapshot_program.stamp` (~33475 tok)
+- `kernel_snapshot_program.d` (~32688 tok)
+- `kernel_snapshot_program.stamp` (~33581 tok)
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
@@ -863,12 +882,6 @@
 - `android_gradle_build_mini.json` (~171 tok)
 - `android_gradle_build.json` (~272 tok)
 - `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6222 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~485 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4146 tok)
-- `metadata_generation_command.txt` (~266 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~24 tok)
 
 ## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/.cmake/api/v1/query/client-agp/
 
@@ -879,7 +892,3 @@
 ## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/.cmake/api/v1/reply/
 
 - `cache-v2-20b0d9f30737d123ca68.json` — Declares of (~7784 tok)
-- `cmakeFiles-v1-472dd979af832b5ac82a.json` (~7544 tok)
-- `codemodel-v2-33493940d7123aa0023d.json` (~207 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-06T13-40-06-0104.json` (~448 tok)

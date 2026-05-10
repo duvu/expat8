@@ -679,3 +679,192 @@ Response:
 
 With a valid bearer session, `user_id` is populated and the level reflects the
 signed-in user's proficiency state instead of anonymous device state.
+
+---
+
+## Exam Endpoints
+
+All exam endpoints (except `GET /v1/exam/certificate/:id`) require the standard
+app-credential headers **and** a valid bearer session token.
+
+`GET /v1/exam/certificate/:id` is public — no auth headers required.
+
+### GET /v1/exam/topics
+
+Returns the distinct topics the authenticated user has studied words in for the
+given language. Topics are normalised (lowercase, trimmed).
+
+Query parameters:
+
+- `language`: optional, default `en`
+
+Response:
+
+```json
+{ "topics": ["business", "food", "travel"] }
+```
+
+---
+
+### POST /v1/exam/start
+
+Generates a new exam session with MCQ questions drawn from the user's studied
+words for the requested topic and language. Minimum 5 words required; capped at
+20 questions.
+
+Request body:
+
+```json
+{
+  "topic": "travel",
+  "language": "en"
+}
+```
+
+Success response (201):
+
+```json
+{
+  "session_id": "exam_sess_<uuid>",
+  "topic": "travel",
+  "language": "en",
+  "question_count": 10,
+  "expires_at": "2026-05-11T14:00:00.000Z",
+  "questions": [
+    {
+      "question_id": "exam_q_<uuid>",
+      "ordinal": 0,
+      "prompt_word": "journey",
+      "choices": ["chuyến đi", "bữa ăn", "công việc", "gia đình"]
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field        | Meaning                                      |
+|--------|----------------------|----------------------------------------------|
+| 400    | `bad_request`        | `topic` missing from body                    |
+| 401    | `invalid_session`    | Missing or invalid bearer token              |
+| 422    | `INSUFFICIENT_WORDS` | Fewer than 5 studied words match topic+lang  |
+
+```json
+{
+  "error": "INSUFFICIENT_WORDS",
+  "message": "Not enough studied words for topic \"travel\" in language \"en\". Found 3, need at least 5."
+}
+```
+
+---
+
+### POST /v1/exam/submit
+
+Submits answers for an active session and scores it. A passing score (≥ 70%)
+triggers certificate issuance.
+
+Request body:
+
+```json
+{
+  "session_id": "exam_sess_<uuid>",
+  "answers": [2, 0, 1, 3]
+}
+```
+
+`answers` is an array of integer choice indices (0-based) in question ordinal
+order. Its length must equal `question_count` from `POST /v1/exam/start`.
+
+Success response (200):
+
+```json
+{
+  "attempt_id": "exam_att_<uuid>",
+  "session_id": "exam_sess_<uuid>",
+  "topic": "travel",
+  "language": "en",
+  "difficulty_level": null,
+  "total_questions": 10,
+  "correct_count": 8,
+  "score_pct": 80,
+  "passed": true,
+  "certificate_id": "<uuid>",
+  "created_at": "2026-05-11T12:01:00.000Z"
+}
+```
+
+`certificate_id` is `null` when `passed` is `false`.
+
+Error responses:
+
+| Status | `error` field          | Meaning                                    |
+|--------|------------------------|--------------------------------------------|
+| 400    | `bad_request`          | Missing `session_id` or `answers`          |
+| 401    | `invalid_session`      | Missing or invalid bearer token            |
+| 404    | `not_found`            | Session ID not found                       |
+| 409    | `ALREADY_SUBMITTED`    | Session was already submitted              |
+| 410    | `SESSION_EXPIRED`      | Session TTL (2 hours) exceeded             |
+| 422    | `ANSWER_COUNT_MISMATCH`| `answers.length` ≠ `question_count`        |
+
+---
+
+### GET /v1/exam/results
+
+Returns the authenticated user's exam attempt history, newest first.
+
+Query parameters:
+
+- `page`: optional, default `1`
+- `limit`: optional, default `20`, max `100`
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "attempt_id": "exam_att_<uuid>",
+      "topic": "travel",
+      "language": "en",
+      "difficulty_level": null,
+      "score_pct": 80,
+      "passed": true,
+      "created_at": "2026-05-11T12:01:00.000Z",
+      "certificate_id": "<uuid>"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20
+}
+```
+
+`certificate_id` is `null` when the attempt did not pass.
+
+---
+
+### GET /v1/exam/certificate/:id
+
+**Public endpoint** — no app-credential or session headers required.
+
+Returns a certificate record without user PII.
+
+Success response (200):
+
+```json
+{
+  "certificate_id": "<uuid>",
+  "topic": "travel",
+  "language": "en",
+  "difficulty_level": null,
+  "score_pct": 80,
+  "issued_at": "2026-05-11T12:01:00.000Z",
+  "disclaimer": "This is an internal Expat8 completion certificate. It does not represent an official CEFR or HSK examination result."
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                    |
+|--------|---------------|----------------------------|
+| 404    | `not_found`   | Certificate ID not found   |

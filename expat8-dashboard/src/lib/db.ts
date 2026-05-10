@@ -1,7 +1,7 @@
 import pg from 'pg';
 
 import { getAdminConfig } from './config';
-import type { AdminArticle, SpeakingPrompt, VocabularyReviewItem } from '../types';
+import type { AdminArticle, ExamResult, SpeakingPrompt, VocabularyReviewItem } from '../types';
 
 type ArticleRow = {
   id: string;
@@ -224,5 +224,72 @@ function mapSpeakingPromptRow(row: SpeakingPromptRow): SpeakingPrompt {
     updated_at: row.updated_at,
     display_term: row.display_term,
     meaning_vi: row.meaning_vi
+  };
+}
+
+type ExamResultRow = {
+  id: string;
+  user_id: string;
+  topic: string;
+  language: string;
+  difficulty_level: string | null;
+  total_questions: number;
+  correct_count: number;
+  score_pct: number;
+  passed: number;
+  created_at: string;
+  certificate_id: string | null;
+};
+
+export async function listExamResults({
+  userId = null,
+  topic = null,
+  language = null,
+  limit = 100
+}: {
+  userId?: string | null;
+  topic?: string | null;
+  language?: string | null;
+  limit?: number;
+} = {}) {
+  const cappedLimit = Math.max(1, Math.min(limit, 500));
+  const result = await getPool().query<ExamResultRow>(
+    `SELECT
+       ea.id,
+       ea.user_id,
+       ea.topic,
+       ea.language,
+       ea.difficulty_level,
+       ea.total_questions,
+       ea.correct_count,
+       ea.score_pct,
+       ea.passed,
+       ea.created_at,
+       ec.id AS certificate_id
+     FROM exam_attempts ea
+     LEFT JOIN exam_certificates ec ON ec.attempt_id = ea.id
+     WHERE ($1::text IS NULL OR ea.user_id = $1)
+       AND ($2::text IS NULL OR ea.topic = $2)
+       AND ($3::text IS NULL OR ea.language = $3)
+     ORDER BY ea.created_at DESC
+     LIMIT $4`,
+    [userId, topic, language, cappedLimit]
+  );
+  return result.rows.map(mapExamResultRow);
+}
+
+function mapExamResultRow(row: ExamResultRow): ExamResult {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    topic: row.topic,
+    language: row.language,
+    difficulty_level: row.difficulty_level,
+    total_questions: row.total_questions,
+    correct_count: row.correct_count,
+    score_pct: row.score_pct,
+    passed: row.passed,
+    created_at: row.created_at,
+    certificate_id: row.certificate_id
   };
 }

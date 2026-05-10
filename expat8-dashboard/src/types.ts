@@ -26,6 +26,20 @@ export type VocabularyReviewItem = {
   ipa?: string | null;
 };
 
+export type ExamResult = {
+  id: string;
+  user_id: string;
+  topic: string;
+  language: string;
+  difficulty_level: string | null;
+  total_questions: number;
+  correct_count: number;
+  score_pct: number;
+  passed: number;
+  created_at: string;
+  certificate_id: string | null;
+};
+
 export type SpeakingPrompt = {
   id: string;
   word_sense_id: string;
