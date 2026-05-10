@@ -87,6 +87,7 @@ class SpeakingRepository {
   final Uuid _uuid;
 
   String? _activeAttemptId;
+  String? _currentDrillSessionId;
 
   // ---- permission ----
 
@@ -115,6 +116,16 @@ class SpeakingRepository {
         cachedAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
       ),
     );
+  }
+
+  // ---- drill session ----
+
+  /// Generates a new drill session UUID and stores it.
+  /// Must be called once before the drill begins.
+  /// All drill events will carry this [attempt_id] until [onDrillCompleted].
+  String beginDrillSession() {
+    _currentDrillSessionId = _uuid.v4();
+    return _currentDrillSessionId!;
   }
 
   /// Returns up to [count] prompts for the 3-minute drill, from recent cache.
@@ -301,6 +312,7 @@ class SpeakingRepository {
     _enqueueEvent({
       'event_type': SpeakingEventType.promptViewed,
       'client_event_id': _uuid.v4(),
+      'attempt_id': _currentDrillSessionId,
       'prompt_id': prompt.promptId,
       'occurred_at': DateTime.now().toUtc().toIso8601String(),
     });
@@ -311,6 +323,7 @@ class SpeakingRepository {
     _enqueueEvent({
       'event_type': SpeakingEventType.samplePlayed,
       'client_event_id': _uuid.v4(),
+      'attempt_id': _currentDrillSessionId,
       'prompt_id': prompt.promptId,
       'occurred_at': DateTime.now().toUtc().toIso8601String(),
     });
@@ -426,11 +439,13 @@ class SpeakingRepository {
     _enqueueEvent({
       'event_type': SpeakingEventType.drillCompleted,
       'client_event_id': _uuid.v4(),
+      'attempt_id': _currentDrillSessionId,
       'prompts_attempted': promptsAttempted,
       'prompts_completed': promptsCompleted,
       'total_duration_ms': totalDurationMs,
       'occurred_at': DateTime.now().toUtc().toIso8601String(),
     });
+    _currentDrillSessionId = null;
   }
 
   // ---- TTS playback ----

@@ -214,7 +214,7 @@ Response:
 
 ## PATCH /v1/admin/articles/:id
 
-Admin-only metadata patch. Allowed fields: `title`, `language`, `visibility`, `status`.
+Admin-only metadata patch. Allowed fields: `title`, `language`, `visibility`, `status`. Valid `visibility` values are `'private'` and `'published'`; `'shared'` is not accepted and returns `400`.
 
 Response:
 

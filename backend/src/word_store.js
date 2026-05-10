@@ -35,7 +35,8 @@ export const SPEAKING_EVENT_TYPES = [
 export const SPEAKING_SELF_RATINGS = ['clear', 'hesitated', 'could_not_say'];
 
 export class WordStore {
-  constructor({ seed = true } = {}) {
+  constructor({ seed = true, strictAttemptId = false } = {}) {
+    this.strictAttemptId = strictAttemptId;
     this.words = new Map();
     this.studyEventsByClientId = new Map();
     this.userProficiencies = new Map();
@@ -221,32 +222,51 @@ export class WordStore {
     const cappedLimit = Math.max(1, Math.min(limit, 100));
     const ownerKeys = this.#selectionOwnerKeys({ deviceId, userId });
     const cachedWordIds = this.#cachedWordIdsForOwnerKeys(ownerKeys);
-    const stateWordIds = new Set(
-      [...this.wordStatesByOwnerWord.entries()]
-        .filter(([key, state]) => ownerKeys.has(this.#ownerKeyFromState(state)) && key.includes(':word:'))
-        .filter(([, state]) => state.language === targetLanguage)
-        .map(([, state]) => state.word_id)
-    );
+
+    // Collect all states for this owner+language
+    const allStates = [...this.wordStatesByOwnerWord.entries()]
+      .filter(([key, state]) => ownerKeys.has(this.#ownerKeyFromState(state)) && key.includes(':word:'))
+      .filter(([, state]) => state.language === targetLanguage);
+
+    const stateWordIds = new Set(allStates.map(([, state]) => state.word_id));
+
+    // Due review items: next_review_at is set and <= now
+    const targetReview = Math.floor(cappedLimit * 0.85);
+    const dueStates = allStates
+      .filter(([, state]) => state.next_review_at && state.next_review_at <= now)
+      .sort(([, a], [, b]) => a.next_review_at.localeCompare(b.next_review_at));
+
+    const reviewCards = dueStates
+      .slice(0, targetReview)
+      .map(([, state]) => {
+        const word = this.words.get(state.word_id);
+        return word ? { word, cardType: 'review', selectionReason: 'srs_due' } : null;
+      })
+      .filter(Boolean);
+
+    const newCount = cappedLimit - reviewCards.length;
     const newCandidates = [...this.words.values()]
       .filter((word) => word.language === targetLanguage)
       .filter((word) => !cachedWordIds.has(word.id))
       .filter((word) => !stateWordIds.has(word.id))
       .sort((left, right) => bCompareCreated(left, right));
 
-    const cards = newCandidates
-      .slice(0, cappedLimit)
+    const newCards = newCandidates
+      .slice(0, newCount)
       .map((word) => ({ word, cardType: 'new', selectionReason: 'new_available' }));
+
+    const cards = [...reviewCards, ...newCards];
     this.addCachedWordIds({
       deviceId,
       userId,
-      wordIds: cards.map((card) => card.word.id),
+      wordIds: newCards.map((card) => card.word.id),
       observedAt: now
     });
 
     return {
       items: cards,
-      target_mix: { new: cappedLimit, review: 0 },
-      actual_mix: { new: cards.length, review: 0 }
+      target_mix: { new: cappedLimit - targetReview, review: targetReview },
+      actual_mix: { new: newCards.length, review: reviewCards.length }
     };
   }
 
@@ -332,7 +352,7 @@ export class WordStore {
     if (!eventKey) {
       throw new Error('missing_event_id');
     }
-    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId });
+    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId, strict: this.strictAttemptId });
     const existing = this.speakingEventsByKey.get(eventKey);
     if (existing) {
       return { eventId: existing.id, idempotent: true };
@@ -655,6 +675,26 @@ export class WordStore {
     if (!article) {
       return null;
     }
+
+    // Delete existing vocabulary for this article to prevent duplicates on reprocess
+    const articleTermEntries = [...this.articleTermsById.entries()].filter(
+      ([, at]) => at.article_id === articleId
+    );
+    const senseIds = new Set(articleTermEntries.map(([, at]) => at.word_sense_id));
+    for (const [id] of articleTermEntries) {
+      this.articleTermsById.delete(id);
+    }
+    for (const [id] of this.wordSensesById) {
+      if (senseIds.has(id)) {
+        this.wordSensesById.delete(id);
+      }
+    }
+    for (const [id, item] of this.vocabularyReviewItemsById) {
+      if (item.article_id === articleId) {
+        this.vocabularyReviewItemsById.delete(id);
+      }
+    }
+
     article.status = 'pending_processing';
     article.processing_error = null;
     article.updated_at = new Date().toISOString();
@@ -916,6 +956,8 @@ export class WordStore {
         continue;
       }
       seen.add(dedupeKey);
+      // Stubs (fallback suggestions) are never auto-approved even for user articles
+      const requiresReview = Boolean(article.created_by_admin_id) || Boolean(item.isStub);
       let term = [...this.termsById.values()].find(
         (entry) => entry.language === item.language && entry.normalized_term === normalized
       );
@@ -943,7 +985,7 @@ export class WordStore {
         level_scale: item.level_scale ?? 'cefr',
         level: item.level ?? item.difficulty ?? 'A1',
         quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
-        status: article.created_by_admin_id ? 'pending_review' : 'approved',
+        status: requiresReview ? 'pending_review' : 'approved',
         created_at: now,
         updated_at: now
       };
@@ -970,10 +1012,10 @@ export class WordStore {
         id: createId('review_item'),
         word_sense_id: sense.id,
         article_id: articleId,
-        status: article.created_by_admin_id ? 'pending' : 'approved',
+        status: requiresReview ? 'pending' : 'approved',
         reviewer_user_id: null,
         review_note: null,
-        reviewed_at: article.created_by_admin_id ? null : now,
+        reviewed_at: requiresReview ? null : now,
         created_at: now,
         updated_at: now
       };
@@ -1086,7 +1128,7 @@ export function isUnknownSpeakingEvent(event) {
   return typeof event?.event_type === 'string' && event.event_type.startsWith('speaking_') && !isSpeakingEvent(event);
 }
 
-export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null }) {
+export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null, strict = false }) {
   if (!isSpeakingEvent(event)) {
     throw new Error('invalid_speaking_event_type');
   }
@@ -1094,8 +1136,8 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     throw new Error('forbidden_audio_field');
   }
   const speaking = event.speaking ?? {};
-  const attemptId = normalizeOptionalText(speaking.attempt_id ?? event.attempt_id);
-  if (!attemptId || !event.occurred_at) {
+  const attemptId = normalizeOptionalText(speaking.attempt_id ?? event.attempt_id) ?? null;
+  if ((strict && !attemptId) || !event.occurred_at) {
     throw new Error('missing_required_field');
   }
   const selfRating = normalizeOptionalText(speaking.self_rating ?? event.self_rating);
@@ -1149,6 +1191,7 @@ export function toApiSpeakingPrompt(prompt) {
   }
   return {
     id: prompt.id,
+    word_sense_id: prompt.word_sense_id ?? null,
     target_text: prompt.target_text,
     vi_hint: prompt.vi_hint,
     target_phrase: prompt.target_phrase,

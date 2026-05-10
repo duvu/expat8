@@ -34,6 +34,7 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
     super.initState();
     _prompts = widget.repository.getDrillCandidates(limit: 5);
     _sessionStart = DateTime.now().toUtc();
+    widget.repository.beginDrillSession();
     if (_prompts.isNotEmpty) {
       widget.repository.onDrillPromptViewed(_prompts[0]);
     }
@@ -53,8 +54,8 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
         final durationMs =
             DateTime.now().toUtc().difference(_sessionStart).inMilliseconds;
         widget.repository.onDrillCompleted(
-          promptsAttempted: _totalAttempts + 1,
-          promptsCompleted: _totalAttempts + 1,
+          promptsAttempted: _totalAttempts,
+          promptsCompleted: _totalAttempts,
           totalDurationMs: durationMs,
         );
       }

@@ -48,7 +48,8 @@ export function loadConfig(env = process.env) {
     ),
     adminApiTokens: new Set(
       String(env.ADMIN_API_TOKENS ?? '').split(',').map((token) => token.trim()).filter(Boolean)
-    )
+    ),
+    speakingEventsStrictAttemptId: parseBoolean(env.SPEAKING_EVENTS_STRICT_ATTEMPT_ID ?? 'false')
   };
 }
 

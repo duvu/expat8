@@ -26,10 +26,11 @@ export function createStore({ config, logger, poolFactory = (options) => new pg.
         idleTimeoutMillis: config.dbIdleTimeoutMs,
         connectionTimeoutMillis: config.dbConnectionTimeoutMs
       }),
-      logger: storeLogger.child({ component: 'postgres_word_store' })
+      logger: storeLogger.child({ component: 'postgres_word_store' }),
+      strictAttemptId: config.speakingEventsStrictAttemptId
     });
   }
-  return new WordStore();
+  return new WordStore({ strictAttemptId: config.speakingEventsStrictAttemptId });
 }
 
 export function createBackendRuntime({ config = loadConfig(), poolFactory, logger } = {}) {

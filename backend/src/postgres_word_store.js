@@ -32,9 +32,10 @@ import {
 } from './user_identity.js';
 
 export class PostgresWordStore {
-  constructor({ pool, logger = console }) {
+  constructor({ pool, logger = console, strictAttemptId = false }) {
     this.pool = pool;
     this.logger = logger;
+    this.strictAttemptId = strictAttemptId;
   }
 
   async insertWord(input) {
@@ -342,6 +343,7 @@ export class PostgresWordStore {
 
   async learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 10, now = new Date().toISOString() }) {
     const cappedLimit = Math.max(1, Math.min(limit, 100));
+    const targetReview = Math.floor(cappedLimit * 0.85);
     const [wordsResult, cachedIds, stateResult] = await Promise.all([
       this.pool.query(`SELECT * FROM words WHERE language = $1`, [targetLanguage]),
       this.#cachedWordIdsForSelection({ deviceId, userId }),
@@ -358,26 +360,44 @@ export class PostgresWordStore {
           )
     ]);
     const words = wordsResult.rows.map(rowToWord);
+    const wordById = new Map(words.map((w) => [w.id, w]));
     const stateWordIds = new Set(stateResult.rows.map((state) => state.word_id));
+
+    // Due review items: next_review_at is set and <= now, ordered soonest first
+    const dueStates = stateResult.rows
+      .filter((state) => state.next_review_at && state.next_review_at <= now)
+      .sort((a, b) => a.next_review_at.localeCompare(b.next_review_at));
+
+    const reviewCards = dueStates
+      .slice(0, targetReview)
+      .map((state) => {
+        const word = wordById.get(state.word_id);
+        return word ? { word, cardType: 'review', selectionReason: 'srs_due' } : null;
+      })
+      .filter(Boolean);
+
+    const newCount = cappedLimit - reviewCards.length;
     const newCandidates = words
       .filter((word) => !cachedIds.has(word.id))
       .filter((word) => !stateWordIds.has(word.id))
       .sort((left, right) => right.created_at.localeCompare(left.created_at));
-    const cards = newCandidates
-      .slice(0, cappedLimit)
+    const newCards = newCandidates
+      .slice(0, newCount)
       .map((word) => ({ word, cardType: 'new', selectionReason: 'new_available' }));
+
+    const cards = [...reviewCards, ...newCards];
     await this.addCachedWordIds({
       deviceId,
       userId,
-      wordIds: cards.map((card) => card.word.id),
+      wordIds: newCards.map((card) => card.word.id),
       observedAt: now
     });
     return {
       items: cards,
-      target_mix: { new: cappedLimit, review: 0 },
+      target_mix: { new: cappedLimit - targetReview, review: targetReview },
       actual_mix: {
-        new: cards.length,
-        review: 0
+        new: newCards.length,
+        review: reviewCards.length
       }
     };
   }
@@ -569,7 +589,7 @@ export class PostgresWordStore {
     if (!eventKey) {
       throw new Error('missing_event_id');
     }
-    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId });
+    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId, strict: this.strictAttemptId });
     const eventId = event.event_id ?? eventKey;
     const clientEventId = event.client_event_id ?? eventKey;
     const existing = await this.pool.query(
@@ -1416,7 +1436,7 @@ export class PostgresWordStore {
   async persistArticleVocabulary({ articleId, items = [] }) {
     return this.#withOptionalTransaction(async (client) => {
       const articleResult = await client.query(
-        `SELECT * FROM articles WHERE id = $1 LIMIT 1`,
+        `SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`,
         [articleId]
       );
       const article = articleResult.rows[0];
@@ -1424,11 +1444,20 @@ export class PostgresWordStore {
         throw new Error('article_not_found');
       }
 
+      // Delete existing vocabulary for this article to prevent duplicates on reprocess
+      const existingTermsResult = await client.query(
+        `SELECT word_sense_id FROM article_terms WHERE article_id = $1`,
+        [articleId]
+      );
+      const oldSenseIds = existingTermsResult.rows.map((r) => r.word_sense_id);
+      await client.query(`DELETE FROM vocabulary_review_items WHERE article_id = $1`, [articleId]);
+      await client.query(`DELETE FROM article_terms WHERE article_id = $1`, [articleId]);
+      if (oldSenseIds.length > 0) {
+        await client.query(`DELETE FROM word_senses WHERE id = ANY($1)`, [oldSenseIds]);
+      }
+
       const now = new Date().toISOString();
       const isAdmin = Boolean(article.created_by_admin_id);
-      const senseStatus = isAdmin ? 'pending_review' : 'approved';
-      const reviewStatus = isAdmin ? 'pending' : 'approved';
-      const reviewedAt = isAdmin ? null : now;
       let persistedCount = 0;
       const seen = new Set();
 
@@ -1439,6 +1468,11 @@ export class PostgresWordStore {
           continue;
         }
         seen.add(dedupeKey);
+        // Stubs (fallback suggestions) are never auto-approved even for user articles
+        const requiresReview = isAdmin || Boolean(item.isStub);
+        const senseStatus = requiresReview ? 'pending_review' : 'approved';
+        const reviewStatus = requiresReview ? 'pending' : 'approved';
+        const reviewedAt = requiresReview ? null : now;
         const suggestionType = normalizeSuggestionType(item.suggestion_type, item.term);
         const termResult = await client.query(
           `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)

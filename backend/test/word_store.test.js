@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { WordStore, normalizeSpeakingEvent, isSpeakingEvent, SPEAKING_EVENT_TYPES } from '../src/word_store.js';
+import { WordStore, normalizeSpeakingEvent, isSpeakingEvent, SPEAKING_EVENT_TYPES, toApiSpeakingPrompt } from '../src/word_store.js';
 
 test('prevents duplicate words by language and normalized term', () => {
   const store = new WordStore({ seed: false });
@@ -302,10 +302,56 @@ test('learning cards returns ten new words and records active claims', () => {
   });
 
   assert.equal(first.items.length, 10);
-  assert.deepEqual(first.target_mix, { new: 10, review: 0 });
+  assert.deepEqual(first.target_mix, { new: 2, review: 8 });
   assert.deepEqual(first.actual_mix, { new: 10, review: 0 });
   assert.equal(store.cachedWordIdsFor({ deviceId: 'anonymous_batch' }).size, 12);
   assert.equal(second.items.length, 2);
+});
+
+test('learning cards applies 85/15 SRS split: due review items returned first, remainder filled with new', () => {
+  const store = new WordStore({ seed: false });
+
+  // Insert 10 words that will be reviewed (study event sets next_review_at)
+  for (let index = 0; index < 10; index += 1) {
+    store.insertWord(wordInput({ id: `word_review_${index}`, term: `review ${index}` }));
+  }
+  // Insert 5 additional new words (never seen)
+  for (let index = 0; index < 5; index += 1) {
+    store.insertWord(wordInput({ id: `word_new_${index}`, term: `new ${index}` }));
+  }
+
+  // Record 'too_hard' study events in the past so next_review_at <= now
+  for (let index = 0; index < 10; index += 1) {
+    store.recordStudyEvent({
+      deviceId: 'device_srs',
+      language: 'en',
+      event: {
+        client_event_id: `evt_srs_${index}`,
+        server_word_id: `word_review_${index}`,
+        rating: 'too_hard',
+        occurred_at: '2026-05-05T00:00:00.000Z'
+      }
+    });
+  }
+
+  // now is well past next_review_at (was occurredAt + 5 min = 00:05), so all 10 are due
+  const result = store.learningCards({
+    deviceId: 'device_srs',
+    targetLanguage: 'en',
+    limit: 10,
+    now: '2026-05-05T01:00:00.000Z'
+  });
+
+  const reviewCards = result.items.filter((c) => c.cardType === 'review');
+  const newCards = result.items.filter((c) => c.cardType === 'new');
+
+  assert.equal(result.items.length, 10);
+  assert.deepEqual(result.target_mix, { new: 2, review: 8 });
+  assert.deepEqual(result.actual_mix, { new: 2, review: 8 });
+  assert.equal(reviewCards.length, 8);
+  assert.equal(newCards.length, 2);
+  assert.ok(reviewCards.every((c) => c.selectionReason === 'srs_due'));
+  assert.ok(newCards.every((c) => c.selectionReason === 'new_available'));
 });
 
 test('learning cards exclude anonymous history after sign-in', () => {
@@ -333,6 +379,83 @@ test('learning cards exclude anonymous history after sign-in', () => {
   });
 
   assert.deepEqual(result.items.map((card) => card.word.id), ['word_seen']);
+});
+
+test('reprocessArticle clears existing vocabulary so double-reprocess yields no duplicates', () => {
+  const store = new WordStore({ seed: false });
+  const article = store.createAdminArticle({
+    adminUserId: 'admin_1',
+    title: 'Test Article',
+    language: 'en',
+    rawText: 'Some text about resilience and tenacity.'
+  });
+
+  const vocabItems = [
+    { term: 'resilience', language: 'en', meaning_vi: 'suc ben bi', ipa: '/rɪˈzɪliəns/' },
+    { term: 'tenacity', language: 'en', meaning_vi: 'su kien tri', ipa: '/tɪˈnæsɪti/' }
+  ];
+
+  // First process
+  store.persistArticleVocabulary({ articleId: article.id, items: vocabItems });
+  const afterFirst = [...store.articleTermsById.values()].filter((at) => at.article_id === article.id);
+  assert.equal(afterFirst.length, 2, 'expected 2 article_terms after first process');
+
+  // Reprocess (simulating worker picking up the job a second time)
+  store.reprocessArticle({ articleId: article.id });
+  store.persistArticleVocabulary({ articleId: article.id, items: vocabItems });
+  const afterSecond = [...store.articleTermsById.values()].filter((at) => at.article_id === article.id);
+  assert.equal(afterSecond.length, 2, 'expected 2 article_terms after reprocess (no duplicates)');
+
+  const reviewItems = [...store.vocabularyReviewItemsById.values()].filter(
+    (ri) => ri.article_id === article.id
+  );
+  assert.equal(reviewItems.length, 2, 'expected 2 vocabulary_review_items after reprocess (no duplicates)');
+});
+
+test('stub vocabulary items have approved=false regardless of article type', () => {
+  const store = new WordStore({ seed: false });
+  const adminArticle = store.createAdminArticle({
+    adminUserId: 'admin_stub',
+    title: 'Admin Article',
+    language: 'en',
+    rawText: 'content'
+  });
+  const userArticle = store.createArticle({
+    userId: 'user_stub',
+    title: 'User Article',
+    language: 'en',
+    rawText: 'content'
+  });
+
+  const stubItem = { term: 'perseverance', language: 'en', meaning_vi: 'su kien tri', isStub: true };
+  const normalItem = { term: 'resilience', language: 'en', meaning_vi: 'suc chong chiu' };
+
+  // User article with LLM enrichment (non-stub) → auto-approved
+  store.persistArticleVocabulary({ articleId: userArticle.id, items: [normalItem] });
+  const userNormalReview = [...store.vocabularyReviewItemsById.values()].find(
+    (ri) => ri.article_id === userArticle.id
+  );
+  assert.equal(userNormalReview.status, 'approved', 'user article non-stub should be approved');
+
+  // Admin article with stubs → pending (requires review)
+  store.persistArticleVocabulary({ articleId: adminArticle.id, items: [stubItem] });
+  const adminStubReview = [...store.vocabularyReviewItemsById.values()].find(
+    (ri) => ri.article_id === adminArticle.id
+  );
+  assert.equal(adminStubReview.status, 'pending', 'admin article stub should be pending');
+
+  // User article with stub → also pending (stubs never auto-approve)
+  const userArticle2 = store.createArticle({
+    userId: 'user_stub2',
+    title: 'User Article 2',
+    language: 'en',
+    rawText: 'content'
+  });
+  store.persistArticleVocabulary({ articleId: userArticle2.id, items: [stubItem] });
+  const userStubReview = [...store.vocabularyReviewItemsById.values()].find(
+    (ri) => ri.article_id === userArticle2.id
+  );
+  assert.equal(userStubReview.status, 'pending', 'user article stub should also be pending');
 });
 
 test('additive cache claims are idempotent and filter unknown words', () => {
@@ -415,6 +538,53 @@ test('normalizeSpeakingEvent requires prompts_attempted and total_duration_ms fo
   assert.equal(ok.total_duration_ms, 180000);
 });
 
+test('normalizeSpeakingEvent accepts event without attempt_id in lenient mode (default)', () => {
+  const event = { event_type: 'speaking_recorded', occurred_at: '2026-01-01T00:00:00Z' };
+  const normalized = normalizeSpeakingEvent({ deviceId: 'd', event });
+  assert.equal(normalized.attempt_id, null);
+});
+
+test('normalizeSpeakingEvent accepts event with attempt_id in lenient mode', () => {
+  const event = { event_type: 'speaking_recorded', attempt_id: 'sess_abc', occurred_at: '2026-01-01T00:00:00Z' };
+  const normalized = normalizeSpeakingEvent({ deviceId: 'd', event });
+  assert.equal(normalized.attempt_id, 'sess_abc');
+});
+
+test('normalizeSpeakingEvent accepts event with attempt_id in strict mode', () => {
+  const event = { event_type: 'speaking_recorded', attempt_id: 'sess_xyz', occurred_at: '2026-01-01T00:00:00Z' };
+  const normalized = normalizeSpeakingEvent({ deviceId: 'd', event, strict: true });
+  assert.equal(normalized.attempt_id, 'sess_xyz');
+});
+
+test('normalizeSpeakingEvent rejects event without attempt_id in strict mode', () => {
+  const event = { event_type: 'speaking_recorded', occurred_at: '2026-01-01T00:00:00Z' };
+  assert.throws(
+    () => normalizeSpeakingEvent({ deviceId: 'd', event, strict: true }),
+    { message: 'missing_required_field' }
+  );
+});
+
+test('WordStore.recordSpeakingEvent accepts missing attempt_id in lenient mode', () => {
+  const store = new WordStore({ seed: false, strictAttemptId: false });
+  const result = store.recordSpeakingEvent({
+    deviceId: 'dev1',
+    event: { event_type: 'speaking_recorded', client_event_id: 'ev_lenient', occurred_at: '2026-01-01T00:00:00Z' }
+  });
+  assert.ok(result.eventId);
+  assert.equal(result.idempotent, false);
+});
+
+test('WordStore.recordSpeakingEvent rejects missing attempt_id in strict mode', () => {
+  const store = new WordStore({ seed: false, strictAttemptId: true });
+  assert.throws(
+    () => store.recordSpeakingEvent({
+      deviceId: 'dev1',
+      event: { event_type: 'speaking_recorded', client_event_id: 'ev_strict', occurred_at: '2026-01-01T00:00:00Z' }
+    }),
+    { message: 'missing_required_field' }
+  );
+});
+
 test('speaking events do not affect proficiency level', () => {
   const store = new WordStore({ seed: false });
   store.insertWord(wordInput({ id: 'word_sp1', term: 'hello' }));
@@ -487,6 +657,22 @@ test('getSpeakingSummary returns retry_rate, drill_sessions_completed, first_rec
   assert.equal(summary.retry_rate, 0.5); // 1 retry / 2 recordings
   assert.equal(summary.drill_sessions_completed, 1);
   assert.equal(summary.first_recording_at, '2026-05-10T12:00:00.000Z');
+});
+
+test('toApiSpeakingPrompt includes word_sense_id for mobile sync', () => {
+  const store = new WordStore({ seed: false });
+  const prompt = store.createSpeakingPrompt({
+    word_sense_id: 'ws_test_123',
+    target_text: 'Hello world',
+    difficulty: 'A1',
+    status: 'approved'
+  });
+
+  const api = toApiSpeakingPrompt(prompt);
+  assert.equal(api.word_sense_id, 'ws_test_123', 'word_sense_id should be present in API response');
+  assert.equal(api.id, prompt.id);
+  assert.equal(api.target_text, 'Hello world');
+  assert.equal(toApiSpeakingPrompt(null), null, 'null prompt returns null');
 });
 
 function wordInput(overrides = {}) {

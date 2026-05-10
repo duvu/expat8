@@ -1022,7 +1022,8 @@ class LocalDatabase {
   /// Upserts a batch of speaking prompts from the server sync endpoint.
   ///
   /// Existing entries are updated in-place (preserving their ObjectBox id);
-  /// new entries are inserted.
+  /// new entries are inserted. Any prompts not present in [prompts] are
+  /// deleted from local storage (they have been removed on the server).
   void upsertAllSpeakingPrompts(List<SpeakingPromptEntity> prompts) {
     for (final prompt in prompts) {
       final existing = _speakingPrompts
@@ -1045,6 +1046,16 @@ class LocalDatabase {
           cachedAtMs: prompt.cachedAtMs,
         ),
       );
+    }
+    // Delete any locally-cached prompts that were not in the server response.
+    final receivedIds = prompts.map((p) => p.promptId).toSet();
+    final allLocal = _speakingPrompts.getAll();
+    final staleObjectIds = allLocal
+        .where((p) => !receivedIds.contains(p.promptId))
+        .map((p) => p.id)
+        .toList();
+    if (staleObjectIds.isNotEmpty) {
+      _speakingPrompts.removeMany(staleObjectIds);
     }
   }
 }

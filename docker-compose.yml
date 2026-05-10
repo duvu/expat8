@@ -48,6 +48,26 @@ services:
       timeout: 5s
       retries: 6
 
+  article-worker:
+    build:
+      context: ./backend
+    command: ["npm", "run", "start:worker"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://lite.x51.vn}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}
+      DEFAULT_SOURCE_LANGUAGE: ${DEFAULT_SOURCE_LANGUAGE:-vi}
+      DEFAULT_TARGET_LANGUAGE: ${DEFAULT_TARGET_LANGUAGE:-en}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_REDACTION_ENABLED: ${LOG_REDACTION_ENABLED:-true}
+      ARTICLE_WORKER_INTERVAL_MS: ${ARTICLE_WORKER_INTERVAL_MS:-1000}
+      ARTICLE_WORKER_MAX_ATTEMPTS: ${ARTICLE_WORKER_MAX_ATTEMPTS:-3}
+
   expat8-dashboard:
     build:
       context: ./expat8-dashboard

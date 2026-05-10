@@ -35,7 +35,7 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
     card_mode: 'new'
   });
   assert.equal(batch.items.length, 100);
-  assert.deepEqual(batch.target_mix, { new: 100, review: 0 });
+  assert.deepEqual(batch.target_mix, { new: 15, review: 85 });
   assert.deepEqual(batch.actual_mix, { new: 100, review: 0 });
   assert.ok(batch.items.every((item) => item.language === 'en'));
 
@@ -350,7 +350,7 @@ test('serves backend-selected learning cards as ten new cards and records active
     card_mode: 'new'
   });
 
-  assert.deepEqual(batch.target_mix, { new: 10, review: 0 });
+  assert.deepEqual(batch.target_mix, { new: 2, review: 8 });
   assert.deepEqual(batch.actual_mix, { new: 10, review: 0 });
   assert.equal(batch.items.filter((item) => item.card_type === 'new').length, 10);
   assert.ok(batch.items.every((item) => typeof item.selection_reason === 'string'));
@@ -1132,6 +1132,19 @@ test('supports admin article workflow with admin token guard', async (t) => {
   );
   assert.equal(invalidVisibility.status, 400);
 
+  const sharedVisibility = await fetch(
+    `${baseUrl}/v1/admin/articles/${created.id}`,
+    signedFetchOptions(`${baseUrl}/v1/admin/articles/${created.id}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        'x-expat8-admin-token': 'admin-token-1'
+      },
+      body: JSON.stringify({ visibility: 'shared' })
+    })
+  );
+  assert.equal(sharedVisibility.status, 400, 'shared visibility is rejected');
+
   const notFound = await fetch(
     `${baseUrl}/v1/admin/articles/missing_article`,
     signedFetchOptions(`${baseUrl}/v1/admin/articles/missing_article`, {
@@ -1253,6 +1266,7 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   assert.equal(viewerVocabulary.items[0].suggestion_type, 'phrase');
   assert.deepEqual(viewerVocabulary.items[0].speaking_prompt, {
     id: 'prompt_published_term',
+    word_sense_id: publishedSenseId,
     target_text: 'This is a useful published term.',
     vi_hint: 'Day la mot cum tu huu ich da xuat ban.',
     target_phrase: 'published term',

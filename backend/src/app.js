@@ -413,7 +413,7 @@ function createV1Router({ store, config }) {
       if (typeof body.language === 'string') patch.language = body.language;
       if (body.visibility !== undefined) {
         const v = String(body.visibility).toLowerCase();
-        if (!['private', 'shared', 'published'].includes(v)) {
+        if (!['private', 'published'].includes(v)) {
           return response.status(400).json({ error: 'bad_request' });
         }
         patch.visibility = v;
@@ -969,7 +969,7 @@ function validateArticleBody(body) {
 
 function normalizeVisibility(value) {
   const raw = String(value ?? 'private').toLowerCase();
-  return ['private', 'shared', 'published'].includes(raw) ? raw : 'private';
+  return ['private', 'published'].includes(raw) ? raw : 'private';
 }
 
 function hasAdminAccess({ request, config }) {

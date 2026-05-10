@@ -20,7 +20,7 @@ class SpeakingPromptSyncService {
   ///
   /// Silently ignores network and API errors so the app can still start
   /// without connectivity.
-  Future<void> syncIfNeeded() async {
+  Future<void> sync() async {
     try {
       final items = await _apiClient.fetchSpeakingPrompts();
       _repo.upsertAllFromSync(items);

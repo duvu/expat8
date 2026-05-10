@@ -88,7 +88,8 @@ export class VocabularyEnrichmentAdapter {
       confidence: Number((0.5 + (index * 0.05)).toFixed(2)),
       quality_score: Number((0.5 + (index * 0.05)).toFixed(2)),
       article_chunk_index: chunkIndex,
-      article_chunk_text: chunk
+      article_chunk_text: chunk,
+      isStub: true
     }, { article, chunk, chunkIndex })).filter(Boolean);
   }
 

@@ -81,6 +81,7 @@ Future<void> main() async {
 
   // Build speaking infrastructure (gated by feature flag).
   SpeakingRepository? speakingRepository;
+  SpeakingPromptSyncService? speakingPromptSyncService;
   if (config.speakingFoundationEnabled) {
     final fileManager = AudioFileManager();
     final audioService = SpeakingAudioService(fileManager: fileManager);
@@ -89,15 +90,14 @@ Future<void> main() async {
       audioService: audioService,
       fileManager: fileManager,
     );
+    speakingPromptSyncService = SpeakingPromptSyncService(
+      apiClient: apiClient,
+      speakingRepository: speakingRepository,
+    );
     // Run 30-day audio retention cleanup once at startup — out of band.
     unawaited(speakingRepository.runRetentionCleanup());
     // Sync approved prompts for offline drill use — out of band.
-    unawaited(
-      SpeakingPromptSyncService(
-        apiClient: apiClient,
-        speakingRepository: speakingRepository,
-      ).syncIfNeeded(),
-    );
+    unawaited(speakingPromptSyncService.sync());
   }
 
   await logger.info(
@@ -110,20 +110,50 @@ Future<void> main() async {
     controller: controller,
     articleRepository: articleRepository,
     speakingRepository: speakingRepository,
+    speakingPromptSyncService: speakingPromptSyncService,
   ));
 }
 
-class LanguageLearningApp extends StatelessWidget {
+class LanguageLearningApp extends StatefulWidget {
   const LanguageLearningApp({
     required this.controller,
     required this.articleRepository,
     this.speakingRepository,
+    this.speakingPromptSyncService,
     super.key,
   });
 
   final LearningSessionController controller;
   final ArticleRepository articleRepository;
   final SpeakingRepository? speakingRepository;
+  final SpeakingPromptSyncService? speakingPromptSyncService;
+
+  @override
+  State<LanguageLearningApp> createState() => _LanguageLearningAppState();
+}
+
+class _LanguageLearningAppState extends State<LanguageLearningApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Re-sync speaking prompts when the app comes back to the foreground
+      // so stale prompts are removed and new ones are picked up.
+      unawaited(widget.speakingPromptSyncService?.sync());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,9 +165,9 @@ class LanguageLearningApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: LearningScreen(
-        controller: controller,
-        articleRepository: articleRepository,
-        speakingRepository: speakingRepository,
+        controller: widget.controller,
+        articleRepository: widget.articleRepository,
+        speakingRepository: widget.speakingRepository,
       ),
     );
   }
