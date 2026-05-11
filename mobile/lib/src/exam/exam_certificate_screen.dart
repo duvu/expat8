@@ -150,7 +150,6 @@ class _CertificateBody extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
-          _Row(label: 'Topic', value: _capitalise(cert.topic)),
           _Row(label: 'Language', value: cert.language.toUpperCase()),
           _Row(label: 'Score', value: '$scorePct%'),
           _Row(label: 'Issued', value: issuedLabel),

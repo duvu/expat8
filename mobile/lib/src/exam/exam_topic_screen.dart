@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
 
-import '../api/backend_api_client.dart';
+import '../data/local_database.dart';
 import '../models/user_session.dart';
 import 'exam_question_screen.dart';
 import 'exam_session_controller.dart';
 
-/// Topic and language selector screen that starts a vocabulary exam.
+/// Language selector screen that starts a vocabulary exam.
 ///
-/// Fetches the authenticated user's studied topics for the selected language
-/// and lets them pick one. Navigates to [ExamQuestionScreen] on start.
+/// The primary exam flow no longer depends on topic selection — the backend
+/// generates questions from all studied words for the chosen language.
+/// Navigates to [ExamQuestionScreen] on start.
 class ExamTopicScreen extends StatefulWidget {
   const ExamTopicScreen({
     required this.controller,
     required this.userSession,
+    this.database,
     super.key,
   });
 
   final ExamSessionController controller;
   final UserSession userSession;
+
+  /// Optional database for persisting the selected exam language.
+  final LocalDatabase? database;
 
   @override
   State<ExamTopicScreen> createState() => _ExamTopicScreenState();
@@ -25,22 +30,31 @@ class ExamTopicScreen extends StatefulWidget {
 
 class _ExamTopicScreenState extends State<ExamTopicScreen> {
   String _language = 'en';
-  List<String> _topics = [];
-  bool _loadingTopics = false;
-  String? _selectedTopic;
-  String? _errorMessage;
+
+  static const _settingKey = 'exam_language';
 
   static const _languages = {
     'en': 'English',
     'zh': 'Chinese',
     'vi': 'Vietnamese',
+    'en-idioms': 'English Idioms',
+    'zh-idioms': 'Chinese Idioms (成语)',
   };
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
-    _loadTopics();
+    _loadSavedLanguage();
+  }
+
+  Future<void> _loadSavedLanguage() async {
+    final db = widget.database;
+    if (db == null) return;
+    final saved = await db.getSetting(_settingKey);
+    if (saved != null && _languages.containsKey(saved) && mounted) {
+      setState(() => _language = saved);
+    }
   }
 
   @override
@@ -52,34 +66,17 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
   void _onControllerChanged() {
     if (!mounted) return;
     setState(() {});
-    final err = widget.controller.errorMessage;
-    if (err != null && widget.controller.state == ExamState.idle) {
-      _errorMessage = err;
-    }
   }
 
-  Future<void> _loadTopics() async {
-    setState(() {
-      _loadingTopics = true;
-      _selectedTopic = null;
-      _errorMessage = null;
-    });
-    final topics = await widget.controller
-        .fetchTopics(userSession: widget.userSession, language: _language);
-    if (!mounted) return;
-    setState(() {
-      _topics = topics;
-      _loadingTopics = false;
-    });
+  Future<void> _onLanguageChanged(String? value) async {
+    if (value == null || value == _language) return;
+    setState(() => _language = value);
+    await widget.database?.setSetting(_settingKey, value);
   }
 
   Future<void> _startExam() async {
-    final topic = _selectedTopic;
-    if (topic == null) return;
-
     await widget.controller.startSession(
       userSession: widget.userSession,
-      topic: topic,
       language: _language,
     );
 
@@ -93,15 +90,15 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
           ),
         ),
       );
-      // Reset after returning so the topic screen is fresh for the next attempt.
+      // Reset after returning so the screen is fresh for the next attempt.
       widget.controller.reset();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = _loadingTopics ||
-        widget.controller.state == ExamState.loading;
+    final isLoading = widget.controller.state == ExamState.loading;
+    final errorMessage = widget.controller.errorMessage;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Vocabulary Exam')),
@@ -122,48 +119,14 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
                         child: Text(e.value),
                       ))
                   .toList(),
-              onChanged: isLoading
-                  ? null
-                  : (value) {
-                      if (value != null && value != _language) {
-                        setState(() => _language = value);
-                        _loadTopics();
-                      }
-                    },
+              onChanged: isLoading ? null : _onLanguageChanged,
             ),
-            const SizedBox(height: 24),
 
-            // Topic picker
-            Text('Topic', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 8),
-            if (_loadingTopics)
-              const Center(child: CircularProgressIndicator())
-            else if (_topics.isEmpty)
-              Text(
-                'No topics available for ${_languages[_language] ?? _language}. '
-                'Keep studying to unlock exam topics.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              )
-            else
-              DropdownButton<String>(
-                value: _selectedTopic,
-                isExpanded: true,
-                hint: const Text('Select a topic'),
-                items: _topics
-                    .map((t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(_capitalise(t)),
-                        ))
-                    .toList(),
-                onChanged: isLoading
-                    ? null
-                    : (value) => setState(() => _selectedTopic = value),
-              ),
-
-            if (_errorMessage != null) ...[
+            if (errorMessage != null &&
+                widget.controller.state == ExamState.idle) ...[
               const SizedBox(height: 16),
               Text(
-                _errorMessage!,
+                errorMessage,
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
@@ -177,9 +140,7 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: (isLoading || _selectedTopic == null)
-                    ? null
-                    : _startExam,
+                onPressed: isLoading ? null : _startExam,
                 child: isLoading
                     ? const SizedBox(
                         height: 20,
@@ -194,7 +155,4 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
       ),
     );
   }
-
-  String _capitalise(String s) =>
-      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 }

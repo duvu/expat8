@@ -11,6 +11,8 @@ CREATE TABLE words (
   example_vi TEXT NOT NULL,
   difficulty TEXT NOT NULL,
   topics_json TEXT NOT NULL,
+  entry_type TEXT NOT NULL DEFAULT 'word',
+  explanation TEXT NOT NULL DEFAULT '',
   generation_source TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,

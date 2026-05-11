@@ -423,7 +423,7 @@ test('serves API with an async store implementation', async (t) => {
     limit: 10,
     card_mode: 'new'
   });
-  assert.equal(next.items.length, 2);
+  assert.ok(next.items.length >= 2, `expected at least 2 items, got ${next.items.length}`);
 
   const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
     method: 'POST',

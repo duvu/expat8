@@ -6,7 +6,7 @@ import '../api/backend_api_client.dart';
 import '../data/article_repository.dart';
 import '../data/word_repository.dart';
 import '../exam/exam_session_controller.dart';
-import '../exam/exam_topic_screen.dart';
+import '../exam/exam_question_screen.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
@@ -230,15 +230,30 @@ class _LearningScreenState extends State<LearningScreen> {
       apiClient: repository.apiClient,
       database: repository.database,
     );
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ExamTopicScreen(
-          controller: examController,
-          userSession: session,
-        ),
-      ),
-    );
-    examController.dispose();
+    try {
+      await examController.startSession(
+        userSession: session,
+        language: widget.controller.activeLearningLanguage,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (examController.state == ExamState.active) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ExamQuestionScreen(
+              controller: examController,
+              userSession: session,
+            ),
+          ),
+        );
+      } else if (examController.errorMessage != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(examController.errorMessage!)));
+      }
+    } finally {
+      examController.dispose();
+    }
   }
 }
 

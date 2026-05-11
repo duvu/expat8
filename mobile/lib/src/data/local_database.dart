@@ -189,6 +189,8 @@ class LocalDatabase {
       nextReviewAtMs: word.nextReviewAt?.toUtc().millisecondsSinceEpoch,
       createdAtMs: word.createdAt.toUtc().millisecondsSinceEpoch,
       updatedAtMs: word.updatedAt.toUtc().millisecondsSinceEpoch,
+      entryType: word.entryType,
+      explanation: word.explanation,
     );
     _localWords.put(entity);
 
@@ -869,6 +871,8 @@ class LocalDatabase {
           DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
       updatedAt:
           DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
+      entryType: row.entryType,
+      explanation: row.explanation,
     );
   }
 
@@ -1068,7 +1072,7 @@ class LocalDatabase {
     return _examAttempts.put(entity);
   }
 
-  /// Returns an exam attempt by its server-assigned [attemptId], or null.
+  /// Returns an exam attempt by its [attemptId] (local or server-assigned), or null.
   ExamAttemptEntity? getExamAttempt(String attemptId) {
     return _examAttempts
         .query(ExamAttemptEntity_.attemptId.equals(attemptId))
@@ -1090,5 +1094,64 @@ class LocalDatabase {
 
   /// Deletes all locally cached exam attempts.
   void deleteAllExamAttempts() => _examAttempts.removeAll();
+
+  /// Queues a completed exam result for background sync to the backend.
+  ///
+  /// [localAttemptId] is a stable client-generated UUID used as the
+  /// idempotency key so retries do not create duplicate backend records.
+  void enqueueExamResult({
+    required String localAttemptId,
+    required String sessionId,
+    required List<int> answers,
+    required String language,
+  }) {
+    final payload = jsonEncode({
+      'local_attempt_id': localAttemptId,
+      'session_id': sessionId,
+      'answers': answers,
+      'language': language,
+    });
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'exam_result',
+        payload: payload,
+        retryCount: 0,
+        nextRetryAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  /// Updates the locally stored exam attempt with the confirmed backend result
+  /// and marks its sync status as 'synced'. Also removes the corresponding
+  /// sync queue entry identified by [localAttemptId].
+  void markExamAttemptSynced({
+    required String localAttemptId,
+    required String serverAttemptId,
+    required int correctCount,
+    required double scorePct,
+    required bool passed,
+    String? certificateId,
+  }) {
+    final entity = getExamAttempt(localAttemptId);
+    if (entity != null) {
+      entity.attemptId = serverAttemptId;
+      entity.correctCount = correctCount;
+      entity.scorePct = scorePct;
+      entity.passed = passed ? 1 : 0;
+      entity.certificateId = certificateId;
+      entity.syncStatus = 'synced';
+      _examAttempts.put(entity);
+    }
+
+    // Remove from sync queue (payload contains the local_attempt_id).
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.type == 'exam_result' &&
+          item.payload.contains('"local_attempt_id":"$localAttemptId"')) {
+        _syncQueue.remove(item.id);
+      }
+    }
+  }
 }
 

@@ -33,14 +33,9 @@ export function createExamRouter({ store }) {
         return;
       }
       const body = request.body ?? {};
-      const topic = typeof body.topic === 'string' ? body.topic.trim() : null;
       const language = typeof body.language === 'string' ? body.language.trim() : 'en';
-      if (!topic) {
-        return response.status(400).json({ error: 'bad_request', message: 'topic is required' });
-      }
       const result = await store.startExamSession({
         userId: userSession.user.id,
-        topic,
         language,
         now: new Date().toISOString(),
         sessionTtlMs: EXAM_SESSION_TTL_MS
@@ -48,7 +43,7 @@ export function createExamRouter({ store }) {
       if (result.error === 'INSUFFICIENT_WORDS') {
         return response.status(422).json({
           error: 'INSUFFICIENT_WORDS',
-          message: `Not enough studied words for topic "${topic}" in language "${language}". Found ${result.found}, need at least 5.`
+          message: `Not enough studied words for language "${language}". Found ${result.found}, need at least 5.`
         });
       }
       return response.status(201).json(result);
@@ -67,6 +62,7 @@ export function createExamRouter({ store }) {
       const body = request.body ?? {};
       const sessionId = typeof body.session_id === 'string' ? body.session_id : null;
       const answers = Array.isArray(body.answers) ? body.answers : null;
+      const localAttemptId = typeof body.local_attempt_id === 'string' ? body.local_attempt_id : null;
       if (!sessionId || !answers) {
         return response.status(400).json({ error: 'bad_request', message: 'session_id and answers are required' });
       }
@@ -74,6 +70,7 @@ export function createExamRouter({ store }) {
         sessionId,
         userId: userSession.user.id,
         answers,
+        localAttemptId,
         now: new Date().toISOString(),
         passPct: EXAM_PASS_THRESHOLD * 100,
         disclaimer: CERTIFICATE_DISCLAIMER

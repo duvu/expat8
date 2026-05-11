@@ -21,6 +21,8 @@ class LocalWordEntity {
     this.nextReviewAtMs,
     required this.createdAtMs,
     required this.updatedAtMs,
+    this.entryType = 'word',
+    this.explanation = '',
   });
 
   int id;
@@ -54,6 +56,9 @@ class LocalWordEntity {
   @Index()
   int createdAtMs;
   int updatedAtMs;
+
+  String entryType;
+  String explanation;
 }
 
 @Entity()
@@ -258,6 +263,7 @@ class ExamAttemptEntity {
     required this.passed,
     required this.createdAtMs,
     this.certificateId,
+    this.syncStatus = 'synced',
   });
 
   int id;
@@ -290,4 +296,8 @@ class ExamAttemptEntity {
 
   /// Non-null when the attempt produced a certificate.
   String? certificateId;
+
+  /// Sync status: 'pending' (not yet confirmed by backend) or 'synced'.
+  @Index()
+  String syncStatus;
 }

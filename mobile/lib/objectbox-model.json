@@ -86,7 +86,7 @@
     },
     {
       "id": "3:8516035737042230106",
-      "lastPropertyId": "18:437125655485656215",
+      "lastPropertyId": "20:1231534066534358010",
       "name": "LocalWordEntity",
       "properties": [
         {
@@ -191,6 +191,16 @@
           "id": "18:437125655485656215",
           "name": "updatedAtMs",
           "type": 6
+        },
+        {
+          "id": "19:2591849130354322576",
+          "name": "entryType",
+          "type": 9
+        },
+        {
+          "id": "20:1231534066534358010",
+          "name": "explanation",
+          "type": 9
         }
       ],
       "relations": []
@@ -434,7 +444,7 @@
     },
     {
       "id": "8:3288235631848983449",
-      "lastPropertyId": "12:7588106210396541618",
+      "lastPropertyId": "13:5086087933662608190",
       "name": "ExamAttemptEntity",
       "properties": [
         {
@@ -507,13 +517,20 @@
           "id": "12:7588106210396541618",
           "name": "certificateId",
           "type": 9
+        },
+        {
+          "id": "13:5086087933662608190",
+          "name": "syncStatus",
+          "indexId": "29:5177855304185512194",
+          "type": 9,
+          "flags": 2048
         }
       ],
       "relations": []
     }
   ],
   "lastEntityId": "8:3288235631848983449",
-  "lastIndexId": "28:3393559323606846162",
+  "lastIndexId": "29:5177855304185512194",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

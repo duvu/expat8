@@ -6,9 +6,9 @@ import 'exam_session_controller.dart';
 
 /// Displays exam questions one at a time (MCQ).
 ///
-/// Shows immediate per-choice highlight after the user selects an answer,
-/// then allows advancing to the next question via "Next". After the last
-/// question the session is submitted and the [ExamResultsScreen] is shown.
+/// Tapping a choice commits the answer immediately and advances to the next
+/// question. After the last question the session is submitted and the
+/// [ExamResultsScreen] is shown.
 class ExamQuestionScreen extends StatefulWidget {
   const ExamQuestionScreen({
     required this.controller,
@@ -59,10 +59,6 @@ class _ExamQuestionScreenState extends State<ExamQuestionScreen> {
     }
   }
 
-  Future<void> _onNext() async {
-    await widget.controller.advance(userSession: widget.userSession);
-  }
-
   @override
   Widget build(BuildContext context) {
     final ctrl = widget.controller;
@@ -104,22 +100,31 @@ class _ExamQuestionScreenState extends State<ExamQuestionScreen> {
             const SizedBox(height: 24),
 
             // Prompt
-            Center(
-              child: Text(
-                question.promptWord,
-                style: Theme.of(context).textTheme.displaySmall,
-                textAlign: TextAlign.center,
+            if (question.questionType == 'sentence_context' &&
+                question.sentence != null &&
+                question.highlight != null) ...[
+              _SentenceContextPrompt(
+                sentence: question.sentence!,
+                highlight: question.highlight!,
               ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Text(
-                'What is the meaning?',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+            ] else ...[
+              Center(
+                child: Text(
+                  question.promptWord,
+                  style: Theme.of(context).textTheme.displaySmall,
+                  textAlign: TextAlign.center,
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'What is the meaning?',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                ),
+              ),
+            ],
             const SizedBox(height: 32),
 
             // Choices
@@ -134,25 +139,74 @@ class _ExamQuestionScreenState extends State<ExamQuestionScreen> {
                   isSelected: isSelected,
                   isAnswered: answered != null,
                   onTap: answered == null
-                      ? () => setState(() => ctrl.submitAnswer(idx))
+                      ? () async {
+                          await ctrl.submitAnswerAndAdvance(
+                            userSession: widget.userSession,
+                            choiceIndex: idx,
+                          );
+                          if (mounted) {
+                            setState(() {});
+                          }
+                        }
                       : null,
                 ),
               );
             }),
 
             const Spacer(),
-
-            if (answered != null)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _onNext,
-                  child: Text(ctrl.isLastQuestion ? 'See Results' : 'Next'),
-                ),
-              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Displays the sentence for a `sentence_context` question, with [highlight]
+/// shown in bold to draw the learner's attention.
+class _SentenceContextPrompt extends StatelessWidget {
+  const _SentenceContextPrompt({
+    required this.sentence,
+    required this.highlight,
+  });
+
+  final String sentence;
+  final String highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final parts = sentence.split(highlight);
+    final spans = <TextSpan>[];
+    for (int i = 0; i < parts.length; i++) {
+      if (parts[i].isNotEmpty) {
+        spans.add(TextSpan(text: parts[i]));
+      }
+      if (i < parts.length - 1) {
+        spans.add(TextSpan(
+          text: highlight,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ));
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        RichText(
+          text: TextSpan(
+            style: textTheme.bodyLarge,
+            children: spans,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: Text(
+            'What does the highlighted phrase mean?',
+            style: textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

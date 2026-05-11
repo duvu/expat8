@@ -112,7 +112,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 8516035737042230106),
     name: 'LocalWordEntity',
-    lastPropertyId: const obx_int.IdUid(18, 437125655485656215),
+    lastPropertyId: const obx_int.IdUid(20, 1231534066534358010),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -227,6 +227,18 @@ final _entities = <obx_int.ModelEntity>[
         id: const obx_int.IdUid(18, 437125655485656215),
         name: 'updatedAtMs',
         type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(19, 2591849130354322576),
+        name: 'entryType',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(20, 1231534066534358010),
+        name: 'explanation',
+        type: 9,
         flags: 0,
       ),
     ],
@@ -499,7 +511,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(8, 3288235631848983449),
     name: 'ExamAttemptEntity',
-    lastPropertyId: const obx_int.IdUid(12, 7588106210396541618),
+    lastPropertyId: const obx_int.IdUid(13, 5086087933662608190),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -579,6 +591,13 @@ final _entities = <obx_int.ModelEntity>[
         type: 9,
         flags: 0,
       ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 5086087933662608190),
+        name: 'syncStatus',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(29, 5177855304185512194),
+      ),
     ],
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
@@ -624,7 +643,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
     lastEntityId: const obx_int.IdUid(8, 3288235631848983449),
-    lastIndexId: const obx_int.IdUid(28, 3393559323606846162),
+    lastIndexId: const obx_int.IdUid(29, 5177855304185512194),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -783,7 +802,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final difficultyOffset = fbb.writeString(object.difficulty);
         final topicsJsonOffset = fbb.writeString(object.topicsJson);
         final statusOffset = fbb.writeString(object.status);
-        fbb.startTable(19);
+        final entryTypeOffset = fbb.writeString(object.entryType);
+        final explanationOffset = fbb.writeString(object.explanation);
+        fbb.startTable(21);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, localIdOffset);
         fbb.addOffset(2, serverWordIdOffset);
@@ -802,6 +823,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addInt64(15, object.nextReviewAtMs);
         fbb.addInt64(16, object.createdAtMs);
         fbb.addInt64(17, object.updatedAtMs);
+        fbb.addOffset(18, entryTypeOffset);
+        fbb.addOffset(19, explanationOffset);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -875,6 +898,12 @@ obx_int.ModelDefinition getObjectBoxModel() {
           38,
           0,
         );
+        final entryTypeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 40, '');
+        final explanationParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 42, '');
         final object = LocalWordEntity(
           id: idParam,
           localId: localIdParam,
@@ -894,6 +923,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
           nextReviewAtMs: nextReviewAtMsParam,
           createdAtMs: createdAtMsParam,
           updatedAtMs: updatedAtMsParam,
+          entryType: entryTypeParam,
+          explanation: explanationParam,
         );
 
         return object;
@@ -1267,7 +1298,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final certificateIdOffset = object.certificateId == null
             ? null
             : fbb.writeString(object.certificateId!);
-        fbb.startTable(13);
+        final syncStatusOffset = fbb.writeString(object.syncStatus);
+        fbb.startTable(14);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, attemptIdOffset);
         fbb.addOffset(2, sessionIdOffset);
@@ -1280,6 +1312,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addInt64(9, object.passed);
         fbb.addInt64(10, object.createdAtMs);
         fbb.addOffset(11, certificateIdOffset);
+        fbb.addOffset(12, syncStatusOffset);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -1340,6 +1373,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final certificateIdParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGetNullable(buffer, rootOffset, 26);
+        final syncStatusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 28, '');
         final object = ExamAttemptEntity(
           id: idParam,
           attemptId: attemptIdParam,
@@ -1353,6 +1389,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           passed: passedParam,
           createdAtMs: createdAtMsParam,
           certificateId: certificateIdParam,
+          syncStatus: syncStatusParam,
         );
 
         return object;
@@ -1513,6 +1550,16 @@ class LocalWordEntity_ {
   /// See [LocalWordEntity.updatedAtMs].
   static final updatedAtMs = obx.QueryIntegerProperty<LocalWordEntity>(
     _entities[2].properties[17],
+  );
+
+  /// See [LocalWordEntity.entryType].
+  static final entryType = obx.QueryStringProperty<LocalWordEntity>(
+    _entities[2].properties[18],
+  );
+
+  /// See [LocalWordEntity.explanation].
+  static final explanation = obx.QueryStringProperty<LocalWordEntity>(
+    _entities[2].properties[19],
   );
 }
 
@@ -1763,5 +1810,10 @@ class ExamAttemptEntity_ {
   /// See [ExamAttemptEntity.certificateId].
   static final certificateId = obx.QueryStringProperty<ExamAttemptEntity>(
     _entities[7].properties[11],
+  );
+
+  /// See [ExamAttemptEntity.syncStatus].
+  static final syncStatus = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[12],
   );
 }

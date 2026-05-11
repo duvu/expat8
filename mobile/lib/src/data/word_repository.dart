@@ -698,14 +698,47 @@ class WordRepository {
     for (final entry in entries) {
       try {
         final payload = jsonDecode(entry.payload) as Map<String, dynamic>;
-        final session = await database.loadUserSession();
-        final result = await apiClient.syncStudyEvents(
-          deviceId: deviceId,
-          events: [payload],
-          sessionToken: session?.sessionToken,
-        );
-        for (final acceptedId in result.acceptedEventIds) {
-          await database.markEventSynced(acceptedId);
+
+        if (entry.type == 'exam_result') {
+          // Background sync for a locally-saved exam attempt.
+          final session = await database.loadUserSession();
+          if (session == null) {
+            // Cannot sync without a session; leave in queue for later.
+            continue;
+          }
+          final localAttemptId = payload['local_attempt_id'] as String?;
+          final sessionId = payload['session_id'] as String?;
+          final rawAnswers = payload['answers'] as List<dynamic>?;
+          if (localAttemptId == null || sessionId == null || rawAnswers == null) {
+            // Malformed entry; skip it.
+            continue;
+          }
+          final answers = rawAnswers.map((e) => (e as num).toInt()).toList();
+          final response = await apiClient.submitExamSession(
+            sessionToken: session.sessionToken,
+            sessionId: sessionId,
+            answers: answers,
+            localAttemptId: localAttemptId,
+          );
+          database.markExamAttemptSynced(
+            localAttemptId: localAttemptId,
+            serverAttemptId: response.attemptId,
+            correctCount: response.correctCount,
+            scorePct: response.scorePct,
+            passed: response.passed,
+            certificateId: response.certificateId,
+          );
+        } else {
+          // study_event and other existing types.
+          final session = await database.loadUserSession();
+          final result = await apiClient.syncStudyEvents(
+            deviceId: deviceId,
+            events: [payload],
+            sessionToken: session?.sessionToken,
+          );
+          for (final acceptedId in result.acceptedEventIds) {
+            await database.markEventSynced(acceptedId);
+          }
         }
       } catch (error) {
         await database.scheduleRetry(entry, effectiveNow);
@@ -715,6 +748,7 @@ class WordRepository {
           message: 'Sync entry failed and was scheduled for retry.',
           context: {
             'queue_id': entry.id,
+            'type': entry.type,
             'error': '$error',
           },
         );

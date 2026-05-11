@@ -36,26 +36,6 @@ void main() {
     return ExamSessionController(apiClient: apiClient, database: database);
   }
 
-  // ─── topic fetch ──────────────────────────────────────────────────────────
-
-  test('fetchTopics returns list of topics from backend', () async {
-    final client = MockClient((_) async => http.Response(
-          jsonEncode({'topics': ['travel', 'food']}),
-          200,
-          headers: {'content-type': 'application/json'},
-        ));
-    final ctrl = await _makeController(client);
-    final topics = await ctrl.fetchTopics(userSession: _session);
-    expect(topics, ['travel', 'food']);
-  });
-
-  test('fetchTopics returns empty list on backend error', () async {
-    final client = MockClient((_) async => http.Response('', 500));
-    final ctrl = await _makeController(client);
-    final topics = await ctrl.fetchTopics(userSession: _session);
-    expect(topics, isEmpty);
-  });
-
   // ─── startSession ─────────────────────────────────────────────────────────
 
   test('startSession transitions to active state with questions', () async {
@@ -89,7 +69,7 @@ void main() {
     expect(ctrl.state, ExamState.idle);
 
     await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+        userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.active);
     expect(ctrl.session?.sessionId, 'sess_1');
@@ -112,7 +92,7 @@ void main() {
     final ctrl = await _makeController(client);
 
     await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+        userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
     expect(ctrl.errorMessage, isNotNull);
@@ -124,7 +104,7 @@ void main() {
     final ctrl = await _makeController(client);
 
     await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+        userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
     expect(ctrl.errorMessage, isNotNull);
@@ -154,7 +134,7 @@ void main() {
         ));
     final ctrl = await _makeController(client);
     await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+        userSession: _session, language: 'en');
 
     expect(ctrl.hasAnsweredCurrent, false);
     ctrl.submitAnswer(2);
@@ -184,7 +164,7 @@ void main() {
         ));
     final ctrl = await _makeController(client);
     await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+        userSession: _session, language: 'en');
     ctrl.submitAnswer(1);
     ctrl.submitAnswer(3); // second call — ignored
     expect(ctrl.answers.length, 1);
@@ -240,7 +220,7 @@ void main() {
     });
     final ctrl = await _makeController(client);
     await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+        userSession: _session, language: 'en');
     ctrl.submitAnswer(0);
     await ctrl.advance(userSession: _session);
     expect(ctrl.currentQuestionIndex, 1);
@@ -266,12 +246,16 @@ void main() {
       );
     });
     final ctrl = await _makeController(client);
-    await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
     ctrl.submitAnswer(0);
     await ctrl.advance(userSession: _session);
 
+    // State transitions to results immediately (local-first).
     expect(ctrl.state, ExamState.results);
+
+    // Allow the background backend call to complete.
+    await Future<void>.delayed(Duration.zero);
+
     expect(ctrl.result?.passed, true);
     expect(ctrl.result?.certificateId, 'cert-uuid');
   });
@@ -292,12 +276,15 @@ void main() {
       );
     });
     final ctrl = await _makeController(client);
-    await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
     ctrl.submitAnswer(0);
     await ctrl.submitSession(userSession: _session);
 
     expect(ctrl.state, ExamState.results);
+
+    // Allow the background backend call to complete.
+    await Future<void>.delayed(Duration.zero);
+
     expect(ctrl.result?.passed, false);
     expect(ctrl.result?.certificateId, isNull);
   });
@@ -331,16 +318,109 @@ void main() {
     final ctrl =
         ExamSessionController(apiClient: apiClient, database: database);
 
-    await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
     ctrl.submitAnswer(0);
     await ctrl.submitSession(userSession: _session);
 
     expect(ctrl.state, ExamState.results);
+
+    // Allow the background backend call to complete and update the local record.
+    await Future<void>.delayed(Duration.zero);
+
     final stored = database.getExamAttempt('att_1');
     expect(stored, isNotNull);
     expect(stored?.passed, 1);
     expect(stored?.certificateId, 'cert-uuid');
+    expect(stored?.syncStatus, 'synced');
+  });
+
+  test('submitSession marks attempt as pending before background sync completes',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'exam_pending_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/start')) {
+        return http.Response(
+          _makeStartResponse(questionCount: 1),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response(
+        _makeSubmitResponse(passed: true),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final apiClient = BackendApiClient(
+      baseUrl: 'http://unused',
+      timeout: const Duration(seconds: 5),
+      appId: 'test-app',
+      appSecret: 'test-secret',
+      httpClient: client,
+    );
+    final ctrl =
+        ExamSessionController(apiClient: apiClient, database: database);
+
+    await ctrl.startSession(userSession: _session, language: 'en');
+    ctrl.submitAnswer(0);
+    await ctrl.submitSession(userSession: _session);
+
+    // Immediately after submitSession returns, state is results — user is not blocked.
+    expect(ctrl.state, ExamState.results);
+
+    // The local record already exists with syncStatus='pending';
+    // the background backend call has not yet completed.
+    final attempts = database.getAllExamAttempts();
+    expect(attempts.length, 1);
+    expect(attempts.first.syncStatus, 'pending');
+    expect(ctrl.result, isNull);
+  });
+
+  test('local attempt survives a backend failure with syncStatus pending',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'exam_failure_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/start')) {
+        return http.Response(
+          _makeStartResponse(questionCount: 1),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      // Simulate a backend error — attempt must survive for retry.
+      return http.Response('Internal Server Error', 500);
+    });
+    final apiClient = BackendApiClient(
+      baseUrl: 'http://unused',
+      timeout: const Duration(seconds: 5),
+      appId: 'test-app',
+      appSecret: 'test-secret',
+      httpClient: client,
+    );
+    final ctrl =
+        ExamSessionController(apiClient: apiClient, database: database);
+
+    await ctrl.startSession(userSession: _session, language: 'en');
+    ctrl.submitAnswer(0);
+    await ctrl.submitSession(userSession: _session);
+
+    expect(ctrl.state, ExamState.results);
+
+    // Allow the background call to fail.
+    await Future<void>.delayed(Duration.zero);
+
+    // Record is preserved with syncStatus='pending' so the retry worker can pick it up.
+    final attempts = database.getAllExamAttempts();
+    expect(attempts.length, 1);
+    expect(attempts.first.syncStatus, 'pending');
+    // No score data from backend.
+    expect(ctrl.result, isNull);
   });
 
   // ─── reset ────────────────────────────────────────────────────────────────
@@ -361,8 +441,7 @@ void main() {
       );
     });
     final ctrl = await _makeController(client);
-    await ctrl.startSession(
-        userSession: _session, topic: 'travel', language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
     ctrl.submitAnswer(0);
     await ctrl.submitSession(userSession: _session);
     expect(ctrl.state, ExamState.results);

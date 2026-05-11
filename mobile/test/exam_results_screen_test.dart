@@ -87,19 +87,19 @@ void main() {
         return http.Response(_makeStartResponse(), 201,
             headers: _jsonHeaders);
       }
-      // Submit hangs until we complete the Completer.
+      // Background submit hangs until we resolve the Completer.
       return submitCompleter.future;
     });
 
     final controller = await _makeController(client);
-    await controller.startSession(userSession: _session, topic: 'travel');
+    await controller.startSession(userSession: _session, language: 'en');
     controller.submitAnswer(0);
 
-    // Fire submitSession without awaiting so state goes to submitting
-    // immediately while the HTTP response is pending.
-    // ignore: unawaited_futures
-    controller.submitSession(userSession: _session);
-    expect(controller.state, ExamState.submitting);
+    // Local-first: submitSession saves locally and immediately transitions
+    // to ExamState.results — the user is never blocked on the network call.
+    await controller.submitSession(userSession: _session);
+    expect(controller.state, ExamState.results);
+    expect(controller.result, isNull); // background call still pending
 
     await tester.pumpWidget(MaterialApp(
       home: ExamResultsScreen(controller: controller, userSession: _session),
@@ -152,66 +152,128 @@ void main() {
     neverCompleter.complete(http.Response('', 503));
   });
 
-  // ─── 4.3: Submission failure error state ─────────────────────────────────
+  // ─── 4.3: Results available at mount time ────────────────────────────────
 
   testWidgets(
-      'error UI shown when controller has submission failure (state active + errorMessage)',
+      'results screen shows score data when result is already available at mount time',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     final client = MockClient((req) async {
       if (req.url.path.endsWith('/start')) {
         return http.Response(_makeStartResponse(), 201, headers: _jsonHeaders);
       }
-      // Submit fails with a server error.
-      return http.Response(
-        jsonEncode({'error': 'SERVER_ERROR', 'message': 'Boom'}),
-        500,
-        headers: _jsonHeaders,
-      );
+      return http.Response(_makeSubmitResponse(passed: true), 200,
+          headers: _jsonHeaders);
     });
 
     final controller = await _makeController(client);
-    await controller.startSession(userSession: _session, topic: 'travel');
+    await controller.startSession(userSession: _session, language: 'en');
     controller.submitAnswer(0);
     await controller.submitSession(userSession: _session);
 
-    // Controller is now: state == active, errorMessage != null, result == null.
-    expect(controller.state, ExamState.active);
-    expect(controller.errorMessage, isNotNull);
-    final errorMsg = controller.errorMessage!;
+    // Drain the background HTTP call through FakeAsync.
+    // Each pump() flushes pending microtasks and fires elapsed timers.
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(controller.result, isNotNull);
 
     await tester.pumpWidget(MaterialApp(
       home: ExamResultsScreen(controller: controller, userSession: _session),
     ));
     await tester.pump();
 
-    // Error message and "Try Again" button must be visible.
-    expect(find.text(errorMsg), findsOneWidget);
-    expect(find.text('Try Again'), findsOneWidget);
-    // Spinner must not be shown.
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    // Results UI shown immediately since result was available at mount time.
+    // Note: _ScoreCircle renders a determinate CircularProgressIndicator for
+    // the score arc, so we verify the results UI via text, not by absence of
+    // CircularProgressIndicator.
+    expect(find.text('Exam Results'), findsOneWidget);
+    expect(find.text('You passed!'), findsOneWidget);
+  });
+
+  // ─── 4.5: Done tap — single pop, no black screen ─────────────────────────
+
+  testWidgets('tapping Done returns to learning screen and resets controller',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/start')) {
+        return http.Response(_makeStartResponse(), 201, headers: _jsonHeaders);
+      }
+      return http.Response(_makeSubmitResponse(passed: false), 200,
+          headers: _jsonHeaders);
+    });
+
+    final controller = await _makeController(client);
+    await controller.startSession(userSession: _session, language: 'en');
+    controller.submitAnswer(0);
+    await controller.submitSession(userSession: _session);
+
+    // Drain the background HTTP call through FakeAsync.
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(controller.result, isNotNull);
+
+    final navigatorKey = GlobalKey<NavigatorState>();
+
+    await tester.pumpWidget(MaterialApp(
+      navigatorKey: navigatorKey,
+      home: const Scaffold(body: Text('Learning')),
+    ));
+
+    // Push ExamResultsScreen on top — simulates the navigation stack after
+    // ExamQuestionScreen used pushReplacement to show results.
+    navigatorKey.currentState!.push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ExamResultsScreen(controller: controller, userSession: _session),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Results screen is showing; learning screen is beneath.
+    expect(find.text('Exam Results'), findsOneWidget);
+    expect(find.text('Learning'), findsNothing);
+
+    // Tap Done.
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    // 2.1: Learning screen is now visible — navigator was NOT over-popped.
+    expect(find.text('Learning'), findsOneWidget);
+    expect(find.text('Exam Results'), findsNothing);
+
+    // 2.2: Controller must have been reset before dismissing the route.
+    expect(controller.state, ExamState.idle);
+    expect(controller.result, isNull);
+    expect(controller.errorMessage, isNull);
   });
 
   // ─── 4.4: Retry tap ──────────────────────────────────────────────────────
 
   testWidgets('tapping Try Again resets controller and pops the route',
       (tester) async {
+    // Backend never responds — submit remains unanswered, triggering timeout.
+    final neverCompleter = Completer<http.Response>();
     final client = MockClient((req) async {
       if (req.url.path.endsWith('/start')) {
         return http.Response(_makeStartResponse(), 201, headers: _jsonHeaders);
       }
-      return http.Response(
-        jsonEncode({'error': 'SERVER_ERROR', 'message': 'Boom'}),
-        500,
-        headers: _jsonHeaders,
-      );
+      return neverCompleter.future;
     });
 
     final controller = await _makeController(client);
-    await controller.startSession(userSession: _session, topic: 'travel');
+    await controller.startSession(userSession: _session, language: 'en');
     controller.submitAnswer(0);
     await controller.submitSession(userSession: _session);
 
-    expect(controller.state, ExamState.active);
+    // Local-first: state is results immediately; result is null (pending).
+    expect(controller.state, ExamState.results);
 
     final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -227,9 +289,18 @@ void main() {
             ExamResultsScreen(controller: controller, userSession: _session),
       ),
     );
-    await tester.pumpAndSettle();
+    // Use fixed pumps instead of pumpAndSettle: the indeterminate
+    // CircularProgressIndicator animation never settles, so pumpAndSettle
+    // would keep pumping until the 20-second timeout fires.
+    await tester.pump(); // kick off the route-push frame
+    await tester.pump(const Duration(milliseconds: 500)); // complete route animation
 
-    // Error UI is showing; home is hidden beneath.
+    // Initially showing spinner (result=null, not timed out).
+    expect(find.byType(CircularProgressIndicator), findsAtLeastNWidgets(1));
+
+    // Advance past the 20-second timeout to trigger the Try Again UI.
+    await tester.pump(const Duration(seconds: 21));
+
     expect(find.text('Try Again'), findsOneWidget);
     expect(find.text('Home'), findsNothing);
 
@@ -243,5 +314,8 @@ void main() {
     expect(controller.state, ExamState.idle);
     expect(controller.errorMessage, isNull);
     expect(controller.result, isNull);
+
+    // Cleanup: resolve the stalled future.
+    neverCompleter.complete(http.Response('', 503));
   });
 }

@@ -181,7 +181,7 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Topic: ${_capitalise(result.topic)}  •  ${result.language.toUpperCase()}',
+              'Language: ${result.language.toUpperCase()}',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: cs.outline,
                   ),
@@ -246,7 +246,7 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
               child: OutlinedButton(
                 onPressed: () {
                   widget.controller.reset();
-                  // Pop back to the topic screen.
+                  // Pop back to the learning screen.
                   Navigator.of(context).pop();
                 },
                 child: const Text('Take Again'),
@@ -258,10 +258,9 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
               child: FilledButton(
                 onPressed: () {
                   widget.controller.reset();
-                  // Pop both results and topic screens.
-                  Navigator.of(context)
-                    ..pop()
-                    ..pop();
+                  // Single pop — the question route was replaced by results,
+                  // so only one pop is needed to return to the learning screen.
+                  Navigator.of(context).pop();
                 },
                 child: const Text('Done'),
               ),
@@ -271,9 +270,6 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
       ),
     );
   }
-
-  String _capitalise(String s) =>
-      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 }
 
 // ─── score circle widget ──────────────────────────────────────────────────────

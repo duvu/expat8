@@ -54,12 +54,14 @@ export class PostgresWordStore {
       language: input.language,
       meaning_vi: input.meaning_vi,
       part_of_speech: input.part_of_speech ?? null,
-      ipa: input.ipa,
-      vietnamese_pronunciation: input.vietnamese_pronunciation,
-      example: input.example,
-      example_vi: input.example_vi,
+      ipa: input.ipa ?? '',
+      vietnamese_pronunciation: input.vietnamese_pronunciation ?? '',
+      example: input.example ?? '',
+      example_vi: input.example_vi ?? '',
       difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
       topics_json: JSON.stringify(input.topics ?? []),
+      entry_type: input.entry_type ?? 'word',
+      explanation: input.explanation ?? '',
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
       updated_at: input.updated_at ?? now
@@ -79,11 +81,13 @@ export class PostgresWordStore {
         example_vi,
         difficulty,
         topics_json,
+        entry_type,
+        explanation,
         generation_source,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       ON CONFLICT (language, normalized_term) DO NOTHING
       RETURNING *`,
       [
@@ -99,6 +103,8 @@ export class PostgresWordStore {
         row.example_vi,
         row.difficulty,
         row.topics_json,
+        row.entry_type,
+        row.explanation,
         row.generation_source,
         row.created_at,
         row.updated_at
@@ -1774,26 +1780,19 @@ export class PostgresWordStore {
     return [...topicsSet].sort();
   }
 
-  async startExamSession({ userId, topic, language = 'en', now = new Date().toISOString(), sessionTtlMs = 7200000 }) {
-    const normTopic = String(topic).trim().toLowerCase();
+  async startExamSession({ userId, language = 'en', now = new Date().toISOString(), sessionTtlMs = 7200000 }) {
     const expiresAt = new Date(new Date(now).getTime() + sessionTtlMs).toISOString();
 
     return this.#withOptionalTransaction(async (client) => {
-      // Find studied words matching topic+language
+      // Find studied words for the active language.
       const sourceResult = await client.query(
-        `SELECT w.id, w.term, w.meaning_vi, w.difficulty, w.topics_json, w.language
+        `SELECT w.id, w.term, w.meaning_vi, w.difficulty, w.topics_json, w.language, w.example, w.entry_type
          FROM user_word_states uws
          JOIN words w ON w.id = uws.word_id
          WHERE uws.user_id = $1 AND uws.language = $2`,
         [userId, language]
       );
-      const matchingWords = sourceResult.rows
-        .map((r) => {
-          let topics;
-          try { topics = JSON.parse(r.topics_json ?? '[]'); } catch { topics = []; }
-          return { ...r, topics };
-        })
-        .filter((w) => w.topics.map((t) => String(t).trim().toLowerCase()).includes(normTopic));
+      const matchingWords = sourceResult.rows;
 
       if (matchingWords.length < 5) {
         return { error: 'INSUFFICIENT_WORDS', found: matchingWords.length };
@@ -1804,7 +1803,7 @@ export class PostgresWordStore {
 
       // Distractor pool: same language, not a source word
       const distResult = await client.query(
-        `SELECT id, term, meaning_vi, difficulty FROM words WHERE language = $1`,
+        `SELECT id, term, meaning_vi, difficulty, example, entry_type FROM words WHERE language = $1`,
         [language]
       );
       const distractorPool = distResult.rows.filter((w) => !sourceIds.has(w.id));
@@ -1814,7 +1813,7 @@ export class PostgresWordStore {
       await client.query(
         `INSERT INTO exam_sessions (id, user_id, topic, language, difficulty_level, created_at, expires_at, submitted_at)
          VALUES ($1, $2, $3, $4, NULL, $5, $6, NULL)`,
-        [sessionId, userId, normTopic, language, now, expiresAt]
+        [sessionId, userId, 'language', language, now, expiresAt]
       );
 
       const questions = [];
@@ -1824,6 +1823,11 @@ export class PostgresWordStore {
         const correctMeaning = src.meaning_vi ?? src.term;
         const choicesRaw = [correctMeaning, ...distractors.map((d) => d.meaning_vi ?? d.term)];
         const { choices, correctIndex } = shuffleChoices(choicesRaw);
+
+        // Assign question_type: 50/50 sentence_context if example is non-empty
+        const hasExample = src.example && src.example.trim() !== '';
+        const questionType = hasExample && Math.random() < 0.5 ? 'sentence_context' : 'meaning_choice';
+
         const question = {
           id: createId('exam_q'),
           session_id: sessionId,
@@ -1832,7 +1836,10 @@ export class PostgresWordStore {
           choices_json: JSON.stringify(choices),
           correct_index: correctIndex,
           ordinal: i,
-          created_at: now
+          created_at: now,
+          question_type: questionType,
+          sentence: questionType === 'sentence_context' ? src.example : null,
+          highlight: questionType === 'sentence_context' ? src.term : null,
         };
         await client.query(
           `INSERT INTO exam_questions (id, session_id, word_id, prompt_word, choices_json, correct_index, ordinal, created_at)
@@ -1845,16 +1852,24 @@ export class PostgresWordStore {
 
       return {
         session_id: sessionId,
-        topic: normTopic,
+        topic: 'language',
         language,
         question_count: questions.length,
         expires_at: expiresAt,
-        questions: questions.map((q) => ({
-          question_id: q.id,
-          ordinal: q.ordinal,
-          prompt_word: q.prompt_word,
-          choices: JSON.parse(q.choices_json)
-        }))
+        questions: questions.map((q) => {
+          const item = {
+            question_id: q.id,
+            ordinal: q.ordinal,
+            prompt_word: q.prompt_word,
+            choices: JSON.parse(q.choices_json),
+            question_type: q.question_type,
+          };
+          if (q.question_type === 'sentence_context') {
+            item.sentence = q.sentence;
+            item.highlight = q.highlight;
+          }
+          return item;
+        })
       };
     });
   }
@@ -1989,6 +2004,8 @@ function rowToWord(row) {
     example_vi: row.example_vi,
     difficulty: row.difficulty,
     topics: JSON.parse(row.topics_json),
+    entry_type: row.entry_type ?? 'word',
+    explanation: row.explanation ?? '',
     generation_source: row.generation_source,
     created_at: row.created_at,
     updated_at: row.updated_at

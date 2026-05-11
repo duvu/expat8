@@ -238,6 +238,8 @@ Response:
   "vietnamese_pronunciation": "ri-lai-uh-bol",
   "example": "She is a reliable teammate.",
   "example_vi": "Co ay la mot dong doi dang tin cay.",
+  "entry_type": "word",
+  "explanation": "",
   "speaking_prompt": {
     "id": "prompt_123",
     "target_text": "She is a reliable teammate.",
@@ -257,6 +259,11 @@ Response:
 `speaking_prompt` is optional. When present, it contains an approved prompt for
 local speaking practice. Mobile clients MUST treat it as practice text only; no
 audio recording is uploaded as part of card loading or study-event sync.
+
+`entry_type` is one of `"word"`, `"phrase"`, or `"idiom"`. For `phrase` and
+`idiom` entries, `ipa` and `part_of_speech` are empty strings. `explanation`
+contains a Vietnamese usage note for the entry; it is an empty string for plain
+words.
 
 ## POST /v1/learning/cards
 
@@ -692,7 +699,9 @@ app-credential headers **and** a valid bearer session token.
 ### GET /v1/exam/topics
 
 Returns the distinct topics the authenticated user has studied words in for the
-given language. Topics are normalised (lowercase, trimmed).
+given language. Topics are normalised (lowercase, trimmed). This endpoint is
+retained for historical browsing, but the primary exam flow no longer depends
+on topic selection.
 
 Query parameters:
 
@@ -709,14 +718,13 @@ Response:
 ### POST /v1/exam/start
 
 Generates a new exam session with MCQ questions drawn from the user's studied
-words for the requested topic and language. Minimum 5 words required; capped at
-20 questions.
+words for the requested language. Minimum 5 words required; capped at 20
+questions.
 
 Request body:
 
 ```json
 {
-  "topic": "travel",
   "language": "en"
 }
 ```
@@ -726,7 +734,7 @@ Success response (201):
 ```json
 {
   "session_id": "exam_sess_<uuid>",
-  "topic": "travel",
+  "topic": "language",
   "language": "en",
   "question_count": 10,
   "expires_at": "2026-05-11T14:00:00.000Z",
@@ -735,11 +743,27 @@ Success response (201):
       "question_id": "exam_q_<uuid>",
       "ordinal": 0,
       "prompt_word": "journey",
-      "choices": ["chuyến đi", "bữa ăn", "công việc", "gia đình"]
+      "choices": ["chuyến đi", "bữa ăn", "công việc", "gia đình"],
+      "question_type": "meaning_choice"
+    },
+    {
+      "question_id": "exam_q_<uuid>",
+      "ordinal": 1,
+      "prompt_word": "break the ice",
+      "choices": ["phá vỡ bầu không khí ngại ngùng", "bắt đầu công việc", "tiết lộ bí mật", "cảm thấy mệt mỏi"],
+      "question_type": "sentence_context",
+      "sentence": "He told a joke to break the ice at the meeting.",
+      "highlight": "break the ice"
     }
   ]
 }
 ```
+
+Each question object always contains `question_type` (`"meaning_choice"` or
+`"sentence_context"`). For `sentence_context` questions, `sentence` (the example
+sentence) and `highlight` (the term to emphasize) are also present. Questions
+with an empty `example` always receive `"meaning_choice"`; questions with a
+non-empty `example` are randomly assigned either type (50/50).
 
 Error responses:
 
@@ -747,12 +771,12 @@ Error responses:
 |--------|----------------------|----------------------------------------------|
 | 400    | `bad_request`        | `topic` missing from body                    |
 | 401    | `invalid_session`    | Missing or invalid bearer token              |
-| 422    | `INSUFFICIENT_WORDS` | Fewer than 5 studied words match topic+lang  |
+| 422    | `INSUFFICIENT_WORDS` | Fewer than 5 studied words exist for language |
 
 ```json
 {
   "error": "INSUFFICIENT_WORDS",
-  "message": "Not enough studied words for topic \"travel\" in language \"en\". Found 3, need at least 5."
+  "message": "Not enough studied words for language \"en\". Found 3, need at least 5."
 }
 ```
 

@@ -969,21 +969,20 @@ class BackendApiClient {
   ///
   /// Returns an [ExamSessionResponse]. Throws [BackendApiException] with
   /// `backendError == 'INSUFFICIENT_WORDS'` when fewer than 5 words are
-  /// available for the requested topic and language.
+  /// available for the requested language.
   Future<ExamSessionResponse> startExamSession({
     required String sessionToken,
-    required String topic,
     String language = 'en',
   }) async {
     final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/exam/start');
-    final rawBody = utf8.encode(jsonEncode({'topic': topic, 'language': language}));
+    final rawBody = utf8.encode(jsonEncode({'language': language}));
     await _logger.info(
       category: AppLogCategory.api,
       event: 'exam.start.request',
       message: 'Starting exam session.',
       traceId: traceId,
-      context: {'topic': topic, 'language': language},
+      context: {'language': language},
     );
     final stopwatch = Stopwatch()..start();
     http.Response response;
@@ -1030,11 +1029,16 @@ class BackendApiClient {
     required String sessionToken,
     required String sessionId,
     required List<int> answers,
+    String? localAttemptId,
   }) async {
     final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/exam/submit');
-    final rawBody = utf8.encode(
-        jsonEncode({'session_id': sessionId, 'answers': answers}));
+    final bodyMap = <String, dynamic>{
+      'session_id': sessionId,
+      'answers': answers,
+      if (localAttemptId != null) 'local_attempt_id': localAttemptId,
+    };
+    final rawBody = utf8.encode(jsonEncode(bodyMap));
     await _logger.info(
       category: AppLogCategory.api,
       event: 'exam.submit.request',
@@ -1529,6 +1533,9 @@ class ExamQuestion {
     required this.ordinal,
     required this.promptWord,
     required this.choices,
+    this.questionType = 'meaning_choice',
+    this.sentence,
+    this.highlight,
   });
 
   factory ExamQuestion.fromJson(Map<String, dynamic> json) {
@@ -1539,6 +1546,9 @@ class ExamQuestion {
       choices: ((json['choices'] as List<dynamic>?) ?? [])
           .whereType<String>()
           .toList(),
+      questionType: json['question_type'] as String? ?? 'meaning_choice',
+      sentence: json['sentence'] as String?,
+      highlight: json['highlight'] as String?,
     );
   }
 
@@ -1546,6 +1556,15 @@ class ExamQuestion {
   final int ordinal;
   final String promptWord;
   final List<String> choices;
+
+  /// `'meaning_choice'` or `'sentence_context'`.
+  final String questionType;
+
+  /// The example sentence for `sentence_context` questions. Null for `meaning_choice`.
+  final String? sentence;
+
+  /// The term to emphasize in [sentence] for `sentence_context` questions. Null for `meaning_choice`.
+  final String? highlight;
 }
 
 /// Full exam session returned by `POST /v1/exam/start`.

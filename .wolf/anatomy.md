@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-10T23:00:00.613Z
-> Files: 518 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-11T17:00:00.570Z
+> Files: 521 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -126,10 +126,6 @@
 - `project.local.yml` — This file allows you to locally override settings in project.yml for development purposes. (~115 tok)
 - `project.yml` — the name by which the project can be referenced within Serena (~2661 tok)
 
-## .serena/cache/typescript/
-
-- `raw_document_symbols.pkl` (~266526 tok)
-
 ## .serena/memories/expat8/deploy/
 
 - `2026-05-09-expat8-backend-fresh-deploy.md` (~373 tok)
@@ -194,7 +190,7 @@
 - `litellm_client.js` — Exports LiteLLMClient (~2506 tok)
 - `logger.js` — Exports createLogger, sanitizeFields (~987 tok)
 - `normalize.js` — Exports normalizeTerm (~32 tok)
-- `postgres_word_store.js` — Exports PostgresWordStore (~19250 tok)
+- `postgres_word_store.js` — Exports PostgresWordStore (~19155 tok)
 - `proficiency.js` — Exports CEFR_LEVELS, HSK_LEVELS, DEFAULT_PROFICIENCY_LEVEL, VALID_STUDY_RATINGS + 16 more (~1416 tok)
 - `rate_limit.js` — Simple in-process sliding-window rate limiter. (~906 tok)
 - `runtime.js` — Exports createStore, createBackendRuntime (~820 tok)
@@ -203,12 +199,12 @@
 - `vocabulary_enrichment_adapter.js` — Exports VocabularyEnrichmentAdapter (~1498 tok)
 - `vocabulary_pool_scheduler.js` — Exports VocabularyPoolScheduler (~1207 tok)
 - `vocabulary_validator.js` — Exports validateVocabularyItem, normalizeSuggestionType (~692 tok)
-- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~16188 tok)
+- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~16492 tok)
 - `worker.js` — config: tick (~478 tok)
 
 ## backend/src/routes/
 
-- `exam.js` — API routes: GET, POST (6 endpoints) (~1635 tok)
+- `exam.js` — API routes: GET, POST (6 endpoints) (~1602 tok)
 
 ## backend/test/
 
@@ -222,7 +218,7 @@
 - `database.test.js` — Declares schemaSql (~237 tok)
 - `e2e_prod_test.mjs` — E2E test against production backend at https://expat8.x51.vn (~4170 tok)
 - `e2e_smoke.test.js` — backendStore: listen, fetchJson, wordInput (~3683 tok)
-- `exam.test.js` — Directly inject a user word state (bypasses SRS logic for speed). (~4212 tok)
+- `exam.test.js` — Directly inject a user word state (bypasses SRS logic for speed). (~5373 tok)
 - `generation_service.test.js` — items: wordInput (~1764 tok)
 - `litellm_client.test.js` — Declares client (~571 tok)
 - `logger.test.js` — Declares chunks (~484 tok)
@@ -241,7 +237,7 @@
 
 ## contracts/
 
-- `api.md` — API Contracts (~5419 tok)
+- `api.md` — API Contracts (~5436 tok)
 
 ## docs/
 
@@ -404,7 +400,7 @@
 ## mobile/.dart_tool/flutter_build/07428d6725df74e11cbe763f9411fbe4/
 
 - `_composite.stamp` (~7 tok)
-- `.filecache` (~57235 tok)
+- `.filecache` (~57201 tok)
 - `android_aot_bundle_release_android-arm.stamp` (~64 tok)
 - `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
 - `android_aot_bundle_release_android-x64.stamp` (~62 tok)
@@ -426,8 +422,8 @@
 - `gen_localizations.stamp` (~7 tok)
 - `install_code_assets.d` (~32 tok)
 - `install_code_assets.stamp` (~119 tok)
-- `kernel_snapshot_program.d` (~32710 tok)
-- `kernel_snapshot_program.stamp` (~33604 tok)
+- `kernel_snapshot_program.d` (~32691 tok)
+- `kernel_snapshot_program.stamp` (~33583 tok)
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
@@ -518,6 +514,36 @@
 - `install_code_assets.stamp` (~119 tok)
 - `kernel_snapshot_program.d` (~32483 tok)
 - `kernel_snapshot_program.stamp` (~33371 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~504 tok)
+
+## mobile/.dart_tool/flutter_build/c5696d2059e1fc06d585f547380f0883/
+
+- `_composite.stamp` (~7 tok)
+- `.filecache` (~57201 tok)
+- `android_aot_bundle_release_android-arm.stamp` (~64 tok)
+- `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
+- `android_aot_bundle_release_android-x64.stamp` (~62 tok)
+- `android_aot_release_android-arm.stamp` (~150 tok)
+- `android_aot_release_android-arm64.stamp` (~150 tok)
+- `android_aot_release_android-x64.stamp` (~149 tok)
+- `aot_android_asset_bundle.stamp` (~2720 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `flutter_android_aot_bundle_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-x64.d` (~1 tok)
+- `flutter_android_aot_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_release_android-x64.d` (~1 tok)
+- `flutter_assets.d` (~2547 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32691 tok)
+- `kernel_snapshot_program.stamp` (~33583 tok)
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
@@ -835,9 +861,6 @@
 - `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6219 tok)
 - `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~485 tok)
 - `CMakeCache.txt` — This is the CMakeCache file. (~4143 tok)
-- `metadata_generation_command.txt` (~264 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~24 tok)
 
 ## mobile/android/app/.cxx/Debug/2h1sn5j6/arm64-v8a/.cmake/api/v1/query/client-agp/
 
@@ -851,44 +874,3 @@
 - `cmakeFiles-v1-a90e45e267848e3e2eca.json` (~7540 tok)
 - `codemodel-v2-9c25d319424d8a6742e6.json` (~207 tok)
 - `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-06T13-40-05-0725.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/arm64-v8a/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~11480 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~404 tok)
-- `TargetDirectories.txt` (~54 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/arm64-v8a/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~920 tok)
-- `CMakeCXXCompiler.cmake` (~1773 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/arm64-v8a/CMakeFiles/3.22.1-g37088a8/CompilerIdC/
-
-- `CMakeCCompilerId.c` — ifdef __cplusplus (~7101 tok)
-- `CMakeCCompilerId.o` (~1613 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/arm64-v8a/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/
-
-- `CMakeCXXCompilerId.cpp` (~7028 tok)
-- `CMakeCXXCompilerId.o` (~1615 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~171 tok)
-- `android_gradle_build.json` (~272 tok)
-- `build_file_index.txt` (~25 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/2h1sn5j6/armeabi-v7a/.cmake/api/v1/reply/
-
-- `cache-v2-20b0d9f30737d123ca68.json` — Declares of (~7784 tok)

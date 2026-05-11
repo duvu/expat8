@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../api/backend_api_client.dart';
 import '../data/local_database.dart';
@@ -95,26 +96,12 @@ class ExamSessionController extends ChangeNotifier {
       _session != null &&
       _currentQuestionIndex == _session!.questions.length - 1;
 
-  /// Fetches topics the user has studied words in for [language].
-  Future<List<String>> fetchTopics({
-    required UserSession userSession,
-    String language = 'en',
-  }) async {
-    try {
-      return await _apiClient.fetchExamTopics(
-          sessionToken: userSession.sessionToken, language: language);
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Starts a new exam session for [topic] + [language].
+  /// Starts a new exam session for [language].
   ///
   /// Sets [state] to [ExamState.loading] then [ExamState.active] on success,
   /// or leaves it in [ExamState.idle] and sets [errorMessage] on failure.
   Future<void> startSession({
     required UserSession userSession,
-    required String topic,
     String language = 'en',
   }) async {
     _state = ExamState.loading;
@@ -128,14 +115,13 @@ class ExamSessionController extends ChangeNotifier {
     try {
       final response = await _apiClient.startExamSession(
         sessionToken: userSession.sessionToken,
-        topic: topic,
         language: language,
       );
       _session = response;
       _state = ExamState.active;
     } on BackendApiException catch (e) {
       if (e.backendError == 'INSUFFICIENT_WORDS') {
-        errorMessage = 'Not enough studied words for this topic. '
+        errorMessage = 'Not enough studied words for this language. '
             'Keep learning and try again!';
       } else {
         errorMessage = 'Failed to start exam. Please try again.';
@@ -172,6 +158,23 @@ class ExamSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Commits the current answer and advances or submits as needed.
+  Future<void> submitAnswerAndAdvance({
+    required UserSession userSession,
+    required int choiceIndex,
+  }) async {
+    if (hasAnsweredCurrent || _state == ExamState.submitting) {
+      return;
+    }
+    submitAnswer(choiceIndex);
+    if (isLastQuestion) {
+      await submitSession(userSession: userSession);
+      return;
+    }
+    _currentQuestionIndex++;
+    notifyListeners();
+  }
+
   /// Advances to the next question, or transitions to [ExamState.submitting]
   /// and calls [submitSession] if all questions have been answered.
   ///
@@ -187,10 +190,12 @@ class ExamSessionController extends ChangeNotifier {
     }
   }
 
-  /// Submits all answers to the backend and scores the session.
+  /// Submits all answers: persists locally first, then syncs to backend in background.
   ///
-  /// Transitions to [ExamState.results] on success. Persists the attempt
-  /// locally regardless of pass/fail.
+  /// Transitions to [ExamState.results] immediately after local save so the
+  /// user is never blocked by backend latency. The backend call runs in the
+  /// background; when it completes, [result] is set and listeners are notified
+  /// so the results screen can update reactively.
   Future<void> submitSession({required UserSession userSession}) async {
     final s = _session;
     if (s == null) return;
@@ -207,42 +212,83 @@ class ExamSessionController extends ChangeNotifier {
       }
     }
 
+    // Step 1: Generate a stable client-side attempt ID for idempotency.
+    final localAttemptId = const Uuid().v4();
+
+    // Step 2: Persist the attempt locally with 'pending' sync status.
+    // Score fields are left at 0 and will be updated once the backend responds.
+    _database.saveExamAttempt(ExamAttemptEntity(
+      attemptId: localAttemptId,
+      sessionId: s.sessionId,
+      topic: s.topic ?? 'language',
+      language: s.language ?? 'en',
+      difficultyLevel: null,
+      totalQuestions: s.questionCount,
+      correctCount: 0,
+      scorePct: 0.0,
+      passed: 0,
+      createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      certificateId: null,
+      syncStatus: 'pending',
+    ));
+
+    // Step 3: Enqueue for background sync (retry-safe).
+    _database.enqueueExamResult(
+      localAttemptId: localAttemptId,
+      sessionId: s.sessionId,
+      answers: answerList,
+      language: s.language ?? 'en',
+    );
+
+    // Step 4: Transition to results immediately — user is not blocked.
+    _state = ExamState.results;
+    notifyListeners();
+
+    // Step 5: Submit to backend in background; update local record on success.
+    _submitToBackendInBackground(
+      userSession: userSession,
+      localAttemptId: localAttemptId,
+      sessionId: s.sessionId,
+      answers: answerList,
+    );
+  }
+
+  /// Calls the backend submit endpoint and, on success, updates the local
+  /// attempt record and notifies listeners so the results screen can render.
+  ///
+  /// Failures are silently swallowed — the queue entry will be retried by the
+  /// background sync worker. The results screen's 20-second timeout handles
+  /// the case where the backend never responds.
+  Future<void> _submitToBackendInBackground({
+    required UserSession userSession,
+    required String localAttemptId,
+    required String sessionId,
+    required List<int> answers,
+  }) async {
     try {
       final response = await _apiClient.submitExamSession(
         sessionToken: userSession.sessionToken,
-        sessionId: s.sessionId,
-        answers: answerList,
+        sessionId: sessionId,
+        answers: answers,
+        localAttemptId: localAttemptId,
       );
       _result = response;
 
-      // Persist attempt locally for offline history.
-      _database.saveExamAttempt(ExamAttemptEntity(
-        attemptId: response.attemptId,
-        sessionId: response.sessionId,
-        topic: response.topic,
-        language: response.language,
-        difficultyLevel: response.difficultyLevel,
-        totalQuestions: response.totalQuestions,
+      // Update the local record with the server-confirmed scores.
+      _database.markExamAttemptSynced(
+        localAttemptId: localAttemptId,
+        serverAttemptId: response.attemptId,
         correctCount: response.correctCount,
         scorePct: response.scorePct,
-        passed: response.passed ? 1 : 0,
-        createdAtMs: DateTime.tryParse(response.createdAt)
-                ?.millisecondsSinceEpoch ??
-            DateTime.now().millisecondsSinceEpoch,
+        passed: response.passed,
         certificateId: response.certificateId,
-      ));
+      );
 
-      _state = ExamState.results;
-    } on BackendApiException catch (e) {
-      errorMessage = e.backendError == 'SESSION_EXPIRED'
-          ? 'Exam session expired. Please start a new exam.'
-          : 'Failed to submit exam. Please try again.';
-      _state = ExamState.active;
+      notifyListeners();
     } catch (_) {
-      errorMessage = 'Failed to submit exam. Please try again.';
-      _state = ExamState.active;
+      // Backend sync failed; the queue entry will be retried in the background.
+      // Do not surface an error here — the attempt is safely persisted locally.
     }
-    notifyListeners();
   }
 
   /// Resets the controller to [ExamState.idle] for a new exam attempt.

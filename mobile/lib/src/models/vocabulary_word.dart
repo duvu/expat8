@@ -62,6 +62,8 @@ class VocabularyWord {
     this.cardType,
     this.selectionReason,
     this.speakingPrompt,
+    this.entryType = 'word',
+    this.explanation = '',
   });
 
   factory VocabularyWord.fromJson(Map<String, dynamic> json) {
@@ -86,6 +88,8 @@ class VocabularyWord {
       cardType: _cardTypeFromJson(json['card_type'] as String?),
       selectionReason: json['selection_reason'] as String?,
       speakingPrompt: spJson != null ? SpeakingPrompt.fromJson(spJson) : null,
+      entryType: json['entry_type'] as String? ?? 'word',
+      explanation: json['explanation'] as String? ?? '',
     );
   }
 
@@ -113,6 +117,12 @@ class VocabularyWord {
   /// Null when no approved prompt exists — UI falls back to [example].
   final SpeakingPrompt? speakingPrompt;
 
+  /// Entry type: `'word'`, `'phrase'`, or `'idiom'`.
+  final String entryType;
+
+  /// Vietnamese usage note for phrase/idiom entries. Empty string for plain words.
+  final String explanation;
+
   VocabularyWord copyWith({
     String? localId,
     String? serverWordId,
@@ -134,6 +144,8 @@ class VocabularyWord {
     LearningCardType? cardType,
     String? selectionReason,
     SpeakingPrompt? speakingPrompt,
+    String? entryType,
+    String? explanation,
   }) {
     return VocabularyWord(
       localId: localId ?? this.localId,
@@ -157,6 +169,8 @@ class VocabularyWord {
       cardType: cardType ?? this.cardType,
       selectionReason: selectionReason ?? this.selectionReason,
       speakingPrompt: speakingPrompt ?? this.speakingPrompt,
+      entryType: entryType ?? this.entryType,
+      explanation: explanation ?? this.explanation,
     );
   }
 }
