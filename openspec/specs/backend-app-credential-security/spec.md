@@ -1,5 +1,6 @@
-## ADDED Requirements
-
+## Purpose
+Define how the backend authenticates all public API requests using HMAC-signed app credentials and rejects unsigned or replayed requests.
+## Requirements
 ### Requirement: Backend protects public API routes with app credentials
 The backend SHALL require valid app credential verification before handling any `/v1/*` API request.
 
@@ -16,7 +17,7 @@ The backend SHALL require valid app credential verification before handling any 
 - **THEN** the backend processes the matching API route normally
 
 ### Requirement: Backend verifies HMAC signatures over canonical requests
-The backend SHALL verify app credential signatures using HMAC-SHA-256 over a canonical request containing method, sorted path and query, timestamp, nonce, and the SHA-256 hash of the raw request body.
+The backend SHALL verify app credential signatures using HMAC-SHA-256 over a canonical request containing method, sorted path and query, timestamp, nonce, and the SHA-256 hash of the raw request body. Signature comparison SHALL be performed in constant time regardless of the byte length of either operand.
 
 #### Scenario: Signed query parameters are changed
 - **WHEN** a client sends a request whose query parameters differ from the values used to compute the signature
@@ -29,6 +30,10 @@ The backend SHALL verify app credential signatures using HMAC-SHA-256 over a can
 #### Scenario: Unknown app id is supplied
 - **WHEN** a client signs a request with an app id that is not configured as active
 - **THEN** the backend returns `400` with `{ "error": "bad_request" }`
+
+#### Scenario: Signatures with mismatched lengths are compared
+- **WHEN** a client supplies a signature whose raw byte length differs from the expected signature
+- **THEN** the backend's comparison does not terminate early due to length differences — both operands are normalized before the constant-time comparison
 
 ### Requirement: Backend rejects expired and replayed credential requests
 The backend SHALL reject credential requests outside the configured timestamp window and SHALL reject repeated nonces for the same app id within the replay window.
@@ -73,3 +78,11 @@ The backend SHALL use ExpressJS middleware ordering so app credential checks run
 #### Scenario: Invalid credential request targets study event sync
 - **WHEN** a client sends an invalid credential request to `/v1/study-events/sync`
 - **THEN** the backend rejects the request before parsing the body as a study event payload
+
+### Requirement: Nonce cache check-then-set concurrency is documented
+The `InMemoryNonceCache.use()` operation SHALL include a code comment explaining that the check-then-set sequence is safe because Node.js processes events sequentially on a single thread, and each cache operation completes without yielding.
+
+#### Scenario: Concurrent requests arrive in the same event loop tick
+- **WHEN** two requests carrying the same nonce are received
+- **THEN** only the first request passes nonce verification; the second is rejected
+

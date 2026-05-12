@@ -1,7 +1,18 @@
 import pg from 'pg';
 
 import { getAdminConfig } from './config';
-import type { AdminArticle, ExamResult, SpeakingPrompt, VocabularyReviewItem } from '../types';
+import type {
+  AdminArticle,
+  DashboardSummaryStats,
+  ExamResult,
+  RecentStudyEvent,
+  SpeakingPrompt,
+  StudyEventSummary,
+  UserDetail,
+  UserProficiency,
+  UserRow,
+  VocabularyReviewItem,
+} from '../types';
 
 type ArticleRow = {
   id: string;
@@ -291,5 +302,157 @@ function mapExamResultRow(row: ExamResultRow): ExamResult {
     passed: row.passed,
     created_at: row.created_at,
     certificate_id: row.certificate_id
+  };
+}
+
+// ── User management ──────────────────────────────────────────────────────────
+
+type UserListRow = {
+  id: string;
+  identifier: string;
+  display_name: string | null;
+  created_at: string;
+  last_activity: string | null;
+  study_event_count: string;
+};
+
+export async function listUsers({ page = 1 }: { page?: number } = {}): Promise<UserRow[]> {
+  const offset = (Math.max(1, page) - 1) * 50;
+  const result = await getPool().query<UserListRow>(
+    `SELECT
+       u.id,
+       u.identifier,
+       u.display_name,
+       u.created_at,
+       MAX(se.occurred_at) AS last_activity,
+       COUNT(se.id)::text AS study_event_count
+     FROM users u
+     LEFT JOIN study_events se ON se.user_id = u.id
+     GROUP BY u.id, u.identifier, u.display_name, u.created_at
+     ORDER BY u.created_at DESC
+     LIMIT 50 OFFSET $1`,
+    [offset]
+  );
+  return result.rows.map(row => ({
+    id: row.id,
+    identifier: row.identifier,
+    display_name: row.display_name,
+    created_at: row.created_at,
+    last_activity: row.last_activity,
+    study_event_count: Number(row.study_event_count),
+  }));
+}
+
+type UserDetailRow = {
+  id: string;
+  identifier: string;
+  display_name: string | null;
+  created_at: string;
+  session_count: string;
+  cached_word_count: string;
+};
+
+export async function getUserDetail(userId: string): Promise<UserDetail | null> {
+  const result = await getPool().query<UserDetailRow>(
+    `SELECT
+       u.id,
+       u.identifier,
+       u.display_name,
+       u.created_at,
+       (SELECT COUNT(*)::text FROM user_sessions us WHERE us.user_id = u.id) AS session_count,
+       (SELECT COUNT(*)::text FROM user_cached_words ucw WHERE ucw.user_id = u.id) AS cached_word_count
+     FROM users u
+     WHERE u.id = $1`,
+    [userId]
+  );
+  if (!result.rows[0]) return null;
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    identifier: row.identifier,
+    display_name: row.display_name,
+    created_at: row.created_at,
+    session_count: Number(row.session_count),
+    cached_word_count: Number(row.cached_word_count),
+  };
+}
+
+export async function getUserProficiency(userId: string): Promise<UserProficiency[]> {
+  const result = await getPool().query<UserProficiency>(
+    `SELECT language, level, updated_at
+     FROM user_proficiency
+     WHERE user_id = $1
+     ORDER BY language`,
+    [userId]
+  );
+  return result.rows;
+}
+
+type StudyEventBreakdownRow = { rating: string; count: string };
+type StudyEventRow = {
+  id: string;
+  word_id: string | null;
+  local_word_id: string | null;
+  rating: string;
+  occurred_at: string;
+};
+
+export async function getUserStudyStats(
+  userId: string
+): Promise<{ breakdown: StudyEventSummary[]; recentEvents: RecentStudyEvent[] }> {
+  const [breakdownResult, recentResult] = await Promise.all([
+    getPool().query<StudyEventBreakdownRow>(
+      `SELECT rating, COUNT(*)::text AS count
+       FROM study_events
+       WHERE user_id = $1
+       GROUP BY rating
+       ORDER BY rating`,
+      [userId]
+    ),
+    getPool().query<StudyEventRow>(
+      `SELECT id, word_id, local_word_id, rating, occurred_at
+       FROM study_events
+       WHERE user_id = $1
+       ORDER BY occurred_at DESC
+       LIMIT 20`,
+      [userId]
+    ),
+  ]);
+  return {
+    breakdown: breakdownResult.rows.map(r => ({ rating: r.rating, count: Number(r.count) })),
+    recentEvents: recentResult.rows,
+  };
+}
+
+type SummaryStatsRow = {
+  total_users: string;
+  total_study_events: string;
+  active_last_7_days: string;
+  total_words: string;
+};
+
+export async function getDashboardSummaryStats(): Promise<DashboardSummaryStats> {
+  const result = await getPool().query<SummaryStatsRow>(
+    `WITH
+       user_count    AS (SELECT COUNT(*)::text AS n FROM users),
+       event_count   AS (SELECT COUNT(*)::text AS n FROM study_events),
+       active_count  AS (
+         SELECT COUNT(DISTINCT device_id)::text AS n
+         FROM study_events
+         WHERE occurred_at >= to_char(NOW() - INTERVAL '7 days', 'YYYY-MM-DD')
+       ),
+       word_count    AS (SELECT COUNT(*)::text AS n FROM word_senses)
+     SELECT
+       (SELECT n FROM user_count)   AS total_users,
+       (SELECT n FROM event_count)  AS total_study_events,
+       (SELECT n FROM active_count) AS active_last_7_days,
+       (SELECT n FROM word_count)   AS total_words`
+  );
+  const row = result.rows[0];
+  return {
+    total_users: Number(row.total_users),
+    total_study_events: Number(row.total_study_events),
+    active_last_7_days: Number(row.active_last_7_days),
+    total_words: Number(row.total_words),
   };
 }

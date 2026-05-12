@@ -292,6 +292,53 @@ dl.article-meta dd {
   color: var(--muted);
 }
 
+.stats-panel {
+  padding: 22px 28px;
+}
+
+.stats-panel dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.stats-panel dl div {
+  padding: 18px 20px;
+  border-radius: 18px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+}
+
+.stats-panel dl dt {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.stats-panel dl dd {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.pagination {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.button.disabled,
+.button.secondary.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
 @media (max-width: 720px) {
   .app-shell {
     padding: 20px 12px 40px;

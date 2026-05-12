@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the Android release build configuration and artifact packaging for the mobile app.
+
+## Requirements
 
 ### Requirement: Mobile project SHALL produce Android release build
 The mobile codebase MUST support Android release packaging that compiles the application with release profile and produces a distributable artifact.

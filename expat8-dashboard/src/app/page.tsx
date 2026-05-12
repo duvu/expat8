@@ -1,13 +1,16 @@
 import Link from 'next/link';
 
-import { listAdminArticles } from '@/lib/db';
+import { getDashboardSummaryStats, listAdminArticles } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ status?: string }>; }) {
   const params = await searchParams;
   const status = params.status ?? null;
-  const articles = await listAdminArticles({ status });
+  const [articles, stats] = await Promise.all([
+    listAdminArticles({ status }),
+    getDashboardSummaryStats(),
+  ]);
 
   return (
     <main>
@@ -17,9 +20,31 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <Link href="/articles/new">New article</Link>{' '}
           <Link href="/review">Vocabulary review</Link>{' '}
           <Link href="/speaking-prompts">Speaking prompts</Link>{' '}
-          <Link href="/exam">Exam results</Link>
+          <Link href="/exam">Exam results</Link>{' '}
+          <Link href="/users">Users</Link>
         </nav>
       </header>
+
+      <section className="stats-panel">
+        <dl>
+          <div>
+            <dt>Users</dt>
+            <dd>{stats.total_users.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Study Events</dt>
+            <dd>{stats.total_study_events.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Active (7d)</dt>
+            <dd>{stats.active_last_7_days.toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Words</dt>
+            <dd>{stats.total_words.toLocaleString()}</dd>
+          </div>
+        </dl>
+      </section>
 
       <section className="table-panel">
         <form className="toolbar">

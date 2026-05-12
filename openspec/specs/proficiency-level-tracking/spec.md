@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define how the backend stores and retrieves a user's proficiency level per target language.
+
+## Requirements
 
 ### Requirement: Store and retrieve user proficiency level
 

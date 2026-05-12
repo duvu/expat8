@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the backend endpoint that exposes weekly speaking session summaries per learner.
+
+## Requirements
 
 ### Requirement: Backend exposes weekly speaking summary endpoint
 

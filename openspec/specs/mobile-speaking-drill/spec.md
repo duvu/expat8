@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the mobile entry point for the 3-minute speaking drill feature.
+
+## Requirements
 
 ### Requirement: Mobile provides a 3-minute speaking drill entry point
 

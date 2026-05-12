@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the dashboard interface for listing, filtering, and managing the status of speaking prompts.
+
+## Requirements
 
 ### Requirement: Dashboard lists speaking prompts with filter and status
 

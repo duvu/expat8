@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define how the backend filters vocabulary content based on the learner's current proficiency level.
+
+## Requirements
 
 ### Requirement: Filter words by user proficiency level
 

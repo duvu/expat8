@@ -1,3 +1,6 @@
+## Purpose
+Define the API endpoint that returns vocabulary items extracted from a specific article to its owner or authorized users.
+
 ## Requirements
 
 ### Requirement: Authenticated user can retrieve vocabulary extracted from an article

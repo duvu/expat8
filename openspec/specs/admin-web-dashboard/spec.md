@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the browser-based admin interface for creating and managing articles submitted to the backend.
+
+## Requirements
 
 ### Requirement: Admin can create articles from the dashboard
 The system SHALL provide a browser-based admin form that submits article title, language, raw text, optional source URL, and visibility to the backend for processing.

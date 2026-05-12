@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the authenticated user flow for soft-deleting own articles while preserving extracted vocabulary.
+
+## Requirements
 
 ### Requirement: Authenticated user can soft-delete own article
 The system SHALL expose `DELETE /v1/articles/:id` that sets the article's `status` to `'deleted'` and `visibility` to `'private'`. This hides the article from list and vocabulary endpoints. Extracted vocabulary is preserved. Only the article's owner may delete it.

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define how difficulty ratings are recorded on study events and used to schedule spaced-repetition reviews.
+
+## Requirements
 
 ### Requirement: Record difficulty rating on study events
 

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define that mobile learning interactions are exclusively gesture-driven, with no explicit action buttons on the primary learning screen.
+
+## Requirements
 
 ### Requirement: Learning interactions SHALL be gesture-only
 The mobile app MUST remove explicit learning action buttons from the primary learning screen and SHALL process learning intents exclusively from directional swipe gestures.

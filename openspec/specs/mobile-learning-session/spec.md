@@ -2,46 +2,26 @@
 Define how the mobile learning session selects cards, handles gestures, updates local learning state, and renders language-native proficiency labels.
 ## Requirements
 ### Requirement: Swipe advances the learning session
-The mobile app SHALL provide a primary learning screen where directional gestures drive session actions: right-to-left selects another card biased to 15% learned-word review, left-to-right routes to review flow with 15% new-word weighting, bottom-to-top marks remembered and reduces relearning frequency to 10%, and top-to-bottom marks difficult and adds the word to relearn group. The app SHALL log session navigation actions and card-source decisions for troubleshooting.
+The mobile app SHALL provide a primary learning screen where a downward swipe requests the next vocabulary card, SHALL show the current active learning language on that screen, and SHALL keep session navigation scoped to the selected learning language and proficiency scale.
 
-#### Scenario: User swipes right-to-left for another card
-- **WHEN** the user performs a right-to-left swipe on the learning screen
-- **THEN** the app selects and displays the next vocabulary card and records a session-navigation log event with learned-word review weighting at 15%
-
-#### Scenario: User swipes left-to-right for review flow
-- **WHEN** the user performs a left-to-right swipe on the learning screen
-- **THEN** the app advances to the next card using review flow selection and records a session-navigation log event with new-word weighting at 15%
-
-#### Scenario: User swipes bottom-to-top to mark remembered
-- **WHEN** the user performs a bottom-to-top swipe on the learning screen
-- **THEN** the app updates local word state as remembered, reduces relearning frequency to 10% for that word, and records scheduling and navigation log events
-
-#### Scenario: User swipes top-to-bottom to mark difficult
-- **WHEN** the user performs a top-to-bottom swipe on the learning screen
-- **THEN** the app updates local word state as difficult, assigns the word to relearn group, and records scheduling and navigation log events
-
-#### Scenario: Rapid duplicate gestures are ignored while one gesture is active
-- **WHEN** a recognized gesture callback is still in progress and the user performs another swipe
-- **THEN** the app ignores the duplicate gesture until the active gesture completes and MUST NOT duplicate the current card's local study event or local learning-state transition
-
-#### Scenario: Gesture callback fails
-- **WHEN** a gesture callback fails while processing a recognized swipe
-- **THEN** the app handles the failure without leaving gesture dispatch permanently disabled and allows a later gesture to be processed
+#### Scenario: User swipes down for next card
+- **WHEN** the user performs a downward swipe on the learning screen
+- **THEN** the app requests the next card using the active language and current scale-native proficiency state
 
 #### Scenario: App starts with local state
 - **WHEN** the user opens the app
-- **THEN** the app loads the most recent local learning state before starting the session and records initialization log events for restored state
+- **THEN** the app restores session state including active language and associated proficiency scale metadata before continuing the session
 
-#### Scenario: Card selection never blocks on network
-- **WHEN** the app selects the next card and a background refill is in progress or pending
-- **THEN** the app returns a card from local storage immediately without awaiting the network operation
+#### Scenario: User changes the active learning language
+- **WHEN** the user selects a different learning language from the learning screen
+- **THEN** the app reloads proficiency and subsequent card requests in the newly selected language
 
-#### Scenario: New-word shown triggers post-transition refill check
-- **WHEN** a new-word card is shown and the user advances to it
-- **THEN** the app fires `markWordAsLearning` in the background, and the inventory threshold check runs after that transition completes — not before
+#### Scenario: Active language changes while a card is visible
+- **WHEN** the user switches to another learning language while a card from the previous language is displayed
+- **THEN** the app replaces that language context with content for the newly selected language instead of continuing the old one
 
 ### Requirement: Vocabulary card displays required learning content
-The mobile app SHALL display all required vocabulary fields on each card when the data is available.
+The mobile app SHALL display all required vocabulary fields on each card when the data is available and SHALL expose optional speaking practice content when an approved speaking prompt or fallback example is available.
 
 #### Scenario: Complete vocabulary card is shown
 - **WHEN** a vocabulary card is displayed
@@ -50,6 +30,10 @@ The mobile app SHALL display all required vocabulary fields on each card when th
 #### Scenario: Optional part of speech is available
 - **WHEN** a vocabulary item includes part of speech
 - **THEN** the card displays the part of speech with the vocabulary term
+
+#### Scenario: Optional speaking prompt is available
+- **WHEN** a vocabulary card includes an approved speaking prompt
+- **THEN** the card exposes a non-blocking speaking entry point with target text and Vietnamese hint for local speaking practice
 
 ### Requirement: Review scheduling updates after ratings
 The mobile app SHALL derive remembered/difficult scheduling updates from gesture intents and update the word review schedule locally, and SHALL log gesture-derived scheduling decisions.
@@ -91,3 +75,26 @@ The mobile app SHALL target 15% new-word cards and 85% review or learned-word ca
 #### Scenario: All local card pools are exhausted
 - **WHEN** no new, learned, due-review, difficult-relearn, or recent-review card is available for the active language
 - **THEN** the app may show an empty-card message explaining that no learning card is available
+
+### Requirement: Session uses backend-owned new-word batches
+The mobile learning session SHALL consume backend-owned new-word batches without sending current card IDs or word exclusion lists.
+
+#### Scenario: New-word batch is requested
+- **WHEN** the learning session requests new remote supply
+- **THEN** the request uses the unified learning-card endpoint with limit 10 and omits current word ID and exclude word IDs
+
+#### Scenario: Remote batch fails
+- **WHEN** the unified learning-card endpoint fails during a session
+- **THEN** the session continues with eligible local cards when available and does not fall back to the removed legacy endpoint
+
+### Requirement: Speaking entry points preserve swipe behavior
+The mobile learning session SHALL keep speaking practice optional and SHALL NOT require speaking before the learner can continue normal card navigation.
+
+#### Scenario: Learner skips speaking prompt
+- **WHEN** a speaking prompt is available on the current card and the learner swipes to another card instead of opening it
+- **THEN** the app advances through the existing local card-selection flow without recording a speaking attempt
+
+#### Scenario: Speaking sync is pending
+- **WHEN** speaking event sync is pending or in progress
+- **THEN** the app still selects the next card locally without awaiting the speaking sync operation
+

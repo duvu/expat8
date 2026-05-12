@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define how the system resolves language-specific proficiency profiles from a registry keyed by target language.
+
+## Requirements
 
 ### Requirement: System defines language-native proficiency profiles
 The system SHALL resolve proficiency behavior from a language profile registry keyed by target language.

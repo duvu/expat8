@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define how the backend loads its LiteLLM endpoint URL from runtime configuration rather than hard-coding it.
+
+## Requirements
 
 ### Requirement: Backend uses configurable LiteLLM endpoint
 The backend SHALL read the LiteLLM base URL from environment configuration and default to `https://lite.x51.vn` when no override is provided.

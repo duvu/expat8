@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define how the backend automatically adjusts a learner's proficiency level based on consecutive study-event ratings.
+
+## Requirements
 
 ### Requirement: Auto-detect proficiency level from consecutive ratings
 

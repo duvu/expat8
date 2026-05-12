@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the admin endpoint for patching article metadata fields including title, language, visibility, and status.
+
+## Requirements
 
 ### Requirement: Admin can update article metadata
 The system SHALL expose `PATCH /v1/admin/articles/:id` allowing admins to update a whitelist of article metadata fields: `title`, `language`, `visibility`, and `status`. Fields not in the whitelist SHALL be silently ignored. The endpoint requires the `X-Expat8-Admin-Token` header.

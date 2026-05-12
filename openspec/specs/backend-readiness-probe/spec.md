@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the database-aware readiness probe endpoint used to determine whether the backend is ready to serve traffic.
+
+## Requirements
 
 ### Requirement: Backend exposes a DB-aware readiness probe
 The system SHALL expose `GET /health/ready` that checks database connectivity before reporting healthy. The endpoint requires no authentication and is exempt from app credential headers.

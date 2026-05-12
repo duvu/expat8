@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the ObjectBox-based local persistence layer for mobile learning data including words, events, settings, and logs.
+
+## Requirements
 
 ### Requirement: Mobile app MUST persist learning data using ObjectBox
 The mobile app SHALL persist local words, study events, sync queue entries, app settings, and app logs in ObjectBox boxes managed by a single app-local ObjectBox store.

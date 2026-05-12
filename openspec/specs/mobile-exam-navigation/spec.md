@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the navigation contract for the mobile exam flow so the Done action on results returns to the learning screen.
+
+## Requirements
 
 ### Requirement: Results Done returns to learning screen
 The mobile app SHALL return to the learning screen when the user taps `Done` on the exam results screen, without removing the learning screen route or leaving the app on a blank screen.

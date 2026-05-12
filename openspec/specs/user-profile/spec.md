@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Define the authenticated endpoint that returns the current user's non-sensitive profile fields.
+
+## Requirements
 
 ### Requirement: Authenticated user can fetch own profile
 The system SHALL expose `GET /v1/me` that returns the current user's non-sensitive profile fields when called with a valid Bearer session token.

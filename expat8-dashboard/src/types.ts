@@ -40,6 +40,50 @@ export type ExamResult = {
   certificate_id: string | null;
 };
 
+export type UserRow = {
+  id: string;
+  identifier: string;
+  display_name: string | null;
+  created_at: string;
+  last_activity: string | null;
+  study_event_count: number;
+};
+
+export type UserDetail = {
+  id: string;
+  identifier: string;
+  display_name: string | null;
+  created_at: string;
+  session_count: number;
+  cached_word_count: number;
+};
+
+export type UserProficiency = {
+  language: string;
+  level: string;
+  updated_at: string;
+};
+
+export type StudyEventSummary = {
+  rating: string;
+  count: number;
+};
+
+export type RecentStudyEvent = {
+  id: string;
+  word_id: string | null;
+  local_word_id: string | null;
+  rating: string;
+  occurred_at: string;
+};
+
+export type DashboardSummaryStats = {
+  total_users: number;
+  total_study_events: number;
+  active_last_7_days: number;
+  total_words: number;
+};
+
 export type SpeakingPrompt = {
   id: string;
   word_sense_id: string;
