@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import Sidebar from '@/components/Sidebar';
 import './globals.css';
 
 export const metadata = {
@@ -11,7 +12,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <div className="app-shell">{children}</div>
+        <input type="checkbox" id="sidebar-toggle" className="sidebar-toggle-checkbox" />
+        <div className="shell-grid">
+          <Sidebar />
+          {children}
+        </div>
       </body>
     </html>
   );

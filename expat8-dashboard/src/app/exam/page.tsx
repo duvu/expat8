@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { listExamResults } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,14 +18,7 @@ export default async function ExamResultsPage({
   const results = await listExamResults({ userId, topic, language });
 
   return (
-    <main>
-      <header className="page-header">
-        <h1>Exam Results</h1>
-        <nav>
-          <Link href="/">Home</Link>
-        </nav>
-      </header>
-
+    <PageShell title="Exam Results">
       <section className="table-panel">
         <form className="toolbar">
           <label>
@@ -87,6 +81,6 @@ export default async function ExamResultsPage({
           </tbody>
         </table>
       </section>
-    </main>
+    </PageShell>
   );
 }

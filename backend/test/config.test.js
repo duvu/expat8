@@ -3,13 +3,13 @@ import test from 'node:test';
 
 import { loadConfig } from '../src/config.js';
 
-test('loads database URL and deployment LiteLLM defaults from environment', () => {
+test('loads database URL from environment; liteLLMBaseUrl is undefined when LITELLM_BASE_URL is not set', () => {
   const config = loadConfig({
     DATABASE_URL: 'postgres://expat8:secret@db:5432/expat8'
   });
 
   assert.equal(config.databaseUrl, 'postgres://expat8:secret@db:5432/expat8');
-  assert.equal(config.liteLLMBaseUrl, 'https://lite.x51.vn');
+  assert.equal(config.liteLLMBaseUrl, undefined);
 });
 
 test('loads app credential security settings from environment', () => {

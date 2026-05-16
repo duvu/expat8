@@ -19,9 +19,9 @@ Gia tri mac dinh:
 Vi du chay debug:
 ```bash
 flutter run -d emulator-5554 \
-  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
   --dart-define=APP_LOG_LEVEL=debug
 ```
 

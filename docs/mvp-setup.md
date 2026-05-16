@@ -20,7 +20,7 @@ Environment values:
 
 - `PORT`: backend HTTP port, default `8787`.
 - `DATABASE_URL`: PostgreSQL connection string. When set, the backend uses PostgreSQL-backed persistence.
-- `LITELLM_BASE_URL`: LiteLLM-compatible base URL, default `https://lite.x51.vn`.
+- `LITELLM_BASE_URL`: LiteLLM-compatible base URL, default `<YOUR_LITELLM_URL>`.
 - `LITELLM_API_KEY`: optional API key for LiteLLM. Supply this through the shell environment or an untracked local env file.
 - `LITELLM_MODEL`: model routed through LiteLLM.
 - `DEFAULT_SOURCE_LANGUAGE`: default source language, currently `vi`.
@@ -86,10 +86,10 @@ Compose environment values:
 
 - `POSTGRES_DB`: database name, default `expat8`.
 - `POSTGRES_USER`: database user, default `expat8`.
-- `POSTGRES_PASSWORD`: database password, default `expat8_password`.
+- `POSTGRES_PASSWORD`: database password, default `<YOUR_DB_PASSWORD>`.
 - `BACKEND_PORT`: host port exposed for the backend, default `8787`.
 - `PORT`: backend container port, default `8787`.
-- `LITELLM_BASE_URL`: default `https://lite.x51.vn`.
+- `LITELLM_BASE_URL`: default `<YOUR_LITELLM_URL>`.
 - `LITELLM_API_KEY`: LiteLLM API key, intentionally blank by default.
 - `LITELLM_MODEL`: default `gpt-4o-mini`.
 - `CORS_ALLOWED_ORIGIN`: default `*`; set an explicit production web origin
@@ -185,7 +185,7 @@ node scripts/smoke-deployed-backend.mjs
 
 Optional environment:
 
-- `BACKEND_BASE_URL`: defaults to `https://expat8.x51.vn`.
+- `BACKEND_BASE_URL`: defaults to `<YOUR_BACKEND_URL>`.
 - `APP_CREDENTIAL_APP_ID`: defaults to the mobile app credential id.
 - `APP_CREDENTIAL_SECRET`: defaults to the mobile app credential secret.
 - `SMOKE_TIMEOUT_MS`: defaults to `5000`.

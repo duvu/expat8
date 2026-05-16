@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
+import 'package:expat8_language_app/src/exam/exam_certificate_screen.dart';
 import 'package:expat8_language_app/src/exam/exam_results_screen.dart';
 import 'package:expat8_language_app/src/exam/exam_session_controller.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
@@ -10,6 +11,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+
+class _ReadinessInterceptClient extends http.BaseClient {
+  _ReadinessInterceptClient(this._delegate);
+
+  final http.Client _delegate;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request is http.Request &&
+        request.method == 'GET' &&
+        request.url.path == '/health/ready') {
+      final response = http.Response(
+        jsonEncode({'ok': true, 'db': 'ok'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+      return http.StreamedResponse(
+        Stream<List<int>>.value(response.bodyBytes),
+        response.statusCode,
+        contentLength: response.contentLength,
+        request: request,
+        headers: response.headers,
+        isRedirect: response.isRedirect,
+        persistentConnection: response.persistentConnection,
+        reasonPhrase: response.reasonPhrase,
+      );
+    }
+    return _delegate.send(request);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +64,7 @@ void main() {
       timeout: const Duration(seconds: 5),
       appId: 'test-app',
       appSecret: 'test-secret',
-      httpClient: httpClient,
+      httpClient: _ReadinessInterceptClient(httpClient),
     );
     return ExamSessionController(apiClient: apiClient, database: database);
   }
@@ -68,6 +99,16 @@ void main() {
         'created_at': '2026-05-11T12:00:00.000Z',
       });
 
+  String _makeCertificateResponse() => jsonEncode({
+        'certificate_id': 'cert-uuid',
+        'topic': 'travel',
+        'language': 'en',
+        'difficulty_level': null,
+        'score_pct': 100.0,
+        'issued_at': '2026-05-11T12:00:00.000Z',
+        'disclaimer': 'Demo certificate disclaimer.',
+      });
+
   const _jsonHeaders = {'content-type': 'application/json'};
 
   // ─── 4.1: Reactive render ────────────────────────────────────────────────
@@ -84,8 +125,7 @@ void main() {
 
     final client = MockClient((req) async {
       if (req.url.path.endsWith('/start')) {
-        return http.Response(_makeStartResponse(), 201,
-            headers: _jsonHeaders);
+        return http.Response(_makeStartResponse(), 201, headers: _jsonHeaders);
       }
       // Background submit hangs until we resolve the Completer.
       return submitCompleter.future;
@@ -111,10 +151,14 @@ void main() {
     expect(find.text('Exam Results'), findsNothing);
 
     // Complete the HTTP submit — controller sets result and notifies listeners.
-    submitCompleter.complete(
-        http.Response(_makeSubmitResponse(passed: true), 200,
-            headers: _jsonHeaders));
-    await tester.pumpAndSettle();
+    submitCompleter.complete(http.Response(
+        _makeSubmitResponse(passed: true), 200,
+        headers: _jsonHeaders));
+    // Avoid pumpAndSettle here: this flow starts from an indeterminate spinner,
+    // so bounded pumps are more reliable than waiting for the framework to
+    // decide that every animation has settled.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Results UI now shown without any hot-reload.
     expect(find.text('Exam Results'), findsOneWidget);
@@ -193,6 +237,97 @@ void main() {
     expect(find.text('You passed!'), findsOneWidget);
   });
 
+  testWidgets('View Certificate passes api client and renders certificate',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final requestedPaths = <String>[];
+    final client = MockClient((req) async {
+      requestedPaths.add(req.url.path);
+      if (req.url.path.endsWith('/start')) {
+        return http.Response(_makeStartResponse(), 201, headers: _jsonHeaders);
+      }
+      if (req.url.path.endsWith('/submit')) {
+        return http.Response(_makeSubmitResponse(passed: true), 200,
+            headers: _jsonHeaders);
+      }
+      if (req.url.path.endsWith('/certificate/cert-uuid')) {
+        return http.Response(_makeCertificateResponse(), 200,
+            headers: _jsonHeaders);
+      }
+      return http.Response('not found', 404);
+    });
+
+    final controller = await _makeController(client);
+    await controller.startSession(userSession: _session, language: 'en');
+    controller.submitAnswer(0);
+    await controller.submitSession(userSession: _session);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(controller.result?.certificateId, 'cert-uuid');
+
+    await tester.pumpWidget(MaterialApp(
+      home: ExamResultsScreen(controller: controller, userSession: _session),
+    ));
+    await tester.pump();
+
+    await tester.tap(find.text('View Certificate'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('API client not available.'), findsNothing);
+    expect(find.text('Certificate of Completion'), findsOneWidget);
+    expect(find.text('Demo certificate disclaimer.'), findsOneWidget);
+    expect(requestedPaths, contains('/v1/exam/certificate/cert-uuid'));
+  });
+
+  testWidgets(
+      'certificate screen renders certificate using supplied api client',
+      (tester) async {
+    final requestedPaths = <String>[];
+    final client = MockClient((req) async {
+      requestedPaths.add(req.url.path);
+      if (req.url.path.endsWith('/certificate/cert-uuid')) {
+        return http.Response(_makeCertificateResponse(), 200,
+            headers: _jsonHeaders);
+      }
+      return http.Response('not found', 404);
+    });
+    final apiClient = BackendApiClient(
+      baseUrl: 'http://unused',
+      timeout: const Duration(seconds: 5),
+      appId: 'test-app',
+      appSecret: 'test-secret',
+      httpClient: client,
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: ExamCertificateScreen(
+        certificateId: 'cert-uuid',
+        apiClient: apiClient,
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('API client not available.'), findsNothing);
+    expect(find.text('Certificate of Completion'), findsOneWidget);
+    expect(find.text('Demo certificate disclaimer.'), findsOneWidget);
+    expect(requestedPaths, contains('/v1/exam/certificate/cert-uuid'));
+  });
+
+  testWidgets('certificate screen keeps explicit missing-client error',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: ExamCertificateScreen(certificateId: 'cert-uuid'),
+    ));
+    await tester.pump();
+
+    expect(find.text('API client not available.'), findsOneWidget);
+  });
+
   // ─── 4.5: Done tap — single pop, no black screen ─────────────────────────
 
   testWidgets('tapping Done returns to learning screen and resets controller',
@@ -242,7 +377,8 @@ void main() {
 
     // Tap Done.
     await tester.tap(find.text('Done'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // 2.1: Learning screen is now visible — navigator was NOT over-popped.
     expect(find.text('Learning'), findsOneWidget);
@@ -293,7 +429,8 @@ void main() {
     // CircularProgressIndicator animation never settles, so pumpAndSettle
     // would keep pumping until the 20-second timeout fires.
     await tester.pump(); // kick off the route-push frame
-    await tester.pump(const Duration(milliseconds: 500)); // complete route animation
+    await tester
+        .pump(const Duration(milliseconds: 500)); // complete route animation
 
     // Initially showing spinner (result=null, not timed out).
     expect(find.byType(CircularProgressIndicator), findsAtLeastNWidgets(1));
@@ -306,7 +443,8 @@ void main() {
 
     // Tap the retry button.
     await tester.tap(find.text('Try Again'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     // Should have popped back to the home route.
     expect(find.text('Home'), findsOneWidget);

@@ -4,9 +4,9 @@
 Complete the phase 0-3 Speaking Foundation Definition of Done: 3-minute drill, dashboard prompt review, weekly summary API, and beta metrics instrumentation.
 
 ## Constraints & Preferences
-- 10.113.213.9 is the local Z440/deploy host.
+- `<INTERNAL_HOST>` is the local Z440/deploy host.
 - Deploy on worker Z440 using `/home/beou/deployment/worker-z440/docker-compose.yml`.
-- Mobile release APK targets `BACKEND_BASE_URL=https://expat8.x51.vn` via `--dart-define`.
+- Mobile release APK targets `BACKEND_BASE_URL=<YOUR_BACKEND_URL>` via `--dart-define`.
 - `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64` required for builds.
 - Android SDK compileSdk must be ≥36 (flutter_tts requirement).
 - Audio must remain local-only on device; no raw audio, no file paths in backend payloads.

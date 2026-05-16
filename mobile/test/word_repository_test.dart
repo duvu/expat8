@@ -666,6 +666,16 @@ void main() {
         reason: 'existing en data is preserved');
     expect(await database.countWords(language: 'zh'), 2);
   });
+
+  test('bundled English vocabulary asset stays duplicate-free', () async {
+    const loader = SeedVocabularyLoader();
+
+    final words = await loader.loadForLanguage('en');
+
+    expect(words, hasLength(100));
+    expect(words.map((word) => word.serverWordId).toSet(), hasLength(100));
+    expect(words.map((word) => word.term).toSet(), hasLength(100));
+  });
 }
 
 class _StubSeedLoader extends SeedVocabularyLoader {

@@ -41,6 +41,20 @@ flutter run \
 	--dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
 
+Android release builds use the same production `--dart-define` values for both the signed APK and the signed bundle:
+
+```bash
+cd mobile
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
+  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
+  --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
+  --dart-define=APP_LOG_LEVEL=info
+```
+
+The APK lands at `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still produces `build/app/outputs/bundle/release/app-release.aab`.
+
 Mobile card loading uses `POST /v1/learning/cards` with `card_mode: "new"`.
 The backend owns duplicate avoidance through learner state and
 `PUT /v1/user-word-cache`; mobile no longer sends exclusion lists for card

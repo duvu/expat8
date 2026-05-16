@@ -135,6 +135,33 @@ test('postgres store claims cached words when cache unique indexes are missing',
   assert.equal(pool.userCachedWords.size, 2);
 });
 
+test('postgres store replaces cached words idempotently under concurrent requests', async () => {
+  const pool = new ConcurrentCacheReplacePool();
+  const store = new PostgresWordStore({ pool });
+  const word = await store.insertWord(wordInput({ id: 'word_cache_concurrent' }));
+
+  const [first, second] = await Promise.all([
+    store.replaceCachedWordIds({
+      deviceId: 'device_cache_concurrent',
+      wordIds: [word.word.id],
+      observedAt: '2026-05-05T00:00:00.000Z'
+    }),
+    store.replaceCachedWordIds({
+      deviceId: 'device_cache_concurrent',
+      wordIds: [word.word.id],
+      observedAt: '2026-05-05T00:00:00.000Z'
+    })
+  ]);
+
+  assert.equal(first.stored_count, 1);
+  assert.equal(second.stored_count, 1);
+  assert.equal(pool.userCachedWords.size, 1);
+  assert.deepEqual(
+    [...pool.userCachedWords.values()].map((row) => row.word_id),
+    [word.word.id]
+  );
+});
+
 test('postgres store levels up after five consecutive too_easy ratings', async () => {
   const store = new PostgresWordStore({ pool: new FakePool() });
 
@@ -567,6 +594,47 @@ class MissingCacheConflictTargetPool extends FakePool {
     ) {
       throw new Error('there is no unique or exclusion constraint matching the ON CONFLICT specification');
     }
+    return super.query(sql, params);
+  }
+}
+
+class ConcurrentCacheReplacePool extends FakePool {
+  constructor() {
+    super();
+    this.deleteCount = 0;
+    this.deleteBarrier = new Promise((resolve) => {
+      this.releaseDeleteBarrier = resolve;
+    });
+  }
+
+  async query(sql, params = []) {
+    const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+
+    if (normalizedSql.startsWith('DELETE FROM user_cached_words')) {
+      this.deleteCount += 1;
+      if (this.deleteCount === 1) {
+        await this.deleteBarrier;
+      } else if (this.deleteCount === 2) {
+        this.releaseDeleteBarrier();
+      }
+    }
+
+    if (normalizedSql.startsWith('INSERT INTO user_cached_words')) {
+      const row = cachedWordRowFromParams(params);
+      const key = row.user_id
+        ? `user:${row.user_id}:${row.word_id}`
+        : `device:${row.device_id}:${row.word_id}`;
+      if (this.userCachedWords.has(key)) {
+        if (normalizedSql.includes('ON CONFLICT DO NOTHING')) {
+          return { rows: [] };
+        }
+        throw Object.assign(
+          new Error('duplicate key value violates unique constraint "idx_user_cached_words_device_word"'),
+          { code: '23505' }
+        );
+      }
+    }
+
     return super.query(sql, params);
   }
 }

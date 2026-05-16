@@ -8,6 +8,76 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+class _ReadinessInterceptClient extends http.BaseClient {
+  _ReadinessInterceptClient(
+    this._delegate, {
+    this.readinessResponse,
+  });
+
+  final http.Client _delegate;
+  final http.Response Function(http.Request request)? readinessResponse;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request is http.Request &&
+        request.method == 'GET' &&
+        request.url.path == '/health/ready') {
+      final response = readinessResponse?.call(request) ??
+          http.Response(
+            jsonEncode({'ok': true, 'db': 'ok'}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+      return http.StreamedResponse(
+        Stream<List<int>>.value(response.bodyBytes),
+        response.statusCode,
+        contentLength: response.contentLength,
+        request: request,
+        headers: response.headers,
+        isRedirect: response.isRedirect,
+        persistentConnection: response.persistentConnection,
+        reasonPhrase: response.reasonPhrase,
+      );
+    }
+    return _delegate.send(request);
+  }
+}
+
+String _makeSubmitResponse({bool passed = true}) {
+  return jsonEncode({
+    'attempt_id': 'att_1',
+    'session_id': 'sess_1',
+    'topic': 'travel',
+    'language': 'en',
+    'difficulty_level': null,
+    'total_questions': 2,
+    'correct_count': passed ? 2 : 0,
+    'score_pct': passed ? 100.0 : 0.0,
+    'passed': passed,
+    'certificate_id': passed ? 'cert-uuid' : null,
+    'created_at': '2026-05-11T12:00:00.000Z',
+  });
+}
+
+String _makeStartResponse({int questionCount = 2}) {
+  return jsonEncode({
+    'session_id': 'sess_1',
+    'topic': 'travel',
+    'language': 'en',
+    'question_count': questionCount,
+    'expires_at': '2099-01-01T00:00:00.000Z',
+    'questions': List.generate(
+      questionCount,
+      (i) => {
+        'question_id': 'q${i + 1}',
+        'ordinal': i,
+        'prompt_word': 'word$i',
+        'choices': ['a', 'b', 'c', 'd'],
+      },
+    ),
+  });
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -21,7 +91,9 @@ void main() {
   );
 
   Future<ExamSessionController> _makeController(
-      http.Client httpClient) async {
+    http.Client httpClient, {
+    http.Response Function(http.Request request)? readinessResponse,
+  }) async {
     final database = await LocalDatabase.open(
       databaseName:
           'exam_ctrl_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -31,10 +103,40 @@ void main() {
       timeout: const Duration(seconds: 5),
       appId: 'test-app',
       appSecret: 'test-secret',
-      httpClient: httpClient,
+      httpClient: _ReadinessInterceptClient(
+        httpClient,
+        readinessResponse: readinessResponse,
+      ),
     );
     return ExamSessionController(apiClient: apiClient, database: database);
   }
+
+  test('startSession sets idle state and retryable error when readiness fails',
+      () async {
+    var startCalled = false;
+    final client = MockClient((req) async {
+      if (req.method == 'POST' && req.url.path.endsWith('/start')) {
+        startCalled = true;
+        return http.Response(
+          _makeStartResponse(questionCount: 2),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('', 500);
+    });
+    final ctrl = await _makeController(
+      client,
+      readinessResponse: (_) => http.Response('', 503),
+    );
+
+    await ctrl.startSession(userSession: _session, language: 'en');
+
+    expect(ctrl.state, ExamState.idle);
+    expect(ctrl.errorMessage, 'Backend unavailable. Please try again.');
+    expect(ctrl.session, isNull);
+    expect(startCalled, false);
+  });
 
   // ─── startSession ─────────────────────────────────────────────────────────
 
@@ -100,14 +202,60 @@ void main() {
   });
 
   test('startSession sets idle state and error on network failure', () async {
-    final client = MockClient((_) async => http.Response('', 500));
+    final client = MockClient((req) async {
+      if (req.method == 'POST' && req.url.path.endsWith('/start')) {
+        return http.Response('', 500);
+      }
+      return http.Response(
+        jsonEncode({'ok': true, 'db': 'ok'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
     final ctrl = await _makeController(client);
 
     await ctrl.startSession(
         userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, isNotNull);
+    expect(ctrl.errorMessage, 'Backend unavailable. Please try again.');
+  });
+
+  test('startSession can recover after the backend becomes healthy', () async {
+    var backendReady = false;
+    final client = MockClient((req) async {
+      if (req.method == 'POST' && req.url.path.endsWith('/start')) {
+        return http.Response(
+          _makeStartResponse(questionCount: 1),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('', 500);
+    });
+    final ctrl = await _makeController(
+      client,
+      readinessResponse: (_) => backendReady
+          ? http.Response(
+              jsonEncode({'ok': true, 'db': 'ok'}),
+              200,
+              headers: {'content-type': 'application/json'},
+            )
+          : http.Response('', 503),
+    );
+
+    // First attempt: readiness probe fails.
+    await ctrl.startSession(userSession: _session, language: 'en');
+    expect(ctrl.state, ExamState.idle);
+    expect(ctrl.errorMessage, 'Backend unavailable. Please try again.');
+
+    // Second attempt: probe succeeds, start session should proceed normally.
+    backendReady = true;
+    await ctrl.startSession(userSession: _session, language: 'en');
+
+    expect(ctrl.state, ExamState.active);
+    expect(ctrl.session?.sessionId, 'sess_1');
+    expect(ctrl.errorMessage, isNull);
   });
 
   // ─── submitAnswer ─────────────────────────────────────────────────────────
@@ -172,41 +320,6 @@ void main() {
   });
 
   // ─── advance + submitSession ──────────────────────────────────────────────
-
-  _makeSubmitResponse({bool passed = true}) {
-    return jsonEncode({
-      'attempt_id': 'att_1',
-      'session_id': 'sess_1',
-      'topic': 'travel',
-      'language': 'en',
-      'difficulty_level': null,
-      'total_questions': 2,
-      'correct_count': passed ? 2 : 0,
-      'score_pct': passed ? 100.0 : 0.0,
-      'passed': passed,
-      'certificate_id': passed ? 'cert-uuid' : null,
-      'created_at': '2026-05-11T12:00:00.000Z',
-    });
-  }
-
-  _makeStartResponse({int questionCount = 2}) {
-    return jsonEncode({
-      'session_id': 'sess_1',
-      'topic': 'travel',
-      'language': 'en',
-      'question_count': questionCount,
-      'expires_at': '2099-01-01T00:00:00.000Z',
-      'questions': List.generate(
-        questionCount,
-        (i) => {
-          'question_id': 'q${i + 1}',
-          'ordinal': i,
-          'prompt_word': 'word$i',
-          'choices': ['a', 'b', 'c', 'd'],
-        },
-      ),
-    });
-  }
 
   test('advance moves to next question when not on last', () async {
     int callCount = 0;
@@ -313,7 +426,7 @@ void main() {
       timeout: const Duration(seconds: 5),
       appId: 'test-app',
       appSecret: 'test-secret',
-      httpClient: client,
+      httpClient: _ReadinessInterceptClient(client),
     );
     final ctrl =
         ExamSessionController(apiClient: apiClient, database: database);
@@ -359,7 +472,7 @@ void main() {
       timeout: const Duration(seconds: 5),
       appId: 'test-app',
       appSecret: 'test-secret',
-      httpClient: client,
+      httpClient: _ReadinessInterceptClient(client),
     );
     final ctrl =
         ExamSessionController(apiClient: apiClient, database: database);
@@ -401,7 +514,7 @@ void main() {
       timeout: const Duration(seconds: 5),
       appId: 'test-app',
       appSecret: 'test-secret',
-      httpClient: client,
+      httpClient: _ReadinessInterceptClient(client),
     );
     final ctrl =
         ExamSessionController(apiClient: apiClient, database: database);

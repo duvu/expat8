@@ -1,9 +1,9 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
 import { backendFetch } from '@/lib/backend';
 import { getAdminArticle, listArticleVocabulary } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,12 +34,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
   const vocabulary = await listArticleVocabulary(id);
 
   return (
-    <main>
-      <header className="page-header">
-        <Link href="/">Back</Link>
-        <h1>{article.title}</h1>
-      </header>
-
+    <PageShell title={article.title}>
       <dl className="article-meta">
         <div><dt>Status</dt><dd><span className="badge" data-status={article.status}>{article.status}</span></dd></div>
         <div><dt>Language</dt><dd>{article.language}</dd></div>
@@ -89,6 +84,6 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
           </tbody>
         </table>
       </section>
-    </main>
+    </PageShell>
   );
 }

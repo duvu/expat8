@@ -16,7 +16,7 @@ class AppConfig {
     return const AppConfig(
       backendBaseUrl: String.fromEnvironment(
         'BACKEND_BASE_URL',
-        defaultValue: 'https://expat8.x51.vn',
+        defaultValue: '',
       ),
       newWordTimeout: Duration(
         seconds:
@@ -24,11 +24,11 @@ class AppConfig {
       ),
       appCredentialAppId: String.fromEnvironment(
         'APP_CREDENTIAL_APP_ID',
-        defaultValue: 'expat8-mobile-app',
+        defaultValue: '',
       ),
       appCredentialSecret: String.fromEnvironment(
         'APP_CREDENTIAL_SECRET',
-        defaultValue: 'expat8-mobile-secret',
+        defaultValue: '',
       ),
       defaultLearningLanguage: 'en',
       supportedLearningLanguages: ['en', 'zh', 'vi'],

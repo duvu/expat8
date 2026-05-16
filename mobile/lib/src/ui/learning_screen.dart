@@ -4,16 +4,20 @@ import 'package:flutter/material.dart';
 
 import '../api/backend_api_client.dart';
 import '../data/article_repository.dart';
+import '../data/workplace_sentence_repository.dart';
 import '../data/word_repository.dart';
 import '../exam/exam_session_controller.dart';
 import '../exam/exam_question_screen.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
+import '../session/workplace_sentence_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
 import 'articles_screen.dart';
+import 'fitb_card.dart';
 import 'logs_screen.dart';
 import 'vocabulary_card.dart';
+import 'workplace_sentence_screen.dart';
 
 const Map<String, String> kLearningLanguageLabels = {
   'en': 'English',
@@ -25,12 +29,14 @@ class LearningScreen extends StatefulWidget {
   const LearningScreen({
     required this.controller,
     required this.articleRepository,
+    required this.workplaceSentenceRepository,
     this.speakingRepository,
     super.key,
   });
 
   final LearningSessionController controller;
   final ArticleRepository articleRepository;
+  final WorkplaceSentenceRepository workplaceSentenceRepository;
   final SpeakingRepository? speakingRepository;
 
   @override
@@ -99,6 +105,7 @@ class _LearningScreenState extends State<LearningScreen> {
         wordRepository: controller.repository,
         onArticles: _openArticles,
         onVocabulary: () => Navigator.of(context).maybePop(),
+        onWorkplaceSentences: _openWorkplaceSentences,
         onLogs: () {
           Navigator.of(context).maybePop();
           Navigator.of(context).push(
@@ -138,10 +145,15 @@ class _LearningScreenState extends State<LearningScreen> {
             if (controller.isLoading)
               const Center(child: CircularProgressIndicator())
             else if (controller.currentWord != null)
-              VocabularyCardView(
-                word: controller.currentWord!,
-                speakingRepository: widget.speakingRepository,
+              controller.shouldShowFitb(
+                controller.currentWord!,
+                cardKind: controller.currentCardKind,
               )
+                  ? FitbCard(word: controller.currentWord!)
+                  : VocabularyCardView(
+                      word: controller.currentWord!,
+                      speakingRepository: widget.speakingRepository,
+                    )
             else
               Padding(
                 padding: const EdgeInsets.all(24),
@@ -230,30 +242,39 @@ class _LearningScreenState extends State<LearningScreen> {
       apiClient: repository.apiClient,
       database: repository.database,
     );
-    try {
-      await examController.startSession(
-        userSession: session,
-        language: widget.controller.activeLearningLanguage,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (examController.state == ExamState.active) {
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ExamQuestionScreen(
-              controller: examController,
-              userSession: session,
-            ),
-          ),
-        );
-      } else if (examController.errorMessage != null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(examController.errorMessage!)));
-      }
-    } finally {
-      examController.dispose();
+    await examController.startSession(
+      userSession: session,
+      language: widget.controller.activeLearningLanguage,
+    );
+    if (!mounted) {
+      return;
     }
+    if (examController.state == ExamState.active) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ExamQuestionScreen(
+            controller: examController,
+            userSession: session,
+          ),
+        ),
+      );
+    } else if (examController.errorMessage != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(examController.errorMessage!)));
+    }
+  }
+
+  Future<void> _openWorkplaceSentences() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkplaceSentenceScreen(
+          controller: WorkplaceSentenceSessionController(
+            repository: widget.workplaceSentenceRepository,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -437,6 +458,7 @@ class LearningDrawer extends StatelessWidget {
   const LearningDrawer({
     required this.isSignedIn,
     required this.onVocabulary,
+    required this.onWorkplaceSentences,
     required this.onLogs,
     required this.onArticles,
     required this.onRegister,
@@ -456,6 +478,7 @@ class LearningDrawer extends StatelessWidget {
   final SpeakingRepository? speakingRepository;
   final WordRepository? wordRepository; // for speaking stats fetch
   final VoidCallback onVocabulary;
+  final VoidCallback onWorkplaceSentences;
   final VoidCallback onLogs;
   final VoidCallback onArticles;
   final VoidCallback onRegister;
@@ -475,6 +498,11 @@ class LearningDrawer extends StatelessWidget {
               leading: const Icon(Icons.menu_book_outlined),
               title: const Text('Vocabulary'),
               onTap: onVocabulary,
+            ),
+            ListTile(
+              leading: const Icon(Icons.record_voice_over_outlined),
+              title: const Text('Sentences'),
+              onTap: onWorkplaceSentences,
             ),
             if (isSignedIn)
               ListTile(

@@ -10,7 +10,7 @@ import {
   InvalidRegistrationInputError
 } from './user_identity.js';
 import { createLogger } from './logger.js';
-import { toApiWord, toApiSpeakingPrompt } from './word_store.js';
+import { toApiWord, toApiSpeakingPrompt, toApiWorkplaceSentence } from './word_store.js';
 import { createExamRouter } from './routes/exam.js';
 import { InMemoryRateLimiter, rateLimitMiddleware } from './rate_limit.js';
 
@@ -66,7 +66,15 @@ export function createApp({
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
     parseJsonFromCapturedBody,
-    createV1Router({ store, generationService, config, rateLimiters: createRateLimiters() })
+    createV1Router({
+      store,
+      generationService,
+      config,
+      rateLimiters: createRateLimiters({
+        registerMax: config.authRateLimitRegister,
+        signInMax: config.authRateLimitSignIn
+      })
+    })
   );
 
   app.use((request, response) => {
@@ -103,10 +111,17 @@ export function createApp({
  * Returns an object of named InMemoryRateLimiter instances.
  * Individual limiters can be replaced or disabled by passing null via rateLimiters.
  */
-function createRateLimiters() {
+function createRateLimiters({
+  registerMax = 10,
+  registerWindowMs = 60_000,
+  signInMax = 20,
+  signInWindowMs = 60_000
+} = {}) {
   return {
-    // Auth: 10 requests per minute per IP — protects against brute-force
-    authLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 10 }),
+    // Registration: configurable requests per minute per IP.
+    registerLimiter: new InMemoryRateLimiter({ windowMs: registerWindowMs, maxRequests: registerMax }),
+    // Sign-in: configurable requests per minute per IP.
+    signInLimiter: new InMemoryRateLimiter({ windowMs: signInWindowMs, maxRequests: signInMax }),
     // Article upload: 20 uploads per minute per device/IP
     articleUploadLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 20 }),
     // Learning cards: 60 fetches per minute per device — supports fast offline refill
@@ -118,7 +133,8 @@ function createRateLimiters() {
 
 function createV1Router({ store, config, rateLimiters = {} }) {
   const {
-    authLimiter,
+    registerLimiter,
+    signInLimiter,
     articleUploadLimiter,
     learningCardsLimiter,
     studyEventSyncLimiter
@@ -130,7 +146,7 @@ function createV1Router({ store, config, rateLimiters = {} }) {
 
   router.post(
     '/users/register',
-    ...(authLimiter ? [rateLimitMiddleware(authLimiter, { keyPrefix: 'register' })] : []),
+    ...(registerLimiter ? [rateLimitMiddleware(registerLimiter, { keyPrefix: 'register' })] : []),
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -155,7 +171,7 @@ function createV1Router({ store, config, rateLimiters = {} }) {
 
   router.post(
     '/users/sign-in',
-    ...(authLimiter ? [rateLimitMiddleware(authLimiter, { keyPrefix: 'signin' })] : []),
+    ...(signInLimiter ? [rateLimitMiddleware(signInLimiter, { keyPrefix: 'signin' })] : []),
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -167,7 +183,10 @@ function createV1Router({ store, config, rateLimiters = {} }) {
         return response.json(userSessionResponse(result));
       } catch (error) {
         if (error instanceof InvalidCredentialsError) {
-          return response.status(401).json({ error: 'invalid_credentials' });
+          return response.status(401).json({
+            error: 'invalid_credentials',
+            ...(error.reason ? { reason: error.reason } : {})
+          });
         }
         throw error;
       }
@@ -253,6 +272,16 @@ function createV1Router({ store, config, rateLimiters = {} }) {
       const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
       const words = await store.recentWords({ targetLanguage, limit });
       response.json({ items: words.map(toApiWord) });
+    })
+  );
+
+  router.get(
+    '/workplace-sentences/recent',
+    asyncHandler(async (request, response) => {
+      const limit = clampLimit(request.query.limit, 1, 1000);
+      const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
+      const sentences = await store.recentWorkplaceSentences({ targetLanguage, limit });
+      response.json({ items: sentences.map(toApiWorkplaceSentence) });
     })
   );
 

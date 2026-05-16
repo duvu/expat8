@@ -43,6 +43,9 @@ class ExamAnswerState {
 ///
 /// Does NOT touch [LearningSessionController] or any SRS state.
 class ExamSessionController extends ChangeNotifier {
+  static const String _backendUnavailableMessage =
+      'Backend unavailable. Please try again.';
+
   ExamSessionController({
     required BackendApiClient apiClient,
     required LocalDatabase database,
@@ -51,6 +54,8 @@ class ExamSessionController extends ChangeNotifier {
 
   final BackendApiClient _apiClient;
   final LocalDatabase _database;
+
+  BackendApiClient get apiClient => _apiClient;
 
   ExamState _state = ExamState.idle;
   ExamState get state => _state;
@@ -84,8 +89,8 @@ class ExamSessionController extends ChangeNotifier {
 
   ExamAnswerState? get currentAnswer {
     try {
-      return _answers.firstWhere(
-          (a) => a.questionIndex == _currentQuestionIndex);
+      return _answers
+          .firstWhere((a) => a.questionIndex == _currentQuestionIndex);
     } catch (_) {
       return null;
     }
@@ -95,6 +100,11 @@ class ExamSessionController extends ChangeNotifier {
   bool get isLastQuestion =>
       _session != null &&
       _currentQuestionIndex == _session!.questions.length - 1;
+
+  void _setBackendUnavailableError() {
+    errorMessage = _backendUnavailableMessage;
+    _state = ExamState.idle;
+  }
 
   /// Starts a new exam session for [language].
   ///
@@ -113,6 +123,13 @@ class ExamSessionController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      final backendReady = await _apiClient.checkBackendReadiness();
+      if (!backendReady) {
+        _setBackendUnavailableError();
+        notifyListeners();
+        return;
+      }
+
       final response = await _apiClient.startExamSession(
         sessionToken: userSession.sessionToken,
         language: language,
@@ -123,13 +140,14 @@ class ExamSessionController extends ChangeNotifier {
       if (e.backendError == 'INSUFFICIENT_WORDS') {
         errorMessage = 'Not enough studied words for this language. '
             'Keep learning and try again!';
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        _setBackendUnavailableError();
       } else {
         errorMessage = 'Failed to start exam. Please try again.';
       }
       _state = ExamState.idle;
     } catch (_) {
-      errorMessage = 'Failed to start exam. Please try again.';
-      _state = ExamState.idle;
+      _setBackendUnavailableError();
     }
     notifyListeners();
   }

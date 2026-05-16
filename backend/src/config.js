@@ -2,7 +2,7 @@ export function loadConfig(env = process.env) {
   return {
     port: Number.parseInt(env.PORT ?? '8787', 10),
     databaseUrl: env.DATABASE_URL,
-    liteLLMBaseUrl: env.LITELLM_BASE_URL ?? 'https://lite.x51.vn',
+    liteLLMBaseUrl: env.LITELLM_BASE_URL,
     liteLLMApiKey: env.LITELLM_API_KEY ?? '',
     liteLLMModel: env.LITELLM_MODEL ?? 'gpt-4o-mini',
     defaultSourceLanguage: env.DEFAULT_SOURCE_LANGUAGE ?? 'vi',

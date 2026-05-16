@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -33,8 +34,10 @@ class LearningSessionController extends ChangeNotifier {
   final Logger _logger;
   final AppConfig _config;
   late String _activeLearningLanguage;
+  final Random _fitbRandom = Random.secure();
 
   VocabularyWord? currentWord;
+  CardKind? currentCardKind;
   bool isLoading = false;
   bool isAuthInProgress = false;
   Timer? _inventoryTimer;
@@ -496,9 +499,11 @@ class LearningSessionController extends ChangeNotifier {
   }) {
     if (word == null) {
       currentWord = null;
+      currentCardKind = null;
       statusMessage = emptyMessage;
     } else {
       currentWord = word;
+      currentCardKind = actualKind;
       _selectionWindow.record(actualKind!);
       _telemetry.track(
         actualKind == CardKind.newWord
@@ -829,13 +834,20 @@ class LearningSessionController extends ChangeNotifier {
     );
     if (error is BackendApiException) {
       final backendError = error.backendError;
+      final backendReason = error.backendReason;
       if (action == AuthAction.register &&
           (error.statusCode == 409 || backendError == 'user_exists')) {
         return 'An account already exists for this email.';
       }
+      if (action == AuthAction.signIn && backendReason == 'user_not_found') {
+        return 'No account found. Please register.';
+      }
       if (action == AuthAction.signIn &&
           (error.statusCode == 401 || backendError == 'invalid_credentials')) {
         return 'Email or password is incorrect.';
+      }
+      if (error.statusCode == 429 || backendError == 'too_many_requests') {
+        return 'Too many attempts. Please wait a moment and try again.';
       }
       if (error.statusCode == 400 || backendError == 'bad_request') {
         return 'The request was rejected. Check the entered details and try again.';
@@ -844,7 +856,60 @@ class LearningSessionController extends ChangeNotifier {
         return '${action.failureLabel} failed. Server returned ${error.statusCode}.';
       }
     }
-    return '${action.failureLabel} failed. Check connection and try again.';
+      return '${action.failureLabel} failed. Check connection and try again.';
+  }
+
+  /// Returns true when [word] meets all FITB eligibility conditions:
+  /// - Review card (or a cached review/mastered word without `cardType`)
+  /// - Non-empty example with at least 8 words
+  /// - Term appears in the example (case-insensitive)
+  /// - entry_type is word, phrase, or idiom
+  /// - For phrase/idiom: blank_word is non-null and non-empty
+  bool canFitb(VocabularyWord word, {CardKind? cardKind}) {
+    final isReviewCard = cardKind == CardKind.review ||
+        (cardKind == null &&
+            (word.cardType == LearningCardType.review ||
+                (word.cardType == null &&
+                    (word.status == WordStatus.review ||
+                        word.status == WordStatus.mastered))));
+    if (!isReviewCard) return false;
+    if (word.example.isEmpty) return false;
+    if (word.example.split(' ').length < 8) return false;
+    if (!word.example.toLowerCase().contains(word.term.toLowerCase())) {
+      return false;
+    }
+    if (!const ['word', 'phrase', 'idiom'].contains(word.entryType)) {
+      return false;
+    }
+    if (word.entryType != 'word') {
+      final bw = word.blankWord;
+      if (bw == null || bw.isEmpty) return false;
+    }
+    return true;
+  }
+
+  /// Returns true when [word] is eligible for FITB and random chance selects
+  /// FITB mode. The 0.59 threshold gives ~50% FITB share of total session
+  /// cards (accounting for the 85% review-card ratio).
+  bool shouldShowFitb(VocabularyWord word, {CardKind? cardKind}) {
+    final eligible = canFitb(word, cardKind: cardKind);
+    final roll = eligible ? _fitbRandom.nextDouble() : null;
+    final showFitb = eligible && roll! < 0.59;
+    _safeLog(
+      _logger.info(
+        category: AppLogCategory.session,
+        event: 'session.fitb.decision',
+        message: 'Evaluated FITB eligibility for current card.',
+        context: {
+          'word_id': word.serverWordId ?? word.localId,
+          'card_kind': cardKind?.name,
+          'eligible': eligible,
+          'roll': roll,
+          'show_fitb': showFitb,
+        },
+      ),
+    );
+    return showFitb;
   }
 }
 

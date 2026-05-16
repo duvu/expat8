@@ -7,6 +7,7 @@ import 'src/config.dart';
 import 'src/data/article_repository.dart';
 import 'src/data/content_pack_sync_service.dart';
 import 'src/data/local_database.dart';
+import 'src/data/workplace_sentence_repository.dart';
 import 'src/data/word_repository.dart';
 import 'src/logging/logger.dart';
 import 'src/session/learning_session_controller.dart';
@@ -56,6 +57,11 @@ Future<void> main() async {
     apiClient: apiClient,
     logger: logger,
     config: config,
+  );
+  final workplaceSentenceRepository = WorkplaceSentenceRepository(
+    database: database,
+    apiClient: apiClient,
+    logger: logger,
   );
   final controller =
       LearningSessionController(repository: repository, logger: logger);
@@ -133,10 +139,11 @@ Future<void> main() async {
   );
 
   runApp(LanguageLearningApp(
-    controller: controller,
-    articleRepository: articleRepository,
-    contentPackSyncService: contentPackSyncService,
-    speakingRepository: speakingRepository,
+      controller: controller,
+      articleRepository: articleRepository,
+      workplaceSentenceRepository: workplaceSentenceRepository,
+      contentPackSyncService: contentPackSyncService,
+      speakingRepository: speakingRepository,
     speakingPromptSyncService: speakingPromptSyncService,
     onResumeSyncEvents: onAppResumeSyncEvents,
   ));
@@ -146,6 +153,7 @@ class LanguageLearningApp extends StatefulWidget {
   const LanguageLearningApp({
     required this.controller,
     required this.articleRepository,
+    required this.workplaceSentenceRepository,
     required this.contentPackSyncService,
     this.speakingRepository,
     this.speakingPromptSyncService,
@@ -155,6 +163,7 @@ class LanguageLearningApp extends StatefulWidget {
 
   final LearningSessionController controller;
   final ArticleRepository articleRepository;
+  final WorkplaceSentenceRepository workplaceSentenceRepository;
   final ContentPackSyncService contentPackSyncService;
   final SpeakingRepository? speakingRepository;
   final SpeakingPromptSyncService? speakingPromptSyncService;
@@ -204,6 +213,7 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
       home: LearningScreen(
         controller: widget.controller,
         articleRepository: widget.articleRepository,
+        workplaceSentenceRepository: widget.workplaceSentenceRepository,
         speakingRepository: widget.speakingRepository,
       ),
     );

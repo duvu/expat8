@@ -42,8 +42,8 @@
 
 ## 7. Build and Deployment
 
-- [x] 7.1 Build and push backend image `docker.x51.vn/x-ai/expat8-backend:<timestamp-tag>`.
+- [x] 7.1 Build and push backend image `<YOUR_REGISTRY>/expat8-backend:<timestamp-tag>`.
 - [x] 7.2 Update `~/deployment/worker-z440/docker-compose.yml` to new backend tag and force-recreate `expat8-backend`.
-- [x] 7.3 Verify deployed backend health at `http://10.113.213.9:18787/health` and confirm runtime image tag.
+- [x] 7.3 Verify deployed backend health at `http://<INTERNAL_HOST>:18787/health` and confirm runtime image tag.
 - [x] 7.4 Build Android release artifact from mobile project.
 - [x] 7.5 Validate release build on emulator/device with gesture smoke checks and no runtime crash.

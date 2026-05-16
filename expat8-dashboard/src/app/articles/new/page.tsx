@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { backendFetch } from '@/lib/backend';
+import PageShell from '@/components/PageShell';
 
 async function createArticle(formData: FormData) {
   'use server';
@@ -23,8 +24,7 @@ async function createArticle(formData: FormData) {
 
 export default function NewArticlePage() {
   return (
-    <main>
-      <h1>New article</h1>
+    <PageShell title="New Article">
       <form className="editor-form" action={createArticle}>
         <label>
           Title
@@ -52,6 +52,6 @@ export default function NewArticlePage() {
         </label>
         <button type="submit">Submit article</button>
       </form>
-    </main>
+    </PageShell>
   );
 }

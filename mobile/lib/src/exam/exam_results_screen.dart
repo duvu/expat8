@@ -117,8 +117,7 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
         if (_timedOut) {
           return Scaffold(
             appBar: AppBar(title: const Text('Results')),
-            body: _buildErrorUI(
-                'Exam submission timed out. Please try again.'),
+            body: _buildErrorUI('Exam submission timed out. Please try again.'),
           );
         }
 
@@ -199,24 +198,22 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.workspace_premium,
-                        size: 40, color: cs.primary),
+                    Icon(Icons.workspace_premium, size: 40, color: cs.primary),
                     const SizedBox(height: 8),
                     Text(
                       'Certificate Earned!',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                              color: cs.onPrimaryContainer,
-                              fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: cs.onPrimaryContainer,
+                          fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              ExamCertificateScreen(certificateId: certId),
+                          builder: (_) => ExamCertificateScreen(
+                            certificateId: certId,
+                            apiClient: widget.controller.apiClient,
+                          ),
                         ),
                       ),
                       child: const Text('View Certificate'),
@@ -294,8 +291,8 @@ class _ScoreCircle extends StatelessWidget {
               value: scorePct / 100,
               strokeWidth: 10,
               backgroundColor: cs.surfaceContainerHighest,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                  passed ? cs.primary : cs.error),
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(passed ? cs.primary : cs.error),
             ),
           ),
           Text(

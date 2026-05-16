@@ -13,6 +13,7 @@ Flutter client for the Expat8 vocabulary learning MVP.
 - Duplicate avoidance is backend-owned through learner state and
   `PUT /v1/user-word-cache`; the mobile app does not send word exclusion lists
   for refill.
+- The drawer exposes a separate `Sentences` entry for workplace sentence study.
 
 ## Development
 
@@ -22,8 +23,24 @@ flutter test
 flutter run \
   --dart-define=BACKEND_BASE_URL=http://localhost:8787 \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
+
+## Release Builds
+
+Android release builds use the same production `--dart-define` values for the signed APK and the signed bundle:
+
+```bash
+cd mobile
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
+  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
+  --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
+  --dart-define=APP_LOG_LEVEL=info
+```
+
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still writes `build/app/outputs/bundle/release/app-release.aab`.
 
 ObjectBox native libraries are required for desktop/unit-test runs. In this
 repo, Linux test runs expect `mobile/lib/libobjectbox.so` to be present.

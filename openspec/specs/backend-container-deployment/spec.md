@@ -3,11 +3,11 @@ Define how the backend image and root Compose stack package the backend, dashboa
 
 ## Requirements
 ### Requirement: Backend image can be built with Docker
-The backend SHALL provide Docker packaging that builds a runnable backend service image and supports tagged publication to `docker.x51.vn/x-ai/expat8-backend`.
+The backend SHALL provide Docker packaging that builds a runnable backend service image and supports tagged publication to `<YOUR_REGISTRY>/expat8-backend`.
 
 #### Scenario: Backend image is built and tagged
 - **WHEN** an operator builds backend image with a timestamp tag
-- **THEN** Docker produces an image tagged as `docker.x51.vn/x-ai/expat8-backend:<YYYYMMDD.HHMM>`
+- **THEN** Docker produces an image tagged as `<YOUR_REGISTRY>/expat8-backend:<YYYYMMDD.HHMM>`
 
 #### Scenario: Tagged image is pushed to registry
 - **WHEN** operator executes push for the tagged image
@@ -26,7 +26,7 @@ The deployment process SHALL recreate `expat8-backend` from `~/deployment/worker
 
 #### Scenario: Deployment verification passes
 - **WHEN** backend redeploy finishes
-- **THEN** `docker compose ps expat8-backend` shows healthy status and `curl` against `http://10.113.213.9:18787/health` returns success
+- **THEN** `docker compose ps expat8-backend` shows healthy status and `curl` against `http://<INTERNAL_HOST>:18787/health` returns success
 
 ### Requirement: Compose configuration keeps deployment settings environment-configurable
 The Compose deployment SHALL read runtime-specific values from environment variables instead of hard-coding secrets or service URLs.

@@ -62,6 +62,54 @@ class LocalWordEntity {
 }
 
 @Entity()
+class LocalWorkplaceSentenceEntity {
+  LocalWorkplaceSentenceEntity({
+    this.id = 0,
+    required this.localId,
+    this.serverSentenceId,
+    required this.text,
+    required this.language,
+    required this.meaningVi,
+    this.topic,
+    this.sourceTitle,
+    required this.generationSource,
+    required this.isBundled,
+    required this.status,
+    this.lastSeenAtMs,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String localId;
+
+  @Index()
+  String? serverSentenceId;
+
+  String text;
+  String language;
+  String meaningVi;
+  String? topic;
+  String? sourceTitle;
+  String generationSource;
+
+  /// ObjectBox stores booleans as 0/1 scalar values.
+  int isBundled;
+
+  @Index()
+  String status;
+
+  @Index()
+  int? lastSeenAtMs;
+
+  @Index()
+  int createdAtMs;
+  int updatedAtMs;
+}
+
+@Entity()
 class StudyEventEntity {
   StudyEventEntity({
     this.id = 0,

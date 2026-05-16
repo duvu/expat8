@@ -527,10 +527,99 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "9:7623126289449930472",
+      "lastPropertyId": "14:5135544224436699283",
+      "name": "LocalWorkplaceSentenceEntity",
+      "properties": [
+        {
+          "id": "1:3075656904735009019",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4812383148060157714",
+          "name": "localId",
+          "indexId": "30:5325547818262788490",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:2089978830348000993",
+          "name": "serverSentenceId",
+          "indexId": "31:254264944844424605",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5349643798033280791",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "5:3534248391845193183",
+          "name": "language",
+          "type": 9
+        },
+        {
+          "id": "6:1446670116255896604",
+          "name": "meaningVi",
+          "type": 9
+        },
+        {
+          "id": "7:4447217739024682745",
+          "name": "topic",
+          "type": 9
+        },
+        {
+          "id": "8:6660193928940505961",
+          "name": "sourceTitle",
+          "type": 9
+        },
+        {
+          "id": "9:7575864257028155336",
+          "name": "generationSource",
+          "type": 9
+        },
+        {
+          "id": "10:4475300493876454539",
+          "name": "isBundled",
+          "type": 6
+        },
+        {
+          "id": "11:4791717315805413297",
+          "name": "status",
+          "indexId": "32:1377162962780106685",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "12:4149242005305884948",
+          "name": "lastSeenAtMs",
+          "indexId": "33:176399341513004656",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "13:6287386393774510740",
+          "name": "createdAtMs",
+          "indexId": "34:7547890276824839143",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "14:5135544224436699283",
+          "name": "updatedAtMs",
+          "type": 6
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "8:3288235631848983449",
-  "lastIndexId": "29:5177855304185512194",
+  "lastEntityId": "9:7623126289449930472",
+  "lastIndexId": "34:7547890276824839143",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

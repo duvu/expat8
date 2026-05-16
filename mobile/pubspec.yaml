@@ -1,7 +1,7 @@
 name: expat8_language_app
 description: Flutter mobile app for swipe-based vocabulary learning.
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -35,3 +35,4 @@ flutter:
     - assets/seed_vocab/en.json
     - assets/seed_vocab/zh.json
     - assets/seed_vocab/vi.json
+    - assets/seed_workplace_sentences/en.json

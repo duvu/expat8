@@ -11,12 +11,14 @@ import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
+import '../models/workplace_sentence.dart';
 import 'local_database_entities.dart';
 
 class LocalDatabase {
   LocalDatabase(this._store, {Logger? logger})
       : _logger = logger ?? const NoopLogger(),
         _localWords = _store.box<LocalWordEntity>(),
+        _localWorkplaceSentences = _store.box<LocalWorkplaceSentenceEntity>(),
         _studyEvents = _store.box<StudyEventEntity>(),
         _syncQueue = _store.box<SyncQueueEntity>(),
         _settings = _store.box<AppSettingEntity>(),
@@ -29,6 +31,7 @@ class LocalDatabase {
   Logger _logger;
 
   final Box<LocalWordEntity> _localWords;
+  final Box<LocalWorkplaceSentenceEntity> _localWorkplaceSentences;
   final Box<StudyEventEntity> _studyEvents;
   final Box<SyncQueueEntity> _syncQueue;
   final Box<AppSettingEntity> _settings;
@@ -203,6 +206,102 @@ class LocalDatabase {
         'server_word_id': word.serverWordId,
       },
     );
+  }
+
+  Future<void> upsertWorkplaceSentence(WorkplaceSentence sentence) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    _localWorkplaceSentences.put(
+      LocalWorkplaceSentenceEntity(
+        id: existing?.id ?? 0,
+        localId: sentence.localId,
+        serverSentenceId: sentence.serverSentenceId,
+        text: sentence.text,
+        language: sentence.language,
+        meaningVi: sentence.meaningVi,
+        topic: sentence.topic,
+        sourceTitle: sentence.sourceTitle,
+        generationSource: sentence.generationSource,
+        isBundled: sentence.isBundled ? 1 : 0,
+        status: sentence.status.name,
+        lastSeenAtMs: sentence.lastSeenAt?.toUtc().millisecondsSinceEpoch,
+        createdAtMs: sentence.createdAt.toUtc().millisecondsSinceEpoch,
+        updatedAtMs: sentence.updatedAt.toUtc().millisecondsSinceEpoch,
+      ),
+    );
+
+    await _logger.debug(
+      category: AppLogCategory.database,
+      event: 'local_workplace_sentences.upsert',
+      message: 'Workplace sentence upserted in local cache.',
+      context: {
+        'local_id': sentence.localId,
+        'server_sentence_id': sentence.serverSentenceId,
+        'is_bundled': sentence.isBundled,
+      },
+    );
+  }
+
+  Future<WorkplaceSentence?> nextUnseenWorkplaceSentence({
+    String language = 'en',
+    Random? random,
+  }) async {
+    final rows = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.status
+                  .equals(WorkplaceSentenceStatus.unseen.name) &
+              LocalWorkplaceSentenceEntity_.language.equals(language),
+        )
+        .order(
+          LocalWorkplaceSentenceEntity_.createdAtMs,
+          flags: Order.descending,
+        )
+        .build()
+        .find();
+    if (rows.isEmpty) {
+      return null;
+    }
+    final rng = random ?? Random();
+    return _workplaceSentenceFromEntity(rows[rng.nextInt(rows.length)]);
+  }
+
+  Future<WorkplaceSentence?> randomWorkplaceSentence({
+    String language = 'en',
+    Random? random,
+  }) async {
+    final rows = _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.language.equals(language))
+        .build()
+        .find();
+    if (rows.isEmpty) {
+      return null;
+    }
+    final rng = random ?? Random();
+    return _workplaceSentenceFromEntity(rows[rng.nextInt(rows.length)]);
+  }
+
+  Future<void> markWorkplaceSentenceSeen({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.lastSeenAtMs = now.toUtc().millisecondsSinceEpoch;
+    existing.updatedAtMs = now.toUtc().millisecondsSinceEpoch;
+    _localWorkplaceSentences.put(existing);
   }
 
   Future<VocabularyWord?> nextNewWord({String language = 'en'}) async {
@@ -647,6 +746,24 @@ class LocalDatabase {
         .count();
   }
 
+  Future<int> countUnseenWorkplaceSentences({String language = 'en'}) async {
+    return _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.status
+                  .equals(WorkplaceSentenceStatus.unseen.name) &
+              LocalWorkplaceSentenceEntity_.language.equals(language),
+        )
+        .build()
+        .count();
+  }
+
+  Future<int> countWorkplaceSentences({String language = 'en'}) async {
+    return _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.language.equals(language))
+        .build()
+        .count();
+  }
+
   /// Picks a random word for [language] whose status is not [mastered]
   /// (i.e., not yet marked as remembered). Used as the fallback when no
   /// new-word card is available so the learner always has something to study.
@@ -736,6 +853,57 @@ class LocalDatabase {
     for (final language in affectedLanguages) {
       await pruneToCapSmartly(maxWords: 1000, language: language);
     }
+  }
+
+  Future<int> addWorkplaceSentenceBatch(List<WorkplaceSentence> sentences) async {
+    if (sentences.isEmpty) return 0;
+    var inserted = 0;
+    final affectedLanguages = <String>{};
+    for (final sentence in sentences) {
+      final alreadyExists = _localWorkplaceSentences
+          .query(
+            LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+          )
+          .build()
+          .findFirst();
+      if (alreadyExists == null) {
+        inserted += 1;
+      }
+      await upsertWorkplaceSentence(sentence);
+      affectedLanguages.add(sentence.language);
+    }
+    for (final language in affectedLanguages) {
+      await pruneWorkplaceSentencesToCap(maxSentences: 1000, language: language);
+    }
+    return inserted;
+  }
+
+  Future<int> pruneWorkplaceSentencesToCap({
+    int maxSentences = 1000,
+    required String language,
+  }) async {
+    final rows = _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.language.equals(language))
+        .build()
+        .find();
+    if (rows.length <= maxSentences) {
+      return 0;
+    }
+
+    final removable = rows.where((row) => row.isBundled == 0).toList()
+      ..sort((a, b) {
+        final aTs = a.lastSeenAtMs ?? a.createdAtMs;
+        final bTs = b.lastSeenAtMs ?? b.createdAtMs;
+        return aTs.compareTo(bTs);
+      });
+
+    var removed = 0;
+    final targetRemovals = rows.length - maxSentences;
+    for (final row in removable.take(targetRemovals)) {
+      _localWorkplaceSentences.remove(row.id);
+      removed += 1;
+    }
+    return removed;
   }
 
   /// Prunes the local word store for [language] (or globally when null) to
@@ -871,8 +1039,28 @@ class LocalDatabase {
           DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
       updatedAt:
           DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
-      entryType: row.entryType,
+      entryType: row.entryType.isEmpty ? 'word' : row.entryType,
       explanation: row.explanation,
+    );
+  }
+
+  WorkplaceSentence _workplaceSentenceFromEntity(
+    LocalWorkplaceSentenceEntity row,
+  ) {
+    return WorkplaceSentence(
+      localId: row.localId,
+      serverSentenceId: row.serverSentenceId,
+      text: row.text,
+      language: row.language,
+      meaningVi: row.meaningVi,
+      topic: row.topic,
+      sourceTitle: row.sourceTitle,
+      generationSource: row.generationSource,
+      isBundled: row.isBundled == 1,
+      status: WorkplaceSentenceStatus.values.byName(row.status),
+      lastSeenAt: _parseDateMs(row.lastSeenAtMs),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
     );
   }
 
@@ -1154,4 +1342,3 @@ class LocalDatabase {
     }
   }
 }
-

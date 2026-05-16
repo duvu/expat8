@@ -107,6 +107,49 @@ test('serves unified learning cards, recent words, and idempotent sync', async (
   assert.equal(proficiency.level, 'A1');
 });
 
+test('serves workplace sentence feed only for published source articles', async (t) => {
+  const store = new WordStore({ seed: false });
+  const privateArticle = store.createArticle({
+    userId: 'owner_sentence_private',
+    title: 'Private workplace notes',
+    language: 'en',
+    rawText: 'Private notes'
+  });
+  const publishedArticle = store.createAdminArticle({
+    adminUserId: 'admin_sentence_published',
+    title: 'Published workplace notes',
+    language: 'en',
+    rawText: 'Published notes'
+  });
+  store.persistArticleWorkplaceSentences({
+    articleId: privateArticle.id,
+    items: [sentenceItem('Could you send the revised file by noon?', { topic: 'follow-up' })]
+  });
+  store.persistArticleWorkplaceSentences({
+    articleId: publishedArticle.id,
+    items: [sentenceItem('Could you send the revised file by noon?', { topic: 'follow-up' })]
+  });
+  store.publishArticle({ articleId: publishedArticle.id });
+
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const recent = await fetchJson(`${baseUrl}/v1/workplace-sentences/recent?limit=10&target_language=en`);
+
+  assert.equal(recent.items.length, 1);
+  assert.equal(recent.items[0].text, 'Could you send the revised file by noon?');
+  assert.equal(recent.items[0].source_article_id, publishedArticle.id);
+  assert.equal(recent.items[0].source_title, 'Published workplace notes');
+});
+
 test('syncs speaking events separately from rating study events', async (t) => {
   const store = new WordStore({ seed: false });
   store.insertWord(wordInput({ id: 'word_speaking', term: 'speaking' }));
@@ -787,6 +830,136 @@ test('registers, signs in, signs out, and associates signed-in learning with use
     headers: bearerHeaders(signedIn.session_token)
   }));
   assert.equal(afterSignOut.status, 401);
+});
+
+test('sign-in returns user_not_found only when the account does not exist', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  await fetchJson(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'known@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_signin_reason'
+    })
+  });
+
+  const missingUser = await fetch(`${baseUrl}/v1/users/sign-in`, signedFetchOptions(`${baseUrl}/v1/users/sign-in`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'missing@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_signin_reason'
+    })
+  }));
+  assert.equal(missingUser.status, 401);
+  assert.deepEqual(await missingUser.json(), {
+    error: 'invalid_credentials',
+    reason: 'user_not_found'
+  });
+
+  const wrongPassword = await fetch(`${baseUrl}/v1/users/sign-in`, signedFetchOptions(`${baseUrl}/v1/users/sign-in`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'known@example.com',
+      password: 'wrong password',
+      device_id: 'device_signin_reason'
+    })
+  }));
+  assert.equal(wrongPassword.status, 401);
+  assert.deepEqual(await wrongPassword.json(), {
+    error: 'invalid_credentials'
+  });
+});
+
+test('auth rate limit config applies separate register and sign-in limits', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig({
+        AUTH_RATE_LIMIT_REGISTER: '1',
+        AUTH_RATE_LIMIT_SIGN_IN: '2'
+      })
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const registerUrl = `${baseUrl}/v1/users/register`;
+  const signInUrl = `${baseUrl}/v1/users/sign-in`;
+
+  const firstRegister = await fetch(registerUrl, signedFetchOptions(registerUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'limited@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_auth_limit'
+    })
+  }));
+  assert.equal(firstRegister.status, 201);
+
+  const secondRegister = await fetch(registerUrl, signedFetchOptions(registerUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'limited-2@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_auth_limit'
+    })
+  }));
+  assert.equal(secondRegister.status, 429);
+  assert.deepEqual(await secondRegister.json(), { error: 'rate_limit_exceeded' });
+
+  const firstSignIn = await fetch(signInUrl, signedFetchOptions(signInUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'limited@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_auth_limit'
+    })
+  }));
+  assert.equal(firstSignIn.status, 200);
+
+  const secondSignIn = await fetch(signInUrl, signedFetchOptions(signInUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'limited@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_auth_limit'
+    })
+  }));
+  assert.equal(secondSignIn.status, 200);
+
+  const thirdSignIn = await fetch(signInUrl, signedFetchOptions(signInUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'limited@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_auth_limit'
+    })
+  }));
+  assert.equal(thirdSignIn.status, 429);
+  assert.deepEqual(await thirdSignIn.json(), { error: 'rate_limit_exceeded' });
 });
 
 test('handles browser CORS preflight while preserving app credential protection', async (t) => {
@@ -1732,6 +1905,16 @@ function vocabItem(term, overrides = {}) {
     example_vi: `${term} trong bai viet`,
     difficulty: 'A1',
     topics: ['article-ingestion'],
+    ...overrides
+  };
+}
+
+function sentenceItem(text, overrides = {}) {
+  return {
+    text,
+    language: 'en',
+    meaning_vi: `Cau cong viec: ${text}`,
+    topic: 'work',
     ...overrides
   };
 }

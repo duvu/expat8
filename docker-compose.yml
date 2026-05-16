@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-expat8}
       POSTGRES_USER: ${POSTGRES_USER:-expat8}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expat8_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGEME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
@@ -24,8 +24,8 @@ services:
         condition: service_healthy
     environment:
       PORT: ${PORT:-8787}
-      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
-      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://lite.x51.vn}
+      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
       LITELLM_API_KEY: ${LITELLM_API_KEY:-}
       LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}
       DEFAULT_SOURCE_LANGUAGE: ${DEFAULT_SOURCE_LANGUAGE:-vi}
@@ -57,8 +57,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
-      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://lite.x51.vn}
+      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
       LITELLM_API_KEY: ${LITELLM_API_KEY:-}
       LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}
       DEFAULT_SOURCE_LANGUAGE: ${DEFAULT_SOURCE_LANGUAGE:-vi}
@@ -79,7 +79,7 @@ services:
         condition: service_healthy
     environment:
       BACKEND_BASE_URL: ${DASHBOARD_BACKEND_BASE_URL:-http://backend:8787}
-      EXPAT8_DASHBOARD_DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
+      EXPAT8_DASHBOARD_DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       APP_CREDENTIAL_APP_ID: ${DASHBOARD_APP_CREDENTIAL_APP_ID:-}
       APP_CREDENTIAL_SECRET: ${DASHBOARD_APP_CREDENTIAL_SECRET:-}

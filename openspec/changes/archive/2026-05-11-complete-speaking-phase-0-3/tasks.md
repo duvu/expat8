@@ -79,5 +79,5 @@
 - [x] 9.4 Manual test: dashboard → speaking prompts page → edit a prompt → approve → confirm approved prompt returned by `GET /v1/speaking/prompts`
 - [x] 9.5 Test offline drill: airplane mode → start drill → complete → reconnect → verify events sync
 - [x] 9.6 Test permission denied: revoke microphone permission → open drill → confirm no crash, graceful message shown
-- [x] 9.7 Rebuild APK: `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release --dart-define BACKEND_BASE_URL=https://expat8.x51.vn --dart-define SPEAKING_FOUNDATION_ENABLED=true`
+- [x] 9.7 Rebuild APK: `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release --dart-define BACKEND_BASE_URL=<YOUR_BACKEND_URL> --dart-define SPEAKING_FOUNDATION_ENABLED=true`
 - [x] 9.8 Update `contracts/api.md` with `GET /v1/speaking/summary`, `GET /v1/admin/speaking-prompts`, `PATCH /v1/admin/speaking-prompts/:id`, new event types

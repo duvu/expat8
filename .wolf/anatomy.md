@@ -1,16 +1,16 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-12T11:00:00.199Z
-> Files: 519 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-15T11:00:00.782Z
+> Files: 512 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
 - `.gitignore` — Git ignore rules (~27 tok)
 - `AGENTS.md` — AGENTS.md (~513 tok)
-- `CLAUDE.md` — OpenWolf (~1610 tok)
-- `docker-compose.yml` — Docker Compose services (~1005 tok)
+- `CLAUDE.md` — OpenWolf (~1609 tok)
+- `docker-compose.yml` — Docker Compose services (~986 tok)
 - `expat8.code-workspace` (~44 tok)
-- `README.md` — Project documentation (~780 tok)
+- `README.md` — Project documentation (~779 tok)
 
 ## .claude/
 
@@ -62,7 +62,7 @@
 
 ## .github/
 
-- `copilot-instructions.md` — Copilot Instructions (~553 tok)
+- `copilot-instructions.md` — Copilot Instructions (~551 tok)
 
 ## .github/prompts/
 
@@ -128,11 +128,11 @@
 
 ## .serena/memories/expat8/deploy/
 
-- `2026-05-09-expat8-backend-fresh-deploy.md` (~373 tok)
+- `2026-05-09-expat8-backend-fresh-deploy.md` (~372 tok)
 
 ## .serena/memories/expat8/speaking-foundation/
 
-- `status.md` — Speaking Foundation Phase 0-3 — Status (~1156 tok)
+- `status.md` — Speaking Foundation Phase 0-3 — Status (~1157 tok)
 
 ## backend/
 
@@ -162,6 +162,7 @@
 - `20260510_speaking_drill_completed.sql` — Migration: speaking-drill-completed (~478 tok)
 - `20260510_srs_review_index.sql` — Partial index to speed up due-review-item queries in learningCards. (~85 tok)
 - `20260511_exam_tables.sql` — Migration: add-vocabulary-exam (~691 tok)
+- `20260512_add_blank_word.sql` — SQL: 1 alter(s) (~18 tok)
 - `20260512_phrase_idiom_entry_types.sql` — Migration: phrase-idiom-exam (~124 tok)
 
 ## backend/db/seeds/
@@ -183,24 +184,24 @@
 - `article_processing_pipeline.js` — Exports ArticleProcessingPipeline (~1998 tok)
 - `article_processing_worker.js` — Exports ArticleProcessingWorker (~691 tok)
 - `article_term_extractor.js` — Exports extractCandidateTerms (~384 tok)
-- `config.js` — Exports loadConfig (~1087 tok)
+- `config.js` — Exports loadConfig (~1080 tok)
 - `database.js` — Exports readSchemaSql, initializeDatabaseSchema (~142 tok)
 - `generation_service.js` — Exports VocabularyGenerationService, parseVocabularyJson (~892 tok)
 - `http_utils.js` — Exports readJson, sendJson (~117 tok)
 - `ids.js` — Exports createId (~34 tok)
-- `litellm_client.js` — Exports LiteLLMClient (~2506 tok)
+- `litellm_client.js` — Exports LiteLLMClient (~2767 tok)
 - `logger.js` — Exports createLogger, sanitizeFields (~987 tok)
 - `normalize.js` — Exports normalizeTerm (~32 tok)
-- `postgres_word_store.js` — Exports PostgresWordStore (~19456 tok)
+- `postgres_word_store.js` — Exports PostgresWordStore (~19483 tok)
 - `proficiency.js` — Exports CEFR_LEVELS, HSK_LEVELS, DEFAULT_PROFICIENCY_LEVEL, VALID_STUDY_RATINGS + 16 more (~1416 tok)
 - `rate_limit.js` — Simple in-process sliding-window rate limiter. (~906 tok)
 - `runtime.js` — Exports createStore, createBackendRuntime (~820 tok)
 - `server.js` (~148 tok)
 - `user_identity.js` — Exports DuplicateUserError, InvalidCredentialsError, InvalidRegistrationInputError, normalizeUserIdentifier + 5 more (~618 tok)
-- `vocabulary_enrichment_adapter.js` — Exports VocabularyEnrichmentAdapter (~1498 tok)
+- `vocabulary_enrichment_adapter.js` — Exports VocabularyEnrichmentAdapter (~1505 tok)
 - `vocabulary_pool_scheduler.js` — Exports VocabularyPoolScheduler (~1207 tok)
 - `vocabulary_validator.js` — Exports validateVocabularyItem, normalizeSuggestionType (~692 tok)
-- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~27382 tok)
+- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~27406 tok)
 - `worker.js` — config: tick (~478 tok)
 
 ## backend/src/routes/
@@ -215,11 +216,11 @@
 - `article_ingest_integration.test.js` — Integration tests: article ingest → processing state transitions → publish eligibility. (~2219 tok)
 - `article_processing_pipeline.test.js` — Helpers (~2544 tok)
 - `article_processing_worker.test.js` — Declares store (~1621 tok)
-- `config.test.js` — Declares config (~720 tok)
+- `config.test.js` — Declares config (~725 tok)
 - `database.test.js` — Declares schemaSql (~237 tok)
-- `e2e_prod_test.mjs` — E2E test against production backend at https://expat8.x51.vn (~4170 tok)
+- `e2e_prod_test.mjs` — E2E test against a production backend. (~4252 tok)
 - `e2e_smoke.test.js` — backendStore: listen, fetchJson, wordInput (~3683 tok)
-- `exam.test.js` — Directly inject a user word state (bypasses SRS logic for speed). (~6878 tok)
+- `exam.test.js` — Directly inject a user word state (bypasses SRS logic for speed). (~7291 tok)
 - `generation_service.test.js` — items: wordInput (~1764 tok)
 - `litellm_client.test.js` — Declares client (~571 tok)
 - `logger.test.js` — Declares chunks (~484 tok)
@@ -248,10 +249,10 @@
 - `20260506-language-native-proficiency-release-handoff.md` — Release Notes and Handoff: Language-Native Proficiency Scales (~560 tok)
 - `20260506-language-native-proficiency-rollout.md` — Language-Native Proficiency Rollout (CEFR + HSK) (~689 tok)
 - `20260506-multilanguage-chinese-research.md` — Nghien cuu ho tro da ngon ngu: uu tien hoc tu vung tieng Trung (~2731 tok)
-- `20260507-mobile-backend-request-investigation.md` — 2026-05-07 Mobile Backend Request Investigation (~2715 tok)
-- `20260508-app-runtime-review.md` — App Runtime Status Review - 2026-05-08 23:30 (~2186 tok)
+- `20260507-mobile-backend-request-investigation.md` — 2026-05-07 Mobile Backend Request Investigation (~2713 tok)
+- `20260508-app-runtime-review.md` — App Runtime Status Review - 2026-05-08 23:30 (~2181 tok)
 - `20260509-card-freeze-investigation.md` — Investigation: App "treo" sau vài từ (~1507 tok)
-- `20260509-expat8-backend-fresh-deploy-1507.md` — Deploy Report: expat8-backend Fresh Deploy (~330 tok)
+- `20260509-expat8-backend-fresh-deploy-1507.md` — Deploy Report: expat8-backend Fresh Deploy (~332 tok)
 - `20260509-expat8-phase-0-3-speaking-foundation.md` — Expat8 Phase 0-3 Months: Speaking Foundation (~5181 tok)
 - `20260509-expat8-product-roadmap-2026-2028.md` — Expat8 Product Roadmap 2026-2028 (~3223 tok)
 - `20260509-mobile-local-first-word-loading.md` — Mobile Local-First Word Loading Exploration (~3304 tok)
@@ -259,24 +260,25 @@
 - `20260509-speaking-audio-privacy.md` — Expat8 Speaking Audio Privacy - Phase 0-3 (~474 tok)
 - `20260509-speaking-prompt-seed-scope.md` — Speaking Prompt Seed Scope - Phase 0-3 (~1227 tok)
 - `20260509-swipe-right-to-left-new-word-invariant.md` — Investigation: Swipe Phải→Trái Chỉ Load Được 3 Từ Mới (~1542 tok)
-- `20260510-article-processing-worker-deployment.md` — Article Processing Worker — Deployment Notes (~1064 tok)
+- `20260510-article-processing-worker-deployment.md` — Article Processing Worker — Deployment Notes (~1063 tok)
 - `app-credential-security.md` — App Credential Security (~3196 tok)
 - `architecture.md` — Kiến trúc hệ thống Expat8 — Version 2 (~7138 tok)
 - `chinese-language-e2e-investigation.md` — Investigation: Tiếng Trung E2E Flow (~2188 tok)
-- `COMMIT_REPORT_20260509_1510.md` — Commit Report (~1377 tok)
+- `COMMIT_REPORT_20260509_1510.md` — Commit Report (~1378 tok)
 - `COMMIT_REPORT_20260509_155944.md` — Commit Report (~1191 tok)
 - `COMMIT_REPORT_20260509_184558.md` — Commit Report (~1115 tok)
-- `COMMIT_REPORT_20260509_192657.md` — Commit Report (~1488 tok)
+- `COMMIT_REPORT_20260509_192657.md` — Commit Report (~1489 tok)
 - `COMMIT_REPORT_20260509_204126.md` — Commit Report (~2312 tok)
 - `COMMIT_REPORT_20260510_131500.md` — Commit Report (~1331 tok)
-- `COMMIT_REPORT_20260510_202545.md` — Commit Report (~1373 tok)
-- `expat8_logs_2026_05_07T16_39_51_937450Z_1.txt` — Expat8 mobile logs (~3682 tok)
-- `mobile-system-logging.md` — Mobile System Logging (~670 tok)
+- `COMMIT_REPORT_20260510_202545.md` — Commit Report (~1374 tok)
+- `expat8_logs_2026_05_07T16_39_51_937450Z_1.txt` — Expat8 mobile logs (~3685 tok)
+- `mobile-system-logging.md` — Mobile System Logging (~669 tok)
 - `mvp-setup.md` — MVP Setup and Limitations (~2300 tok)
+- `privacy-policy.md` — Privacy Policy — Expat8 (~703 tok)
 - `random-fallback-investigation.md` — Investigation: "Rất ít từ vựng sẵn sàng" khi mở app (~987 tok)
 - `RELEASE_NOTES_9_9.md` — Release Notes: Beta Speaking Foundation (v9.9) (~1709 tok)
 - `release-notes.md` — Release Notes (~537 tok)
-- `seed-vocabulary.md` — Seed Vocabulary Bundling (~1193 tok)
+- `seed-vocabulary.md` — Seed Vocabulary Bundling (~1192 tok)
 
 ## expat8-dashboard/
 
@@ -300,37 +302,44 @@
 
 ## expat8-dashboard/src/app/
 
-- `globals.css` — Styles: 29 rules, 14 vars, 1 media queries (~1928 tok)
-- `layout.tsx` — metadata (~114 tok)
-- `page.tsx` — dynamic — renders form, table (~992 tok)
+- `globals.css` — Styles: 41 rules, 16 vars, 2 media queries (~2519 tok)
+- `layout.tsx` — metadata (~165 tok)
+- `page.tsx` — dynamic — renders form, table (~919 tok)
 
 ## expat8-dashboard/src/app/articles/[id]/
 
-- `page.tsx` — dynamic — renders form, table (~960 tok)
+- `page.tsx` — dynamic — renders form, table (~938 tok)
 
 ## expat8-dashboard/src/app/articles/new/
 
-- `page.tsx` — createArticle — renders form (~452 tok)
+- `page.tsx` — createArticle — renders form (~467 tok)
 
 ## expat8-dashboard/src/app/exam/
 
-- `page.tsx` — dynamic — renders form, table (~861 tok)
+- `page.tsx` — dynamic — renders form, table (~840 tok)
 
 ## expat8-dashboard/src/app/review/
 
-- `page.tsx` — dynamic — renders form, table (~789 tok)
+- `page.tsx` — dynamic — renders form, table (~804 tok)
 
 ## expat8-dashboard/src/app/speaking-prompts/
 
-- `page.tsx` — dynamic — renders form, table (~1214 tok)
+- `page.tsx` — dynamic — renders form, table (~1227 tok)
 
 ## expat8-dashboard/src/app/users/
 
-- `page.tsx` — dynamic — renders table (~750 tok)
+- `page.tsx` — dynamic — renders table (~729 tok)
 
 ## expat8-dashboard/src/app/users/[id]/
 
-- `page.tsx` — dynamic — renders table (~1243 tok)
+- `page.tsx` — dynamic — renders table (~1209 tok)
+
+## expat8-dashboard/src/components/
+
+- `PageShell.tsx` — PageShell (~111 tok)
+- `Sidebar.tsx` — Sidebar (~60 tok)
+- `SidebarNav.tsx` — NAV_LINKS (~249 tok)
+- `Toolbar.tsx` — Toolbar (~127 tok)
 
 ## expat8-dashboard/src/lib/
 
@@ -466,6 +475,23 @@
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
+## mobile/.dart_tool/flutter_build/4911fd291998fe4f4ba374cb7b891d08/
+
+- `.filecache` (~57063 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `debug_android_application.stamp` (~2839 tok)
+- `flutter_assets.d` (~2540 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32708 tok)
+- `kernel_snapshot_program.stamp` (~33601 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~509 tok)
+
 ## mobile/.dart_tool/flutter_build/61d153fe3a87fabc0492c0f77fe25763/
 
 - `_composite.stamp` (~7 tok)
@@ -496,6 +522,53 @@
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
+## mobile/.dart_tool/flutter_build/70483856fee8e7737ea26717e4c4a61c/
+
+- `.filecache` (~57063 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `debug_android_application.stamp` (~2839 tok)
+- `flutter_assets.d` (~2540 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32708 tok)
+- `kernel_snapshot_program.stamp` (~33601 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~509 tok)
+
+## mobile/.dart_tool/flutter_build/a49d52765388b2bc57d6ea40598e5e33/
+
+- `_composite.stamp` (~7 tok)
+- `.filecache` (~57232 tok)
+- `android_aot_bundle_release_android-arm.stamp` (~64 tok)
+- `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
+- `android_aot_bundle_release_android-x64.stamp` (~62 tok)
+- `android_aot_release_android-arm.stamp` (~150 tok)
+- `android_aot_release_android-arm64.stamp` (~150 tok)
+- `android_aot_release_android-x64.stamp` (~149 tok)
+- `aot_android_asset_bundle.stamp` (~2720 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `flutter_android_aot_bundle_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-x64.d` (~1 tok)
+- `flutter_android_aot_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_release_android-x64.d` (~1 tok)
+- `flutter_assets.d` (~2547 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32708 tok)
+- `kernel_snapshot_program.stamp` (~33601 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~504 tok)
+
 ## mobile/.dart_tool/flutter_build/a5eb4af7e6453ba7e880cbb12e957e05/
 
 - `_composite.stamp` (~7 tok)
@@ -523,6 +596,36 @@
 - `install_code_assets.stamp` (~119 tok)
 - `kernel_snapshot_program.d` (~32691 tok)
 - `kernel_snapshot_program.stamp` (~33583 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~504 tok)
+
+## mobile/.dart_tool/flutter_build/b31e1d2bebdba842960398a6539d4cf0/
+
+- `_composite.stamp` (~7 tok)
+- `.filecache` (~57232 tok)
+- `android_aot_bundle_release_android-arm.stamp` (~64 tok)
+- `android_aot_bundle_release_android-arm64.stamp` (~63 tok)
+- `android_aot_bundle_release_android-x64.stamp` (~62 tok)
+- `android_aot_release_android-arm.stamp` (~150 tok)
+- `android_aot_release_android-arm64.stamp` (~150 tok)
+- `android_aot_release_android-x64.stamp` (~149 tok)
+- `aot_android_asset_bundle.stamp` (~2720 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `flutter_android_aot_bundle_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_bundle_release_android-x64.d` (~1 tok)
+- `flutter_android_aot_release_android-arm.d` (~1 tok)
+- `flutter_android_aot_release_android-arm64.d` (~1 tok)
+- `flutter_android_aot_release_android-x64.d` (~1 tok)
+- `flutter_assets.d` (~2547 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32708 tok)
+- `kernel_snapshot_program.stamp` (~33601 tok)
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
@@ -616,244 +719,41 @@
 - `native_assets.json` (~13 tok)
 - `outputs.json` (~504 tok)
 
-## mobile/.github/prompts/
-
-- `opsx-apply.prompt.md` — Implementing: <change-name> (schema: <schema-name>) (~1126 tok)
-- `opsx-archive.prompt.md` — Archive Complete (~1233 tok)
-- `opsx-explore.prompt.md` — The Stance (~1563 tok)
-- `opsx-propose.prompt.md` (~1084 tok)
-
-## mobile/.github/skills/openspec-apply-change/
-
-- `SKILL.md` — Implementing: <change-name> (schema: <schema-name>) (~1190 tok)
-
-## mobile/.github/skills/openspec-archive-change/
-
-- `SKILL.md` — Archive Complete (~1039 tok)
-
-## mobile/.github/skills/openspec-explore/
-
-- `SKILL.md` — The Stance (~2309 tok)
-
-## mobile/.github/skills/openspec-propose/
-
-- `SKILL.md` (~1161 tok)
-
-## mobile/android/
-
-- `.gitignore` — Git ignore rules (~68 tok)
-- `build.gradle.kts` — Gradle Kotlin build configuration (~138 tok)
-- `expat8_language_app_android.iml` (~427 tok)
-- `gradle.properties` (~45 tok)
-- `gradlew` — ############################################################################# (~1326 tok)
-- `gradlew.bat` (~642 tok)
-- `local.properties` (~42 tok)
-- `README.md` — Project documentation (~82 tok)
-- `settings.gradle.kts` — Gradle Kotlin settings (~198 tok)
-
-## mobile/android/.gradle/
-
-- `file-system.probe` (~3 tok)
-
-## mobile/android/.gradle/8.10.2/
-
-- `gc.properties` (~0 tok)
-
-## mobile/android/.gradle/8.10.2/dependencies-accessors/
-
-- `gc.properties` (~0 tok)
-
-## mobile/android/.gradle/buildOutputCleanup/
-
-- `cache.properties` — Mon May 04 21:39:00 ICT 2026 (~14 tok)
-
-## mobile/android/.gradle/kotlin/errors/
-
-- `errors-1778341142851.log` (~2160 tok)
-
-## mobile/android/.gradle/vcs-1/
-
-- `gc.properties` (~0 tok)
-
-## mobile/android/.kotlin/errors/
-
-- `errors-1778341142851.log` (~2160 tok)
-
-## mobile/android/app/
-
-- `build.gradle.kts` — Gradle Kotlin build configuration (~364 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/
-
-- `hash_key.txt` — Values used to calculate the hash in this folder name. (~308 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~170 tok)
-- `android_gradle_build.json` (~271 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6185 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~485 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4125 tok)
-- `metadata_generation_command.txt` (~264 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~24 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/.cmake/api/v1/reply/
-
-- `cache-v2-f1048ae033bfed1af0a7.json` — Declares of (~7760 tok)
-- `cmakeFiles-v1-3813a372d1ac11b54828.json` (~7509 tok)
-- `codemodel-v2-f72146371ef1f86589e6.json` (~207 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-05T12-08-18-0017.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~11493 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~404 tok)
-- `TargetDirectories.txt` (~54 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~920 tok)
-- `CMakeCXXCompiler.cmake` (~1773 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/CMakeFiles/3.22.1-g37088a8/CompilerIdC/
-
-- `CMakeCCompilerId.c` — ifdef __cplusplus (~7101 tok)
-- `CMakeCCompilerId.o` (~1613 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/arm64-v8a/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/
-
-- `CMakeCXXCompilerId.cpp` (~7028 tok)
-- `CMakeCXXCompilerId.o` (~1615 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~171 tok)
-- `android_gradle_build.json` (~272 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6188 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~485 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4128 tok)
-- `metadata_generation_command.txt` (~266 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~24 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/.cmake/api/v1/reply/
-
-- `cache-v2-f33639f025674a7d5f2b.json` — Declares of (~7763 tok)
-- `cmakeFiles-v1-e22bef0e02493b2b09a0.json` (~7512 tok)
-- `codemodel-v2-5ca53682ca9cdbe188f5.json` (~207 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-05T12-08-27-0044.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~12301 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~405 tok)
-- `TargetDirectories.txt` (~55 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~919 tok)
-- `CMakeCXXCompiler.cmake` (~1772 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/CMakeFiles/3.22.1-g37088a8/CompilerIdC/
-
-- `CMakeCCompilerId.c` — ifdef __cplusplus (~7101 tok)
-- `CMakeCCompilerId.o` (~1106 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/armeabi-v7a/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/
-
-- `CMakeCXXCompilerId.cpp` (~7028 tok)
-- `CMakeCXXCompilerId.o` (~1115 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~166 tok)
-- `android_gradle_build.json` (~267 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6177 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~483 tok)
-- `CMakeCache.txt` — This is the CMakeCache file. (~4114 tok)
-- `metadata_generation_command.txt` (~256 tok)
-- `prefab_config.json` (~12 tok)
-- `symbol_folder_index.txt` (~22 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/.cmake/api/v1/reply/
-
-- `cache-v2-db52427d632a4878ef55.json` — Declares of (~7750 tok)
-- `cmakeFiles-v1-503880802d6b9bc4fe00.json` (~7498 tok)
-- `codemodel-v2-5ddcac7a0f8dc3c1d9a1.json` (~205 tok)
-- `directory-.-Debug-f5ebdc15457944623624.json` (~44 tok)
-- `index-2026-05-05T12-08-27-0346.json` (~448 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/CMakeFiles/
-
-- `cmake.check_cache` — This file is generated by cmake for dependency checking of the CMakeCache.txt file (~23 tok)
-- `CMakeOutput.log` (~11156 tok)
-- `rules.ninja` — CMAKE generated file: DO NOT EDIT! (~403 tok)
-- `TargetDirectories.txt` (~51 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/CMakeFiles/3.22.1-g37088a8/
-
-- `CMakeCCompiler.cmake` (~917 tok)
-- `CMakeCXXCompiler.cmake` (~1770 tok)
-- `CMakeSystem.cmake` (~123 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/CMakeFiles/3.22.1-g37088a8/CompilerIdC/
-
-- `CMakeCCompilerId.c` — ifdef __cplusplus (~7101 tok)
-- `CMakeCCompilerId.o` (~1048 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/
-
-- `CMakeCXXCompilerId.cpp` (~7028 tok)
-- `CMakeCXXCompilerId.o` (~1056 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86_64/
-
-- `additional_project_files.txt` (~0 tok)
-- `android_gradle_build_mini.json` (~168 tok)
-- `android_gradle_build.json` (~269 tok)
-- `build_file_index.txt` (~25 tok)
-- `build.ninja` — CMAKE generated file: DO NOT EDIT! (~6181 tok)
-- `cmake_install.cmake` — Install script for directory: /home/beou/snap/flutter/common/flutter/packages/flutter_tools/gradle/src/main/groovy (~484 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86_64/.cmake/api/v1/query/client-agp/
-
-- `cache-v2` (~0 tok)
-- `cmakeFiles-v1` (~0 tok)
-- `codemodel-v2` (~0 tok)
-
-## mobile/android/app/.cxx/Debug/27596y4e/x86_64/.cmake/api/v1/reply/
-
-- `cache-v2-a7303108bf22db3f8e99.json` — Declares of (~7755 tok)
-- `cmakeFiles-v1-57baa713cd081210ab21.json` (~7504 tok)
-- `codemodel-v2-f794c631d6ce7f664834.json` (~206 tok)
+## mobile/.dart_tool/flutter_build/d78bb27d9cf8909e6e3e0c547dfa94d0/
+
+- `.filecache` (~57063 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `debug_android_application.stamp` (~2839 tok)
+- `flutter_assets.d` (~2540 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32708 tok)
+- `kernel_snapshot_program.stamp` (~33601 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~509 tok)
+
+## mobile/.dart_tool/flutter_build/e7d5bee05f88fd67dae5530599fd4764/
+
+- `.filecache` (~57063 tok)
+- `dart_build_result.json` (~11 tok)
+- `dart_build.d` (~33 tok)
+- `dart_build.stamp` (~121 tok)
+- `debug_android_application.stamp` (~2839 tok)
+- `flutter_assets.d` (~2540 tok)
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)
+- `install_code_assets.d` (~32 tok)
+- `install_code_assets.stamp` (~119 tok)
+- `kernel_snapshot_program.d` (~32708 tok)
+- `kernel_snapshot_program.stamp` (~33601 tok)
+- `native_assets.json` (~13 tok)
+- `outputs.json` (~509 tok)
+
+## mobile/.dart_tool/flutter_build/efb0b888c4c211865005c0e398a481ed/
+
+- `gen_dart_plugin_registrant.stamp` (~51 tok)
+- `gen_localizations.stamp` (~7 tok)

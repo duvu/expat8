@@ -11,7 +11,7 @@ Work through each stage in order. Abort and execute the rollback drill at any re
 - [ ] `cd mobile && flutter test` — all tests pass, 0 fail
 - [ ] `cd backend && npm run verify:migrations` — no drift between schema.sql and applied migrations
 - [ ] Confirm Z440 host is reachable: `ssh -i deployment/worker-z440/ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes <host> echo ok`
-- [ ] Docker image for this release is built and pushed: `docker.x51.vn/x-ai/expat8-backend:<YYYYMMDD.HHMM>`
+- [ ] Docker image for this release is built and pushed: `<YOUR_REGISTRY>/expat8-backend:<YYYYMMDD.HHMM>`
 
 ---
 

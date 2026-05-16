@@ -8,6 +8,7 @@ import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:expat8_language_app/src/session/card_selection.dart';
 import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -128,6 +129,56 @@ void main() {
     expect(controller.authErrorMessage, 'Email or password is incorrect.');
     expect(controller.takeUserFeedbackMessage(),
         'Email or password is incorrect.');
+  });
+
+  test('sign-in missing account suggests registration', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(
+        _ControllerApiClient(
+          signInError: BackendApiException(
+            'Sign-in failed: 401',
+            statusCode: 401,
+            backendError: 'invalid_credentials',
+            backendReason: 'user_not_found',
+          ),
+        ),
+      ),
+    );
+
+    await controller.signIn(
+      identifier: 'missing@example.com',
+      password: 'wrong-password',
+    );
+
+    expect(controller.authErrorMessage, 'No account found. Please register.');
+    expect(
+      controller.takeUserFeedbackMessage(),
+      'No account found. Please register.',
+    );
+  });
+
+  test('auth rate-limit failure uses plain-language feedback', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(
+        _ControllerApiClient(
+          signInError: BackendApiException(
+            'Sign-in failed: 429',
+            statusCode: 429,
+            backendError: 'too_many_requests',
+          ),
+        ),
+      ),
+    );
+
+    await controller.signIn(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+    );
+
+    expect(
+      controller.authErrorMessage,
+      'Too many attempts. Please wait a moment and try again.',
+    );
   });
 
   test(
@@ -691,6 +742,108 @@ void main() {
         reason:
             'should fall back to non-mastered word when no new words exist');
   });
+
+  // canFitb tests — only depend on the VocabularyWord passed in, no async I/O
+  group('canFitb', () {
+    late LearningSessionController controller;
+
+    setUp(() async {
+      controller = LearningSessionController(
+        repository: await _repository(_ControllerApiClient()),
+      );
+    });
+
+    VocabularyWord _reviewWord({
+      String term = 'reliable',
+      String example =
+          'She is a very reliable and trustworthy teammate at work.',
+      String entryType = 'word',
+      String? blankWord,
+    }) {
+      final now = DateTime.utc(2026, 5, 12);
+      return VocabularyWord(
+        localId: 'w1',
+        term: term,
+        language: 'en',
+        meaningVi: 'đáng tin cậy',
+        partOfSpeech: 'adjective',
+        ipa: '/rɪˈlaɪəbl/',
+        vietnamesePronunciation: 'ri-lai-uh-bol',
+        example: example,
+        exampleVi: 'Cô ấy là một đồng đội đáng tin cậy.',
+        difficulty: 'B1',
+        topics: const ['work'],
+        status: WordStatus.review,
+        createdAt: now,
+        updatedAt: now,
+        cardType: LearningCardType.review,
+        entryType: entryType,
+        explanation: '',
+        blankWord: blankWord,
+      );
+    }
+
+    test('10.1a returns false for a new card', () {
+      final word = _reviewWord().copyWith(cardType: LearningCardType.newCard);
+      expect(controller.canFitb(word), false);
+    });
+
+    test('10.1b returns false when example has fewer than 8 words', () {
+      final word = _reviewWord(example: 'She is reliable here.');
+      expect(controller.canFitb(word), false);
+    });
+
+    test('10.1c returns false when example does not contain the term', () {
+      final word = _reviewWord(
+        term: 'diligent',
+        example: 'She is a very reliable and trustworthy teammate at work.',
+      );
+      expect(controller.canFitb(word), false);
+    });
+
+    test('10.1d returns false for phrase with null blankWord', () {
+      final word = _reviewWord(
+        entryType: 'phrase',
+        term: 'break the ice',
+        example: 'He told a joke to break the ice at the meeting today.',
+        blankWord: null,
+      );
+      expect(controller.canFitb(word), false);
+    });
+
+    test('10.1e returns false for idiom with empty blankWord', () {
+      final word = _reviewWord(
+        entryType: 'idiom',
+        term: 'break the ice',
+        example: 'He told a joke to break the ice at the meeting today.',
+        blankWord: '',
+      );
+      expect(controller.canFitb(word), false);
+    });
+
+    test('10.1f returns true for a local review word with null cardType', () {
+      final word = _reviewWord().copyWith(cardType: null);
+      expect(controller.canFitb(word), true);
+    });
+
+    test('10.1g returns true for a phrase with non-null blankWord', () {
+      final word = _reviewWord(
+        entryType: 'phrase',
+        term: 'break the ice',
+        example: 'He told a joke to break the ice at the meeting today.',
+        blankWord: 'break the ice',
+      );
+      expect(controller.canFitb(word), true);
+    });
+
+    test(
+        '10.1h returns true for a review selection even when cached status is learning',
+        () {
+      final word = _reviewWord().copyWith(status: WordStatus.learning);
+      expect(controller.canFitb(word, cardKind: CardKind.review), true);
+      expect(controller.canFitb(word, cardKind: CardKind.newWord), false);
+    });
+  });
 }
 
 int _databaseCounter = 0;
@@ -706,6 +859,8 @@ Future<WordRepository> _repository(_ControllerApiClient apiClient) async {
 class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
+    this.signInError,
+    this.signOutError,
     this.fetchLearningCardsError,
     this.submitStudyEventError,
     this.submitProficiency,

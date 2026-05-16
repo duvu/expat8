@@ -1,15 +1,23 @@
 import 'dart:async';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
+import 'package:expat8_language_app/src/data/local_database.dart';
 import 'package:expat8_language_app/src/data/article_repository.dart';
+import 'package:expat8_language_app/src/data/workplace_sentence_repository.dart';
+import 'package:expat8_language_app/src/data/word_repository.dart';
+import 'package:expat8_language_app/src/exam/exam_question_screen.dart';
+import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/article.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:expat8_language_app/src/ui/articles_screen.dart';
 import 'package:expat8_language_app/src/ui/learning_screen.dart';
 import 'package:expat8_language_app/src/ui/vocabulary_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -126,6 +134,7 @@ void main() {
           drawer: LearningDrawer(
             isSignedIn: false,
             onVocabulary: () {},
+            onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
             onRegister: () {},
@@ -140,6 +149,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Vocabulary'), findsOneWidget);
+    expect(find.text('Sentences'), findsOneWidget);
     expect(find.text('Articles'), findsNothing);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
@@ -162,6 +172,7 @@ void main() {
               sessionToken: 'session_1',
             ),
             onVocabulary: () {},
+            onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
             onRegister: () {},
@@ -178,9 +189,66 @@ void main() {
     expect(find.text('Sign out'), findsOneWidget);
     expect(find.text('Learner'), findsOneWidget);
     expect(find.text('learner@example.com'), findsOneWidget);
+    expect(find.text('Sentences'), findsOneWidget);
     expect(find.text('Articles'), findsOneWidget);
     expect(find.text('Register'), findsNothing);
     expect(find.text('Sign in'), findsNothing);
+  });
+
+  testWidgets('Take Exam stays on learning screen when backend is down',
+      (tester) async {
+    var startCalled = false;
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/health/ready') {
+        return http.Response('', 503);
+      }
+      if (request.method == 'POST' && request.url.path == '/v1/exam/start') {
+        startCalled = true;
+        fail('Exam start should not run when readiness fails.');
+      }
+      fail('Unexpected request: ${request.method} ${request.url.path}');
+    });
+
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_screen_test_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = _LearningScreenRepository(
+      database: database,
+      httpClient: httpClient,
+    );
+    final workplaceSentenceRepository = WorkplaceSentenceRepository(
+      database: database,
+      apiClient: repository.apiClient,
+    );
+    final controller = LearningSessionController(repository: repository);
+
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LearningScreen(
+            controller: controller,
+            articleRepository: _TestArticleRepository(),
+            workplaceSentenceRepository: workplaceSentenceRepository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Take Exam'));
+      await tester.pumpAndSettle();
+
+      expect(startCalled, isFalse);
+      expect(find.byType(ExamQuestionScreen), findsNothing);
+      expect(find.text('Backend unavailable. Please try again.'),
+          findsOneWidget);
+    } finally {
+      controller.dispose();
+      await database.close();
+    }
   });
 
   testWidgets('drawer opens article management flow', (tester) async {
@@ -201,6 +269,7 @@ void main() {
                 sessionToken: 'session_1',
               ),
               onVocabulary: () {},
+              onWorkplaceSentences: () {},
               onLogs: () {},
               onArticles: () {
                 Navigator.of(context).maybePop();
@@ -382,6 +451,7 @@ void main() {
             isSignedIn: false,
             isAuthInProgress: true,
             onVocabulary: () {},
+            onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
             onRegister: () => registerCount += 1,
@@ -571,6 +641,61 @@ class _TestArticleRepository extends ArticleRepository {
     required String articleId,
   }) {
     throw UnimplementedError();
+  }
+}
+
+class _LearningScreenRepository extends WordRepository {
+  _LearningScreenRepository({
+    required LocalDatabase database,
+    required http.Client httpClient,
+  }) : super(
+          database: database,
+          apiClient: BackendApiClient(
+            baseUrl: 'https://example.com',
+            timeout: const Duration(seconds: 5),
+            appId: 'test-app',
+            appSecret: 'test-secret',
+            httpClient: httpClient,
+          ),
+        );
+
+  @override
+  Future<String> getOrCreateDeviceId() async {
+    return 'device_1';
+  }
+
+  @override
+  Future<UserSession?> loadUserSession() async {
+    return const UserSession(
+      userId: 'user_1',
+      identifier: 'learner@example.com',
+      displayName: 'Learner',
+      sessionToken: 'session_1',
+    );
+  }
+
+  @override
+  Future<WordLookupResult> getNewWordWithFallbackResult({
+    String language = 'en',
+  }) async {
+    return const WordLookupResult(
+      word: null,
+      source: WordLookupSource.none,
+      message: 'No learning card is available. Check connection and try again.',
+    );
+  }
+
+  @override
+  Future<ProficiencyState> fetchProficiency({
+    required String deviceId,
+    String language = 'en',
+  }) async {
+    return ProficiencyState.initial();
+  }
+
+  @override
+  Future<TopUpResult> topUpInventoryIfNeeded() async {
+    return const TopUpResult(action: TopUpAction.none);
   }
 }
 

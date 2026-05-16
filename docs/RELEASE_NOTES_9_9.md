@@ -96,7 +96,7 @@ npm run start:worker # (Optional) Start background worker
 cd mobile
 flutter pub get
 flutter build apk --release \
-  --dart-define BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
   --dart-define SPEAKING_FOUNDATION_ENABLED=true
 ```
 
@@ -104,6 +104,12 @@ The built APK will be available at:
 ```
 build/app/outputs/flutter-apk/app-release.apk
 ```
+
+### Production Android Verification
+- APK build command used:
+  `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 --dart-define=APP_LOG_LEVEL=info`
+- Smoke check: `adb -s emulator-5554 uninstall vn.x51.expat8 && adb -s emulator-5554 install /home/beou/IdeaProjects/expat8/mobile/build/app/outputs/flutter-apk/app-release.apk && adb -s emulator-5554 shell am start -W -n vn.x51.expat8/.MainActivity` completed successfully after removing the previous incompatible install.
+- Matching release bundle command still produces `build/app/outputs/bundle/release/app-release.aab` with the same production defines.
 
 ## Release Timeline
 

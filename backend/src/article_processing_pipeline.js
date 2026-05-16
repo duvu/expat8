@@ -4,6 +4,10 @@ import {
   normalizeSuggestionType,
   validateVocabularyItem
 } from './vocabulary_validator.js';
+import {
+  normalizeSentenceText,
+  validateWorkplaceSentenceItem
+} from './workplace_sentence_validator.js';
 
 const DEFAULT_MAX_CHUNK_CHARS = 1800;
 const DEFAULT_MAX_SUGGESTIONS_PER_CHUNK = 10;
@@ -41,6 +45,10 @@ export class ArticleProcessingPipeline {
     const accepted = [];
     const rejected = [];
     const seen = new Set();
+    const extractedSentences = [];
+    const acceptedSentences = [];
+    const rejectedSentences = [];
+    const seenSentences = new Set();
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
       const chunk = chunks[chunkIndex];
@@ -102,33 +110,85 @@ export class ArticleProcessingPipeline {
         seen.add(`${article.language}:${normalizedTerm}`);
         accepted.push(candidate);
       }
+
+      const sentenceResult = await this.#suggestSentencesForChunk({
+        article,
+        chunk,
+        chunkIndex,
+        maxSuggestions: Math.max(1, Math.min(5, maxTerms))
+      });
+
+      for (const suggestion of sentenceResult.items) {
+        extractedSentences.push(suggestion);
+
+        const normalizedText = normalizeSentenceText(suggestion.text);
+        if (!normalizedText || seenSentences.has(`${article.language}:${normalizedText}`)) {
+          rejectedSentences.push({
+            text: suggestion.text,
+            classification: 'duplicate_sentence_suggestion',
+            reason: 'duplicate_across_chunks'
+          });
+          continue;
+        }
+
+        const candidate = {
+          text: suggestion.text,
+          language: suggestion.language ?? article.language,
+          meaning_vi: suggestion.meaning_vi,
+          topic: suggestion.topic ?? 'work',
+          confidence: Number(suggestion.confidence ?? 0.5),
+          generation_source: suggestion.generation_source ?? 'article_workplace_sentence',
+          isStub: Boolean(suggestion.isStub)
+        };
+
+        const validation = validateWorkplaceSentenceItem(candidate);
+        if (!validation.ok) {
+          rejectedSentences.push({
+            text: suggestion.text,
+            classification: validation.reason,
+            reason: validation.reason
+          });
+          continue;
+        }
+
+        seenSentences.add(`${article.language}:${normalizedText}`);
+        acceptedSentences.push(candidate);
+      }
     }
 
     if (accepted.length > 0) {
       await this.store.persistArticleVocabulary({ articleId, items: accepted });
     }
+    if (acceptedSentences.length > 0 && typeof this.store.persistArticleWorkplaceSentences === 'function') {
+      await this.store.persistArticleWorkplaceSentences({ articleId, items: acceptedSentences });
+    }
 
-    const rejectedByReason = rejected.reduce((acc, r) => {
+    const rejectedByReason = [...rejected, ...rejectedSentences].reduce((acc, r) => {
       const key = r.classification ?? r.reason ?? 'unknown';
       acc[key] = (acc[key] ?? 0) + 1;
       return acc;
     }, {});
 
-    this.logger.info?.('article_processing_pipeline_completed', {
+      this.logger.info?.('article_processing_pipeline_completed', {
       article_id: articleId,
       extracted_count: extracted.length,
       accepted_count: accepted.length,
       rejected_count: rejected.length,
+      extracted_sentence_count: extractedSentences.length,
+      accepted_sentence_count: acceptedSentences.length,
+      rejected_sentence_count: rejectedSentences.length,
       rejected_by_reason: rejectedByReason
     });
 
     return {
       success: true,
-      classification: rejected.length > 0 ? 'partial_success' : 'success',
-      extracted_count: extracted.length,
-      accepted_count: accepted.length,
-      rejected_count: rejected.length,
-      rejected
+      classification: (rejected.length > 0 || rejectedSentences.length > 0) ? 'partial_success' : 'success',
+      extracted_count: extracted.length + extractedSentences.length,
+      accepted_count: accepted.length + acceptedSentences.length,
+      rejected_count: rejected.length + rejectedSentences.length,
+      rejected: [...rejected, ...rejectedSentences],
+      vocabulary_accepted_count: accepted.length,
+      sentence_accepted_count: acceptedSentences.length
     };
   }
 
@@ -151,6 +211,26 @@ export class ArticleProcessingPipeline {
       classification: 'article_suggestion_adapter_missing',
       reason: 'article_suggestion_adapter_missing'
     };
+  }
+
+  async #suggestSentencesForChunk({ article, chunk, chunkIndex, maxSuggestions }) {
+    if (this.suggestionAdapter?.suggestWorkplaceSentences) {
+      const result = await this.suggestionAdapter.suggestWorkplaceSentences({
+        article,
+        chunk,
+        chunkIndex,
+        maxSuggestions
+      });
+      if (Array.isArray(result)) {
+        return { ok: true, items: result };
+      }
+      if (result?.ok === false) {
+        return { ok: true, items: [] };
+      }
+      return result ?? { ok: true, items: [] };
+    }
+
+    return { ok: true, items: [] };
   }
 }
 

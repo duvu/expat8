@@ -32,6 +32,6 @@
 
 ## 5. Verification
 
-- [x] 5.1 Build and install APK on emulator: `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release --dart-define BACKEND_BASE_URL=https://expat8.x51.vn --dart-define SPEAKING_FOUNDATION_ENABLED=true`
+- [x] 5.1 Build and install APK on emulator: `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release --dart-define BACKEND_BASE_URL=<YOUR_BACKEND_URL> --dart-define SPEAKING_FOUNDATION_ENABLED=true`
 - [ ] 5.2 Complete a full 5-question exam on the emulator — confirm results screen appears immediately after "See Results" is tapped
 - [ ] 5.3 Confirm "Try Again" from results error state navigates back to the exam topic screen without crash

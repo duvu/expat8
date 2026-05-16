@@ -602,6 +602,105 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(9, 7623126289449930472),
+    name: 'LocalWorkplaceSentenceEntity',
+    lastPropertyId: const obx_int.IdUid(14, 5135544224436699283),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3075656904735009019),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 4812383148060157714),
+        name: 'localId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(30, 5325547818262788490),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 2089978830348000993),
+        name: 'serverSentenceId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(31, 254264944844424605),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 5349643798033280791),
+        name: 'text',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 3534248391845193183),
+        name: 'language',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 1446670116255896604),
+        name: 'meaningVi',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 4447217739024682745),
+        name: 'topic',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 6660193928940505961),
+        name: 'sourceTitle',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 7575864257028155336),
+        name: 'generationSource',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 4475300493876454539),
+        name: 'isBundled',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 4791717315805413297),
+        name: 'status',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(32, 1377162962780106685),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 4149242005305884948),
+        name: 'lastSeenAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(33, 176399341513004656),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 6287386393774510740),
+        name: 'createdAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(34, 7547890276824839143),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(14, 5135544224436699283),
+        name: 'updatedAtMs',
+        type: 6,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -642,8 +741,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(8, 3288235631848983449),
-    lastIndexId: const obx_int.IdUid(29, 5177855304185512194),
+    lastEntityId: const obx_int.IdUid(9, 7623126289449930472),
+    lastIndexId: const obx_int.IdUid(34, 7547890276824839143),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -1395,6 +1494,130 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    LocalWorkplaceSentenceEntity:
+        obx_int.EntityDefinition<LocalWorkplaceSentenceEntity>(
+          model: _entities[8],
+          toOneRelations: (LocalWorkplaceSentenceEntity object) => [],
+          toManyRelations: (LocalWorkplaceSentenceEntity object) => {},
+          getId: (LocalWorkplaceSentenceEntity object) => object.id,
+          setId: (LocalWorkplaceSentenceEntity object, int id) {
+            object.id = id;
+          },
+          objectToFB: (LocalWorkplaceSentenceEntity object, fb.Builder fbb) {
+            final localIdOffset = fbb.writeString(object.localId);
+            final serverSentenceIdOffset = object.serverSentenceId == null
+                ? null
+                : fbb.writeString(object.serverSentenceId!);
+            final textOffset = fbb.writeString(object.text);
+            final languageOffset = fbb.writeString(object.language);
+            final meaningViOffset = fbb.writeString(object.meaningVi);
+            final topicOffset = object.topic == null
+                ? null
+                : fbb.writeString(object.topic!);
+            final sourceTitleOffset = object.sourceTitle == null
+                ? null
+                : fbb.writeString(object.sourceTitle!);
+            final generationSourceOffset = fbb.writeString(
+              object.generationSource,
+            );
+            final statusOffset = fbb.writeString(object.status);
+            fbb.startTable(15);
+            fbb.addInt64(0, object.id);
+            fbb.addOffset(1, localIdOffset);
+            fbb.addOffset(2, serverSentenceIdOffset);
+            fbb.addOffset(3, textOffset);
+            fbb.addOffset(4, languageOffset);
+            fbb.addOffset(5, meaningViOffset);
+            fbb.addOffset(6, topicOffset);
+            fbb.addOffset(7, sourceTitleOffset);
+            fbb.addOffset(8, generationSourceOffset);
+            fbb.addInt64(9, object.isBundled);
+            fbb.addOffset(10, statusOffset);
+            fbb.addInt64(11, object.lastSeenAtMs);
+            fbb.addInt64(12, object.createdAtMs);
+            fbb.addInt64(13, object.updatedAtMs);
+            fbb.finish(fbb.endTable());
+            return object.id;
+          },
+          objectFromFB: (obx.Store store, ByteData fbData) {
+            final buffer = fb.BufferContext(fbData);
+            final rootOffset = buffer.derefObject(0);
+            final idParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              4,
+              0,
+            );
+            final localIdParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 6, '');
+            final serverSentenceIdParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGetNullable(buffer, rootOffset, 8);
+            final textParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 10, '');
+            final languageParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 12, '');
+            final meaningViParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 14, '');
+            final topicParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGetNullable(buffer, rootOffset, 16);
+            final sourceTitleParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGetNullable(buffer, rootOffset, 18);
+            final generationSourceParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 20, '');
+            final isBundledParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              22,
+              0,
+            );
+            final statusParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 24, '');
+            final lastSeenAtMsParam = const fb.Int64Reader().vTableGetNullable(
+              buffer,
+              rootOffset,
+              26,
+            );
+            final createdAtMsParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              28,
+              0,
+            );
+            final updatedAtMsParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              30,
+              0,
+            );
+            final object = LocalWorkplaceSentenceEntity(
+              id: idParam,
+              localId: localIdParam,
+              serverSentenceId: serverSentenceIdParam,
+              text: textParam,
+              language: languageParam,
+              meaningVi: meaningViParam,
+              topic: topicParam,
+              sourceTitle: sourceTitleParam,
+              generationSource: generationSourceParam,
+              isBundled: isBundledParam,
+              status: statusParam,
+              lastSeenAtMs: lastSeenAtMsParam,
+              createdAtMs: createdAtMsParam,
+              updatedAtMs: updatedAtMsParam,
+            );
+
+            return object;
+          },
+        ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -1816,4 +2039,85 @@ class ExamAttemptEntity_ {
   static final syncStatus = obx.QueryStringProperty<ExamAttemptEntity>(
     _entities[7].properties[12],
   );
+}
+
+/// [LocalWorkplaceSentenceEntity] entity fields to define ObjectBox queries.
+class LocalWorkplaceSentenceEntity_ {
+  /// See [LocalWorkplaceSentenceEntity.id].
+  static final id = obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[0],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.localId].
+  static final localId = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[1],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.serverSentenceId].
+  static final serverSentenceId =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[2],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.text].
+  static final text = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[3],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.language].
+  static final language = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[4],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.meaningVi].
+  static final meaningVi =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[5],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.topic].
+  static final topic = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[6],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.sourceTitle].
+  static final sourceTitle =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[7],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.generationSource].
+  static final generationSource =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[8],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.isBundled].
+  static final isBundled =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[9],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.status].
+  static final status = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[10],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.lastSeenAtMs].
+  static final lastSeenAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[11],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.createdAtMs].
+  static final createdAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[12],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.updatedAtMs].
+  static final updatedAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[13],
+      );
 }

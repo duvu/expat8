@@ -2,7 +2,7 @@
 
 The current mobile learning flow still exposes button-based actions and a legacy swipe mapping that does not match the intended product behavior. The app uses local-first storage, and user interactions in sessions are expected to read/write local data immediately, then sync with backend policies. Product direction requires a gesture-only UI, explicit local-state transitions for difficult/remembered signals, and predictable cache health through a daily refill policy.
 
-The backend already provides learning feed APIs, but release operations must consistently publish tagged images to `docker.x51.vn` and redeploy from `~/deployment/worker-z440`.
+The backend already provides learning feed APIs, but release operations must consistently publish tagged images to `<YOUR_REGISTRY>` and redeploy from `~/deployment/worker-z440`.
 
 ## Goals / Non-Goals
 
@@ -54,7 +54,7 @@ The backend already provides learning feed APIs, but release operations must con
 ## Migration Plan
 
 1. Ship backend support and mobile code in feature branch; validate backend tests and mobile tests.
-2. Build and push backend image with timestamp tag to `docker.x51.vn/x-ai/expat8-backend:<tag>`.
+2. Build and push backend image with timestamp tag to `<YOUR_REGISTRY>/expat8-backend:<tag>`.
 3. Update `~/deployment/worker-z440/docker-compose.yml` to new tag and force-recreate `expat8-backend`.
 4. Build Android release artifact and validate gesture flows on emulator/device.
 5. Monitor backend request logs for `/v1/learning/cards` and mobile telemetry for gesture events.

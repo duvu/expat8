@@ -1,4 +1,4 @@
-package com.example.expat8_language_app
+package vn.x51.expat8
 
 import io.flutter.embedding.android.FlutterActivity
 

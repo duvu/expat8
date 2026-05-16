@@ -9,6 +9,34 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('checks backend readiness without app credentials', () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response(
+        jsonEncode({'ok': true, 'db': 'ok'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    final ready = await apiClient.checkBackendReadiness();
+
+    expect(ready, isTrue);
+    expect(captured.method, 'GET');
+    expect(captured.url.path, '/health/ready');
+    expect(captured.headers.containsKey('x-expat8-app-id'), isFalse);
+    expect(captured.headers.containsKey('authorization'), isFalse);
+  });
+
   test('requests learning cards with post body and no word exclusions',
       () async {
     late http.Request captured;
@@ -26,10 +54,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -66,10 +94,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -103,10 +131,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -134,10 +162,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -191,10 +219,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -254,10 +282,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -303,10 +331,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -327,17 +355,20 @@ void main() {
       () async {
     final client = MockClient((request) async {
       return http.Response(
-        jsonEncode({'error': 'invalid_credentials'}),
+        jsonEncode({
+          'error': 'invalid_credentials',
+          'reason': 'user_not_found',
+        }),
         401,
         headers: {'content-type': 'application/json'},
       );
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -350,6 +381,7 @@ void main() {
     } on BackendApiException catch (error) {
       expect(error.statusCode, 401);
       expect(error.backendError, 'invalid_credentials');
+      expect(error.backendReason, 'user_not_found');
       expect(error.message, 'Sign-in failed: 401');
     }
   });
@@ -451,10 +483,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 
@@ -497,10 +529,10 @@ void main() {
     });
 
     final apiClient = BackendApiClient(
-      baseUrl: 'https://expat8.x51.vn',
+      baseUrl: 'https://example.com',
       timeout: const Duration(seconds: 5),
       appId: 'expat8-mobile-app',
-      appSecret: 'expat8-mobile-secret',
+      appSecret: 'test-app-secret',
       httpClient: client,
     );
 

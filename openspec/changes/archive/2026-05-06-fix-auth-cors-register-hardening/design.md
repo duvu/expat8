@@ -86,5 +86,5 @@ Rollback is straightforward: revert the middleware/config change and redeploy ba
 
 ## Open Questions
 
-- What exact production web origin should be configured for `CORS_ALLOWED_ORIGIN`: `https://expat8.x51.vn`, another app domain, or a comma-separated list if multiple frontends are expected?
+- What exact production web origin should be configured for `CORS_ALLOWED_ORIGIN`: `<YOUR_BACKEND_URL>`, another app domain, or a comma-separated list if multiple frontends are expected?
 - Should CI install `libsqlite3-dev` directly, or should the repository include a wrapper script for Linux Flutter tests?

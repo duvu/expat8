@@ -157,11 +157,11 @@ listening on `localhost:8787` from this workspace.
 
 `mobile/lib/src/config.dart`:
 
-- Lines 21-24: default `BACKEND_BASE_URL` is `https://expat8.x51.vn`.
+- Lines 21-24: default `BACKEND_BASE_URL` is `<YOUR_BACKEND_URL>`.
 
 Docs vary by context:
 
-- `README.md` uses `https://expat8.x51.vn` in the sample run command.
+- `README.md` uses `<YOUR_BACKEND_URL>` in the sample run command.
 - `mobile/README.md` uses `http://localhost:8787`.
 - `docs/mvp-setup.md` uses `http://localhost:8787`.
 
@@ -176,7 +176,7 @@ emulator itself, not the host machine. The host backend is normally reached via
 
 ```text
 APP_CREDENTIAL_APP_ID=expat8-mobile-app
-APP_CREDENTIAL_SECRET=expat8-mobile-secret
+APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
 
 `backend/.env.example` uses:

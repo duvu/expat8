@@ -61,6 +61,16 @@ function makePhraseSuggestion(overrides = {}) {
   };
 }
 
+function makeSentenceSuggestion(overrides = {}) {
+  return {
+    text: 'Could we move this meeting to tomorrow morning?',
+    language: 'en',
+    meaning_vi: 'Chung ta co the chuyen cuoc hop nay sang sang mai duoc khong?',
+    topic: 'meetings',
+    ...overrides
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Task 4.1 — chunking behaviour
 // ---------------------------------------------------------------------------
@@ -239,6 +249,34 @@ test('article_vocabulary read exposes classification and suggestion_type', async
   assert.equal(item.classification, 'article_phrase');
   assert.equal(item.suggestion_type, 'phrase');
   assert.equal(item.level, 'B1');
+});
+
+test('pipeline persists workplace sentence candidates for later feed serving', async () => {
+  const store = new WordStore({ seed: false });
+  const article = store.createArticle({
+    userId: 'user_sentence_pipeline',
+    title: 'Meeting coordination',
+    language: 'en',
+    rawText: 'Could we move this meeting to tomorrow morning?'
+  });
+
+  const adapter = {
+    suggestVocabulary() {
+      return [];
+    },
+    suggestWorkplaceSentences() {
+      return [makeSentenceSuggestion()];
+    }
+  };
+  const pipeline = new ArticleProcessingPipeline({ store, suggestionAdapter: adapter });
+
+  const result = await pipeline.processArticle({ articleId: article.id });
+
+  assert.equal(result.sentence_accepted_count, 1);
+  assert.equal(store.workplaceSentencesById.size, 1);
+  const persisted = [...store.workplaceSentencesById.values()][0];
+  assert.equal(persisted.text, 'Could we move this meeting to tomorrow morning?');
+  assert.equal(persisted.topic, 'meetings');
 });
 
 test('missing suggestion adapter returns adapter_missing classification in result', async () => {

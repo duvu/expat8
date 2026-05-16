@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { WordStore, normalizeSpeakingEvent, isSpeakingEvent, SPEAKING_EVENT_TYPES, toApiSpeakingPrompt } from '../src/word_store.js';
+import {
+  WordStore,
+  normalizeSpeakingEvent,
+  isSpeakingEvent,
+  SPEAKING_EVENT_TYPES,
+  toApiSpeakingPrompt,
+  toApiWorkplaceSentence
+} from '../src/word_store.js';
 
 test('prevents duplicate words by language and normalized term', () => {
   const store = new WordStore({ seed: false });
@@ -507,6 +514,44 @@ test('admin article vocabulary is NOT bridged into words pool (requires review)'
   // Word should NOT be in the words pool (pending_review)
   const wordTerms = [...store.words.values()].map((w) => w.term);
   assert.ok(!wordTerms.includes('curation'), 'admin article vocab should NOT be in words pool');
+});
+
+test('recentWorkplaceSentences only returns sentences linked to published articles and preserves dedupe across articles', () => {
+  const store = new WordStore({ seed: false });
+  const privateArticle = store.createArticle({
+    userId: 'owner_sentence_private',
+    title: 'Private meeting notes',
+    language: 'en',
+    rawText: 'Private article content'
+  });
+  const publishedArticle = store.createAdminArticle({
+    adminUserId: 'admin_sentence_published',
+    title: 'Published meeting notes',
+    language: 'en',
+    rawText: 'Published article content'
+  });
+
+  const sharedSentence = {
+    text: 'Could we move this meeting to tomorrow morning?',
+    language: 'en',
+    meaning_vi: 'Chung ta co the chuyen cuoc hop nay sang sang mai duoc khong?',
+    topic: 'meetings'
+  };
+
+  store.persistArticleWorkplaceSentences({ articleId: privateArticle.id, items: [sharedSentence] });
+  assert.deepEqual(store.recentWorkplaceSentences({ targetLanguage: 'en' }), []);
+
+  store.persistArticleWorkplaceSentences({ articleId: publishedArticle.id, items: [sharedSentence] });
+  store.publishArticle({ articleId: publishedArticle.id });
+
+  const recent = store.recentWorkplaceSentences({ targetLanguage: 'en' });
+  assert.equal(recent.length, 1);
+  assert.equal(recent[0].source_article_id, publishedArticle.id);
+  assert.equal(recent[0].source_title, 'Published meeting notes');
+
+  const apiSentence = toApiWorkplaceSentence(recent[0]);
+  assert.equal(apiSentence.text, sharedSentence.text);
+  assert.equal(apiSentence.topic, 'meetings');
 });
 
 test('additive cache claims are idempotent and filter unknown words', () => {

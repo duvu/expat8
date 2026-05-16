@@ -97,7 +97,7 @@
 
 | Time | Action | File(s) | Outcome | ~Tokens |
 |------|--------|---------|---------|--------|
-| 14:15 | Recorded host mapping for deploy ops | .wolf/cerebrum.md, .wolf/memory.md | `10.113.213.9` treated as local machine in this workspace | ~120 |
+| 14:15 | Recorded host mapping for deploy ops | .wolf/cerebrum.md, .wolf/memory.md | `<INTERNAL_HOST>` treated as local machine in this workspace | ~120 |
 | 15:24 | Created docs/20260509-swipe-right-to-left-new-word-invariant.md | — | ~1645 |
 | 15:24 | Session end: 29 writes across 14 files (word_store.js, postgres_word_store.js, app.js, architecture.md, proposal.md) | 14 reads | ~39738 tok |
 | 15:29 | Created openspec/changes/fix-swipe-right-to-left-new-word/proposal.md | — | ~379 |

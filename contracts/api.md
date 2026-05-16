@@ -368,6 +368,39 @@ Response:
 }
 ```
 
+## GET /v1/workplace-sentences/recent
+
+Query parameters:
+
+- `limit`: maximum returned sentence items, capped at `1000`
+- `target_language`: optional target language code, default `en`
+
+This endpoint returns prepared workplace sentence items for local bootstrap and
+background refill. It is read-only and MUST NOT trigger sentence generation in
+the request path.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "sentence_id": "sentence_123",
+      "text": "Could we move this meeting to tomorrow morning?",
+      "language": "en",
+      "meaning_vi": "Chung ta co the chuyen cuoc hop nay sang sang mai duoc khong?",
+      "topic": "meetings",
+      "source_article_id": "article_123",
+      "source_title": "How teams coordinate deadlines",
+      "generation_source": "article_workplace_sentence",
+      "created_at": "2026-05-16T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Only sentences from published source articles are eligible for this feed.
+
 ## PUT /v1/user-word-cache
 
 Replaces the backend's advisory inventory of server words currently stored on a

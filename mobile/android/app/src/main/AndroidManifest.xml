@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
-        android:label="expat8_language_app"
+        android:label="Expat8 – Learn English"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

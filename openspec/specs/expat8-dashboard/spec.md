@@ -13,7 +13,7 @@ The system SHALL provide a dashboard service named `expat8-dashboard` that can b
 - **THEN** the service starts and serves the admin dashboard UI
 
 ### Requirement: Dashboard supports article moderation workflows
-The system SHALL let admins upload articles, inspect processing state, review vocabulary, review speaking prompts linked to vocabulary, and publish reviewed content. The dashboard navigation SHALL also provide access to user management and learning statistics views.
+The system SHALL let admins upload articles, inspect processing state, review vocabulary, review speaking prompts linked to vocabulary, and publish reviewed content. Navigation to all sections SHALL be provided by the shared left sidebar — individual pages SHALL NOT render their own navigation headers.
 
 #### Scenario: Admin uploads an article
 - **WHEN** an admin submits title, language, raw text, and optional source URL
@@ -28,8 +28,12 @@ The system SHALL let admins upload articles, inspect processing state, review vo
 - **THEN** the dashboard displays editable target text, Vietnamese hint, target phrase, pronunciation tip, common mistake, difficulty, topic, and prompt status fields
 
 #### Scenario: Admin navigates to users section
-- **WHEN** the admin clicks the "Users" navigation link
+- **WHEN** the admin clicks the "Users" navigation link in the left sidebar
 - **THEN** the browser navigates to `/users` and renders the registered user list
+
+#### Scenario: No per-page navigation header is rendered
+- **WHEN** an admin loads any dashboard page
+- **THEN** the page body does not contain a duplicate `<header>` / `<nav>` block — all navigation is in the shared sidebar
 
 ### Requirement: Dashboard requests remain authenticated
 The system SHALL send backend requests using the existing app credential and admin token model.
@@ -48,4 +52,3 @@ The dashboard SHALL provide an admin workflow for finding speaking prompts that 
 #### Scenario: Admin approves a speaking prompt
 - **WHEN** an admin marks a speaking prompt as approved
 - **THEN** the dashboard persists the approved state through an authenticated backend request so the prompt can be served to eligible mobile cards
-

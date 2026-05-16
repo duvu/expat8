@@ -11,6 +11,7 @@ import '../models/article.dart';
 import '../models/proficiency_state.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
+import '../models/workplace_sentence.dart';
 
 class BackendApiClient {
   BackendApiClient({
@@ -236,6 +237,84 @@ class BackendApiClient {
         body['actual_mix'] as Map<String, dynamic>? ?? const {},
       ),
     );
+  }
+
+  Future<List<WorkplaceSentence>> fetchWorkplaceSentences({
+    int limit = 20,
+    String targetLanguage = 'en',
+    String? sessionToken,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/workplace-sentences/recent').replace(
+      queryParameters: {
+        'limit': '$limit',
+        'target_language': targetLanguage,
+      },
+    );
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'workplace_sentences.request',
+      message: 'Requesting workplace sentences from backend.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'limit': limit,
+        'target_language': targetLanguage,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'workplace_sentences.timeout',
+        message: 'Workplace sentence request timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'limit': limit,
+          'target_language': targetLanguage,
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'workplace_sentences.response',
+      message: 'Received workplace sentence response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+
+    _throwIfFailed(response, 'Workplace sentence batch failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['items'] as List? ?? const [];
+    return items
+        .map((item) => WorkplaceSentence.fromJson(item as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   Future<CacheInventoryResult> syncCacheInventory({
@@ -658,16 +737,20 @@ class BackendApiClient {
       return;
     }
     String? backendError;
+    String? backendReason;
     try {
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       backendError = body['error'] as String?;
+      backendReason = body['reason'] as String?;
     } catch (_) {
       backendError = null;
+      backendReason = null;
     }
     throw BackendApiException(
       '$context: ${response.statusCode}',
       statusCode: response.statusCode,
       backendError: backendError,
+      backendReason: backendReason,
     );
   }
 
@@ -963,6 +1046,78 @@ class BackendApiClient {
     return ((body['topics'] as List<dynamic>?) ?? [])
         .whereType<String>()
         .toList();
+  }
+
+  /// Checks whether the backend is ready without sending app credential headers.
+  Future<bool> checkBackendReadiness() async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/health/ready');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'health.ready.request',
+      message: 'Checking backend readiness.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await _httpClient.get(uri).timeout(timeout);
+      await _logger.info(
+        category: AppLogCategory.api,
+        event: 'health.ready.response',
+        message: 'Received backend readiness response.',
+        traceId: traceId,
+        context: {
+          'status_code': response.statusCode,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+        },
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return true;
+      }
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'health.ready.unhealthy',
+        message: 'Backend readiness probe reported unhealthy.',
+        traceId: traceId,
+        context: {
+          'status_code': response.statusCode,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+        },
+      );
+      return false;
+    } on TimeoutException catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'health.ready.timeout',
+        message: 'Backend readiness probe timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      return false;
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'health.ready.failed',
+        message: 'Backend readiness probe failed.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      return false;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
   }
 
   /// Calls `POST /v1/exam/start` to generate a new exam session.
@@ -1448,11 +1603,13 @@ class BackendApiException implements Exception {
     this.message, {
     this.statusCode,
     this.backendError,
+    this.backendReason,
   });
 
   final String message;
   final int? statusCode;
   final String? backendError;
+  final String? backendReason;
 
   @override
   String toString() => message;

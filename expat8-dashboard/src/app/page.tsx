@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { getDashboardSummaryStats, listAdminArticles } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,18 +14,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   ]);
 
   return (
-    <main>
-      <header className="page-header">
-        <h1>Expat8 Admin</h1>
-        <nav>
-          <Link href="/articles/new">New article</Link>{' '}
-          <Link href="/review">Vocabulary review</Link>{' '}
-          <Link href="/speaking-prompts">Speaking prompts</Link>{' '}
-          <Link href="/exam">Exam results</Link>{' '}
-          <Link href="/users">Users</Link>
-        </nav>
-      </header>
-
+    <PageShell title="Articles" actions={<Link href="/articles/new" className="button">New article</Link>}>
       <section className="stats-panel">
         <dl>
           <div>
@@ -96,6 +86,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </tbody>
         </table>
       </section>
-    </main>
+    </PageShell>
   );
 }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { listUsers } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,14 +15,7 @@ export default async function UsersPage({
   const users = await listUsers({ page });
 
   return (
-    <main>
-      <header className="page-header">
-        <h1>Users</h1>
-        <nav>
-          <Link href="/">Home</Link>
-        </nav>
-      </header>
-
+    <PageShell title="Users">
       <section className="table-panel">
         <table>
           <thead>
@@ -76,6 +70,6 @@ export default async function UsersPage({
           )}
         </div>
       </section>
-    </main>
+    </PageShell>
   );
 }

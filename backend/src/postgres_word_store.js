@@ -16,6 +16,7 @@ import {
   toApiSpeakingPrompt
 } from './word_store.js';
 import { normalizeSuggestionType } from './vocabulary_validator.js';
+import { normalizeSentenceText } from './workplace_sentence_validator.js';
 import {
   decrementLevel,
   getDefaultProficiencyLevel,
@@ -61,6 +62,7 @@ export class PostgresWordStore {
       difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
       topics_json: JSON.stringify(input.topics ?? []),
       entry_type: input.entry_type ?? 'word',
+      blank_word: input.blank_word ?? null,
       explanation: input.explanation ?? '',
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
@@ -82,12 +84,13 @@ export class PostgresWordStore {
         difficulty,
         topics_json,
         entry_type,
+        blank_word,
         explanation,
         generation_source,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       ON CONFLICT (language, normalized_term) DO NOTHING
       RETURNING *`,
       [
@@ -104,6 +107,7 @@ export class PostgresWordStore {
         row.difficulty,
         row.topics_json,
         row.entry_type,
+        row.blank_word,
         row.explanation,
         row.generation_source,
         row.created_at,
@@ -143,6 +147,26 @@ export class PostgresWordStore {
       [targetLanguage, Math.min(limit, 1000)]
     );
     return result.rows.map(rowToWord);
+  }
+
+  async recentWorkplaceSentences({ targetLanguage = 'en', limit = 1000 }) {
+    const result = await this.pool.query(
+      `SELECT * FROM (
+        SELECT DISTINCT ON (ws.id)
+          ws.*, a.id AS source_article_id, a.title AS source_title
+        FROM workplace_sentences ws
+        JOIN article_workplace_sentences aws ON aws.workplace_sentence_id = ws.id
+        JOIN articles a ON a.id = aws.article_id
+        WHERE ws.language = $1
+          AND a.status = 'published'
+          AND a.visibility = 'published'
+        ORDER BY ws.id, a.updated_at DESC, aws.created_at DESC
+      ) visible_sentences
+      ORDER BY updated_at DESC
+      LIMIT $2`,
+      [targetLanguage, Math.min(limit, 1000)]
+    );
+    return result.rows.map(rowToWorkplaceSentence);
   }
 
   async countUsableWords({ targetLanguage = 'en' } = {}) {
@@ -259,7 +283,8 @@ export class PostgresWordStore {
             observed_at,
             updated_at
           )
-          VALUES ($1, $2, $3, $4, $5)`,
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING`,
           [deviceId, userId, wordId, observedAt, now]
         );
       }
@@ -785,7 +810,10 @@ export class PostgresWordStore {
       [normalizedIdentifier]
     );
     const user = userResult.rows[0];
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user) {
+      throw new InvalidCredentialsError({ reason: 'user_not_found' });
+    }
+    if (!verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
     const sessionResult = await this.#createSessionForUser({
@@ -1279,6 +1307,11 @@ export class PostgresWordStore {
     if (!article) {
       return null;
     }
+    await this.pool.query(`DELETE FROM article_workplace_sentences WHERE article_id = $1`, [articleId]);
+    await this.pool.query(
+      `DELETE FROM workplace_sentences
+      WHERE id NOT IN (SELECT workplace_sentence_id FROM article_workplace_sentences)`
+    );
     await this.enqueueArticleProcessingJob({ articleId: article.id });
     return article;
   }
@@ -1486,6 +1519,7 @@ export class PostgresWordStore {
       const oldSenseIds = existingTermsResult.rows.map((r) => r.word_sense_id);
       await client.query(`DELETE FROM vocabulary_review_items WHERE article_id = $1`, [articleId]);
       await client.query(`DELETE FROM article_terms WHERE article_id = $1`, [articleId]);
+      await client.query(`DELETE FROM workplace_sentences WHERE source_article_id = $1`, [articleId]);
       if (oldSenseIds.length > 0) {
         await client.query(`DELETE FROM word_senses WHERE id = ANY($1)`, [oldSenseIds]);
       }
@@ -1600,6 +1634,84 @@ export class PostgresWordStore {
           );
         }
 
+        persistedCount += 1;
+      }
+
+      return { count: persistedCount };
+    });
+  }
+
+  async persistArticleWorkplaceSentences({ articleId, items = [] }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const articleResult = await client.query(
+        `SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [articleId]
+      );
+      const article = articleResult.rows[0];
+      if (!article) {
+        throw new Error('article_not_found');
+      }
+
+      await client.query(`DELETE FROM article_workplace_sentences WHERE article_id = $1`, [articleId]);
+      await client.query(
+        `DELETE FROM workplace_sentences
+        WHERE id NOT IN (SELECT workplace_sentence_id FROM article_workplace_sentences)`
+      );
+
+      const now = new Date().toISOString();
+      let persistedCount = 0;
+      const seen = new Set();
+
+      for (const item of items) {
+        const normalizedText = normalizeSentenceText(item.text);
+        const dedupeKey = `${item.language}:${normalizedText}`;
+        if (!normalizedText || seen.has(dedupeKey)) {
+          continue;
+        }
+        seen.add(dedupeKey);
+
+        const result = await client.query(
+          `INSERT INTO workplace_sentences (
+            id,
+            text,
+            normalized_text,
+            language,
+            meaning_vi,
+            topic,
+            generation_source,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+          ON CONFLICT (language, normalized_text) DO UPDATE
+          SET meaning_vi = EXCLUDED.meaning_vi,
+              topic = COALESCE(EXCLUDED.topic, workplace_sentences.topic),
+              updated_at = EXCLUDED.updated_at
+          RETURNING *`,
+          [
+            createId('sentence'),
+            item.text,
+            normalizedText,
+            item.language,
+            item.meaning_vi,
+            item.topic ?? null,
+            item.generation_source ?? 'article_workplace_sentence',
+            now
+          ]
+        );
+
+        const sentence = result.rows[0];
+        await client.query(
+          `INSERT INTO article_workplace_sentences (
+            id,
+            article_id,
+            workplace_sentence_id,
+            created_at
+          )
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (article_id, workplace_sentence_id) DO NOTHING`,
+          [createId('article_sentence'), articleId, sentence.id, now]
+        );
         persistedCount += 1;
       }
 
@@ -2006,6 +2118,22 @@ function rowToWord(row) {
     topics: JSON.parse(row.topics_json),
     entry_type: row.entry_type ?? 'word',
     explanation: row.explanation ?? '',
+    generation_source: row.generation_source,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function rowToWorkplaceSentence(row) {
+  return {
+    id: row.id,
+    text: row.text,
+    normalized_text: row.normalized_text,
+    language: row.language,
+    meaning_vi: row.meaning_vi,
+    topic: row.topic,
+    source_article_id: row.source_article_id,
+    source_title: row.source_title,
     generation_source: row.generation_source,
     created_at: row.created_at,
     updated_at: row.updated_at

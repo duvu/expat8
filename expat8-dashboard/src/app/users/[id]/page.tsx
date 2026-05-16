@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { getUserDetail, getUserProficiency, getUserStudyStats } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,14 +23,7 @@ export default async function UserDetailPage({
   }
 
   return (
-    <main>
-      <header className="page-header">
-        <h1>User Detail</h1>
-        <nav>
-          <Link href="/users">← Back to users</Link>
-        </nav>
-      </header>
-
+    <PageShell title="User Detail">
       {/* Profile header */}
       <section className="table-panel">
         <h2>Profile</h2>
@@ -150,6 +143,6 @@ export default async function UserDetailPage({
           </tbody>
         </table>
       </section>
-    </main>
+    </PageShell>
   );
 }

@@ -582,6 +582,50 @@ test('4.4 toApiWord includes entry_type and explanation in response shape', () =
   assert.equal(api.explanation, 'Dùng khi muốn tạo không khí thoải mái.');
 });
 
+test('4.4b toApiWord includes blank_word in response shape', () => {
+  const wordEntry = {
+    id: 'w_word',
+    term: 'serendipity',
+    language: 'en',
+    meaning_vi: 'sự may mắn tình cờ',
+    part_of_speech: 'noun',
+    ipa: '/ˌserənˈdɪpɪti/',
+    vietnamese_pronunciation: 'se-ren-dip-i-ti',
+    example: 'Finding that old friend was pure serendipity.',
+    example_vi: 'Gặp lại người bạn cũ đó thật là sự may mắn tình cờ.',
+    difficulty: 'B2',
+    topics: [],
+    entry_type: 'word',
+    blank_word: null,
+    explanation: '',
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z'
+  };
+  const apiWord = toApiWord(wordEntry);
+  assert.equal(apiWord.blank_word, null, 'word entry_type should have null blank_word');
+
+  const phraseEntry = {
+    id: 'w_phrase',
+    term: 'break the ice',
+    language: 'en',
+    meaning_vi: 'phá vỡ bầu không khí',
+    part_of_speech: 'phrase',
+    ipa: '',
+    vietnamese_pronunciation: '',
+    example: 'He told a joke to break the ice at the party.',
+    example_vi: 'Anh ấy kể một trò đùa để phá vỡ bầu không khí tại buổi tiệc.',
+    difficulty: 'B1',
+    topics: [],
+    entry_type: 'phrase',
+    blank_word: 'ice',
+    explanation: '',
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z'
+  };
+  const apiPhrase = toApiWord(phraseEntry);
+  assert.equal(apiPhrase.blank_word, 'ice', 'phrase entry_type should include blank_word');
+});
+
 test('4.5 phrase/idiom inserted with empty ipa and part_of_speech is accepted without error', () => {
   const store = makeStore();
   const result = store.insertWord({

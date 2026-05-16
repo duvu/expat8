@@ -1,6 +1,6 @@
 /**
- * E2E test against production backend at https://expat8.x51.vn
- * Run: node backend/test/e2e_prod_test.mjs
+ * E2E test against a production backend.
+ * Run: BACKEND_URL=https://... APP_ID=... APP_SECRET=... RUN_PROD_E2E=1 node backend/test/e2e_prod_test.mjs
  */
 
 import crypto from 'node:crypto';
@@ -10,9 +10,17 @@ if (process.env.RUN_PROD_E2E !== '1') {
   process.exit(0);
 }
 
-const BASE_URL = process.env.BACKEND_URL ?? 'https://expat8.x51.vn';
-const APP_ID = process.env.APP_ID ?? 'expat8-mobile-app';
-const APP_SECRET = process.env.APP_SECRET ?? 'expat8-mobile-secret';
+const BASE_URL = process.env.BACKEND_URL;
+const APP_ID = process.env.APP_ID;
+const APP_SECRET = process.env.APP_SECRET;
+
+if (!BASE_URL || !APP_ID || !APP_SECRET) {
+  console.error(
+    'Production E2E test requires BACKEND_URL, APP_ID, and APP_SECRET environment variables.\n' +
+    'Example: BACKEND_URL=https://your-backend.example.com APP_ID=your-app-id APP_SECRET=<YOUR_APP_SECRET> RUN_PROD_E2E=1 node backend/test/e2e_prod_test.mjs'
+  );
+  process.exit(0);
+}
 const DEVICE_ID = `e2e_test_${Date.now()}`;
 
 let passed = 0;

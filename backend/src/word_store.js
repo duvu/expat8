@@ -12,6 +12,7 @@ import {
   requireStudyRating
 } from './proficiency.js';
 import { normalizeSuggestionType } from './vocabulary_validator.js';
+import { normalizeSentenceText } from './workplace_sentence_validator.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -46,6 +47,8 @@ export class WordStore {
     this.vocabularyReviewItemsById = new Map();
     this.contentPacksById = new Map();
     this.articleProcessingJobsById = new Map();
+    this.workplaceSentencesById = new Map();
+    this.articleWorkplaceSentenceLinksById = new Map();
     this.termsById = new Map();
     this.wordSensesById = new Map();
     this.articleTermsById = new Map();
@@ -92,6 +95,7 @@ export class WordStore {
       difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
       topics: input.topics ?? [],
       entry_type: input.entry_type ?? 'word',
+      blank_word: input.blank_word ?? null,
       explanation: input.explanation ?? '',
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
@@ -104,6 +108,32 @@ export class WordStore {
   recentWords({ targetLanguage = 'en', limit = 1000 }) {
     return [...this.words.values()]
       .filter((word) => word.language === targetLanguage)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, Math.min(limit, 1000));
+  }
+
+  recentWorkplaceSentences({ targetLanguage = 'en', limit = 1000 }) {
+    return [...this.workplaceSentencesById.values()]
+      .filter((sentence) => sentence.language === targetLanguage)
+      .map((sentence) => {
+        const sourceLink = [...this.articleWorkplaceSentenceLinksById.values()].find((link) => {
+          if (link.workplace_sentence_id !== sentence.id) {
+            return false;
+          }
+          const article = this.articlesById.get(link.article_id);
+          return article?.status === 'published' && article?.visibility === 'published';
+        });
+        if (!sourceLink) {
+          return null;
+        }
+        const article = this.articlesById.get(sourceLink.article_id);
+        return {
+          ...sentence,
+          source_article_id: article?.id ?? null,
+          source_title: article?.title ?? null
+        };
+      })
+      .filter(Boolean)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, Math.min(limit, 1000));
   }
@@ -493,7 +523,10 @@ export class WordStore {
   createUserSession({ identifier, password, deviceId = null }) {
     const normalizedIdentifier = normalizeUserIdentifier(identifier);
     const user = this.usersByIdentifier.get(normalizedIdentifier);
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user) {
+      throw new InvalidCredentialsError({ reason: 'user_not_found' });
+    }
+    if (!verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
     const session = this.#createSessionForUser({ user, deviceId });
@@ -711,6 +744,12 @@ export class WordStore {
         this.vocabularyReviewItemsById.delete(id);
       }
     }
+    for (const [id, link] of this.articleWorkplaceSentenceLinksById) {
+      if (link.article_id === articleId) {
+        this.articleWorkplaceSentenceLinksById.delete(id);
+      }
+    }
+    this.#pruneOrphanWorkplaceSentences();
 
     article.status = 'pending_processing';
     article.processing_error = null;
@@ -1070,6 +1109,76 @@ export class WordStore {
       persisted.push({ term, sense, articleTerm, reviewItem });
     }
     return { count: persisted.length, items: persisted };
+  }
+
+  persistArticleWorkplaceSentences({ articleId, items = [] }) {
+    const article = this.articlesById.get(articleId);
+    if (!article) {
+      throw new Error('article_not_found');
+    }
+
+    for (const [id, link] of this.articleWorkplaceSentenceLinksById) {
+      if (link.article_id === articleId) {
+        this.articleWorkplaceSentenceLinksById.delete(id);
+      }
+    }
+    this.#pruneOrphanWorkplaceSentences();
+
+    const now = new Date().toISOString();
+    const persisted = [];
+    const seen = new Set();
+    for (const item of items) {
+      const normalizedText = normalizeSentenceText(item.text);
+      const dedupeKey = `${item.language}:${normalizedText}`;
+      if (!normalizedText || seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+
+      let sentence = [...this.workplaceSentencesById.values()].find(
+        (sentence) => sentence.language === item.language && sentence.normalized_text === normalizedText
+      );
+      if (!sentence) {
+        sentence = {
+          id: createId('sentence'),
+          text: item.text,
+          normalized_text: normalizedText,
+          language: item.language,
+          meaning_vi: item.meaning_vi,
+          topic: item.topic ?? null,
+          generation_source: item.generation_source ?? 'article_workplace_sentence',
+          created_at: now,
+          updated_at: now
+        };
+        this.workplaceSentencesById.set(sentence.id, sentence);
+      }
+
+      const link = {
+        id: createId('article_sentence'),
+        article_id: articleId,
+        workplace_sentence_id: sentence.id,
+        created_at: now
+      };
+      this.articleWorkplaceSentenceLinksById.set(link.id, link);
+      persisted.push({
+        ...sentence,
+        source_article_id: article.id,
+        source_title: article.title ?? null
+      });
+    }
+
+    return { count: persisted.length, items: persisted };
+  }
+
+  #pruneOrphanWorkplaceSentences() {
+    const linkedSentenceIds = new Set(
+      [...this.articleWorkplaceSentenceLinksById.values()].map((link) => link.workplace_sentence_id)
+    );
+    for (const [id] of this.workplaceSentencesById) {
+      if (!linkedSentenceIds.has(id)) {
+        this.workplaceSentencesById.delete(id);
+      }
+    }
   }
 
   // ─── Exam methods ────────────────────────────────────────────────────────
@@ -1540,6 +1649,20 @@ export function toApiSpeakingPrompt(prompt) {
   };
 }
 
+export function toApiWorkplaceSentence(sentence) {
+  return {
+    sentence_id: sentence.id,
+    text: sentence.text,
+    language: sentence.language,
+    meaning_vi: sentence.meaning_vi,
+    topic: sentence.topic ?? null,
+    source_article_id: sentence.source_article_id ?? null,
+    source_title: sentence.source_title ?? null,
+    generation_source: sentence.generation_source ?? 'article_workplace_sentence',
+    created_at: sentence.created_at
+  };
+}
+
 export function toApiWord(word) {
   const result = {
     server_word_id: word.id,
@@ -1554,6 +1677,7 @@ export function toApiWord(word) {
     difficulty: word.difficulty,
     topics: word.topics,
     entry_type: word.entry_type ?? 'word',
+    blank_word: word.blank_word ?? null,
     explanation: word.explanation ?? '',
     created_at: word.created_at
   };

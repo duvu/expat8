@@ -7,7 +7,7 @@
       "error_message": "Permission denied (publickey,password) when SSHing to Z440 for deploy",
       "file": "deployment/worker-z440/ssh/id_ed25519",
       "root_cause": "Initial deploy attempt used password-based SSH from the shell, but the host required the pre-provisioned key path from the deployment repo",
-      "fix": "Deployed with `ssh -i /home/beou/deployment/worker-z440/ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes beou@10.113.213.9` and then ran `git pull && docker compose up -d --force-recreate expat8-backend`",
+      "fix": "Deployed with `ssh -i /home/beou/deployment/worker-z440/ssh/id_ed25519 -o IdentitiesOnly=yes -o BatchMode=yes beou@<INTERNAL_HOST>` and then ran `git pull && docker compose up -d --force-recreate expat8-backend`",
       "tags": [
         "deploy",
         "ssh",

@@ -5,7 +5,7 @@
 // Usage:
 //   node scripts/generate-seed-vocabulary.mjs                  # default 1000 per language
 //   TARGET_PER_LANGUAGE=500 node scripts/generate-seed-vocabulary.mjs
-//   BACKEND_URL=https://expat8.x51.vn node scripts/generate-seed-vocabulary.mjs
+//   BACKEND_URL=<YOUR_BACKEND_URL> node scripts/generate-seed-vocabulary.mjs
 //
 // Required env (or .env.example defaults):
 //   APP_ID, APP_SECRET — must match an active credential the backend trusts.
@@ -23,7 +23,7 @@ const ASSETS_DIR = path.join(REPO_ROOT, 'mobile', 'assets', 'seed_vocab');
 
 const BACKEND_URL = (process.env.BACKEND_URL ?? 'http://localhost:8787').replace(/\/$/, '');
 const APP_ID = process.env.APP_ID ?? 'expat8-mobile-app';
-const APP_SECRET = process.env.APP_SECRET ?? 'expat8-mobile-secret';
+const APP_SECRET = process.env.APP_SECRET ?? '<YOUR_APP_SECRET>';
 const TARGET_PER_LANGUAGE = Number.parseInt(process.env.TARGET_PER_LANGUAGE ?? '1000', 10);
 const LANGUAGES = (process.env.LANGUAGES ?? 'en,zh,vi').split(',').map((l) => l.trim()).filter(Boolean);
 const BATCH_LIMIT = 100;

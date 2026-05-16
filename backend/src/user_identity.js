@@ -8,9 +8,10 @@ export class DuplicateUserError extends Error {
 }
 
 export class InvalidCredentialsError extends Error {
-  constructor() {
+  constructor({ reason = null } = {}) {
     super('invalid user credentials');
     this.name = 'InvalidCredentialsError';
+    this.reason = reason;
   }
 }
 

@@ -16,7 +16,7 @@ Entrypoint: `node src/worker.js` (npm script: `npm run start:worker`)
 ## Production Deployment (Z440)
 
 Service name: `expat8-worker`
-Image: same as `expat8-backend` (`docker.x51.vn/x-ai/expat8-backend:<tag>`)
+Image: same as `expat8-backend` (`<YOUR_REGISTRY>/expat8-backend:<tag>`)
 Compose file: `/home/beou/deployment/worker-z440/docker-compose.yml`
 
 The worker runs alongside `expat8-backend` and shares the same PostgreSQL database and LiteLLM configuration.
@@ -26,7 +26,7 @@ The worker runs alongside `expat8-backend` and shares the same PostgreSQL databa
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | required | PostgreSQL connection string |
-| `LITELLM_BASE_URL` | `http://10.113.213.1:5003` | LiteLLM endpoint |
+| `LITELLM_BASE_URL` | `http://<YOUR_LITELLM_URL>` | LiteLLM endpoint |
 | `LITELLM_API_KEY` | — | LiteLLM API key |
 | `LITELLM_MODEL` | `editor8-gpt` | Model name |
 | `ARTICLE_WORKER_INTERVAL_MS` | `1000` | Poll interval in milliseconds |

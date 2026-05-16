@@ -1,5 +1,6 @@
 import { normalizeDifficultyLevel } from './proficiency.js';
 import { normalizeSuggestionType } from './vocabulary_validator.js';
+import { normalizeSentenceText } from './workplace_sentence_validator.js';
 
 export class VocabularyEnrichmentAdapter {
   constructor({ liteLLMClient = null, logger = console, sourceLanguage = 'vi' } = {}) {
@@ -23,6 +24,32 @@ export class VocabularyEnrichmentAdapter {
     }
 
     return this.#fallbackSuggestions({ article, chunk, chunkIndex, maxSuggestions });
+  }
+
+  async suggestWorkplaceSentences({ article, chunk, chunkIndex = 0, maxSuggestions = 5 }) {
+    if (article.language !== 'en') {
+      return [];
+    }
+
+    if (this.liteLLMClient) {
+      const aiResult = await this.#suggestWorkplaceSentencesWithAI({
+        article,
+        chunk,
+        chunkIndex,
+        maxSuggestions
+      });
+      if (aiResult.ok) {
+        return aiResult.items;
+      }
+      this.logger.warn?.('article_workplace_sentence_failed', {
+        article_id: article.id,
+        chunk_index: chunkIndex,
+        classification: aiResult.classification,
+        reason: aiResult.reason
+      });
+    }
+
+    return this.#fallbackWorkplaceSentences({ article, chunk, maxSuggestions });
   }
 
   async #suggestWithAI({ article, chunk, chunkIndex, maxSuggestions }) {
@@ -49,6 +76,41 @@ export class VocabularyEnrichmentAdapter {
         items: parsed
           .slice(0, maxSuggestions)
           .map((item) => this.#normalizeSuggestion(item, { article, chunk, chunkIndex }))
+          .filter((item) => item !== null)
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        classification: 'ai_request_failed',
+        reason: `${error}`
+      };
+    }
+  }
+
+  async #suggestWorkplaceSentencesWithAI({ article, chunk, chunkIndex, maxSuggestions }) {
+    try {
+      const content = await this.liteLLMClient.generateArticleWorkplaceSentenceSuggestions({
+        sourceLanguage: this.sourceLanguage,
+        targetLanguage: article.language,
+        chunk,
+        chunkIndex,
+        maxSuggestions,
+        articleTitle: article.title,
+        articleLanguage: article.language
+      });
+      const parsed = parseSuggestions(content);
+      if (parsed.length === 0) {
+        return {
+          ok: false,
+          classification: 'malformed_json',
+          reason: 'invalid_ai_output_json'
+        };
+      }
+      return {
+        ok: true,
+        items: parsed
+          .slice(0, maxSuggestions)
+          .map((item) => this.#normalizeWorkplaceSentence(item, { article }))
           .filter((item) => item !== null)
       };
     } catch (error) {
@@ -93,6 +155,29 @@ export class VocabularyEnrichmentAdapter {
     }, { article, chunk, chunkIndex })).filter(Boolean);
   }
 
+  #fallbackWorkplaceSentences({ article, chunk, maxSuggestions }) {
+    const sentences = String(chunk ?? '')
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => normalizeSentenceText(sentence).split(' ').filter(Boolean).length >= 4);
+
+    return sentences.slice(0, maxSuggestions).map((text, index) => {
+      const normalized = normalizeSentenceText(text);
+      if (!normalized) {
+        return null;
+      }
+      return {
+        text,
+        language: article.language,
+        meaning_vi: `Cau giao tiep cong viec: ${normalized}`,
+        topic: 'work',
+        confidence: Number((0.5 + (index * 0.05)).toFixed(2)),
+        isStub: true,
+        generation_source: 'article_workplace_sentence'
+      };
+    }).filter(Boolean);
+  }
+
   #normalizeSuggestion(item, { article, chunk, chunkIndex }) {
     const term = String(item.term ?? '').trim();
     if (!term) {
@@ -119,10 +204,27 @@ export class VocabularyEnrichmentAdapter {
       confidence: Number(item.confidence ?? item.quality_score ?? 0.5),
       quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
       article_chunk_index: chunkIndex,
-      article_chunk_text: chunk
+      article_chunk_text: chunk,
+      blank_word: null
     };
 
     return normalized;
+  }
+
+  #normalizeWorkplaceSentence(item, { article }) {
+    const text = String(item.text ?? '').trim();
+    if (!text) {
+      return null;
+    }
+
+    return {
+      text,
+      language: String(item.language ?? article.language ?? '').trim() || article.language,
+      meaning_vi: String(item.meaning_vi ?? '').trim() || `Cau giao tiep cong viec: ${text}`,
+      topic: String(item.topic ?? 'work').trim() || 'work',
+      confidence: Number(item.confidence ?? item.quality_score ?? 0.5),
+      generation_source: 'article_workplace_sentence'
+    };
   }
 }
 

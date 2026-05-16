@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 
 import { backendFetch } from '@/lib/backend';
 import { listPendingVocabulary } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,8 +25,7 @@ export default async function ReviewPage() {
   const items = await listPendingVocabulary();
 
   return (
-    <main>
-      <h1>Vocabulary review</h1>
+    <PageShell title="Vocabulary Review">
       <section className="table-panel">
       <table>
         <thead>
@@ -74,6 +74,6 @@ export default async function ReviewPage() {
         </tbody>
       </table>
       </section>
-    </main>
+    </PageShell>
   );
 }
