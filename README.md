@@ -35,10 +35,10 @@ Mobile compile-time values:
 
 ```bash
 flutter run \
-	--dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+	--dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
 	--dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
 	--dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-	--dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+	--dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
 
 Mobile card loading uses `POST /v1/learning/cards` with `card_mode: "new"`.
@@ -78,8 +78,50 @@ docker compose down
 
 The Compose stack builds the ExpressJS backend image, starts PostgreSQL,
 initializes the database from `backend/db/schema.sql`, and exposes the backend
-on `http://localhost:${BACKEND_PORT:-8787}`. The dashboard can be started in the
-same Compose stack once the `expat8-dashboard` service is added. LiteLLM is
-optional for local smoke tests. Without a reachable LiteLLM server or API key,
-the backend falls back to stored words and rejects failed generation attempts
-without exposing sensitive data.
+on `http://localhost:${BACKEND_PORT:-8787}`. The `expat8-dashboard` service is
+already wired in `docker-compose.yml`. LiteLLM is optional for local smoke
+tests. Without a reachable LiteLLM server or API key, the backend falls back to
+stored words and rejects failed generation attempts without exposing sensitive
+data.
+
+## Roadmap
+
+### v1 — Internal Milestone (current)
+
+The v1 milestone covers the full offline-first vocabulary learning loop, speaking foundation (local drill only), and vocabulary exam.
+
+**Shipped**
+
+| Feature | Notes |
+|---|---|
+| Vocabulary flashcard (SRS) | Swipe + FITB card modes; local-first from ObjectBox |
+| Adaptive CEFR proficiency | English A1→C2; auto-upgrade/downgrade from rating history |
+| Adaptive HSK proficiency | Chinese HSK1→HSK6; same mechanics |
+| User accounts | Register, sign-in, sign-out, anonymous fallback via `device_id` |
+| Study event sync | Single and batch; offline queue with retry |
+| Article-based vocabulary | LLM enrichment pipeline; admin publish flow |
+| Speaking foundation | Local record + playback + self-rate drill; behavioral event sync (no audio upload) |
+| Weekly speaking summary | `GET /v1/speaking/summary` |
+| Vocabulary exam | Language-scoped MCQ; auto-advance on tap; results + shareable certificate |
+| Admin dashboard | Article management, vocabulary review, speaking prompt review |
+| App credential security | HMAC signing on all `/v1/*` requests; nonce replay protection |
+
+**Code complete — pending device verification**
+
+| Change | Status |
+|---|---|
+| Exam auto-advance flow | Code done; manual device test outstanding |
+| Exam results screen fix | Code done; manual device test outstanding |
+| Certificate screen API client fix | Code done; manual device test outstanding |
+| Swipe local prefetch + smart prune | Code done; manual device test outstanding |
+
+### Beyond v1
+
+| Phase | Target | Key capability |
+|---|---|---|
+| v1.1 | Near-term | AI pronunciation feedback (server-side audio analysis) |
+| v1.2 | 3-6 months | Personalized speaking path by goal, CEFR, weak sounds |
+| v2 | 6-12 months | AI conversational role-play coach |
+| v3 | 12-24 months | Paid plans, human feedback, community speaking |
+
+See `docs/20260509-expat8-product-roadmap-2026-2028.md` for the full 2-year vision.
