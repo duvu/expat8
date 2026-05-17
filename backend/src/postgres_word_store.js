@@ -546,7 +546,9 @@ export class PostgresWordStore {
           occurred_at,
           received_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        SELECT $1, $2, $3, $4, $5,
+          (SELECT id FROM words WHERE id = $6 LIMIT 1),
+          $7, $8, $9, $10
         ON CONFLICT (client_event_id) DO NOTHING
         RETURNING *`,
         [

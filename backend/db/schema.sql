@@ -12,6 +12,7 @@ CREATE TABLE words (
   difficulty TEXT NOT NULL,
   topics_json TEXT NOT NULL,
   entry_type TEXT NOT NULL DEFAULT 'word',
+  blank_word TEXT,
   explanation TEXT NOT NULL DEFAULT '',
   generation_source TEXT NOT NULL,
   created_at TEXT NOT NULL,
