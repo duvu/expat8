@@ -86,7 +86,7 @@
     },
     {
       "id": "3:8516035737042230106",
-      "lastPropertyId": "20:1231534066534358010",
+      "lastPropertyId": "22:2815687485679262804",
       "name": "LocalWordEntity",
       "properties": [
         {
@@ -201,6 +201,20 @@
           "id": "20:1231534066534358010",
           "name": "explanation",
           "type": 9
+        },
+        {
+          "id": "21:7321897576493477191",
+          "name": "learningState",
+          "indexId": "37:4098806720918912800",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "22:2815687485679262804",
+          "name": "learningStateAtMs",
+          "indexId": "38:3998636556806580351",
+          "type": 6,
+          "flags": 8
         }
       ],
       "relations": []
@@ -530,7 +544,7 @@
     },
     {
       "id": "9:7623126289449930472",
-      "lastPropertyId": "14:5135544224436699283",
+      "lastPropertyId": "16:6434398058747500286",
       "name": "LocalWorkplaceSentenceEntity",
       "properties": [
         {
@@ -613,13 +627,60 @@
           "id": "14:5135544224436699283",
           "name": "updatedAtMs",
           "type": 6
+        },
+        {
+          "id": "15:4494176078376399146",
+          "name": "learningState",
+          "indexId": "39:974236529602551773",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "16:6434398058747500286",
+          "name": "learningStateAtMs",
+          "indexId": "40:2227461795146005189",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "10:8684125017994145344",
+      "lastPropertyId": "4:2463553389133121710",
+      "name": "LearningHistoryEntity",
+      "properties": [
+        {
+          "id": "1:3194772920161611213",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:719476831379784014",
+          "name": "snapshotJson",
+          "type": 9
+        },
+        {
+          "id": "3:8656097539817571863",
+          "name": "learningState",
+          "indexId": "35:8217938479671569544",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:2463553389133121710",
+          "name": "occurredAtMs",
+          "indexId": "36:4882799473228111344",
+          "type": 6,
+          "flags": 8
         }
       ],
       "relations": []
     }
   ],
-  "lastEntityId": "9:7623126289449930472",
-  "lastIndexId": "34:7547890276824839143",
+  "lastEntityId": "10:8684125017994145344",
+  "lastIndexId": "40:2227461795146005189",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

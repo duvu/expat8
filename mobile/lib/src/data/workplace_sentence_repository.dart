@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../api/backend_api_client.dart';
 import '../logging/logger.dart';
+import '../models/learning_progress.dart';
 import '../models/user_session.dart';
 import '../models/workplace_sentence.dart';
 import 'local_database.dart';
@@ -89,6 +90,35 @@ class WorkplaceSentenceRepository {
     required DateTime now,
   }) {
     return database.markWorkplaceSentenceSeen(sentence: sentence, now: now);
+  }
+
+  Future<void> markSentenceLearned({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) {
+    return database.markSentenceLearned(sentence: sentence, now: now);
+  }
+
+  Future<void> markSentenceRemembered({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) {
+    return database.markSentenceRemembered(sentence: sentence, now: now);
+  }
+
+  Future<void> markSentenceDifficult({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) {
+    return database.markSentenceDifficult(sentence: sentence, now: now);
+  }
+
+  Future<List<LearningHistoryEntry>> loadLearningHistory({int limit = -1}) {
+    return database.getLearningHistory(limit: limit);
+  }
+
+  Future<LearningProgressTotals> loadLearningProgressTotals() {
+    return database.getLearningProgressTotals();
   }
 
   Future<int> topUpInventoryIfNeeded() async {

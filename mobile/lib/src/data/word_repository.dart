@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../api/backend_api_client.dart';
 import '../config.dart';
 import '../logging/logger.dart';
+import '../models/learning_progress.dart';
 import '../models/proficiency_state.dart';
 import '../models/study_event.dart';
 import '../models/user_session.dart';
@@ -314,7 +315,7 @@ class WordRepository {
 
   Future<WordLookupResult> getRecentReviewWordResult(DateTime now,
       {String language = 'en'}) async {
-    final recent = await database.recentlyLearnedReviewWord(language: language);
+    final recent = await database.recentlyLearnedReviewWord(now, language: language);
     if (recent != null) {
       await _logger.debug(
         category: AppLogCategory.session,
@@ -553,6 +554,29 @@ class WordRepository {
       cacheSyncDeferredMessage: 'Deferred cache sync after difficult gesture.',
       onProficiency: onProficiency,
     );
+  }
+
+  Future<void> recordLearnedGesture({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    await database.markWordLearned(word: word, now: now);
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'gesture.learned.local_state_updated',
+      message: 'Applied learned gesture update locally.',
+      context: {
+        'word_id': word.serverWordId ?? word.localId,
+      },
+    );
+  }
+
+  Future<List<LearningHistoryEntry>> loadLearningHistory({int limit = -1}) {
+    return database.getLearningHistory(limit: limit);
+  }
+
+  Future<LearningProgressTotals> loadLearningProgressTotals() {
+    return database.getLearningProgressTotals();
   }
 
   Future<void> _recordGestureStudyAction({
@@ -808,6 +832,36 @@ class WordRepository {
       count: logs.length,
       fileName: fileName,
     );
+  }
+
+  Future<LogExportResult> sendLogsToServer({
+    AppLogLevel? minimumLevel,
+    AppLogCategory? category,
+    DateTime? from,
+    DateTime? to,
+    int limit = 2000,
+  }) async {
+    final export = await exportLogs(
+      minimumLevel: minimumLevel,
+      category: category,
+      from: from,
+      to: to,
+      limit: limit,
+    );
+    if (export.count == 0) {
+      return export;
+    }
+
+    final session = await database.loadUserSession();
+    final deviceId = await getOrCreateDeviceId();
+    await apiClient.uploadLogArchive(
+      payload: export.payload,
+      fileName: export.fileName,
+      deviceId: deviceId,
+      sessionToken: session?.sessionToken,
+      contentType: '${export.mimeType}; charset=utf-8',
+    );
+    return export;
   }
 
   String _formatLogExportPayload(List<LogEntry> logs, DateTime exportedAt) {

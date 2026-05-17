@@ -38,7 +38,7 @@ The `backend/.env` file (and any `.env.local`, `.env.production`, etc.) MUST be 
 
 #### Scenario: `.env.example` is checked in
 - **WHEN** `backend/.env.example` is reviewed
-- **THEN** all secret-valued fields contain placeholder strings (e.g., `dev-secret-change-me`, `CHANGE_ME`) and not real production or staging credentials
+- **THEN** all secret-valued fields contain placeholder strings (e.g., `<YOUR_APP_SECRET>`, `CHANGE_ME`) and not real production or staging credentials
 
 ### Requirement: Memory and ephemeral files SHALL NOT expose internal network topology
 Files in `.serena/` or similar AI-agent memory directories that are committed to the repository MUST NOT contain internal server IP addresses, internal hostnames, or private Docker registry paths. Such values MUST be redacted to `<INTERNAL_IP>`, `<INTERNAL_HOST>`, or `<PRIVATE_REGISTRY>` before commit.

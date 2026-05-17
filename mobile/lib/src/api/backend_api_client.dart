@@ -676,6 +676,83 @@ class BackendApiClient {
     _throwIfFailed(response, 'Sign-out failed');
   }
 
+  Future<void> uploadLogArchive({
+    required String payload,
+    required String fileName,
+    required String deviceId,
+    String? sessionToken,
+    String sourceLabel = 'mobile',
+    String contentType = 'text/plain; charset=utf-8',
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/mobile/log-archives');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'log_archive.upload.request',
+      message: 'Uploading sanitized log archive.',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'file_name': fileName,
+        'device_id': deviceId,
+        'has_session_token': sessionToken != null,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': contentType,
+              'x-expat8-device-id': deviceId,
+              'x-expat8-log-source': sourceLabel,
+              'x-expat8-log-filename': fileName,
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+                sessionToken: sessionToken,
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'log_archive.upload.timeout',
+        message: 'Log archive upload timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'file_name': fileName,
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+        },
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) {
+        stopwatch.stop();
+      }
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'log_archive.upload.response',
+      message: 'Received log archive upload response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Log archive upload failed');
+  }
+
   /// Fetches the weekly speaking summary for [deviceId] (and optionally
   /// a signed-in user via [sessionToken]).
   Future<SpeakingWeeklySummary> fetchSpeakingSummary({

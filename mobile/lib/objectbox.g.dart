@@ -112,7 +112,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 8516035737042230106),
     name: 'LocalWordEntity',
-    lastPropertyId: const obx_int.IdUid(20, 1231534066534358010),
+    lastPropertyId: const obx_int.IdUid(22, 2815687485679262804),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -240,6 +240,20 @@ final _entities = <obx_int.ModelEntity>[
         name: 'explanation',
         type: 9,
         flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(21, 7321897576493477191),
+        name: 'learningState',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(37, 4098806720918912800),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(22, 2815687485679262804),
+        name: 'learningStateAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(38, 3998636556806580351),
       ),
     ],
     relations: <obx_int.ModelRelation>[],
@@ -605,7 +619,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(9, 7623126289449930472),
     name: 'LocalWorkplaceSentenceEntity',
-    lastPropertyId: const obx_int.IdUid(14, 5135544224436699283),
+    lastPropertyId: const obx_int.IdUid(16, 6434398058747500286),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -697,6 +711,56 @@ final _entities = <obx_int.ModelEntity>[
         type: 6,
         flags: 0,
       ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(15, 4494176078376399146),
+        name: 'learningState',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(39, 974236529602551773),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(16, 6434398058747500286),
+        name: 'learningStateAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(40, 2227461795146005189),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(10, 8684125017994145344),
+    name: 'LearningHistoryEntity',
+    lastPropertyId: const obx_int.IdUid(4, 2463553389133121710),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3194772920161611213),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 719476831379784014),
+        name: 'snapshotJson',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 8656097539817571863),
+        name: 'learningState',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(35, 8217938479671569544),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 2463553389133121710),
+        name: 'occurredAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(36, 4882799473228111344),
+      ),
     ],
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
@@ -741,8 +805,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(9, 7623126289449930472),
-    lastIndexId: const obx_int.IdUid(34, 7547890276824839143),
+    lastEntityId: const obx_int.IdUid(10, 8684125017994145344),
+    lastIndexId: const obx_int.IdUid(40, 2227461795146005189),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -903,7 +967,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final statusOffset = fbb.writeString(object.status);
         final entryTypeOffset = fbb.writeString(object.entryType);
         final explanationOffset = fbb.writeString(object.explanation);
-        fbb.startTable(21);
+        final learningStateOffset = fbb.writeString(object.learningState);
+        fbb.startTable(23);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, localIdOffset);
         fbb.addOffset(2, serverWordIdOffset);
@@ -924,6 +989,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addInt64(17, object.updatedAtMs);
         fbb.addOffset(18, entryTypeOffset);
         fbb.addOffset(19, explanationOffset);
+        fbb.addOffset(20, learningStateOffset);
+        fbb.addInt64(21, object.learningStateAtMs);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -1003,6 +1070,14 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final explanationParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGet(buffer, rootOffset, 42, '');
+        final learningStateParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 44, '');
+        final learningStateAtMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          46,
+        );
         final object = LocalWordEntity(
           id: idParam,
           localId: localIdParam,
@@ -1024,6 +1099,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
           updatedAtMs: updatedAtMsParam,
           entryType: entryTypeParam,
           explanation: explanationParam,
+          learningState: learningStateParam,
+          learningStateAtMs: learningStateAtMsParam,
         );
 
         return object;
@@ -1521,7 +1598,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
               object.generationSource,
             );
             final statusOffset = fbb.writeString(object.status);
-            fbb.startTable(15);
+            final learningStateOffset = fbb.writeString(object.learningState);
+            fbb.startTable(17);
             fbb.addInt64(0, object.id);
             fbb.addOffset(1, localIdOffset);
             fbb.addOffset(2, serverSentenceIdOffset);
@@ -1536,6 +1614,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
             fbb.addInt64(11, object.lastSeenAtMs);
             fbb.addInt64(12, object.createdAtMs);
             fbb.addInt64(13, object.updatedAtMs);
+            fbb.addOffset(14, learningStateOffset);
+            fbb.addInt64(15, object.learningStateAtMs);
             fbb.finish(fbb.endTable());
             return object.id;
           },
@@ -1598,6 +1678,11 @@ obx_int.ModelDefinition getObjectBoxModel() {
               30,
               0,
             );
+            final learningStateParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 32, '');
+            final learningStateAtMsParam = const fb.Int64Reader()
+                .vTableGetNullable(buffer, rootOffset, 34);
             final object = LocalWorkplaceSentenceEntity(
               id: idParam,
               localId: localIdParam,
@@ -1613,11 +1698,63 @@ obx_int.ModelDefinition getObjectBoxModel() {
               lastSeenAtMs: lastSeenAtMsParam,
               createdAtMs: createdAtMsParam,
               updatedAtMs: updatedAtMsParam,
+              learningState: learningStateParam,
+              learningStateAtMs: learningStateAtMsParam,
             );
 
             return object;
           },
         ),
+    LearningHistoryEntity: obx_int.EntityDefinition<LearningHistoryEntity>(
+      model: _entities[9],
+      toOneRelations: (LearningHistoryEntity object) => [],
+      toManyRelations: (LearningHistoryEntity object) => {},
+      getId: (LearningHistoryEntity object) => object.id,
+      setId: (LearningHistoryEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LearningHistoryEntity object, fb.Builder fbb) {
+        final snapshotJsonOffset = fbb.writeString(object.snapshotJson);
+        final learningStateOffset = fbb.writeString(object.learningState);
+        fbb.startTable(5);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, snapshotJsonOffset);
+        fbb.addOffset(2, learningStateOffset);
+        fbb.addInt64(3, object.occurredAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final snapshotJsonParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final learningStateParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final occurredAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          10,
+          0,
+        );
+        final object = LearningHistoryEntity(
+          id: idParam,
+          snapshotJson: snapshotJsonParam,
+          learningState: learningStateParam,
+          occurredAtMs: occurredAtMsParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -1783,6 +1920,16 @@ class LocalWordEntity_ {
   /// See [LocalWordEntity.explanation].
   static final explanation = obx.QueryStringProperty<LocalWordEntity>(
     _entities[2].properties[19],
+  );
+
+  /// See [LocalWordEntity.learningState].
+  static final learningState = obx.QueryStringProperty<LocalWordEntity>(
+    _entities[2].properties[20],
+  );
+
+  /// See [LocalWordEntity.learningStateAtMs].
+  static final learningStateAtMs = obx.QueryIntegerProperty<LocalWordEntity>(
+    _entities[2].properties[21],
   );
 }
 
@@ -2120,4 +2267,39 @@ class LocalWorkplaceSentenceEntity_ {
       obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
         _entities[8].properties[13],
       );
+
+  /// See [LocalWorkplaceSentenceEntity.learningState].
+  static final learningState =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[14],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.learningStateAtMs].
+  static final learningStateAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[15],
+      );
+}
+
+/// [LearningHistoryEntity] entity fields to define ObjectBox queries.
+class LearningHistoryEntity_ {
+  /// See [LearningHistoryEntity.id].
+  static final id = obx.QueryIntegerProperty<LearningHistoryEntity>(
+    _entities[9].properties[0],
+  );
+
+  /// See [LearningHistoryEntity.snapshotJson].
+  static final snapshotJson = obx.QueryStringProperty<LearningHistoryEntity>(
+    _entities[9].properties[1],
+  );
+
+  /// See [LearningHistoryEntity.learningState].
+  static final learningState = obx.QueryStringProperty<LearningHistoryEntity>(
+    _entities[9].properties[2],
+  );
+
+  /// See [LearningHistoryEntity.occurredAtMs].
+  static final occurredAtMs = obx.QueryIntegerProperty<LearningHistoryEntity>(
+    _entities[9].properties[3],
+  );
 }

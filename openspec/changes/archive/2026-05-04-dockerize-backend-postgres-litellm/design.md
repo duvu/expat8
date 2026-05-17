@@ -2,7 +2,7 @@
 
 The backend is a Node.js 22 service using built-in HTTP primitives and an in-memory `WordStore`. It already has a SQL schema in `backend/db/schema.sql`, LiteLLM client code, and environment-based configuration for LiteLLM. The current setup is useful for tests and local smoke runs, but service restarts lose backend data and deployment still requires manual Node.js setup.
 
-This change makes the backend deployable as a containerized service backed by PostgreSQL. The Docker Compose stack will provide a repeatable local/deployment entry point, and LiteLLM will remain fully environment-configurable with `https://lite.x51.vn` as the deployment-oriented default base URL.
+This change makes the backend deployable as a containerized service backed by PostgreSQL. The Docker Compose stack will provide a repeatable local/deployment entry point, and LiteLLM will remain fully environment-configurable with `<YOUR_LITELLM_URL>` as the deployment-oriented default base URL.
 
 ## Goals / Non-Goals
 

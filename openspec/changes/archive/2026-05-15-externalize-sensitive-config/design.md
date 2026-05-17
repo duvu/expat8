@@ -2,12 +2,12 @@
 
 The expat8 codebase is being prepared for public release. An audit found that production credentials, private infrastructure hostnames, and default secrets are hardcoded across source files, docs, and configuration. The specific findings are:
 
-- `mobile/lib/src/config.dart`: production backend URL (`https://expat8.x51.vn`) and app secret (`expat8-mobile-secret`) as `String.fromEnvironment` default values — compiled into the binary if `--dart-define` is omitted
-- `backend/src/config.js`: `https://lite.x51.vn` (private AI proxy) as hardcoded default for `LITELLM_BASE_URL`
-- `docker-compose.yml`: `expat8_password` as inline fallback DB password in multiple service definitions
+- `mobile/lib/src/config.dart`: production backend URL and app secret as `String.fromEnvironment` default values — compiled into the binary if `--dart-define` is omitted
+- `backend/src/config.js`: private AI proxy URL as hardcoded default for `LITELLM_BASE_URL`
+- `docker-compose.yml`: inline fallback DB password in multiple service definitions
 - `backend/test/e2e_prod_test.mjs`: production URL and production app credentials as JS-level string defaults
-- Docs, README, CLAUDE.md, `.github/copilot-instructions.md`, openspec archive tasks: `expat8-mobile-secret`, `https://expat8.x51.vn`, `docker.x51.vn` in example commands
-- `.serena/` memory files: internal server IP (`10.113.213.9`) and private Docker registry image paths
+- Docs, README, CLAUDE.md, `.github/copilot-instructions.md`, openspec archive tasks: secret, URL, and registry placeholders in example commands
+- `.serena/` memory files: internal server IP and private Docker registry image paths
 
 No API contracts change. This is a purely defensive, hygiene-focused change.
 
@@ -67,7 +67,7 @@ Operators running the existing stack must take the following steps after this ch
 
 1. Copy `backend/.env.example` to `backend/.env` and fill in real values for `DATABASE_URL`, `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `APP_CREDENTIALS_JSON`
 2. Ensure all mobile CI build steps supply `--dart-define=BACKEND_BASE_URL=...`, `--dart-define=APP_CREDENTIAL_APP_ID=...`, `--dart-define=APP_CREDENTIAL_SECRET=...`
-3. Update any shell scripts or manual notes that previously referenced `expat8-mobile-secret` with the real secret sourced from the team's password manager
+3. Update any shell scripts or manual notes that previously referenced the app secret placeholder with the real secret sourced from the team's password manager
 4. If running E2E tests: set `BACKEND_BASE_URL`, `APP_ID`, `APP_SECRET` env vars in the test environment
 
 No rollback plan is needed — the change is purely subtractive for secrets and additive for placeholder text. Rolling back would re-introduce the leaked values, which is undesirable.

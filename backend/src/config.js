@@ -1,4 +1,8 @@
 export function loadConfig(env = process.env) {
+  const logArchiveMaxTotalBytes = Number.parseInt(
+    env.LOG_ARCHIVE_MAX_TOTAL_BYTES ?? String(100 * 1024 * 1024),
+    10
+  );
   return {
     port: Number.parseInt(env.PORT ?? '8787', 10),
     databaseUrl: env.DATABASE_URL,
@@ -24,6 +28,13 @@ export function loadConfig(env = process.env) {
     ),
     appCredentialPostBodyLimitBytes: Number.parseInt(
       env.APP_CREDENTIAL_POST_BODY_LIMIT_BYTES ?? '262144',
+      10
+    ),
+    logArchiveDir: env.LOG_ARCHIVE_DIR ?? './data/log-archives',
+    logArchiveRetentionDays: Number.parseInt(env.LOG_ARCHIVE_RETENTION_DAYS ?? '3', 10),
+    logArchiveMaxTotalBytes,
+    logArchiveUploadBodyLimitBytes: Number.parseInt(
+      env.LOG_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES ?? String(logArchiveMaxTotalBytes),
       10
     ),
     logLevel: String(env.LOG_LEVEL ?? 'info').toLowerCase(),

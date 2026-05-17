@@ -68,6 +68,83 @@ class WorkplaceSentenceSessionController extends ChangeNotifier {
     }
   }
 
+  Future<void> onSwipeRightToLeft() async {
+    final sentence = currentSentence;
+    if (sentence == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markSentenceLearned(
+        sentence: sentence,
+        now: DateTime.now().toUtc(),
+      );
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'workplace_sentence.gesture.right_to_left.failed',
+        message: 'Learned sentence gesture update failed.',
+        context: {'error': '$error'},
+      );
+      return;
+    }
+    await showNextSentence();
+  }
+
+  Future<void> onSwipeLeftToRight() async {
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'workplace_sentence.gesture.left_to_right',
+      message: 'Swipe left-to-right received.',
+    );
+  }
+
+  Future<void> onSwipeBottomToTop() async {
+    final sentence = currentSentence;
+    if (sentence == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markSentenceRemembered(
+        sentence: sentence,
+        now: DateTime.now().toUtc(),
+      );
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'workplace_sentence.gesture.bottom_to_top.failed',
+        message: 'Remembered sentence gesture update failed.',
+        context: {'error': '$error'},
+      );
+      return;
+    }
+    await showNextSentence();
+  }
+
+  Future<void> onSwipeTopToBottom() async {
+    final sentence = currentSentence;
+    if (sentence == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.markSentenceDifficult(
+        sentence: sentence,
+        now: DateTime.now().toUtc(),
+      );
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'workplace_sentence.gesture.top_to_bottom.failed',
+        message: 'Difficult sentence gesture update failed.',
+        context: {'error': '$error'},
+      );
+      return;
+    }
+    await showNextSentence();
+  }
+
   Future<void> _loadNextSentence() async {
     final next = await repository.nextSentence(language: _activeLanguage);
     if (next == null) {

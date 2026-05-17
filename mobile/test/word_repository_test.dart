@@ -519,6 +519,47 @@ void main() {
     expect(exported.payload.contains('# Entries: 0'), true);
   });
 
+  test('sends sanitized logs to the backend archive endpoint', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_send_logs_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 10, 0),
+        level: AppLogLevel.warning,
+        category: AppLogCategory.api,
+        event: 'api.warning',
+        message: 'Request failed with Bearer secret-token',
+        context: const {
+          'status_code': 500,
+          'app_secret': 'secret-value',
+        },
+      ),
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      logger: const NoopLogger(),
+    );
+
+    final exported = await repository.sendLogsToServer(
+      minimumLevel: AppLogLevel.warning,
+    );
+
+    expect(exported.count, 1);
+    expect(apiClient.lastUploadedLogDeviceId, isNotNull);
+    expect(apiClient.lastUploadedLogFileName, endsWith('.txt'));
+    expect(apiClient.lastUploadedLogPayload, isNotNull);
+    expect(apiClient.lastUploadedLogPayload!.contains('secret-token'), false);
+    expect(apiClient.lastUploadedLogPayload!.contains('secret-value'), false);
+    expect(
+      apiClient.lastUploadedLogPayload!.contains('# Expat8 mobile logs'),
+      true,
+    );
+  });
+
   test('topUpInventoryIfNeeded loads threshold batch when DB is empty',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
@@ -728,6 +769,11 @@ class _RecordingApiClient extends BackendApiClient {
   bool signOutCalled = false;
   String? lastSyncedDeviceId;
   List<String> lastSyncedCachedServerWordIds = const [];
+  String? lastUploadedLogPayload;
+  String? lastUploadedLogFileName;
+  String? lastUploadedLogDeviceId;
+  String? lastUploadedLogSessionToken;
+  String? lastUploadedLogSourceLabel;
 
   @override
   Future<CacheInventoryResult> syncCacheInventory({
@@ -822,6 +868,22 @@ class _RecordingApiClient extends BackendApiClient {
   @override
   Future<void> signOut({required UserSession session}) async {
     signOutCalled = true;
+  }
+
+  @override
+  Future<void> uploadLogArchive({
+    required String payload,
+    required String fileName,
+    required String deviceId,
+    String? sessionToken,
+    String sourceLabel = 'mobile',
+    String contentType = 'text/plain; charset=utf-8',
+  }) async {
+    lastUploadedLogPayload = payload;
+    lastUploadedLogFileName = fileName;
+    lastUploadedLogDeviceId = deviceId;
+    lastUploadedLogSessionToken = sessionToken;
+    lastUploadedLogSourceLabel = sourceLabel;
   }
 }
 

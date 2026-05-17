@@ -138,7 +138,38 @@ class LearningSessionController extends ChangeNotifier {
       event: 'session.gesture.right_to_left',
       message: 'Swipe right-to-left received.',
     );
-    await _showSelectedCard(mode: _CardSelectionMode.newFirst);
+    final word = currentWord;
+    if (word == null || isLoading) {
+      return;
+    }
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      await repository.recordLearnedGesture(
+        word: word,
+        now: DateTime.now().toUtc(),
+      );
+      _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
+        'rating': 'learned',
+        'word_id': word.serverWordId ?? word.localId,
+      });
+    } catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.session,
+        event: 'session.gesture.right_to_left.failed',
+        message: 'Learned gesture update failed.',
+        context: {'error': '$error'},
+      );
+      return;
+    }
+    // For new-word cards, ensure the status write (newWord → learning) from
+    // _showSelectedCard has committed before we call nextCard(). This closes a
+    // race where the fire-and-forget markWordAsLearning hasn't finished and
+    // nextNewWord would otherwise re-select the same card.
+    if (currentCardKind == CardKind.newWord && word != null) {
+      await repository.markWordAsLearning(
+          word: word, now: DateTime.now().toUtc());
+    }
+    await nextCard();
   }
 
   Future<void> onSwipeLeftToRight() async {
@@ -148,7 +179,6 @@ class LearningSessionController extends ChangeNotifier {
       event: 'session.gesture.left_to_right',
       message: 'Swipe left-to-right received.',
     );
-    await _showSelectedCard(mode: _CardSelectionMode.reviewFirst);
   }
 
   Future<void> onSwipeBottomToTop() async {

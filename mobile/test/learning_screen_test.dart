@@ -12,6 +12,9 @@ import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:expat8_language_app/src/ui/articles_screen.dart';
+import 'package:expat8_language_app/src/ui/learning_gesture_surface.dart';
+import 'package:expat8_language_app/src/ui/learning_history_screen.dart';
+import 'package:expat8_language_app/src/ui/learning_progress_stats_screen.dart';
 import 'package:expat8_language_app/src/ui/learning_screen.dart';
 import 'package:expat8_language_app/src/ui/vocabulary_card.dart';
 import 'package:flutter/material.dart';
@@ -137,6 +140,8 @@ void main() {
             onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
+            onHistory: () {},
+            onStats: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -175,6 +180,8 @@ void main() {
             onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
+            onHistory: () {},
+            onStats: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -284,6 +291,8 @@ void main() {
                   ),
                 );
               },
+              onHistory: () {},
+              onStats: () {},
               onRegister: () {},
               onSignIn: () {},
               onSignOut: () {},
@@ -454,6 +463,8 @@ void main() {
             onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
+            onHistory: () {},
+            onStats: () {},
             onRegister: () => registerCount += 1,
             onSignIn: () => signInCount += 1,
             onSignOut: () {},
@@ -578,6 +589,125 @@ void main() {
     );
 
     expect(find.byType(OutlinedButton), findsNothing);
+  });
+
+  testWidgets('learning history screen shows empty state', (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_history_screen_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningHistoryScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No learned items yet.'), findsOneWidget);
+  });
+
+  testWidgets('learning progress stats screen shows zero totals', (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_stats_screen_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningProgressStatsScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Learned'), findsOneWidget);
+    expect(find.text('Remembered'), findsOneWidget);
+    expect(find.text('Difficult'), findsOneWidget);
+  });
+
+  testWidgets('learning history screen preserves learned order', (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_history_screen_order_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final first = _word().copyWith(
+      localId: 'history_first',
+      serverWordId: 'history_first',
+      term: 'alpha',
+      meaningVi: 'Alpha',
+    );
+    final second = _word().copyWith(
+      localId: 'history_second',
+      serverWordId: 'history_second',
+      term: 'beta',
+      meaningVi: 'Beta',
+    );
+    await database.upsertWord(first);
+    await database.upsertWord(second);
+    await database.markWordLearned(word: first, now: DateTime.utc(2026, 5, 5, 1));
+    await database.markWordLearned(word: second, now: DateTime.utc(2026, 5, 5, 2));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningHistoryScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('alpha'), findsOneWidget);
+    expect(find.text('beta'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('alpha')).dy,
+        lessThan(tester.getTopLeft(find.text('beta')).dy));
+  });
+
+  testWidgets('learning progress stats screen shows aggregated counts',
+      (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_stats_screen_counts_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final learned = _word().copyWith(
+      localId: 'stats_learned',
+      serverWordId: 'stats_learned',
+      term: 'learned',
+      meaningVi: 'Learned',
+    );
+    final remembered = _word().copyWith(
+      localId: 'stats_remembered',
+      serverWordId: 'stats_remembered',
+      term: 'remembered',
+      meaningVi: 'Remembered',
+    );
+    final difficult = _word().copyWith(
+      localId: 'stats_difficult',
+      serverWordId: 'stats_difficult',
+      term: 'difficult',
+      meaningVi: 'Difficult',
+    );
+    await database.upsertWord(learned);
+    await database.upsertWord(remembered);
+    await database.upsertWord(difficult);
+    await database.markWordLearned(word: learned, now: DateTime.utc(2026, 5, 5, 1));
+    await database.markWordRememberedLowFrequency(
+      word: remembered,
+      now: DateTime.utc(2026, 5, 5, 2),
+    );
+    await database.markWordDifficultForRelearn(
+      word: difficult,
+      now: DateTime.utc(2026, 5, 5, 3),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningProgressStatsScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Learned'), findsOneWidget);
+    expect(find.text('Remembered'), findsOneWidget);
+    expect(find.text('Difficult'), findsOneWidget);
+    expect(find.text('1'), findsNWidgets(3));
   });
 }
 

@@ -23,6 +23,8 @@ class LocalWordEntity {
     required this.updatedAtMs,
     this.entryType = 'word',
     this.explanation = '',
+    this.learningState = '',
+    this.learningStateAtMs,
   });
 
   int id;
@@ -59,6 +61,12 @@ class LocalWordEntity {
 
   String entryType;
   String explanation;
+
+  @Index()
+  String learningState = '';
+
+  @Index()
+  int? learningStateAtMs;
 }
 
 @Entity()
@@ -78,6 +86,8 @@ class LocalWorkplaceSentenceEntity {
     this.lastSeenAtMs,
     required this.createdAtMs,
     required this.updatedAtMs,
+    this.learningState = '',
+    this.learningStateAtMs,
   });
 
   int id;
@@ -107,6 +117,12 @@ class LocalWorkplaceSentenceEntity {
   @Index()
   int createdAtMs;
   int updatedAtMs;
+
+  @Index()
+  String learningState = '';
+
+  @Index()
+  int? learningStateAtMs;
 }
 
 @Entity()
@@ -156,6 +172,26 @@ class SyncQueueEntity {
 
   @Index()
   int createdAtMs;
+}
+
+@Entity()
+class LearningHistoryEntity {
+  LearningHistoryEntity({
+    this.id = 0,
+    required this.snapshotJson,
+    required this.learningState,
+    required this.occurredAtMs,
+  });
+
+  int id;
+
+  String snapshotJson;
+
+  @Index()
+  String learningState;
+
+  @Index()
+  int occurredAtMs;
 }
 
 @Entity()

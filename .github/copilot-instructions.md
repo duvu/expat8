@@ -57,3 +57,9 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ~/snap/flutter/common/flutter/bin/f
 ~/Android/sdk/platform-tools/adb -s emulator-5554 install -r build/app/outputs/flutter-apk/app-release.apk
 ~/Android/sdk/platform-tools/adb -s emulator-5554 shell am start -n vn.x51.expat8/.MainActivity
 ```
+
+- Before any release/package build, source the current values from env files or a secret manager and inject them via `--dart-define`.
+- If `BACKEND_BASE_URL`, `APP_CREDENTIAL_APP_ID`, `APP_CREDENTIAL_SECRET`, `NEW_WORD_TIMEOUT_SECONDS`, or `APP_LOG_LEVEL` changes, rebuild both APK and AAB before deploy/testing.
+
+- Treat all `--dart-define` values as compile-time inputs. If any of them change, rebuild both APK and AAB before deploying or testing.
+- Source real values from local env files or a secret manager; never hardcode production credentials in committed docs or scripts.

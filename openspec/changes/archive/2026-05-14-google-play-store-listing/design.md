@@ -24,7 +24,7 @@ The backend does not use the package name; clients authenticate with `APP_CREDEN
 
 ### D1: Application ID — `vn.x51.expat8`
 
-`com.example.*` is explicitly blocked by Play Console. The reverse-DNS of the deployment domain (`expat8.x51.vn`) gives `vn.x51.expat8`, which is valid, memorable, and aligns with the production backend host. Alternative `com.expat8.app` was considered but we don't own `expat8.com`.
+`com.example.*` is explicitly blocked by Play Console. The reverse-DNS of the deployment domain gives `vn.x51.expat8`, which is valid, memorable, and aligns with the production backend host. Alternative `com.expat8.app` was considered but we don't own `expat8.com`.
 
 ### D2: Keystore location — `~/keystores/` (outside repo)
 
@@ -67,5 +67,5 @@ The app teaches English; the primary audience is non-native English speakers but
 
 ## Open Questions
 
-- What publicly accessible URL will host the privacy policy? (GitHub Pages or `expat8.x51.vn/privacy` are candidates)
+- What publicly accessible URL will host the privacy policy? (GitHub Pages or a backend-hosted `/privacy` page are candidates)
 - Will the first release target Internal Testing only, or go directly to Production?

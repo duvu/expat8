@@ -8,6 +8,10 @@ App ho tro cac bien `--dart-define` sau:
 - `APP_LOG_LEVEL`: muc log toi thieu (`debug`, `info`, `warning`, `error`)
 - `APP_LOG_MAX_ENTRIES`: so ban ghi toi da giu lai trong local store
 
+Luu y build:
+- Moi khi thay `BACKEND_BASE_URL`, `APP_CREDENTIAL_APP_ID`, `APP_CREDENTIAL_SECRET`, `APP_LOG_LEVEL`, hoac `APP_LOG_MAX_ENTRIES`, phai rebuild APK/AAB de binary lay cau hinh moi.
+- Gia tri that phai duoc cung cap tu env file local hoac secret store, khong hardcode trong file commit len GitHub.
+
 Retention theo tuoi duoc co dinh o 60 phut. Normal build khong ho tro cau hinh
 giu log lau hon moc nay.
 

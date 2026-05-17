@@ -5,7 +5,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'Expat8 Dashboard',
-  description: 'Content ingestion and vocabulary review dashboard'
+  description: 'Content ingestion, vocabulary review, and operations dashboard'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

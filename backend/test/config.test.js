@@ -34,6 +34,19 @@ test('loads app credential security settings from environment', () => {
   assert.equal(config.appCredentialPostBodyLimitBytes, 1024);
 });
 
+test('loads log archive storage settings from environment', () => {
+  const config = loadConfig({
+    LOG_ARCHIVE_DIR: '/tmp/archives',
+    LOG_ARCHIVE_RETENTION_DAYS: '7',
+    LOG_ARCHIVE_MAX_TOTAL_BYTES: '4096'
+  });
+
+  assert.equal(config.logArchiveDir, '/tmp/archives');
+  assert.equal(config.logArchiveRetentionDays, 7);
+  assert.equal(config.logArchiveMaxTotalBytes, 4096);
+  assert.equal(config.logArchiveUploadBodyLimitBytes, 4096);
+});
+
 test('loads CORS allowed origin with a development default', () => {
   assert.equal(loadConfig({}).corsAllowedOrigin, '*');
   assert.equal(

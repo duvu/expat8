@@ -41,7 +41,7 @@ flutter run \
 	--dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
 
-Android release builds use the same production `--dart-define` values for both the signed APK and the signed bundle:
+Android release builds use the same production `--dart-define` values for both the signed APK and the signed bundle. Keep these values in your local environment or secret store and inject them at build time; do not hardcode them in GitHub-tracked files:
 
 ```bash
 cd mobile
@@ -53,7 +53,10 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
   --dart-define=APP_LOG_LEVEL=info
 ```
 
-The APK lands at `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still produces `build/app/outputs/bundle/release/app-release.aab`.
+The APK lands at `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still produces `build/app/outputs/bundle/release/app-release.aab`. If any of the build-time values change, rebuild the package so the binary picks up the new config.
+
+Use a local env file or secret manager for these values. Do not commit production `--dart-define` values into GitHub-tracked files.
+When building packages for deploy, always source the current values first, then rebuild the APK/AAB. Do not reuse stale compiled values after updating the backend URL, app credential id/secret, or app log settings.
 
 Mobile card loading uses `POST /v1/learning/cards` with `card_mode: "new"`.
 The backend owns duplicate avoidance through learner state and

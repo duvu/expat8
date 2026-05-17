@@ -7,7 +7,7 @@ The backend needs a production-ready runtime path instead of relying on the curr
 - Add PostgreSQL-backed backend persistence for vocabulary words, study events, and user word state using the existing database schema as the contract baseline.
 - Add Docker packaging for the backend service.
 - Add a root `docker-compose.yml` that builds the backend image and runs it with PostgreSQL.
-- Configure LiteLLM through environment variables, with `https://lite.x51.vn` as the default base URL and the API key supplied by environment.
+- Configure LiteLLM through environment variables, with `<YOUR_LITELLM_URL>` as the default base URL and the API key supplied by environment.
 - Document the local and deployment commands for building, starting, and verifying the backend stack.
 
 ## Capabilities

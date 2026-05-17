@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../api/backend_api_client.dart';
@@ -14,10 +12,13 @@ import '../session/workplace_sentence_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
 import 'articles_screen.dart';
+import 'learning_gesture_surface.dart';
 import 'fitb_card.dart';
 import 'logs_screen.dart';
 import 'vocabulary_card.dart';
 import 'workplace_sentence_screen.dart';
+import 'learning_history_screen.dart';
+import 'learning_progress_stats_screen.dart';
 
 const Map<String, String> kLearningLanguageLabels = {
   'en': 'English',
@@ -106,6 +107,8 @@ class _LearningScreenState extends State<LearningScreen> {
         onArticles: _openArticles,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onWorkplaceSentences: _openWorkplaceSentences,
+        onHistory: _openHistory,
+        onStats: _openStats,
         onLogs: () {
           Navigator.of(context).maybePop();
           Navigator.of(context).push(
@@ -125,7 +128,7 @@ class _LearningScreenState extends State<LearningScreen> {
       body: LearningCardGestureSurface(
         isEnabled: !controller.isLoading,
         onSwipeRightToLeft: controller.onSwipeRightToLeft,
-        onSwipeLeftToRight: controller.onSwipeLeftToRight,
+        onSwipeLeftToRight: _handleHistoryGesture,
         onSwipeBottomToTop: controller.onSwipeBottomToTop,
         onSwipeTopToBottom: controller.onSwipeTopToBottom,
         child: ListView(
@@ -163,9 +166,9 @@ class _LearningScreenState extends State<LearningScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Text(
                 'Swipe Right->Left: next card (15% new, 85% review). '
-                'Swipe Left->Right: review-first flow.\n'
-                'Swipe Bottom->Top: remembered (10% relearn). '
-                'Swipe Top->Bottom: difficult (relearn group).',
+                 'Swipe Left->Right: open history.\n'
+                 'Swipe Bottom->Top: remembered (10% relearn). '
+                 'Swipe Top->Bottom: difficult (relearn group).',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -276,6 +279,36 @@ class _LearningScreenState extends State<LearningScreen> {
       ),
     );
   }
+
+  Future<void> _handleHistoryGesture() async {
+    await widget.controller.onSwipeLeftToRight();
+    if (!mounted) {
+      return;
+    }
+    await _openHistory();
+  }
+
+  Future<void> _openHistory() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LearningHistoryScreen(
+          database: widget.controller.repository.database,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStats() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LearningProgressStatsScreen(
+          database: widget.controller.repository.database,
+        ),
+      ),
+    );
+  }
 }
 
 class LearningLanguageSelector extends StatelessWidget {
@@ -373,87 +406,6 @@ class LearningLanguageSelector extends StatelessWidget {
   }
 }
 
-class LearningCardGestureSurface extends StatefulWidget {
-  const LearningCardGestureSurface({
-    required this.onSwipeRightToLeft,
-    required this.onSwipeLeftToRight,
-    required this.onSwipeBottomToTop,
-    required this.onSwipeTopToBottom,
-    required this.child,
-    this.isEnabled = true,
-    super.key,
-  });
-
-  final bool isEnabled;
-  final Future<void> Function() onSwipeRightToLeft;
-  final Future<void> Function() onSwipeLeftToRight;
-  final Future<void> Function() onSwipeBottomToTop;
-  final Future<void> Function() onSwipeTopToBottom;
-  final Widget child;
-
-  @override
-  State<LearningCardGestureSurface> createState() =>
-      _LearningCardGestureSurfaceState();
-}
-
-class _LearningCardGestureSurfaceState
-    extends State<LearningCardGestureSurface> {
-  Offset _panDelta = Offset.zero;
-  bool _gestureInFlight = false;
-
-  void _dispatchGesture(Future<void> Function() callback) {
-    if (_gestureInFlight) {
-      return;
-    }
-    _gestureInFlight = true;
-    unawaited(() async {
-      try {
-        await callback();
-      } catch (_) {
-        // Gesture failures must not leave the surface permanently disabled.
-      } finally {
-        _gestureInFlight = false;
-      }
-    }());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (_) => _panDelta = Offset.zero,
-      onPanUpdate: (details) {
-        _panDelta += details.delta;
-      },
-      onPanEnd: (details) {
-        if (!widget.isEnabled || _gestureInFlight) {
-          _panDelta = Offset.zero;
-          return;
-        }
-        final dx = _panDelta.dx;
-        final dy = _panDelta.dy;
-        final vel = details.velocity.pixelsPerSecond;
-        _panDelta = Offset.zero;
-        // Determine primary axis from whichever had more movement.
-        if (dx.abs() >= dy.abs()) {
-          if (vel.dx < -200 || dx < -80) {
-            _dispatchGesture(widget.onSwipeRightToLeft);
-          } else if (vel.dx > 200 || dx > 80) {
-            _dispatchGesture(widget.onSwipeLeftToRight);
-          }
-        } else {
-          if (vel.dy < -200 || dy < -80) {
-            _dispatchGesture(widget.onSwipeBottomToTop);
-          } else if (vel.dy > 200 || dy > 80) {
-            _dispatchGesture(widget.onSwipeTopToBottom);
-          }
-        }
-      },
-      child: widget.child,
-    );
-  }
-}
-
 class LearningDrawer extends StatelessWidget {
   const LearningDrawer({
     required this.isSignedIn,
@@ -461,6 +413,8 @@ class LearningDrawer extends StatelessWidget {
     required this.onWorkplaceSentences,
     required this.onLogs,
     required this.onArticles,
+    required this.onHistory,
+    required this.onStats,
     required this.onRegister,
     required this.onSignIn,
     required this.onSignOut,
@@ -481,6 +435,8 @@ class LearningDrawer extends StatelessWidget {
   final VoidCallback onWorkplaceSentences;
   final VoidCallback onLogs;
   final VoidCallback onArticles;
+  final VoidCallback onHistory;
+  final VoidCallback onStats;
   final VoidCallback onRegister;
   final VoidCallback onSignIn;
   final VoidCallback onSignOut;
@@ -523,6 +479,16 @@ class LearningDrawer extends StatelessWidget {
               leading: const Icon(Icons.bug_report_outlined),
               title: const Text('Logs'),
               onTap: onLogs,
+            ),
+            ListTile(
+              leading: const Icon(Icons.history_outlined),
+              title: const Text('History'),
+              onTap: onHistory,
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart_outlined),
+              title: const Text('Stats'),
+              onTap: onStats,
             ),
             if (speakingRepository != null) ...[
               ListTile(

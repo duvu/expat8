@@ -4,5 +4,11 @@
 backend/.env
 backend/.env.*
 !backend/.env.example
+backend/data/
+**/key.properties
+**/*.jks
+**/*.keystore
+**/*credentials*.json
+**/*serviceAccount*.json
 node_modules/
 coverage/

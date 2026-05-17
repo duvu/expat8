@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { isSidebarLinkActive } from '@/lib/nav';
+
 const NAV_LINKS = [
   { href: '/', label: 'Articles' },
   { href: '/articles/new', label: 'New Article' },
@@ -10,6 +12,7 @@ const NAV_LINKS = [
   { href: '/speaking-prompts', label: 'Speaking Prompts' },
   { href: '/exam', label: 'Exam Results' },
   { href: '/users', label: 'Users' },
+  { href: '/ops', label: 'Ops' },
 ];
 
 export default function SidebarNav() {
@@ -21,11 +24,7 @@ export default function SidebarNav() {
         <Link
           key={href}
           href={href}
-          aria-current={
-            href === '/'
-              ? pathname === href ? 'page' : undefined
-              : pathname.startsWith(href) ? 'page' : undefined
-          }
+          aria-current={isSidebarLinkActive(pathname, href) ? 'page' : undefined}
         >
           {label}
         </Link>

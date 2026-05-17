@@ -182,7 +182,7 @@ APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 `backend/.env.example` uses:
 
 ```text
-APP_CREDENTIALS_JSON=[{"appId":"app_mobile_dev","secret":"dev-secret-change-me","status":"active"}]
+APP_CREDENTIALS_JSON=[{"appId":"app_mobile_dev","secret":"<YOUR_APP_SECRET>","status":"active"}]
 ```
 
 If the mobile app reaches a local backend configured from `.env.example` but the
@@ -265,7 +265,7 @@ backend, or the mobile branch never calls it.
 flutter run \
   --dart-define=BACKEND_BASE_URL=http://10.0.2.2:8787 \
   --dart-define=APP_CREDENTIAL_APP_ID=app_mobile_dev \
-  --dart-define=APP_CREDENTIAL_SECRET=dev-secret-change-me \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
   --dart-define=APP_LOG_LEVEL=debug
 ```
 

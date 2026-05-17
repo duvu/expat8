@@ -120,6 +120,78 @@ void main() {
         await repository.loadLogs(minimumLevel: AppLogLevel.error);
     expect(persisted.length, 1);
   });
+
+  testWidgets('send shows success feedback and keeps export intact',
+      (tester) async {
+    final repository = await _repositoryWithLogs([
+      _log(
+        level: AppLogLevel.warning,
+        event: 'api.warning',
+        message: 'Request warning',
+      ),
+    ]);
+    final shareService = _RecordingLogShareService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LogsScreen(
+          repository: repository,
+          shareService: shareService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Send logs to server'));
+    await _pumpUntil(
+      tester,
+      () => find.text('Sent 1 logs to the server.').evaluate().isNotEmpty,
+    );
+
+    expect(find.text('Sent 1 logs to the server.'), findsOneWidget);
+    expect(shareService.exports, isEmpty);
+  });
+
+  testWidgets('send reports failures without deleting logs', (tester) async {
+    final repository = await _repositoryWithLogs([
+      _log(
+        level: AppLogLevel.error,
+        event: 'api.error',
+        message: 'Request failed',
+      ),
+    ]);
+    final failingRepository = repository as _FakeLogRepository;
+    failingRepository.sendError = Exception('upload failed');
+    final shareService = _RecordingLogShareService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LogsScreen(
+          repository: failingRepository,
+          shareService: shareService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Send logs to server'));
+    await _pumpUntil(
+      tester,
+      () => find
+          .textContaining('Failed to send logs to server:')
+          .evaluate()
+          .isNotEmpty,
+    );
+
+    expect(
+      find.textContaining('Failed to send logs to server:'),
+      findsOneWidget,
+    );
+    expect(shareService.exports, isEmpty);
+    final persisted =
+        await failingRepository.loadLogs(minimumLevel: AppLogLevel.error);
+    expect(persisted.length, 1);
+  });
 }
 
 Future<void> _pumpUntil(
@@ -158,6 +230,8 @@ class _FakeLogRepository extends WordRepository {
         );
 
   final List<LogEntry> logs;
+  Object? sendError;
+  final List<LogExportResult> sentExports = [];
 
   @override
   Future<List<LogEntry>> loadLogs({
@@ -205,6 +279,28 @@ class _FakeLogRepository extends WordRepository {
       count: entries.length,
       fileName: 'expat8_logs_test.txt',
     );
+  }
+
+  @override
+  Future<LogExportResult> sendLogsToServer({
+    AppLogLevel? minimumLevel,
+    AppLogCategory? category,
+    DateTime? from,
+    DateTime? to,
+    int limit = 2000,
+  }) async {
+    final export = await exportLogs(
+      minimumLevel: minimumLevel,
+      category: category,
+      from: from,
+      to: to,
+      limit: limit,
+    );
+    if (sendError != null) {
+      throw sendError!;
+    }
+    sentExports.add(export);
+    return export;
   }
 }
 

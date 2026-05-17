@@ -5,6 +5,7 @@ import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
 import 'package:expat8_language_app/src/data/word_repository.dart';
 import 'package:expat8_language_app/src/logging/logger.dart';
+import 'package:expat8_language_app/src/models/learning_progress.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
@@ -685,10 +686,7 @@ void main() {
     expect(payload['rating'], 'too_easy');
   });
 
-  // Swipe right-to-left invariant tests (fix-swipe-right-to-left-new-word)
-
-  test(
-      'onSwipeRightToLeft shows a new word on the 4th consecutive swipe (not capped at 3)',
+  test('onSwipeRightToLeft persists learned state and advances locally',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -706,19 +704,22 @@ void main() {
       ),
     );
 
-    // 4 consecutive right-to-left swipes — newFirst mode is not gated by the
-    // 3-card window target, so all 4 should show a non-null word.
-    for (var i = 0; i < 4; i++) {
-      await controller.onSwipeRightToLeft();
-      expect(controller.currentWord, isNotNull,
-          reason: 'swipe $i: expected a word, got empty state');
-      expect(controller.isLoading, false,
-          reason: 'isLoading must reset after swipe $i');
-    }
+    await controller.showNewWord();
+    final before = controller.currentWord;
+
+    await controller.onSwipeRightToLeft();
+
+    expect(before, isNotNull);
+    expect(controller.isLoading, false);
+    expect(controller.currentWord, isNotNull);
+    expect(controller.currentWord?.localId, isNot(before?.localId));
+    final history = await database.getLearningHistory();
+    expect(history, hasLength(1));
+    expect(history.single.snapshot.localId, before!.localId);
+    expect(history.single.state, LearningItemState.learned);
   });
 
-  test(
-      'onSwipeRightToLeft falls back gracefully to non-mastered word when no new words exist',
+  test('onSwipeLeftToRight keeps the current word and does not mutate state',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -735,12 +736,64 @@ void main() {
       ),
     );
 
-    await controller.onSwipeRightToLeft();
+    await controller.showNewWord();
+    final before = controller.currentWord;
+    await controller.onSwipeLeftToRight();
 
     expect(controller.isLoading, false);
-    expect(controller.currentWord?.localId, 'fallback_rtl_word',
-        reason:
-            'should fall back to non-mastered word when no new words exist');
+    expect(controller.currentWord?.localId, before?.localId);
+    expect(await database.getLearningHistory(), isEmpty);
+  });
+
+  test('local history preserves the learned swipe order', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_history_order_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime.utc(2026, 5, 5);
+    await database.upsertWord(_wordAt('history_word_1', base));
+    await database.upsertWord(_wordAt('history_word_2', base.add(const Duration(seconds: 1))));
+    final controller = LearningSessionController(
+      repository: WordRepository(
+        database: database,
+        apiClient: _ControllerApiClient(),
+      ),
+    );
+
+    await controller.showNewWord();
+    final first = controller.currentWord!;
+    await controller.onSwipeRightToLeft();
+    final second = controller.currentWord!;
+    await controller.onSwipeRightToLeft();
+
+    final history = await database.getLearningHistory();
+    expect(history, hasLength(2));
+    expect(history[0].snapshot.localId, first.localId);
+    expect(history[1].snapshot.localId, second.localId);
+  });
+
+  test('progress totals reflect learned remembered and difficult states', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_totals_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final now = DateTime.utc(2026, 5, 5);
+    final learned = _wordAt('totals_learned', now);
+    final remembered = _wordAt('totals_remembered', now);
+    final difficult = _wordAt('totals_difficult', now);
+    await database.upsertWord(learned);
+    await database.upsertWord(remembered);
+    await database.upsertWord(difficult);
+    await database.markWordLearned(word: learned, now: now);
+    await database.markWordRememberedLowFrequency(word: remembered, now: now);
+    await database.markWordDifficultForRelearn(word: difficult, now: now);
+
+    final totals = await database.getLearningProgressTotals();
+
+    expect(totals.learned, 1);
+    expect(totals.remembered, 1);
+    expect(totals.difficult, 1);
+    expect(totals.total, 3);
   });
 
   // canFitb tests — only depend on the VocabularyWord passed in, no async I/O

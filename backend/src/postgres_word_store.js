@@ -1521,7 +1521,10 @@ export class PostgresWordStore {
       const oldSenseIds = existingTermsResult.rows.map((r) => r.word_sense_id);
       await client.query(`DELETE FROM vocabulary_review_items WHERE article_id = $1`, [articleId]);
       await client.query(`DELETE FROM article_terms WHERE article_id = $1`, [articleId]);
-      await client.query(`DELETE FROM workplace_sentences WHERE source_article_id = $1`, [articleId]);
+      await client.query(`DELETE FROM article_workplace_sentences WHERE article_id = $1`, [articleId]);
+      await client.query(
+        `DELETE FROM workplace_sentences WHERE id NOT IN (SELECT workplace_sentence_id FROM article_workplace_sentences)`
+      );
       if (oldSenseIds.length > 0) {
         await client.query(`DELETE FROM word_senses WHERE id = ANY($1)`, [oldSenseIds]);
       }

@@ -9,6 +9,7 @@ import { VocabularyGenerationService } from './generation_service.js';
 import { LiteLLMClient } from './litellm_client.js';
 import { createLogger } from './logger.js';
 import { PostgresWordStore } from './postgres_word_store.js';
+import { FileLogArchiveStore } from './log_archive_store.js';
 import { VocabularyPoolScheduler } from './vocabulary_pool_scheduler.js';
 import { WordStore } from './word_store.js';
 
@@ -53,6 +54,12 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     store,
     logger: runtimeLogger.child({ component: 'generation_service' })
   });
+  const logArchiveStore = new FileLogArchiveStore({
+    rootDir: config.logArchiveDir,
+    retentionDays: config.logArchiveRetentionDays,
+    maxTotalBytes: config.logArchiveMaxTotalBytes,
+    logger: runtimeLogger.child({ component: 'log_archive_store' })
+  });
   const vocabularyPoolScheduler = new VocabularyPoolScheduler({
     store,
     generationService,
@@ -70,6 +77,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     generationService,
     config,
     logger: runtimeLogger.child({ component: 'api' }),
+    logArchiveStore,
     ...(nonceCache ? { nonceCache } : {})
   }));
 
@@ -77,6 +85,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     config,
     store,
     generationService,
+    logArchiveStore,
     vocabularyPoolScheduler,
     server,
     logger: runtimeLogger

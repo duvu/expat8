@@ -1,7 +1,7 @@
 ## 1. Database Persistence
 
 - [x] 1.1 Add a PostgreSQL client dependency to `backend/package.json`.
-- [x] 1.2 Add database configuration to backend config, including `DATABASE_URL` and a LiteLLM default base URL of `https://lite.x51.vn`.
+- [x] 1.2 Add database configuration to backend config, including `DATABASE_URL` and a LiteLLM default base URL of `<YOUR_LITELLM_URL>`.
 - [x] 1.3 Implement a PostgreSQL-backed store that preserves the current store interface for inserting words, fetching new/recent words, and syncing study events.
 - [x] 1.4 Ensure PostgreSQL word storage serializes and deserializes topic arrays through the existing `topics_json` column.
 - [x] 1.5 Ensure study-event sync remains idempotent by `client_event_id` when backed by PostgreSQL.

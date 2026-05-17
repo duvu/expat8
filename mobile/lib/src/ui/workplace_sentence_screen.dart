@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../models/workplace_sentence.dart';
 import '../session/workplace_sentence_session_controller.dart';
+import 'learning_gesture_surface.dart';
+import 'learning_history_screen.dart';
+import 'learning_progress_stats_screen.dart';
 
 class WorkplaceSentenceScreen extends StatefulWidget {
   const WorkplaceSentenceScreen({
@@ -40,31 +43,78 @@ class _WorkplaceSentenceScreenState extends State<WorkplaceSentenceScreen> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     return Scaffold(
-      appBar: AppBar(title: const Text('Sentences')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (controller.isLoading) const LinearProgressIndicator(),
-            const SizedBox(height: 16),
-            Expanded(
-              child: controller.currentSentence == null
-                  ? Center(
-                      child: Text(
-                        controller.statusMessage ?? 'No sentence loaded.',
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  : _WorkplaceSentenceCard(sentence: controller.currentSentence!),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: controller.isLoading ? null : controller.showNextSentence,
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('Next sentence'),
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text('Sentences'),
+        actions: [
+          IconButton(
+            tooltip: 'History',
+            onPressed: controller.isLoading ? null : () => _openHistory(context),
+            icon: const Icon(Icons.history_outlined),
+          ),
+          IconButton(
+            tooltip: 'Stats',
+            onPressed: controller.isLoading ? null : () => _openStats(context),
+            icon: const Icon(Icons.bar_chart_outlined),
+          ),
+        ],
+      ),
+      body: LearningCardGestureSurface(
+        isEnabled: !controller.isLoading,
+        onSwipeRightToLeft: controller.onSwipeRightToLeft,
+        onSwipeLeftToRight: () async {
+          await controller.onSwipeLeftToRight();
+          if (context.mounted) {
+            await _openHistory(context);
+          }
+        },
+        onSwipeBottomToTop: controller.onSwipeBottomToTop,
+        onSwipeTopToBottom: controller.onSwipeTopToBottom,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (controller.isLoading) const LinearProgressIndicator(),
+              const SizedBox(height: 16),
+              Expanded(
+                child: controller.currentSentence == null
+                    ? Center(
+                        child: Text(
+                          controller.statusMessage ?? 'No sentence loaded.',
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : _WorkplaceSentenceCard(sentence: controller.currentSentence!),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Swipe Right->Left: learned. Swipe Left->Right: history. '
+                'Swipe Bottom->Top: remembered. Swipe Top->Bottom: difficult.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openHistory(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LearningHistoryScreen(
+          database: widget.controller.repository.database,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStats(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LearningProgressStatsScreen(
+          database: widget.controller.repository.database,
         ),
       ),
     );

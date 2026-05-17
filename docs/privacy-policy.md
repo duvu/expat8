@@ -16,7 +16,7 @@ If you create an account (optional), a **session token** is issued and stored lo
 
 ### 2.2 Learning Progress
 
-We store your vocabulary learning progress — including which words you have studied, your review history, and study ratings — both **locally on your device** (using an on-device database) and **synced to our backend server** (`expat8.x51.vn`). This data is used to power spaced-repetition scheduling and to restore your progress if you reinstall the app.
+We store your vocabulary learning progress — including which words you have studied, your review history, and study ratings — both **locally on your device** (using an on-device database) and **synced to our backend server** (`<YOUR_BACKEND_URL>`). This data is used to power spaced-repetition scheduling and to restore your progress if you reinstall the app.
 
 ### 2.3 Audio Recordings (Speaking Drill Feature)
 

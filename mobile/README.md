@@ -28,7 +28,7 @@ flutter run \
 
 ## Release Builds
 
-Android release builds use the same production `--dart-define` values for the signed APK and the signed bundle:
+Android release builds use the same production `--dart-define` values for the signed APK and the signed bundle. Store these values in local env files or a secret manager and inject them at build time; never commit the real values:
 
 ```bash
 cd mobile
@@ -40,7 +40,10 @@ JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
   --dart-define=APP_LOG_LEVEL=info
 ```
 
-The APK is written to `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still writes `build/app/outputs/bundle/release/app-release.aab`.
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still writes `build/app/outputs/bundle/release/app-release.aab`. If `BACKEND_BASE_URL`, app credentials, or any other `--dart-define` changes, rebuild both artifacts.
+
+Keep the real build-time values in a local env file or secret store and inject them at build time. Never commit those values into the repo.
+For every package build, source the latest env/secret values first and then rebuild. If any compile-time value changes, redeploy with a fresh APK/AAB so the binary matches the target environment.
 
 ObjectBox native libraries are required for desktop/unit-test runs. In this
 repo, Linux test runs expect `mobile/lib/libobjectbox.so` to be present.

@@ -77,6 +77,46 @@ void main() {
     expect(body.containsKey('exclude_server_word_id'), false);
   });
 
+  test('uploads sanitized log archives with app credentials and metadata',
+      () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response(
+        jsonEncode({
+          'id': 'archive_1',
+          'file_name': 'expat8_logs_20260505.txt',
+        }),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    await apiClient.uploadLogArchive(
+      payload: '# Expat8 mobile logs\n{"message":"hello"}\n',
+      fileName: 'expat8_logs_20260505.txt',
+      deviceId: 'device_1',
+      sessionToken: 'session_1',
+    );
+
+    expect(captured.method, 'POST');
+    expect(captured.url.path, '/v1/mobile/log-archives');
+    expect(captured.headers['content-type'], 'text/plain; charset=utf-8');
+    expect(captured.headers['x-expat8-device-id'], 'device_1');
+    expect(captured.headers['x-expat8-log-source'], 'mobile');
+    expect(captured.headers['x-expat8-log-filename'], 'expat8_logs_20260505.txt');
+    expect(captured.headers['authorization'], 'Bearer session_1');
+    expect(captured.body, '# Expat8 mobile logs\n{"message":"hello"}\n');
+  });
+
   test('uses distinct high-entropy app credential nonces concurrently',
       () async {
     final requests = <http.Request>[];

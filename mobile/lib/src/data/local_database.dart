@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../objectbox.g.dart';
 import '../logging/logger.dart';
+import '../models/learning_progress.dart';
 import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
@@ -21,6 +22,7 @@ class LocalDatabase {
         _localWorkplaceSentences = _store.box<LocalWorkplaceSentenceEntity>(),
         _studyEvents = _store.box<StudyEventEntity>(),
         _syncQueue = _store.box<SyncQueueEntity>(),
+        _learningHistory = _store.box<LearningHistoryEntity>(),
         _settings = _store.box<AppSettingEntity>(),
         _logs = _store.box<AppLogEntity>(),
         _speakingPrompts = _store.box<SpeakingPromptEntity>(),
@@ -34,6 +36,7 @@ class LocalDatabase {
   final Box<LocalWorkplaceSentenceEntity> _localWorkplaceSentences;
   final Box<StudyEventEntity> _studyEvents;
   final Box<SyncQueueEntity> _syncQueue;
+  final Box<LearningHistoryEntity> _learningHistory;
   final Box<AppSettingEntity> _settings;
   final Box<AppLogEntity> _logs;
   final Box<SpeakingPromptEntity> _speakingPrompts;
@@ -52,7 +55,9 @@ class LocalDatabase {
       dbDir.createSync(recursive: true);
     }
     final store = await openStore(directory: dbDir.path);
-    return LocalDatabase(store);
+    final database = LocalDatabase(store);
+    await database._backfillLearningStateFields();
+    return database;
   }
 
   static Future<Directory> _resolveStorageDirectory() async {
@@ -194,6 +199,8 @@ class LocalDatabase {
       updatedAtMs: word.updatedAt.toUtc().millisecondsSinceEpoch,
       entryType: word.entryType,
       explanation: word.explanation,
+      learningState: existing?.learningState ?? '',
+      learningStateAtMs: existing?.learningStateAtMs,
     );
     _localWords.put(entity);
 
@@ -231,6 +238,8 @@ class LocalDatabase {
         lastSeenAtMs: sentence.lastSeenAt?.toUtc().millisecondsSinceEpoch,
         createdAtMs: sentence.createdAt.toUtc().millisecondsSinceEpoch,
         updatedAtMs: sentence.updatedAt.toUtc().millisecondsSinceEpoch,
+        learningState: existing?.learningState ?? '',
+        learningStateAtMs: existing?.learningStateAtMs,
       ),
     );
 
@@ -304,6 +313,38 @@ class LocalDatabase {
     _localWorkplaceSentences.put(existing);
   }
 
+  Future<void> markWordLearned({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.learningState = LearningItemState.learned.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    // Advance nextReviewAtMs by at least 30 minutes so this word is not
+    // immediately re-selected as a review candidate by recentlyLearnedReviewWord.
+    // Takes max(existing, now + 30 min) so a longer SRS interval is never shortened.
+    final minNextReview = nowMs + 30 * 60 * 1000;
+    final existingNextReview = existing.nextReviewAtMs ?? 0;
+    existing.nextReviewAtMs =
+        existingNextReview > minNextReview ? existingNextReview : minNextReview;
+    _localWords.put(existing);
+    await _appendLearningHistory(
+      snapshot: LearningItemSnapshot.fromVocabularyWord(word),
+      state: LearningItemState.learned,
+      occurredAt: now,
+    );
+  }
+
   Future<VocabularyWord?> nextNewWord({String language = 'en'}) async {
     final rows = _localWords
         .query(
@@ -349,12 +390,17 @@ class LocalDatabase {
   }
 
   Future<VocabularyWord?> recentlyLearnedReviewWord(
-      {String language = 'en'}) async {
+      DateTime now, {
+    String language = 'en',
+  }) async {
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
     final rows = _localWords
         .query(
           LocalWordEntity_.language.equals(language) &
               LocalWordEntity_.status.oneOf(_activeReviewStatuses) &
-              LocalWordEntity_.lastSeenAtMs.notNull(),
+              LocalWordEntity_.lastSeenAtMs.notNull() &
+              (LocalWordEntity_.nextReviewAtMs.isNull() |
+                  LocalWordEntity_.nextReviewAtMs.lessOrEqual(nowMs)),
         )
         .build()
         .find();
@@ -563,6 +609,8 @@ class LocalDatabase {
 
     final nowMs = now.toUtc().millisecondsSinceEpoch;
     existing.status = WordStatus.mastered.name;
+    existing.learningState = LearningItemState.remembered.name;
+    existing.learningStateAtMs = nowMs;
     existing.lastSeenAtMs = nowMs;
     // Product rule: remembered swipe reduces relearn frequency to 10%.
     // We model this by scheduling a farther review interval.
@@ -586,6 +634,8 @@ class LocalDatabase {
 
     final nowMs = now.toUtc().millisecondsSinceEpoch;
     existing.status = WordStatus.learning.name;
+    existing.learningState = LearningItemState.difficult.name;
+    existing.learningStateAtMs = nowMs;
     existing.lastSeenAtMs = nowMs;
     existing.nextReviewAtMs =
         now.toUtc().add(const Duration(minutes: 10)).millisecondsSinceEpoch;
@@ -614,6 +664,191 @@ class LocalDatabase {
         now.toUtc().add(const Duration(hours: 24)).millisecondsSinceEpoch;
     existing.updatedAtMs = nowMs;
     _localWords.put(existing);
+  }
+
+  Future<void> markSentenceLearned({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.learningState = LearningItemState.learned.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    _localWorkplaceSentences.put(existing);
+    await _appendLearningHistory(
+      snapshot: LearningItemSnapshot.fromWorkplaceSentence(sentence),
+      state: LearningItemState.learned,
+      occurredAt: now,
+    );
+  }
+
+  Future<void> markSentenceRemembered({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.learningState = LearningItemState.remembered.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    _localWorkplaceSentences.put(existing);
+  }
+
+  Future<void> markSentenceDifficult({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.learningState = LearningItemState.difficult.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    _localWorkplaceSentences.put(existing);
+  }
+
+  Future<void> _appendLearningHistory({
+    required LearningItemSnapshot snapshot,
+    required LearningItemState state,
+    required DateTime occurredAt,
+  }) async {
+    _learningHistory.put(
+      LearningHistoryEntity(
+        snapshotJson: jsonEncode(snapshot.toJson()),
+        learningState: state.name,
+        occurredAtMs: occurredAt.toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<List<LearningHistoryEntry>> getLearningHistory({
+    int limit = -1,
+  }) async {
+    final rows = _learningHistory
+        .query()
+        .order(LearningHistoryEntity_.occurredAtMs)
+        .build()
+        .find();
+    final entries = rows
+        .map(
+          (row) => LearningHistoryEntry.fromJson(
+            {
+              'snapshot': jsonDecode(row.snapshotJson) as Map<String, dynamic>,
+              'state': row.learningState,
+              'occurred_at_ms': row.occurredAtMs,
+            },
+          ),
+        )
+        .toList(growable: false);
+    if (limit >= 0) {
+      return entries.take(limit).toList(growable: false);
+    }
+    return entries;
+  }
+
+  Future<LearningProgressTotals> getLearningProgressTotals() async {
+    final learned =
+        await _countLearningState(LearningItemState.learned.name);
+    final remembered =
+        await _countLearningState(LearningItemState.remembered.name);
+    final difficult =
+        await _countLearningState(LearningItemState.difficult.name);
+    return LearningProgressTotals(
+      learned: learned,
+      remembered: remembered,
+      difficult: difficult,
+    );
+  }
+
+  Future<int> _countLearningState(String state) async {
+    final wordCount = _localWords
+        .query(LocalWordEntity_.learningState.equals(state))
+        .build()
+        .count();
+    final sentenceCount = _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.learningState.equals(state))
+        .build()
+        .count();
+    return wordCount + sentenceCount;
+  }
+
+  Future<void> _backfillLearningStateFields() async {
+    final wordRows = _localWords.getAll();
+    for (final row in wordRows) {
+      if (row.learningState.isNotEmpty) {
+        continue;
+      }
+      final backfilled = _learningStateFromWordStatus(row.status);
+      if (backfilled == null) {
+        continue;
+      }
+      row.learningState = backfilled.name;
+      row.learningStateAtMs = row.lastSeenAtMs ?? row.updatedAtMs;
+      _localWords.put(row);
+    }
+
+    final sentenceRows = _localWorkplaceSentences.getAll();
+    for (final row in sentenceRows) {
+      if (row.learningState.isNotEmpty) {
+        continue;
+      }
+      final backfilled = _learningStateFromSentenceStatus(row.status);
+      if (backfilled == null) {
+        continue;
+      }
+      row.learningState = backfilled.name;
+      row.learningStateAtMs = row.lastSeenAtMs ?? row.updatedAtMs;
+      _localWorkplaceSentences.put(row);
+    }
+  }
+
+  LearningItemState? _learningStateFromWordStatus(String status) {
+    return switch (status) {
+      'mastered' => LearningItemState.remembered,
+      'learning' => LearningItemState.learned,
+      'review' => LearningItemState.learned,
+      _ => null,
+    };
+  }
+
+  LearningItemState? _learningStateFromSentenceStatus(String status) {
+    return switch (status) {
+      'seen' => LearningItemState.learned,
+      _ => null,
+    };
   }
 
   Future<void> insertStudyEvent(StudyEvent event) async {

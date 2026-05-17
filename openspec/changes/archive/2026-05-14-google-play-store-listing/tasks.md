@@ -11,7 +11,7 @@
 - [x] 2.2 In `mobile/android/app/build.gradle.kts`: change `applicationId` from `"com.example.expat8_language_app"` to `"vn.x51.expat8"`
 - [x] 2.3 In `mobile/android/app/src/main/AndroidManifest.xml`: change `android:label` from `"expat8_language_app"` to `"Expat8 – Learn English"`
 - [x] 2.4 In `mobile/pubspec.yaml`: change `version` from `0.1.0+1` to `1.0.0+1`
-- [x] 2.5 Run `flutter build appbundle --release --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret` (with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`) and confirm the build succeeds and produces `build/app/outputs/bundle/release/app-release.aab`
+- [x] 2.5 Run `flutter build appbundle --release --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>` (with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`) and confirm the build succeeds and produces `build/app/outputs/bundle/release/app-release.aab`
 - [x] 2.6 Inspect the `.aab` manifest (e.g., via `bundletool dump manifest --bundle=app-release.aab`) and confirm `applicationId` is `vn.x51.expat8` and `versionCode`/`versionName` are `1`/`1.0.0`
 
 ## 3. Store Listing Copy
@@ -31,7 +31,7 @@
 ## 5. Privacy Policy
 
 - [x] 5.1 Write `docs/privacy-policy.md` covering: device ID collection, learning progress stored locally and synced to backend, audio recording for speaking drill, no third-party advertising SDKs
-- [ ] 5.2 Publish the privacy policy to a publicly accessible URL (e.g., `https://expat8.x51.vn/privacy` or a GitHub Pages page) and confirm it returns HTTP 200
+- [ ] 5.2 Publish the privacy policy to a publicly accessible URL (e.g., `<YOUR_BACKEND_URL>/privacy` or a GitHub Pages page) and confirm it returns HTTP 200
 - [ ] 5.3 Record the privacy policy URL for entry into Play Console
 
 ## 6. Play Console Submission

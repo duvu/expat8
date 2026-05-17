@@ -88,6 +88,116 @@ void main() {
     expect({firstId, secondId, thirdId}.length, 2);
     expect(controller.currentSentence?.status, WorkplaceSentenceStatus.seen);
   });
+
+  test('right-to-left swipe records learned sentence and advances', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'workplace_sentence_controller_rtl_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = WorkplaceSentenceRepository(
+      database: database,
+      apiClient: _FailingSentenceApiClient(),
+      seedLoader: _StubSentenceSeedLoader({
+        'en': [
+          _sentence('rtl_sentence_1', createdAt: DateTime.utc(2026, 5, 16, 0)),
+          _sentence('rtl_sentence_2', createdAt: DateTime.utc(2026, 5, 16, 1)),
+        ],
+      }),
+    );
+    final controller = WorkplaceSentenceSessionController(repository: repository);
+
+    await controller.loadInitial();
+    final before = controller.currentSentence?.localId;
+
+    await controller.onSwipeRightToLeft();
+
+    expect(before, isNotNull);
+    expect(controller.currentSentence?.localId, isNot(before));
+    final history = await database.getLearningHistory();
+    expect(history, hasLength(1));
+    expect(history.single.snapshot.localId, before);
+    expect(history.single.stateLabel, 'Learned');
+  });
+
+  test('left-to-right swipe opens history without mutating state', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'workplace_sentence_controller_ltr_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = WorkplaceSentenceRepository(
+      database: database,
+      apiClient: _FailingSentenceApiClient(),
+      seedLoader: _StubSentenceSeedLoader({
+        'en': [
+          _sentence('ltr_sentence_1', createdAt: DateTime.utc(2026, 5, 16, 0)),
+          _sentence('ltr_sentence_2', createdAt: DateTime.utc(2026, 5, 16, 1)),
+        ],
+      }),
+    );
+    final controller = WorkplaceSentenceSessionController(repository: repository);
+
+    await controller.loadInitial();
+    final before = controller.currentSentence?.localId;
+
+    await controller.onSwipeLeftToRight();
+
+    expect(controller.currentSentence?.localId, before);
+    expect(await database.getLearningHistory(), isEmpty);
+  });
+
+  test('bottom-to-top swipe marks sentence remembered and advances', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'workplace_sentence_controller_btt_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = WorkplaceSentenceRepository(
+      database: database,
+      apiClient: _FailingSentenceApiClient(),
+      seedLoader: _StubSentenceSeedLoader({
+        'en': [
+          _sentence('btt_sentence_1', createdAt: DateTime.utc(2026, 5, 16, 0)),
+          _sentence('btt_sentence_2', createdAt: DateTime.utc(2026, 5, 16, 1)),
+        ],
+      }),
+    );
+    final controller = WorkplaceSentenceSessionController(repository: repository);
+
+    await controller.loadInitial();
+    final before = controller.currentSentence?.localId;
+
+    await controller.onSwipeBottomToTop();
+
+    final totals = await database.getLearningProgressTotals();
+    expect(controller.currentSentence?.localId, isNot(before));
+    expect(totals.remembered, 1);
+  });
+
+  test('top-to-bottom swipe marks sentence difficult and advances', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'workplace_sentence_controller_ttb_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = WorkplaceSentenceRepository(
+      database: database,
+      apiClient: _FailingSentenceApiClient(),
+      seedLoader: _StubSentenceSeedLoader({
+        'en': [
+          _sentence('ttb_sentence_1', createdAt: DateTime.utc(2026, 5, 16, 0)),
+          _sentence('ttb_sentence_2', createdAt: DateTime.utc(2026, 5, 16, 1)),
+        ],
+      }),
+    );
+    final controller = WorkplaceSentenceSessionController(repository: repository);
+
+    await controller.loadInitial();
+    final before = controller.currentSentence?.localId;
+
+    await controller.onSwipeTopToBottom();
+
+    final totals = await database.getLearningProgressTotals();
+    expect(controller.currentSentence?.localId, isNot(before));
+    expect(totals.difficult, 1);
+  });
 }
 
 class _StubSentenceSeedLoader extends WorkplaceSentenceSeedLoader {

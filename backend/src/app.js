@@ -4,6 +4,7 @@ import express from 'express';
 
 import { InMemoryNonceCache, PostgresNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
 import { InvalidStudyRatingError } from './proficiency.js';
+import { FileLogArchiveStore, openArchiveReadStream } from './log_archive_store.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -23,9 +24,16 @@ export function createApp({
     redactionEnabled: config.logRedactionEnabled,
     component: 'api'
   }),
-  nonceCache = new InMemoryNonceCache()
+  nonceCache = new InMemoryNonceCache(),
+  logArchiveStore = null
 }) {
   const app = express();
+  const resolvedLogArchiveStore = logArchiveStore ?? new FileLogArchiveStore({
+    rootDir: config.logArchiveDir,
+    retentionDays: config.logArchiveRetentionDays,
+    maxTotalBytes: config.logArchiveMaxTotalBytes,
+    logger: logger.child({ component: 'log_archive_store' })
+  });
 
   app.get('/health', (request, response) => {
     response.setHeader('x-request-id', resolveRequestId(request));
@@ -70,6 +78,7 @@ export function createApp({
       store,
       generationService,
       config,
+      logArchiveStore: resolvedLogArchiveStore,
       rateLimiters: createRateLimiters({
         registerMax: config.authRateLimitRegister,
         signInMax: config.authRateLimitSignIn
@@ -131,7 +140,7 @@ function createRateLimiters({
   };
 }
 
-function createV1Router({ store, config, rateLimiters = {} }) {
+function createV1Router({ store, config, logArchiveStore, rateLimiters = {} }) {
   const {
     registerLimiter,
     signInLimiter,
@@ -318,6 +327,38 @@ function createV1Router({ store, config, rateLimiters = {} }) {
         return response.status(404).json({ error: 'not_found' });
       }
       return response.json(pack);
+    })
+  );
+
+  router.post(
+    '/mobile/log-archives',
+    asyncHandler(async (request, response) => {
+      const userSession = await resolveOptionalUserSession({ request, response, store });
+      if (userSession === false) {
+        return;
+      }
+      if (!request.rawBody || request.rawBody.length === 0) {
+        return response.status(400).json({ error: 'bad_request' });
+      }
+
+      const archive = await logArchiveStore.saveArchive({
+        appId: request.appCredential?.appId,
+        userId: userSession?.user.id ?? null,
+        deviceId: optionalHeaderValue(request, 'x-expat8-device-id'),
+        sourceLabel: optionalHeaderValue(request, 'x-expat8-log-source') ?? 'mobile',
+        originalFileName: sanitizeLogFileName(optionalHeaderValue(request, 'x-expat8-log-filename')),
+        contentType: request.get('content-type') ?? 'text/plain; charset=utf-8',
+        body: request.rawBody,
+        uploadedAt: new Date()
+      });
+
+      request.log?.info('log_archive_uploaded', {
+        log_archive_id: archive.id,
+        size_bytes: archive.sizeBytes,
+        source_app_id: archive.appId
+      });
+
+      return response.status(201).json(toApiLogArchive(archive));
     })
   );
 
@@ -617,6 +658,77 @@ function createV1Router({ store, config, rateLimiters = {} }) {
     })
   );
 
+  router.get(
+    '/admin/log-archives',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const limit = clampLimit(request.query.limit ?? 100, 1, 200);
+      const archives = await logArchiveStore.listArchives({ limit });
+      return response.json({ items: archives.map(toApiLogArchive) });
+    })
+  );
+
+  router.get(
+    '/admin/log-archives/:id',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const archive = await logArchiveStore.getArchiveById({ id: request.params.id });
+      if (!archive) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      return response.json(toApiLogArchive(archive));
+    })
+  );
+
+  router.get(
+    '/admin/log-archives/:id/content',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const archive = await logArchiveStore.getArchiveById({ id: request.params.id });
+      if (!archive) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      response.type(archive.contentType ?? 'text/plain; charset=utf-8');
+      return openArchiveReadStream(archive)
+        .on('error', (error) => {
+          request.log?.error('log_archive_stream_failed', { error, log_archive_id: archive.id });
+          if (!response.headersSent) {
+            response.status(500).json({ error: 'internal_error' });
+          }
+        })
+        .pipe(response);
+    })
+  );
+
+  router.get(
+    '/admin/log-archives/:id/download',
+    asyncHandler(async (request, response) => {
+      if (!hasAdminAccess({ request, config })) {
+        return response.status(403).json({ error: 'forbidden' });
+      }
+      const archive = await logArchiveStore.getArchiveById({ id: request.params.id });
+      if (!archive) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      response.setHeader('content-disposition', `attachment; filename="${sanitizeDownloadFileName(archive)}"`);
+      response.type(archive.contentType ?? 'text/plain; charset=utf-8');
+      return openArchiveReadStream(archive)
+        .on('error', (error) => {
+          request.log?.error('log_archive_download_failed', { error, log_archive_id: archive.id });
+          if (!response.headersSent) {
+            response.status(500).json({ error: 'internal_error' });
+          }
+        })
+        .pipe(response);
+    })
+  );
+
   // Mobile: approved speaking prompts for offline drill sync
   router.get(
     '/speaking/prompts',
@@ -909,7 +1021,10 @@ function corsMiddleware({ config }) {
     'x-expat8-timestamp',
     'x-expat8-nonce',
     'x-expat8-content-sha256',
-    'x-expat8-signature'
+    'x-expat8-signature',
+    'x-expat8-device-id',
+    'x-expat8-log-source',
+    'x-expat8-log-filename'
   ].join(', ');
 
   return (request, response, next) => {
@@ -929,9 +1044,7 @@ function corsMiddleware({ config }) {
 
 function captureRawBody({ config }) {
   return (request, response, next) => {
-    const limit = request.method === 'GET'
-      ? config.appCredentialGetBodyLimitBytes
-      : config.appCredentialPostBodyLimitBytes;
+    const limit = resolveBodyLimit({ request, config });
     const contentLength = Number.parseInt(request.get('content-length') ?? '0', 10);
     if (contentLength > limit) {
       return badRequest(response);
@@ -990,6 +1103,17 @@ function parseJsonFromCapturedBody(request, response, next) {
     return next();
   }
 
+  const contentType = String(request.get('content-type') ?? '').toLowerCase();
+  const isJsonContentType = contentType.includes('application/json') || contentType.endsWith('+json');
+  if (!isJsonContentType) {
+    const pathName = new URL(request.originalUrl, 'http://localhost').pathname;
+    if (pathName === '/v1/mobile/log-archives') {
+      request.body = {};
+      return next();
+    }
+    return badRequest(response);
+  }
+
   try {
     request.body = JSON.parse(request.rawBody.toString('utf8'));
     return next();
@@ -1046,6 +1170,58 @@ function validateArticleBody(body) {
 function normalizeVisibility(value) {
   const raw = String(value ?? 'private').toLowerCase();
   return ['private', 'published'].includes(raw) ? raw : 'private';
+}
+
+function resolveBodyLimit({ request, config }) {
+  const pathName = new URL(request.originalUrl, 'http://localhost').pathname;
+  if (request.method === 'POST' && pathName === '/v1/mobile/log-archives') {
+    return config.logArchiveUploadBodyLimitBytes;
+  }
+  return request.method === 'GET'
+    ? config.appCredentialGetBodyLimitBytes
+    : config.appCredentialPostBodyLimitBytes;
+}
+
+function optionalHeaderValue(request, headerName) {
+  const value = request.get(headerName);
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function sanitizeLogFileName(value) {
+  if (!value) {
+    return null;
+  }
+  const sanitized = value
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return sanitized || null;
+}
+
+function sanitizeDownloadFileName(archive) {
+  return sanitizeLogFileName(archive.originalFileName) ?? `log-archive-${archive.id}.txt`;
+}
+
+function toApiLogArchive(archive) {
+  return {
+    id: archive.id,
+    file_name: archive.originalFileName ?? `log-archive-${archive.id}.txt`,
+    content_type: archive.contentType,
+    size_bytes: archive.sizeBytes,
+    uploaded_at: archive.uploadedAt,
+    source_app_id: archive.appId,
+    source_device_id: archive.deviceId,
+    source_user_id: archive.userId,
+    source_label: archive.sourceLabel,
+    retention_expires_at: archive.retentionExpiresAt,
+    retention_state: archive.retentionState,
+    content_url: archive.contentUrl,
+    download_url: archive.downloadUrl
+  };
 }
 
 function hasAdminAccess({ request, config }) {
