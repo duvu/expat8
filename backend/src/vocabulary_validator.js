@@ -12,7 +12,9 @@ const requiredFields = [
 ];
 
 export function validateVocabularyItem(item, options = {}) {
-  const language = String(item.language ?? '').trim().toLowerCase();
+  const language = String(item.language ?? '')
+    .trim()
+    .toLowerCase();
   const isChinese = language.startsWith('zh');
   const difficulty = item.difficulty ?? item.level;
   const suggestionType = normalizeSuggestionType(item.suggestion_type, item.term);
@@ -55,7 +57,9 @@ function hasPinyin(value) {
 }
 
 export function normalizeSuggestionType(value, term) {
-  const trimmed = String(value ?? '').trim().toLowerCase();
+  const trimmed = String(value ?? '')
+    .trim()
+    .toLowerCase();
   if (trimmed) {
     if (trimmed === 'multiword') {
       return 'phrase';

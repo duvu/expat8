@@ -23,7 +23,9 @@ export class InvalidRegistrationInputError extends Error {
 }
 
 export function normalizeUserIdentifier(identifier) {
-  return String(identifier ?? '').trim().toLowerCase();
+  return String(identifier ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 export function requireRegistrationInput({ identifier, password }) {

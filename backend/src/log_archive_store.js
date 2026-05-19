@@ -1,13 +1,6 @@
 import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile
-} from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const DEFAULT_RETENTION_DAYS = 3;
@@ -70,10 +63,7 @@ export class FileLogArchiveStore {
       await writeFile(contentPath, content);
       await writeFile(metaPath, JSON.stringify(record, null, 2), 'utf8');
     } catch (error) {
-      await Promise.allSettled([
-        rm(contentPath, { force: true }),
-        rm(metaPath, { force: true })
-      ]);
+      await Promise.allSettled([rm(contentPath, { force: true }), rm(metaPath, { force: true })]);
       throw error;
     }
 
@@ -108,10 +98,20 @@ export class FileLogArchiveStore {
     return archives.find((archive) => archive.id === id) ?? null;
   }
 
+  async deleteArchiveById({ id } = {}) {
+    const archives = await this.#loadArchives();
+    const archive = archives.find((a) => a.id === id);
+    if (!archive) {
+      return false;
+    }
+    await this.#deleteArchive(archive);
+    return true;
+  }
+
   async cleanupRetention({ now = new Date() } = {}) {
     const archives = await this.#loadArchives({ now });
     const nowMs = now.getTime();
-    const retentionCutoffMs = nowMs - (this.retentionDays * DAY_MS);
+    const retentionCutoffMs = nowMs - this.retentionDays * DAY_MS;
     const expiredArchives = archives.filter((archive) => archive.uploadedAtMs < retentionCutoffMs);
 
     for (const archive of expiredArchives) {
@@ -120,7 +120,9 @@ export class FileLogArchiveStore {
 
     let retainedArchives = archives.filter((archive) => archive.uploadedAtMs >= retentionCutoffMs);
     let retainedBytes = retainedArchives.reduce((total, archive) => total + archive.sizeBytes, 0);
-    const oldestFirst = [...retainedArchives].sort((left, right) => left.uploadedAtMs - right.uploadedAtMs || left.id.localeCompare(right.id));
+    const oldestFirst = [...retainedArchives].sort(
+      (left, right) => left.uploadedAtMs - right.uploadedAtMs || left.id.localeCompare(right.id)
+    );
 
     for (const archive of oldestFirst) {
       if (retainedBytes <= this.maxTotalBytes) {
@@ -169,10 +171,7 @@ export class FileLogArchiveStore {
         meta = JSON.parse(rawMeta);
       } catch (_error) {
         this.logger.warn?.('log_archive_metadata_invalid', { path: metaPath });
-        await Promise.allSettled([
-          rm(contentPath, { force: true }),
-          rm(metaPath, { force: true })
-        ]);
+        await Promise.allSettled([rm(contentPath, { force: true }), rm(metaPath, { force: true })]);
         continue;
       }
 
@@ -190,30 +189,29 @@ export class FileLogArchiveStore {
         continue;
       }
 
-      archives.push(this.#formatArchive({
-        id: archiveId,
-        appId: meta.app_id ?? meta.appId ?? null,
-        userId: meta.user_id ?? meta.userId ?? null,
-        deviceId: meta.device_id ?? meta.deviceId ?? null,
-        sourceLabel: meta.source_label ?? meta.sourceLabel ?? 'mobile',
-        originalFileName: meta.original_file_name ?? meta.originalFileName ?? null,
-        contentType: meta.content_type ?? meta.contentType ?? DEFAULT_CONTENT_TYPE,
-        uploadedAtMs,
-        sizeBytes: contentStat.size,
-        contentPath,
-        metaPath,
-        now
-      }));
+      archives.push(
+        this.#formatArchive({
+          id: archiveId,
+          appId: meta.app_id ?? meta.appId ?? null,
+          userId: meta.user_id ?? meta.userId ?? null,
+          deviceId: meta.device_id ?? meta.deviceId ?? null,
+          sourceLabel: meta.source_label ?? meta.sourceLabel ?? 'mobile',
+          originalFileName: meta.original_file_name ?? meta.originalFileName ?? null,
+          contentType: meta.content_type ?? meta.contentType ?? DEFAULT_CONTENT_TYPE,
+          uploadedAtMs,
+          sizeBytes: contentStat.size,
+          contentPath,
+          metaPath,
+          now
+        })
+      );
     }
 
     return archives;
   }
 
   async #deleteArchive(archive) {
-    await Promise.allSettled([
-      rm(archive.contentPath, { force: true }),
-      rm(archive.metaPath, { force: true })
-    ]);
+    await Promise.allSettled([rm(archive.contentPath, { force: true }), rm(archive.metaPath, { force: true })]);
   }
 
   #formatArchive({
@@ -230,7 +228,7 @@ export class FileLogArchiveStore {
     metaPath,
     now
   }) {
-    const retentionExpiresAtMs = uploadedAtMs + (this.retentionDays * DAY_MS);
+    const retentionExpiresAtMs = uploadedAtMs + this.retentionDays * DAY_MS;
     return {
       id,
       appId,

@@ -26,10 +26,7 @@ const baseConfig = {
 test('canonicalizes query parameters by key and value', () => {
   const url = new URL('http://localhost/v1/learning/cards?target_language=en&limit=1&limit=0');
 
-  assert.equal(
-    canonicalPathWithSortedQuery(url),
-    '/v1/learning/cards?limit=0&limit=1&target_language=en'
-  );
+  assert.equal(canonicalPathWithSortedQuery(url), '/v1/learning/cards?limit=0&limit=1&target_language=en');
 });
 
 test('hashes body and signs canonical requests', () => {
@@ -44,14 +41,7 @@ test('hashes body and signs canonical requests', () => {
 
   assert.equal(
     canonicalRequest,
-    [
-      'v1',
-      'POST',
-      '/v1/study-events/sync?a=1&b=2',
-      '2026-05-04T10:30:00.000Z',
-      'nonce_1',
-      contentSha256
-    ].join('\n')
+    ['v1', 'POST', '/v1/study-events/sync?a=1&b=2', '2026-05-04T10:30:00.000Z', 'nonce_1', contentSha256].join('\n')
   );
   assert.match(signCanonicalRequest({ secret: activeCredential.secret, canonicalRequest }), /^v1=/);
 });
@@ -83,75 +73,83 @@ test('verifies valid credentials and rejects tampering, expiry, unknown apps, an
   );
 
   assert.equal(
-    (await verifyAppCredentialRequest({
-      method: 'POST',
-      url,
-      headers,
-      rawBody,
-      config: baseConfig,
-      nonceCache,
-      now
-    })).ok,
-    false
-  );
-
-  assert.equal(
-    (await verifyAppCredentialRequest({
-      method: 'POST',
-      url: new URL('http://localhost/v1/learning/cards?limit=2'),
-      headers: signedHeaders({
+    (
+      await verifyAppCredentialRequest({
         method: 'POST',
         url,
+        headers,
         rawBody,
-        timestamp: now.toISOString(),
-        nonce: 'nonce_2'
-      }),
-      rawBody,
-      config: baseConfig,
-      nonceCache: new InMemoryNonceCache(),
-      now
-    })).ok,
+        config: baseConfig,
+        nonceCache,
+        now
+      })
+    ).ok,
     false
   );
 
   assert.equal(
-    (await verifyAppCredentialRequest({
-      method: 'POST',
-      url,
-      headers: signedHeaders({
+    (
+      await verifyAppCredentialRequest({
         method: 'POST',
-        url,
-        rawBody,
-        timestamp: '2026-05-04T10:20:00.000Z',
-        nonce: 'nonce_3'
-      }),
-      rawBody,
-      config: baseConfig,
-      nonceCache: new InMemoryNonceCache(),
-      now
-    })).ok,
-    false
-  );
-
-  assert.equal(
-    (await verifyAppCredentialRequest({
-      method: 'POST',
-      url,
-      headers: {
-        ...signedHeaders({
+        url: new URL('http://localhost/v1/learning/cards?limit=2'),
+        headers: signedHeaders({
           method: 'POST',
           url,
           rawBody,
           timestamp: now.toISOString(),
-          nonce: 'nonce_4'
+          nonce: 'nonce_2'
         }),
-        'x-expat8-app-id': 'unknown_app'
-      },
-      rawBody,
-      config: baseConfig,
-      nonceCache: new InMemoryNonceCache(),
-      now
-    })).ok,
+        rawBody,
+        config: baseConfig,
+        nonceCache: new InMemoryNonceCache(),
+        now
+      })
+    ).ok,
+    false
+  );
+
+  assert.equal(
+    (
+      await verifyAppCredentialRequest({
+        method: 'POST',
+        url,
+        headers: signedHeaders({
+          method: 'POST',
+          url,
+          rawBody,
+          timestamp: '2026-05-04T10:20:00.000Z',
+          nonce: 'nonce_3'
+        }),
+        rawBody,
+        config: baseConfig,
+        nonceCache: new InMemoryNonceCache(),
+        now
+      })
+    ).ok,
+    false
+  );
+
+  assert.equal(
+    (
+      await verifyAppCredentialRequest({
+        method: 'POST',
+        url,
+        headers: {
+          ...signedHeaders({
+            method: 'POST',
+            url,
+            rawBody,
+            timestamp: now.toISOString(),
+            nonce: 'nonce_4'
+          }),
+          'x-expat8-app-id': 'unknown_app'
+        },
+        rawBody,
+        config: baseConfig,
+        nonceCache: new InMemoryNonceCache(),
+        now
+      })
+    ).ok,
     false
   );
 });
@@ -166,15 +164,17 @@ test('timingSafeEqual rejects mismatched signatures of different byte lengths wi
   headers['x-expat8-signature'] = 'v1=short';
 
   assert.equal(
-    (await verifyAppCredentialRequest({
-      method: 'GET',
-      url,
-      headers,
-      rawBody,
-      config: baseConfig,
-      nonceCache: new InMemoryNonceCache(),
-      now
-    })).ok,
+    (
+      await verifyAppCredentialRequest({
+        method: 'GET',
+        url,
+        headers,
+        rawBody,
+        config: baseConfig,
+        nonceCache: new InMemoryNonceCache(),
+        now
+      })
+    ).ok,
     false
   );
 });
@@ -210,7 +210,11 @@ test('PostgresNonceCache uses INSERT ON CONFLICT to detect replays', async () =>
 });
 
 test('PostgresNonceCache fails open on database error', async () => {
-  const pool = { query: async () => { throw new Error('db down'); } };
+  const pool = {
+    query: async () => {
+      throw new Error('db down');
+    }
+  };
   const cache = new PostgresNonceCache(pool);
   assert.equal(await cache.use('app1', 'nonce_x', Date.now(), 300), true, 'fails open on error');
 });

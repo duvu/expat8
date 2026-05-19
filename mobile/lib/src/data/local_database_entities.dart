@@ -175,6 +175,55 @@ class SyncQueueEntity {
 }
 
 @Entity()
+class SubmittedWordEntity {
+  SubmittedWordEntity({
+    this.id = 0,
+    required this.localSubmissionId,
+    this.serverSubmissionId,
+    required this.submittedTerm,
+    required this.targetLanguage,
+    required this.status,
+    this.failureReason,
+    this.resolutionType,
+    this.resolvedWordServerId,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.resolvedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String localSubmissionId;
+
+  @Index()
+  String? serverSubmissionId;
+
+  String submittedTerm;
+
+  @Index()
+  String targetLanguage;
+
+  @Index()
+  String status;
+
+  String? failureReason;
+  String? resolutionType;
+
+  @Index()
+  String? resolvedWordServerId;
+
+  @Index()
+  int createdAtMs;
+
+  @Index()
+  int updatedAtMs;
+
+  @Index()
+  int? resolvedAtMs;
+}
+
+@Entity()
 class LearningHistoryEntity {
   LearningHistoryEntity({
     this.id = 0,

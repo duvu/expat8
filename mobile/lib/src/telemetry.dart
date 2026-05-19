@@ -21,9 +21,12 @@ abstract class TelemetrySink {
   void track(TelemetryEvent event, [Map<String, Object?> properties = const {}]);
 }
 
-class DebugTelemetrySink implements TelemetrySink {
+class NoopTelemetrySink implements TelemetrySink {
   @override
   void track(TelemetryEvent event, [Map<String, Object?> properties = const {}]) {
-    // Replace with analytics SDK integration when product telemetry is selected.
+    // No-op implementation. Replace with analytics SDK when ready.
   }
 }
+
+/// Backward-compatible alias.
+typedef DebugTelemetrySink = NoopTelemetrySink;

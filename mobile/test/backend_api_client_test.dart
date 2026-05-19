@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/models/article.dart';
+import 'package:expat8_language_app/src/models/submitted_word.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -100,8 +102,10 @@ void main() {
       httpClient: client,
     );
 
+    const payload = '# Expat8 mobile logs\n{"message":"xin chào"}\n';
+
     await apiClient.uploadLogArchive(
-      payload: '# Expat8 mobile logs\n{"message":"hello"}\n',
+      payload: payload,
       fileName: 'expat8_logs_20260505.txt',
       deviceId: 'device_1',
       sessionToken: 'session_1',
@@ -112,9 +116,48 @@ void main() {
     expect(captured.headers['content-type'], 'text/plain; charset=utf-8');
     expect(captured.headers['x-expat8-device-id'], 'device_1');
     expect(captured.headers['x-expat8-log-source'], 'mobile');
-    expect(captured.headers['x-expat8-log-filename'], 'expat8_logs_20260505.txt');
+    expect(
+        captured.headers['x-expat8-log-filename'], 'expat8_logs_20260505.txt');
     expect(captured.headers['authorization'], 'Bearer session_1');
-    expect(captured.body, '# Expat8 mobile logs\n{"message":"hello"}\n');
+    expect(captured.bodyBytes, utf8.encode(payload));
+    expect(
+      captured.headers['x-expat8-content-sha256'],
+      base64Url
+          .encode(sha256.convert(utf8.encode(payload)).bytes)
+          .replaceAll('=', ''),
+    );
+  });
+
+  test('surfaces log archive upload failures', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'error': 'bad_request'}),
+        400,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    await expectLater(
+      apiClient.uploadLogArchive(
+        payload: '# Expat8 mobile logs\n',
+        fileName: 'expat8_logs_20260505.txt',
+        deviceId: 'device_1',
+      ),
+      throwsA(
+        isA<BackendApiException>()
+            .having((error) => error.statusCode, 'statusCode', 400)
+            .having(
+                (error) => error.backendError, 'backendError', 'bad_request'),
+      ),
+    );
   });
 
   test('uses distinct high-entropy app credential nonces concurrently',
@@ -223,6 +266,118 @@ void main() {
         const ['word_1', 'word_2', 'missing_word']);
     expect(result.storedCount, 2);
     expect(result.unknownServerWordIds, const ['missing_word']);
+  });
+
+  test('creates submitted words with signed JSON body and parses status', () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response(
+        jsonEncode({
+          'id': 'submission_1',
+          'submitted_term': 'stubborn',
+          'target_language': 'en',
+          'status': 'queued',
+          'resolution_type': null,
+          'failure_reason': null,
+          'resolved_word': null,
+          'created_at': '2026-05-19T00:00:00.000Z',
+          'updated_at': '2026-05-19T00:00:00.000Z',
+          'resolved_at': null,
+        }),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    final submission = await apiClient.createSubmittedWord(
+      localSubmissionId: 'local_submission_1',
+      deviceId: 'device_1',
+      term: 'stubborn',
+      targetLanguage: 'en',
+      sessionToken: 'session_1',
+    );
+
+    expect(captured.method, 'POST');
+    expect(captured.url.path, '/v1/user-submitted-words');
+    expect(captured.headers['authorization'], 'Bearer session_1');
+    expect(jsonDecode(captured.body), {
+      'device_id': 'device_1',
+      'term': 'stubborn',
+      'target_language': 'en',
+    });
+    expect(submission.localSubmissionId, 'local_submission_1');
+    expect(submission.serverSubmissionId, 'submission_1');
+    expect(submission.status, SubmittedWordStatus.queued);
+  });
+
+  test('fetches submitted words and parses ready resolved word payload', () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response(
+        jsonEncode({
+          'items': [
+            {
+              'id': 'submission_1',
+              'submitted_term': 'reliable',
+              'target_language': 'en',
+              'status': 'ready',
+              'resolution_type': 'existing_word',
+              'failure_reason': null,
+              'resolved_word': {
+                'server_word_id': 'word_1',
+                'term': 'reliable',
+                'language': 'en',
+                'meaning_vi': 'dang tin cay',
+                'part_of_speech': 'adjective',
+                'ipa': '/rɪˈlaɪəbl/',
+                'vietnamese_pronunciation': 'ri-lai-uh-bol',
+                'example': 'She is reliable.',
+                'example_vi': 'Co ay dang tin cay.',
+                'difficulty': 'B1',
+                'topics': ['work'],
+                'created_at': '2026-05-05T00:00:00.000Z'
+              },
+              'created_at': '2026-05-19T00:00:00.000Z',
+              'updated_at': '2026-05-19T00:00:05.000Z',
+              'resolved_at': '2026-05-19T00:00:05.000Z',
+            }
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    final items = await apiClient.fetchSubmittedWords(
+      deviceId: 'device_1',
+      sessionToken: 'session_1',
+    );
+
+    expect(captured.method, 'GET');
+    expect(captured.url.path, '/v1/user-submitted-words');
+    expect(captured.url.queryParameters['device_id'], 'device_1');
+    expect(items.single.serverSubmissionId, 'submission_1');
+    expect(items.single.status, SubmittedWordStatus.ready);
+    expect(items.single.resolutionType, SubmittedWordResolutionType.existingWord);
+    expect(items.single.resolvedWord?.serverWordId, 'word_1');
   });
 
   test('fetches backend-selected learning card batches with metadata',
@@ -468,7 +623,8 @@ void main() {
           headers: {'content-type': 'application/json'},
         );
       }
-      if (request.url.path == '/v1/articles/article_1' && request.method == 'GET') {
+      if (request.url.path == '/v1/articles/article_1' &&
+          request.method == 'GET') {
         return http.Response(
           jsonEncode({
             'id': 'article_1',
@@ -485,7 +641,8 @@ void main() {
           headers: {'content-type': 'application/json'},
         );
       }
-      if (request.url.path == '/v1/articles/article_1/vocabulary' && request.method == 'GET') {
+      if (request.url.path == '/v1/articles/article_1/vocabulary' &&
+          request.method == 'GET') {
         return http.Response(
           jsonEncode({
             'article_id': 'article_1',
@@ -508,7 +665,8 @@ void main() {
           headers: {'content-type': 'application/json'},
         );
       }
-      if (request.url.path == '/v1/articles/article_1' && request.method == 'DELETE') {
+      if (request.url.path == '/v1/articles/article_1' &&
+          request.method == 'DELETE') {
         return http.Response(
           jsonEncode({'success': true}),
           200,

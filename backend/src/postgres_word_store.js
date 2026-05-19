@@ -15,6 +15,7 @@ import {
   shuffleChoices,
   toApiSpeakingPrompt
 } from './word_store.js';
+import { statusForRating, nextReviewForRating, normalizeWeekStart } from './store_utils.js';
 import { normalizeSuggestionType } from './vocabulary_validator.js';
 import { normalizeSentenceText } from './workplace_sentence_validator.js';
 import {
@@ -170,10 +171,9 @@ export class PostgresWordStore {
   }
 
   async countUsableWords({ targetLanguage = 'en' } = {}) {
-    const result = await this.pool.query(
-      `SELECT COUNT(*)::int AS count FROM words WHERE language = $1`,
-      [targetLanguage]
-    );
+    const result = await this.pool.query(`SELECT COUNT(*)::int AS count FROM words WHERE language = $1`, [
+      targetLanguage
+    ]);
     return Number(result.rows[0]?.count ?? 0);
   }
 
@@ -259,20 +259,15 @@ export class PostgresWordStore {
   async replaceCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
     return this.#withOptionalTransaction(async (client) => {
       const distinctIds = [...new Set(wordIds.filter((wordId) => typeof wordId === 'string' && wordId.length > 0))];
-      const knownResult = distinctIds.length === 0
-        ? { rows: [] }
-        : await client.query(
-            `SELECT id FROM words WHERE id = ANY($1)`,
-            [distinctIds]
-          );
+      const knownResult =
+        distinctIds.length === 0
+          ? { rows: [] }
+          : await client.query(`SELECT id FROM words WHERE id = ANY($1)`, [distinctIds]);
       const knownIds = new Set(knownResult.rows.map((row) => row.id));
       const unknown = distinctIds.filter((wordId) => !knownIds.has(wordId));
       const stored = distinctIds.filter((wordId) => knownIds.has(wordId)).slice(0, 1000);
       const ownerWhere = userId ? 'user_id = $1' : 'device_id = $1 AND user_id IS NULL';
-      await client.query(
-        `DELETE FROM user_cached_words WHERE ${ownerWhere}`,
-        [userId ?? deviceId]
-      );
+      await client.query(`DELETE FROM user_cached_words WHERE ${ownerWhere}`, [userId ?? deviceId]);
       const now = new Date().toISOString();
       for (const wordId of stored) {
         await client.query(
@@ -298,12 +293,10 @@ export class PostgresWordStore {
   async addCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
     return this.#withOptionalTransaction(async (client) => {
       const distinctIds = [...new Set(wordIds.filter((wordId) => typeof wordId === 'string' && wordId.length > 0))];
-      const knownResult = distinctIds.length === 0
-        ? { rows: [] }
-        : await client.query(
-            `SELECT id FROM words WHERE id = ANY($1)`,
-            [distinctIds]
-          );
+      const knownResult =
+        distinctIds.length === 0
+          ? { rows: [] }
+          : await client.query(`SELECT id FROM words WHERE id = ANY($1)`, [distinctIds]);
       const knownIds = new Set(knownResult.rows.map((row) => row.id));
       const unknown = distinctIds.filter((wordId) => !knownIds.has(wordId));
       const stored = distinctIds.filter((wordId) => knownIds.has(wordId)).slice(0, 1000);
@@ -353,23 +346,298 @@ export class PostgresWordStore {
 
   async cachedWordIdsFor({ deviceId, userId = null }) {
     const result = userId
+      ? await this.pool.query(`SELECT word_id FROM user_cached_words WHERE user_id = $1`, [userId])
+      : await this.pool.query(`SELECT word_id FROM user_cached_words WHERE device_id = $1 AND user_id IS NULL`, [
+          deviceId
+        ]);
+    return new Set(result.rows.map((row) => row.word_id));
+  }
+
+  async createUserSubmittedWord({ deviceId, userId = null, term, language }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const submittedTerm = String(term ?? '').trim();
+      const normalizedTerm = normalizeTerm(submittedTerm);
+      const now = new Date().toISOString();
+      const ownerWhere = userId
+        ? 'user_id = $1 AND language = $2 AND normalized_term = $3'
+        : 'device_id = $1 AND user_id IS NULL AND language = $2 AND normalized_term = $3';
+      const ownerParams = userId ? [userId, language, normalizedTerm] : [deviceId, language, normalizedTerm];
+
+      const activeResult = await client.query(
+        `SELECT * FROM user_submitted_words
+         WHERE ${ownerWhere} AND status IN ('queued', 'processing')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        ownerParams
+      );
+      if (activeResult.rows[0]) {
+        return {
+          submission: await this.#hydrateSubmittedWord(client, rowToSubmittedWord(activeResult.rows[0])),
+          created: false
+        };
+      }
+
+      const readyResult = await client.query(
+        `SELECT * FROM user_submitted_words
+         WHERE ${ownerWhere} AND status = 'ready' AND resolved_word_id IS NOT NULL
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        ownerParams
+      );
+      if (readyResult.rows[0]) {
+        return {
+          submission: await this.#hydrateSubmittedWord(client, rowToSubmittedWord(readyResult.rows[0])),
+          created: false
+        };
+      }
+
+      const existingWordResult = await client.query(
+        `SELECT * FROM words WHERE language = $1 AND normalized_term = $2 LIMIT 1`,
+        [language, normalizedTerm]
+      );
+      if (existingWordResult.rows[0]) {
+        const insertedReady = await client.query(
+          `INSERT INTO user_submitted_words (
+            id,
+            user_id,
+            device_id,
+            submitted_term,
+            normalized_term,
+            language,
+            status,
+            failure_reason,
+            resolution_type,
+            resolved_word_id,
+            created_at,
+            updated_at,
+            resolved_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, 'ready', NULL, 'existing_word', $7, $8, $8, $8)
+          RETURNING *`,
+          [
+            createId('submitted_word'),
+            userId,
+            deviceId,
+            submittedTerm,
+            normalizedTerm,
+            language,
+            existingWordResult.rows[0].id,
+            now
+          ]
+        );
+        return {
+          submission: await this.#hydrateSubmittedWord(client, rowToSubmittedWord(insertedReady.rows[0])),
+          created: false
+        };
+      }
+
+      const insertedSubmission = await client.query(
+        `INSERT INTO user_submitted_words (
+          id,
+          user_id,
+          device_id,
+          submitted_term,
+          normalized_term,
+          language,
+          status,
+          failure_reason,
+          resolution_type,
+          resolved_word_id,
+          created_at,
+          updated_at,
+          resolved_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'queued', NULL, NULL, NULL, $7, $7, NULL)
+        RETURNING *`,
+        [createId('submitted_word'), userId, deviceId, submittedTerm, normalizedTerm, language, now]
+      );
+      const submission = rowToSubmittedWord(insertedSubmission.rows[0]);
+
+      await client.query(
+        `INSERT INTO user_submitted_word_jobs (
+          id,
+          submission_id,
+          status,
+          attempt_count,
+          queued_at,
+          started_at,
+          finished_at,
+          error_message,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, 'queued', 0, $3, NULL, NULL, NULL, $3, $3)`,
+        [createId('submitted_word_job'), submission.id, now]
+      );
+
+      return {
+        submission: await this.#hydrateSubmittedWord(client, submission),
+        created: true
+      };
+    });
+  }
+
+  async listUserSubmittedWords({ deviceId, userId = null, limit = 50 }) {
+    const result = userId
       ? await this.pool.query(
-          `SELECT word_id FROM user_cached_words WHERE user_id = $1`,
-          [userId]
+          `SELECT * FROM user_submitted_words
+           WHERE user_id = $1
+           ORDER BY updated_at DESC
+           LIMIT $2`,
+          [userId, Math.max(1, Math.min(limit, 100))]
         )
       : await this.pool.query(
-          `SELECT word_id FROM user_cached_words WHERE device_id = $1 AND user_id IS NULL`,
-          [deviceId]
+          `SELECT * FROM user_submitted_words
+           WHERE device_id = $1 AND user_id IS NULL
+           ORDER BY updated_at DESC
+           LIMIT $2`,
+          [deviceId, Math.max(1, Math.min(limit, 100))]
         );
-    return new Set(result.rows.map((row) => row.word_id));
+    return this.#hydrateSubmittedWords(this.pool, result.rows.map(rowToSubmittedWord));
+  }
+
+  async getUserSubmittedWordById({ submissionId }) {
+    const result = await this.pool.query(`SELECT * FROM user_submitted_words WHERE id = $1 LIMIT 1`, [submissionId]);
+    if (!result.rows[0]) {
+      return null;
+    }
+    return this.#hydrateSubmittedWord(this.pool, rowToSubmittedWord(result.rows[0]));
+  }
+
+  async claimNextSubmittedWordJob() {
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      const updated = await client.query(
+        `UPDATE user_submitted_word_jobs
+         SET status = 'processing',
+             attempt_count = attempt_count + 1,
+             started_at = $1,
+             updated_at = $1
+         WHERE id = (
+           SELECT id FROM user_submitted_word_jobs
+           WHERE status = 'queued'
+           ORDER BY queued_at ASC
+           LIMIT 1
+           FOR UPDATE SKIP LOCKED
+         )
+         RETURNING *`,
+        [now]
+      );
+      const job = updated.rows[0];
+      if (!job) {
+        return null;
+      }
+      await client.query(
+        `UPDATE user_submitted_words
+         SET status = 'processing',
+             failure_reason = NULL,
+             updated_at = $2
+         WHERE id = $1`,
+        [job.submission_id, now]
+      );
+      return job;
+    });
+  }
+
+  async completeSubmittedWordJob({ jobId, resolvedWordId, resolutionType = 'generated_word' }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      const updated = await client.query(
+        `UPDATE user_submitted_word_jobs
+         SET status = 'completed',
+             error_message = NULL,
+             finished_at = $2,
+             updated_at = $2
+         WHERE id = $1
+         RETURNING *`,
+        [jobId, now]
+      );
+      const job = updated.rows[0];
+      if (!job) {
+        return null;
+      }
+      const submissionResult = await client.query(
+        `UPDATE user_submitted_words
+         SET status = 'ready',
+             failure_reason = NULL,
+             resolution_type = $2,
+             resolved_word_id = $3,
+             updated_at = $4,
+             resolved_at = $4
+         WHERE id = $1
+         RETURNING *`,
+        [job.submission_id, resolutionType, resolvedWordId, now]
+      );
+      return this.#hydrateSubmittedWord(client, rowToSubmittedWord(submissionResult.rows[0]));
+    });
+  }
+
+  async retrySubmittedWordJob({ jobId, errorMessage = null }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      const updated = await client.query(
+        `UPDATE user_submitted_word_jobs
+         SET status = 'queued',
+             error_message = $2,
+             finished_at = NULL,
+             updated_at = $3
+         WHERE id = $1
+         RETURNING *`,
+        [jobId, errorMessage, now]
+      );
+      const job = updated.rows[0];
+      if (!job) {
+        return null;
+      }
+      const submissionResult = await client.query(
+        `UPDATE user_submitted_words
+         SET status = 'queued',
+             failure_reason = NULL,
+             updated_at = $2
+         WHERE id = $1
+         RETURNING *`,
+        [job.submission_id, now]
+      );
+      return this.#hydrateSubmittedWord(client, rowToSubmittedWord(submissionResult.rows[0]));
+    });
+  }
+
+  async failSubmittedWordJob({ jobId, errorMessage }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      const updated = await client.query(
+        `UPDATE user_submitted_word_jobs
+         SET status = 'failed',
+             error_message = $2,
+             finished_at = $3,
+             updated_at = $3
+         WHERE id = $1
+         RETURNING *`,
+        [jobId, errorMessage, now]
+      );
+      const job = updated.rows[0];
+      if (!job) {
+        return null;
+      }
+      const submissionResult = await client.query(
+        `UPDATE user_submitted_words
+         SET status = 'failed',
+             failure_reason = $2,
+             updated_at = $3
+         WHERE id = $1
+         RETURNING *`,
+        [job.submission_id, errorMessage, now]
+      );
+      return this.#hydrateSubmittedWord(client, rowToSubmittedWord(submissionResult.rows[0]));
+    });
   }
 
   async wordStateFor({ deviceId, userId = null, wordId }) {
     const result = userId
-      ? await this.pool.query(
-          `SELECT * FROM user_word_states WHERE user_id = $1 AND word_id = $2 LIMIT 1`,
-          [userId, wordId]
-        )
+      ? await this.pool.query(`SELECT * FROM user_word_states WHERE user_id = $1 AND word_id = $2 LIMIT 1`, [
+          userId,
+          wordId
+        ])
       : await this.pool.query(
           `SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND word_id = $2 LIMIT 1`,
           [deviceId, wordId]
@@ -390,10 +658,10 @@ export class PostgresWordStore {
             AND (user_id = $1 OR (device_id = $2 AND user_id IS NULL))`,
             [userId, deviceId, targetLanguage]
           )
-        : this.pool.query(
-            `SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND language = $2`,
-            [deviceId, targetLanguage]
-          )
+        : this.pool.query(`SELECT * FROM user_word_states WHERE device_id = $1 AND user_id IS NULL AND language = $2`, [
+            deviceId,
+            targetLanguage
+          ])
     ]);
     const words = wordsResult.rows.map(rowToWord);
     const wordById = new Map(words.map((w) => [w.id, w]));
@@ -779,14 +1047,7 @@ export class PostgresWordStore {
           )
           VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING *`,
-          [
-            createId('user'),
-            input.identifier,
-            displayName,
-            createPasswordHash(input.password),
-            now,
-            now
-          ]
+          [createId('user'), input.identifier, displayName, createPasswordHash(input.password), now, now]
         );
       } catch (error) {
         if (error?.code === '23505') {
@@ -992,10 +1253,7 @@ export class PostgresWordStore {
       }
     }
     if (assignments.length === 0) {
-      const existing = await this.pool.query(
-        `SELECT * FROM articles WHERE id = $1 LIMIT 1`,
-        [articleId]
-      );
+      const existing = await this.pool.query(`SELECT * FROM articles WHERE id = $1 LIMIT 1`, [articleId]);
       return existing.rows[0] ?? null;
     }
     values.push(new Date().toISOString());
@@ -1071,10 +1329,7 @@ export class PostgresWordStore {
   }
 
   async updateSpeakingPrompt({ promptId, patch, reviewerUserId = null }) {
-    const existing = await this.pool.query(
-      `SELECT * FROM speaking_prompts WHERE id = $1 LIMIT 1`,
-      [promptId]
-    );
+    const existing = await this.pool.query(`SELECT * FROM speaking_prompts WHERE id = $1 LIMIT 1`, [promptId]);
     if (!existing.rows[0]) {
       return null;
     }
@@ -1160,15 +1415,7 @@ export class PostgresWordStore {
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT ${conflictTarget} DO UPDATE SET updated_at = user_proficiency.updated_at
       RETURNING *`,
-      [
-        createId('proficiency'),
-        userId,
-        deviceId,
-        language,
-        getDefaultProficiencyLevel({ language }),
-        now,
-        now
-      ]
+      [createId('proficiency'), userId, deviceId, language, getDefaultProficiencyLevel({ language }), now, now]
     );
     return inserted.rows[0];
   }
@@ -1179,11 +1426,10 @@ export class PostgresWordStore {
       return null;
     }
 
-    const previousLevel = normalizeDifficultyLevel(currentLevel, { language })
-      ?? getDefaultProficiencyLevel({ language });
-    const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel, { language })
-      : decrementLevel(previousLevel, { language });
+    const previousLevel =
+      normalizeDifficultyLevel(currentLevel, { language }) ?? getDefaultProficiencyLevel({ language });
+    const nextLevel =
+      rating === 'too_easy' ? incrementLevel(previousLevel, { language }) : decrementLevel(previousLevel, { language });
 
     await client.query(
       `UPDATE user_proficiency
@@ -1275,14 +1521,18 @@ export class PostgresWordStore {
   }
 
   async getArticleById({ articleId }) {
-    const result = await this.pool.query(
-      `SELECT * FROM articles WHERE id = $1 LIMIT 1`,
-      [articleId]
-    );
+    const result = await this.pool.query(`SELECT * FROM articles WHERE id = $1 LIMIT 1`, [articleId]);
     return result.rows[0] ?? null;
   }
 
-  async createAdminArticle({ adminUserId = null, title, sourceUrl = null, language, rawText, visibility = 'published' }) {
+  async createAdminArticle({
+    adminUserId = null,
+    title,
+    sourceUrl = null,
+    language,
+    rawText,
+    visibility = 'published'
+  }) {
     return this.#insertArticle({ adminUserId, title, sourceUrl, language, rawText, visibility });
   }
 
@@ -1362,10 +1612,11 @@ export class PostgresWordStore {
       if (!item) {
         return null;
       }
-      await client.query(
-        `UPDATE word_senses SET status = $1, updated_at = $2 WHERE id = $3`,
-        [senseStatus, now, item.word_sense_id]
-      );
+      await client.query(`UPDATE word_senses SET status = $1, updated_at = $2 WHERE id = $3`, [
+        senseStatus,
+        now,
+        item.word_sense_id
+      ]);
       return item;
     });
     return result;
@@ -1504,20 +1755,16 @@ export class PostgresWordStore {
 
   async persistArticleVocabulary({ articleId, items = [] }) {
     return this.#withOptionalTransaction(async (client) => {
-      const articleResult = await client.query(
-        `SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`,
-        [articleId]
-      );
+      const articleResult = await client.query(`SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`, [articleId]);
       const article = articleResult.rows[0];
       if (!article) {
         throw new Error('article_not_found');
       }
 
       // Delete existing vocabulary for this article to prevent duplicates on reprocess
-      const existingTermsResult = await client.query(
-        `SELECT word_sense_id FROM article_terms WHERE article_id = $1`,
-        [articleId]
-      );
+      const existingTermsResult = await client.query(`SELECT word_sense_id FROM article_terms WHERE article_id = $1`, [
+        articleId
+      ]);
       const oldSenseIds = existingTermsResult.rows.map((r) => r.word_sense_id);
       await client.query(`DELETE FROM vocabulary_review_items WHERE article_id = $1`, [articleId]);
       await client.query(`DELETE FROM article_terms WHERE article_id = $1`, [articleId]);
@@ -1648,10 +1895,7 @@ export class PostgresWordStore {
 
   async persistArticleWorkplaceSentences({ articleId, items = [] }) {
     return this.#withOptionalTransaction(async (client) => {
-      const articleResult = await client.query(
-        `SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`,
-        [articleId]
-      );
+      const articleResult = await client.query(`SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`, [articleId]);
       const article = articleResult.rows[0];
       if (!article) {
         throw new Error('article_not_found');
@@ -1837,13 +2081,7 @@ export class PostgresWordStore {
       )
       VALUES ($1, $2, $3, $4, $5, NULL)
       RETURNING *`,
-      [
-        createId('session'),
-        user.id,
-        hashSessionToken(sessionToken),
-        deviceId,
-        now
-      ]
+      [createId('session'), user.id, hashSessionToken(sessionToken), deviceId, now]
     );
     return {
       session: inserted.rows[0],
@@ -1869,6 +2107,38 @@ export class PostgresWordStore {
     } finally {
       client.release();
     }
+  }
+
+  async #hydrateSubmittedWord(client, submission) {
+    if (!submission?.resolved_word_id) {
+      return {
+        ...submission,
+        resolved_word: null
+      };
+    }
+
+    const resolvedWordResult = await client.query(`SELECT * FROM words WHERE id = $1 LIMIT 1`, [submission.resolved_word_id]);
+    return {
+      ...submission,
+      resolved_word: resolvedWordResult.rows[0] ? rowToWord(resolvedWordResult.rows[0]) : null
+    };
+  }
+
+  async #hydrateSubmittedWords(client, submissions) {
+    const resolvedIds = [...new Set(submissions.map((submission) => submission.resolved_word_id).filter(Boolean))];
+    if (resolvedIds.length === 0) {
+      return submissions.map((submission) => ({
+        ...submission,
+        resolved_word: null
+      }));
+    }
+
+    const resolvedWordsResult = await client.query(`SELECT * FROM words WHERE id = ANY($1)`, [resolvedIds]);
+    const resolvedWordById = new Map(resolvedWordsResult.rows.map((row) => [row.id, rowToWord(row)]));
+    return submissions.map((submission) => ({
+      ...submission,
+      resolved_word: submission.resolved_word_id ? resolvedWordById.get(submission.resolved_word_id) ?? null : null
+    }));
   }
 
   // ─── Exam methods ──────────────────────────────────────────────────────────
@@ -1956,13 +2226,21 @@ export class PostgresWordStore {
           created_at: now,
           question_type: questionType,
           sentence: questionType === 'sentence_context' ? src.example : null,
-          highlight: questionType === 'sentence_context' ? src.term : null,
+          highlight: questionType === 'sentence_context' ? src.term : null
         };
         await client.query(
           `INSERT INTO exam_questions (id, session_id, word_id, prompt_word, choices_json, correct_index, ordinal, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [question.id, question.session_id, question.word_id, question.prompt_word,
-            question.choices_json, question.correct_index, question.ordinal, question.created_at]
+          [
+            question.id,
+            question.session_id,
+            question.word_id,
+            question.prompt_word,
+            question.choices_json,
+            question.correct_index,
+            question.ordinal,
+            question.created_at
+          ]
         );
         questions.push(question);
       }
@@ -1979,7 +2257,7 @@ export class PostgresWordStore {
             ordinal: q.ordinal,
             prompt_word: q.prompt_word,
             choices: JSON.parse(q.choices_json),
-            question_type: q.question_type,
+            question_type: q.question_type
           };
           if (q.question_type === 'sentence_context') {
             item.sentence = q.sentence;
@@ -1991,19 +2269,24 @@ export class PostgresWordStore {
     });
   }
 
-  async submitExamSession({ sessionId, userId, answers, now = new Date().toISOString(), passPct = 70, disclaimer = '' }) {
+  async submitExamSession({
+    sessionId,
+    userId,
+    answers,
+    now = new Date().toISOString(),
+    passPct = 70,
+    disclaimer: _disclaimer = ''
+  }) {
     return this.#withOptionalTransaction(async (client) => {
-      const sessResult = await client.query(
-        `SELECT * FROM exam_sessions WHERE id = $1`, [sessionId]
-      );
+      const sessResult = await client.query(`SELECT * FROM exam_sessions WHERE id = $1`, [sessionId]);
       if (sessResult.rows.length === 0) return { error: 'NOT_FOUND' };
       const session = sessResult.rows[0];
       if (session.submitted_at) return { error: 'ALREADY_SUBMITTED' };
       if (now > session.expires_at) return { error: 'SESSION_EXPIRED' };
 
-      const qResult = await client.query(
-        `SELECT * FROM exam_questions WHERE session_id = $1 ORDER BY ordinal`, [sessionId]
-      );
+      const qResult = await client.query(`SELECT * FROM exam_questions WHERE session_id = $1 ORDER BY ordinal`, [
+        sessionId
+      ]);
       const questions = qResult.rows;
       if (answers.length !== questions.length) {
         return { error: 'ANSWER_COUNT_MISMATCH', expected: questions.length, received: answers.length };
@@ -2017,16 +2300,25 @@ export class PostgresWordStore {
       const scorePct = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
       const passed = scorePct >= passPct;
 
-      await client.query(
-        `UPDATE exam_sessions SET submitted_at = $1 WHERE id = $2`, [now, sessionId]
-      );
+      await client.query(`UPDATE exam_sessions SET submitted_at = $1 WHERE id = $2`, [now, sessionId]);
 
       const attemptId = createId('exam_att');
       await client.query(
         `INSERT INTO exam_attempts (id, session_id, user_id, topic, language, difficulty_level, total_questions, correct_count, score_pct, passed, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [attemptId, sessionId, userId, session.topic, session.language, session.difficulty_level,
-          totalQuestions, correctCount, scorePct, passed ? 1 : 0, now]
+        [
+          attemptId,
+          sessionId,
+          userId,
+          session.topic,
+          session.language,
+          session.difficulty_level,
+          totalQuestions,
+          correctCount,
+          scorePct,
+          passed ? 1 : 0,
+          now
+        ]
       );
 
       let certificateId = null;
@@ -2035,8 +2327,7 @@ export class PostgresWordStore {
         await client.query(
           `INSERT INTO exam_certificates (id, attempt_id, user_id, topic, language, difficulty_level, score_pct, issued_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [certificateId, attemptId, userId, session.topic, session.language,
-            session.difficulty_level, scorePct, now]
+          [certificateId, attemptId, userId, session.topic, session.language, session.difficulty_level, scorePct, now]
         );
       }
 
@@ -2058,9 +2349,9 @@ export class PostgresWordStore {
 
   async getExamResults({ userId, page = 1, limit = 20 }) {
     const offset = (page - 1) * limit;
-    const countResult = await this.pool.query(
-      `SELECT COUNT(*) AS total FROM exam_attempts WHERE user_id = $1`, [userId]
-    );
+    const countResult = await this.pool.query(`SELECT COUNT(*) AS total FROM exam_attempts WHERE user_id = $1`, [
+      userId
+    ]);
     const total = Number(countResult.rows[0]?.total ?? 0);
     const itemsResult = await this.pool.query(
       `SELECT ea.id AS attempt_id, ea.topic, ea.language, ea.difficulty_level, ea.score_pct,
@@ -2145,34 +2436,20 @@ function rowToWorkplaceSentence(row) {
   };
 }
 
-function statusForRating(rating) {
-  if (rating === 'easy' || rating === 'too_easy') {
-    return 'completed';
-  }
-  return rating === 'too_hard' ? 'learning' : 'review';
-}
-
-function nextReviewForRating(rating, occurredAt) {
-  if (rating === 'easy' || rating === 'too_easy') {
-    return null;
-  }
-  if (rating === 'too_hard') {
-    return new Date(occurredAt.getTime() + 5 * 60 * 1000);
-  }
-  return new Date(occurredAt.getTime() + 24 * 60 * 60 * 1000);
-}
-
-function normalizeWeekStart(value) {
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString();
-    }
-  }
-  const now = new Date();
-  const day = now.getUTCDay();
-  const diff = day === 0 ? 6 : day - 1;
-  now.setUTCDate(now.getUTCDate() - diff);
-  now.setUTCHours(0, 0, 0, 0);
-  return now.toISOString();
+function rowToSubmittedWord(row) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    device_id: row.device_id,
+    submitted_term: row.submitted_term,
+    normalized_term: row.normalized_term,
+    language: row.language,
+    status: row.status,
+    failure_reason: row.failure_reason,
+    resolution_type: row.resolution_type,
+    resolved_word_id: row.resolved_word_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    resolved_at: row.resolved_at
+  };
 }

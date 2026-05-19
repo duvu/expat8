@@ -77,9 +77,7 @@ export class InMemoryRateLimiter {
  */
 export function rateLimitMiddleware(limiter, { keyPrefix = '', keyFn } = {}) {
   return (request, response, next) => {
-    const baseKey = keyFn
-      ? keyFn(request)
-      : (request.body?.device_id ?? request.ip ?? 'unknown');
+    const baseKey = keyFn ? keyFn(request) : (request.body?.device_id ?? request.ip ?? 'unknown');
     const key = keyPrefix ? `${keyPrefix}:${baseKey}` : baseKey;
     const { allowed, remaining, resetMs } = limiter.check(key);
 

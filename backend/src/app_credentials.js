@@ -164,7 +164,7 @@ export async function verifyAppCredentialRequest({ method, url, headers, rawBody
     return { ok: false };
   }
 
-  if (!await nonceCache.use(appId, nonce, nowMs, config.appCredentialNonceTtlSeconds)) {
+  if (!(await nonceCache.use(appId, nonce, nowMs, config.appCredentialNonceTtlSeconds))) {
     return { ok: false };
   }
 

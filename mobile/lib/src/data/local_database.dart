@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../objectbox.g.dart';
 import '../logging/logger.dart';
 import '../models/learning_progress.dart';
+import '../models/submitted_word.dart';
 import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
@@ -22,6 +23,7 @@ class LocalDatabase {
         _localWorkplaceSentences = _store.box<LocalWorkplaceSentenceEntity>(),
         _studyEvents = _store.box<StudyEventEntity>(),
         _syncQueue = _store.box<SyncQueueEntity>(),
+        _submittedWords = _store.box<SubmittedWordEntity>(),
         _learningHistory = _store.box<LearningHistoryEntity>(),
         _settings = _store.box<AppSettingEntity>(),
         _logs = _store.box<AppLogEntity>(),
@@ -36,6 +38,7 @@ class LocalDatabase {
   final Box<LocalWorkplaceSentenceEntity> _localWorkplaceSentences;
   final Box<StudyEventEntity> _studyEvents;
   final Box<SyncQueueEntity> _syncQueue;
+  final Box<SubmittedWordEntity> _submittedWords;
   final Box<LearningHistoryEntity> _learningHistory;
   final Box<AppSettingEntity> _settings;
   final Box<AppLogEntity> _logs;
@@ -559,6 +562,130 @@ class LocalDatabase {
     final row = query.findFirst();
     if (row != null) {
       _settings.remove(row.id);
+    }
+  }
+
+  Future<void> upsertSubmittedWord(SubmittedWord submission) async {
+    final existing = _submittedWords
+        .query(
+          SubmittedWordEntity_.localSubmissionId
+              .equals(submission.localSubmissionId),
+        )
+        .build()
+        .findFirst();
+    _submittedWords.put(
+      SubmittedWordEntity(
+        id: existing?.id ?? 0,
+        localSubmissionId: submission.localSubmissionId,
+        serverSubmissionId: submission.serverSubmissionId,
+        submittedTerm: submission.submittedTerm,
+        targetLanguage: submission.targetLanguage,
+        status: submission.status.name,
+        failureReason: submission.failureReason,
+        resolutionType: switch (submission.resolutionType) {
+          SubmittedWordResolutionType.existingWord => 'existing_word',
+          SubmittedWordResolutionType.generatedWord => 'generated_word',
+          null => null,
+        },
+        resolvedWordServerId:
+            submission.resolvedWord?.serverWordId ?? existing?.resolvedWordServerId,
+        createdAtMs: submission.createdAt.toUtc().millisecondsSinceEpoch,
+        updatedAtMs: submission.updatedAt.toUtc().millisecondsSinceEpoch,
+        resolvedAtMs: submission.resolvedAt?.toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<SubmittedWord?> getSubmittedWord(String localSubmissionId) async {
+    final row = _submittedWords
+        .query(
+          SubmittedWordEntity_.localSubmissionId.equals(localSubmissionId),
+        )
+        .build()
+        .findFirst();
+    return row == null ? null : _submittedWordFromEntity(row);
+  }
+
+  Future<List<SubmittedWord>> listSubmittedWords({int limit = 200}) async {
+    final rows = _submittedWords
+        .query()
+        .order(SubmittedWordEntity_.updatedAtMs, flags: Order.descending)
+        .build()
+        .find();
+    final items = rows.map(_submittedWordFromEntity).toList(growable: false);
+    return items.take(limit).toList(growable: false);
+  }
+
+  Future<void> enqueueSubmittedWordCreate(
+    String localSubmissionId, {
+    DateTime? nextRetryAt,
+  }) async {
+    final existing = _findSubmittedWordQueueEntry(
+      type: 'submitted_word_create',
+      localSubmissionId: localSubmissionId,
+    );
+    final nextRetryAtMs =
+        (nextRetryAt ?? DateTime.now().toUtc()).toUtc().millisecondsSinceEpoch;
+    if (existing != null) {
+      existing.nextRetryAtMs = nextRetryAtMs;
+      existing.retryCount = 0;
+      _syncQueue.put(existing);
+      return;
+    }
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'submitted_word_create',
+        payload: jsonEncode({'local_submission_id': localSubmissionId}),
+        retryCount: 0,
+        nextRetryAtMs: nextRetryAtMs,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<void> enqueueSubmittedWordStatus(
+    String localSubmissionId, {
+    required String serverSubmissionId,
+    DateTime? nextRetryAt,
+  }) async {
+    final existing = _findSubmittedWordQueueEntry(
+      type: 'submitted_word_status',
+      localSubmissionId: localSubmissionId,
+    );
+    final payload = jsonEncode({
+      'local_submission_id': localSubmissionId,
+      'server_submission_id': serverSubmissionId,
+    });
+    final nextRetryAtMs =
+        (nextRetryAt ?? DateTime.now().toUtc()).toUtc().millisecondsSinceEpoch;
+    if (existing != null) {
+      existing.payload = payload;
+      existing.nextRetryAtMs = nextRetryAtMs;
+      existing.retryCount = 0;
+      _syncQueue.put(existing);
+      return;
+    }
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'submitted_word_status',
+        payload: payload,
+        retryCount: 0,
+        nextRetryAtMs: nextRetryAtMs,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<void> removeSyncQueueEntry(int id) async {
+    _syncQueue.remove(id);
+  }
+
+  Future<void> removeSubmittedWordQueueEntries(String localSubmissionId) async {
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (_queuePayloadContainsLocalSubmissionId(item, localSubmissionId)) {
+        _syncQueue.remove(item.id);
+      }
     }
   }
 
@@ -1312,6 +1439,37 @@ class LocalDatabase {
     );
   }
 
+  SubmittedWord _submittedWordFromEntity(SubmittedWordEntity row) {
+    final resolvedWordRow = row.resolvedWordServerId == null
+        ? null
+        : _localWords
+            .query(
+              LocalWordEntity_.serverWordId.equals(row.resolvedWordServerId!),
+            )
+            .build()
+            .findFirst();
+    return SubmittedWord(
+      localSubmissionId: row.localSubmissionId,
+      serverSubmissionId: row.serverSubmissionId,
+      submittedTerm: row.submittedTerm,
+      targetLanguage: row.targetLanguage,
+      status: SubmittedWordStatus.values.byName(row.status),
+      failureReason: row.failureReason,
+      resolutionType: switch (row.resolutionType) {
+        'existing_word' => SubmittedWordResolutionType.existingWord,
+        'generated_word' => SubmittedWordResolutionType.generatedWord,
+        _ => null,
+      },
+      resolvedWord:
+          resolvedWordRow == null ? null : _wordFromEntity(resolvedWordRow),
+      createdAt:
+          DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+      updatedAt:
+          DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
+      resolvedAt: _parseDateMs(row.resolvedAtMs),
+    );
+  }
+
   LogEntry _logFromEntity(AppLogEntity row) {
     return LogEntry(
       id: row.id,
@@ -1333,6 +1491,27 @@ class LocalDatabase {
       return null;
     }
     return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+  }
+
+  SyncQueueEntity? _findSubmittedWordQueueEntry({
+    required String type,
+    required String localSubmissionId,
+  }) {
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.type == type &&
+          _queuePayloadContainsLocalSubmissionId(item, localSubmissionId)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  bool _queuePayloadContainsLocalSubmissionId(
+    SyncQueueEntity item,
+    String localSubmissionId,
+  ) {
+    return item.payload.contains('"local_submission_id":"$localSubmissionId"');
   }
 
   // ---- Speaking prompt cache ----

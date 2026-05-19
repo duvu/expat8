@@ -1,8 +1,4 @@
-import {
-  buildCanonicalRequest,
-  hashBody,
-  signCanonicalRequest
-} from '../../src/app_credentials.js';
+import { buildCanonicalRequest, hashBody, signCanonicalRequest } from '../../src/app_credentials.js';
 import { loadConfig } from '../../src/config.js';
 
 export const testAppCredential = {

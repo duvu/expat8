@@ -13,6 +13,10 @@ Flutter client for the Expat8 vocabulary learning MVP.
 - Duplicate avoidance is backend-owned through learner state and
   `PUT /v1/user-word-cache`; the mobile app does not send word exclusion lists
   for refill.
+- The app exposes an `Add word` flow where a learner can type a word or short
+  expression, store it locally if offline, and sync it through
+  `POST /v1/user-submitted-words` / `GET /v1/user-submitted-words` until it is
+  `queued`, `processing`, `ready`, or `failed`.
 - The drawer exposes a separate `Sentences` entry for workplace sentence study.
 
 ## Development

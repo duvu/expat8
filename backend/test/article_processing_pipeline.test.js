@@ -122,7 +122,10 @@ test('long article (above maxChunkChars) is split into multiple chunks and adapt
   assert.ok(adapter.calls.length >= 2, 'adapter should be called at least twice for a long article');
   // chunk indices should be sequential starting from 0
   const indices = adapter.calls.map((c) => c.chunkIndex);
-  assert.deepEqual(indices, Array.from({ length: adapter.calls.length }, (_, i) => i));
+  assert.deepEqual(
+    indices,
+    Array.from({ length: adapter.calls.length }, (_, i) => i)
+  );
 });
 
 test('extremely long single paragraph is split by character boundary', async () => {

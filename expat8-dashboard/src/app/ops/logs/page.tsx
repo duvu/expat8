@@ -1,28 +1,58 @@
 import Link from 'next/link';
 
 import PageShell from '@/components/PageShell';
-import { formatBytes, formatDateTime, filterLogArchives } from '@/lib/ops';
+import { formatBytes, formatDateTime, filterLogArchives, summarizeLogArchives } from '@/lib/ops';
 import { loadLogArchives } from '@/lib/ops-data';
+import { deleteExpiredArchivesAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OpsLogsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; source?: string; state?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ q?: string; source?: string; state?: string; from?: string; to?: string; user?: string }>;
 }) {
   const params = await searchParams;
   const archivesResult = await loadLogArchives({ limit: 500 });
   const archives = filterLogArchives(archivesResult.items, params);
+  const stats = summarizeLogArchives(archivesResult.items);
   const sources = Array.from(new Set(archivesResult.items.map((archive) => archive.source_label ?? 'mobile'))).sort();
+  const expiredIds = archivesResult.items
+    .filter((a) => a.retention_state === 'expired')
+    .map((a) => a.id);
+
+  async function handleDeleteExpired() {
+    'use server';
+    await deleteExpiredArchivesAction(expiredIds);
+  }
 
   return (
     <PageShell title="Log Archives" actions={<Link href="/ops" className="button secondary">Ops home</Link>}>
+      <section className="table-panel">
+        <div className="ops-stats-bar">
+          <span><strong>{stats.activeCount + stats.expiredCount}</strong> total</span>
+          <span><strong>{formatBytes(stats.totalBytes)}</strong> stored</span>
+          <span><strong>{stats.activeCount}</strong> active</span>
+          <span><strong>{stats.expiredCount}</strong> expired</span>
+          {expiredIds.length > 0 && (
+            <form action={handleDeleteExpired} style={{ display: 'inline', marginLeft: 'auto' }}>
+              <button type="submit" className="button danger small">
+                Delete all expired ({expiredIds.length})
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
       <section className="table-panel">
         <form className="ops-filters" method="GET">
           <label>
             Search
             <input name="q" defaultValue={params.q ?? ''} placeholder="File, device, app, retention" />
+          </label>
+          <label>
+            User
+            <input name="user" defaultValue={params.user ?? ''} placeholder="User ID" />
           </label>
           <label>
             Source

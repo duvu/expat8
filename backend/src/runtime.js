@@ -14,11 +14,13 @@ import { VocabularyPoolScheduler } from './vocabulary_pool_scheduler.js';
 import { WordStore } from './word_store.js';
 
 export function createStore({ config, logger, poolFactory = (options) => new pg.Pool(options) }) {
-  const storeLogger = logger ?? createLogger({
-    level: config.logLevel,
-    redactionEnabled: config.logRedactionEnabled,
-    component: 'backend'
-  });
+  const storeLogger =
+    logger ??
+    createLogger({
+      level: config.logLevel,
+      redactionEnabled: config.logRedactionEnabled,
+      component: 'backend'
+    });
 
   if (config.databaseUrl) {
     const pool = poolFactory({
@@ -37,11 +39,13 @@ export function createStore({ config, logger, poolFactory = (options) => new pg.
 }
 
 export function createBackendRuntime({ config = loadConfig(), poolFactory, logger } = {}) {
-  const runtimeLogger = logger ?? createLogger({
-    level: config.logLevel,
-    redactionEnabled: config.logRedactionEnabled,
-    component: 'backend'
-  });
+  const runtimeLogger =
+    logger ??
+    createLogger({
+      level: config.logLevel,
+      redactionEnabled: config.logRedactionEnabled,
+      component: 'backend'
+    });
   const store = createStore({ config, logger: runtimeLogger, poolFactory });
   const liteLLMClient = new LiteLLMClient({
     baseUrl: config.liteLLMBaseUrl,
@@ -72,14 +76,16 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
   // Falls back to the in-memory implementation for local/test environments.
   const nonceCache = store.pool ? new PostgresNonceCache(store.pool) : undefined;
 
-  const server = http.createServer(createApp({
-    store,
-    generationService,
-    config,
-    logger: runtimeLogger.child({ component: 'api' }),
-    logArchiveStore,
-    ...(nonceCache ? { nonceCache } : {})
-  }));
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService,
+      config,
+      logger: runtimeLogger.child({ component: 'api' }),
+      logArchiveStore,
+      ...(nonceCache ? { nonceCache } : {})
+    })
+  );
 
   return {
     config,

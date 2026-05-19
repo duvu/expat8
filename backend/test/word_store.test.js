@@ -131,10 +131,7 @@ test('replaces cached word inventory and caps it at 1000 known ids', () => {
 
   const result = store.replaceCachedWordIds({
     deviceId: 'device_cache',
-    wordIds: [
-      ...Array.from({ length: 1005 }, (_, index) => `cache_${index}`),
-      'unknown_word'
-    ],
+    wordIds: [...Array.from({ length: 1005 }, (_, index) => `cache_${index}`), 'unknown_word'],
     observedAt: '2026-05-05T00:00:00.000Z'
   });
 
@@ -385,7 +382,10 @@ test('learning cards exclude anonymous history after sign-in', () => {
     now: '2026-05-05T03:00:00.000Z'
   });
 
-  assert.deepEqual(result.items.map((card) => card.word.id), ['word_seen']);
+  assert.deepEqual(
+    result.items.map((card) => card.word.id),
+    ['word_seen']
+  );
 });
 
 test('reprocessArticle clears existing vocabulary so double-reprocess yields no duplicates', () => {
@@ -413,9 +413,7 @@ test('reprocessArticle clears existing vocabulary so double-reprocess yields no 
   const afterSecond = [...store.articleTermsById.values()].filter((at) => at.article_id === article.id);
   assert.equal(afterSecond.length, 2, 'expected 2 article_terms after reprocess (no duplicates)');
 
-  const reviewItems = [...store.vocabularyReviewItemsById.values()].filter(
-    (ri) => ri.article_id === article.id
-  );
+  const reviewItems = [...store.vocabularyReviewItemsById.values()].filter((ri) => ri.article_id === article.id);
   assert.equal(reviewItems.length, 2, 'expected 2 vocabulary_review_items after reprocess (no duplicates)');
 });
 
@@ -439,16 +437,12 @@ test('stub vocabulary items have approved=false regardless of article type', () 
 
   // User article with LLM enrichment (non-stub) → auto-approved
   store.persistArticleVocabulary({ articleId: userArticle.id, items: [normalItem] });
-  const userNormalReview = [...store.vocabularyReviewItemsById.values()].find(
-    (ri) => ri.article_id === userArticle.id
-  );
+  const userNormalReview = [...store.vocabularyReviewItemsById.values()].find((ri) => ri.article_id === userArticle.id);
   assert.equal(userNormalReview.status, 'approved', 'user article non-stub should be approved');
 
   // Admin article with stubs → pending (requires review)
   store.persistArticleVocabulary({ articleId: adminArticle.id, items: [stubItem] });
-  const adminStubReview = [...store.vocabularyReviewItemsById.values()].find(
-    (ri) => ri.article_id === adminArticle.id
-  );
+  const adminStubReview = [...store.vocabularyReviewItemsById.values()].find((ri) => ri.article_id === adminArticle.id);
   assert.equal(adminStubReview.status, 'pending', 'admin article stub should be pending');
 
   // User article with stub → also pending (stubs never auto-approve)
@@ -459,9 +453,7 @@ test('stub vocabulary items have approved=false regardless of article type', () 
     rawText: 'content'
   });
   store.persistArticleVocabulary({ articleId: userArticle2.id, items: [stubItem] });
-  const userStubReview = [...store.vocabularyReviewItemsById.values()].find(
-    (ri) => ri.article_id === userArticle2.id
-  );
+  const userStubReview = [...store.vocabularyReviewItemsById.values()].find((ri) => ri.article_id === userArticle2.id);
   assert.equal(userStubReview.status, 'pending', 'user article stub should also be pending');
 });
 
@@ -607,29 +599,43 @@ test('normalizeSpeakingEvent accepts all 8 speaking event types', () => {
 
 test('normalizeSpeakingEvent rejects unknown speaking event type', () => {
   assert.throws(
-    () => normalizeSpeakingEvent({ deviceId: 'd', event: { event_type: 'speaking_magic_score', attempt_id: 'a', occurred_at: '2026-01-01T00:00:00Z' } }),
+    () =>
+      normalizeSpeakingEvent({
+        deviceId: 'd',
+        event: { event_type: 'speaking_magic_score', attempt_id: 'a', occurred_at: '2026-01-01T00:00:00Z' }
+      }),
     { message: 'invalid_speaking_event_type' }
   );
 });
 
 test('normalizeSpeakingEvent rejects forbidden audio fields', () => {
   assert.throws(
-    () => normalizeSpeakingEvent({ deviceId: 'd', event: { event_type: 'speaking_recorded', attempt_id: 'a', occurred_at: '2026-01-01T00:00:00Z', local_audio_path: '/tmp/x.m4a' } }),
+    () =>
+      normalizeSpeakingEvent({
+        deviceId: 'd',
+        event: {
+          event_type: 'speaking_recorded',
+          attempt_id: 'a',
+          occurred_at: '2026-01-01T00:00:00Z',
+          local_audio_path: '/tmp/x.m4a'
+        }
+      }),
     { message: 'forbidden_audio_field' }
   );
 });
 
 test('normalizeSpeakingEvent requires prompts_attempted and total_duration_ms for drill_completed', () => {
   const base = { event_type: 'speaking_drill_completed', attempt_id: 'sess_1', occurred_at: '2026-05-10T10:00:00Z' };
-  assert.throws(
-    () => normalizeSpeakingEvent({ deviceId: 'd', event: { ...base, total_duration_ms: 180000 } }),
-    { message: 'missing_required_field' }
-  );
-  assert.throws(
-    () => normalizeSpeakingEvent({ deviceId: 'd', event: { ...base, prompts_attempted: 5 } }),
-    { message: 'missing_required_field' }
-  );
-  const ok = normalizeSpeakingEvent({ deviceId: 'd', event: { ...base, prompts_attempted: 5, total_duration_ms: 180000 } });
+  assert.throws(() => normalizeSpeakingEvent({ deviceId: 'd', event: { ...base, total_duration_ms: 180000 } }), {
+    message: 'missing_required_field'
+  });
+  assert.throws(() => normalizeSpeakingEvent({ deviceId: 'd', event: { ...base, prompts_attempted: 5 } }), {
+    message: 'missing_required_field'
+  });
+  const ok = normalizeSpeakingEvent({
+    deviceId: 'd',
+    event: { ...base, prompts_attempted: 5, total_duration_ms: 180000 }
+  });
   assert.equal(ok.prompts_attempted, 5);
   assert.equal(ok.total_duration_ms, 180000);
 });
@@ -654,10 +660,9 @@ test('normalizeSpeakingEvent accepts event with attempt_id in strict mode', () =
 
 test('normalizeSpeakingEvent rejects event without attempt_id in strict mode', () => {
   const event = { event_type: 'speaking_recorded', occurred_at: '2026-01-01T00:00:00Z' };
-  assert.throws(
-    () => normalizeSpeakingEvent({ deviceId: 'd', event, strict: true }),
-    { message: 'missing_required_field' }
-  );
+  assert.throws(() => normalizeSpeakingEvent({ deviceId: 'd', event, strict: true }), {
+    message: 'missing_required_field'
+  });
 });
 
 test('WordStore.recordSpeakingEvent accepts missing attempt_id in lenient mode', () => {
@@ -673,10 +678,11 @@ test('WordStore.recordSpeakingEvent accepts missing attempt_id in lenient mode',
 test('WordStore.recordSpeakingEvent rejects missing attempt_id in strict mode', () => {
   const store = new WordStore({ seed: false, strictAttemptId: true });
   assert.throws(
-    () => store.recordSpeakingEvent({
-      deviceId: 'dev1',
-      event: { event_type: 'speaking_recorded', client_event_id: 'ev_strict', occurred_at: '2026-01-01T00:00:00Z' }
-    }),
+    () =>
+      store.recordSpeakingEvent({
+        deviceId: 'dev1',
+        event: { event_type: 'speaking_recorded', client_event_id: 'ev_strict', occurred_at: '2026-01-01T00:00:00Z' }
+      }),
     { message: 'missing_required_field' }
   );
 });
@@ -691,12 +697,14 @@ test('speaking events do not affect proficiency level', () => {
       deviceId: 'device_prof_isolation',
       language: 'en',
       userId: null,
-      events: [{
-        client_event_id: `easy_${i}`,
-        server_word_id: 'word_sp1',
-        rating: 'too_easy',
-        occurred_at: `2026-05-10T10:0${i}:00.000Z`
-      }]
+      events: [
+        {
+          client_event_id: `easy_${i}`,
+          server_word_id: 'word_sp1',
+          rating: 'too_easy',
+          occurred_at: `2026-05-10T10:0${i}:00.000Z`
+        }
+      ]
     });
   }
 
@@ -704,14 +712,42 @@ test('speaking events do not affect proficiency level', () => {
 
   // Sync 10 speaking events of all types
   const speakingEvents = [
-    { client_event_id: 'sp_viewed', event_type: 'speaking_prompt_viewed', speaking: { attempt_id: 'a1', prompt_id: 'p1' } },
-    { client_event_id: 'sp_played', event_type: 'speaking_sample_played', speaking: { attempt_id: 'a1', prompt_id: 'p1' } },
-    { client_event_id: 'sp_recorded', event_type: 'speaking_recorded', speaking: { attempt_id: 'a1', duration_ms: 3000, retry_count: 0 } },
+    {
+      client_event_id: 'sp_viewed',
+      event_type: 'speaking_prompt_viewed',
+      speaking: { attempt_id: 'a1', prompt_id: 'p1' }
+    },
+    {
+      client_event_id: 'sp_played',
+      event_type: 'speaking_sample_played',
+      speaking: { attempt_id: 'a1', prompt_id: 'p1' }
+    },
+    {
+      client_event_id: 'sp_recorded',
+      event_type: 'speaking_recorded',
+      speaking: { attempt_id: 'a1', duration_ms: 3000, retry_count: 0 }
+    },
     { client_event_id: 'sp_retried', event_type: 'speaking_retried', speaking: { attempt_id: 'a1', retry_count: 1 } },
-    { client_event_id: 'sp_rated_clear', event_type: 'speaking_self_rated_clear', speaking: { attempt_id: 'a1', self_rating: 'clear' } },
-    { client_event_id: 'sp_rated_hes', event_type: 'speaking_self_rated_hesitated', speaking: { attempt_id: 'a2', self_rating: 'hesitated' } },
-    { client_event_id: 'sp_rated_cnt', event_type: 'speaking_self_rated_could_not_say', speaking: { attempt_id: 'a3', self_rating: 'could_not_say' } },
-    { client_event_id: 'sp_drill', event_type: 'speaking_drill_completed', speaking: { attempt_id: 'sess1', prompts_attempted: 5, prompts_completed: 4, total_duration_ms: 180000 } },
+    {
+      client_event_id: 'sp_rated_clear',
+      event_type: 'speaking_self_rated_clear',
+      speaking: { attempt_id: 'a1', self_rating: 'clear' }
+    },
+    {
+      client_event_id: 'sp_rated_hes',
+      event_type: 'speaking_self_rated_hesitated',
+      speaking: { attempt_id: 'a2', self_rating: 'hesitated' }
+    },
+    {
+      client_event_id: 'sp_rated_cnt',
+      event_type: 'speaking_self_rated_could_not_say',
+      speaking: { attempt_id: 'a3', self_rating: 'could_not_say' }
+    },
+    {
+      client_event_id: 'sp_drill',
+      event_type: 'speaking_drill_completed',
+      speaking: { attempt_id: 'sess1', prompts_attempted: 5, prompts_completed: 4, total_duration_ms: 180000 }
+    }
   ].map((e) => ({ ...e, occurred_at: '2026-05-10T11:00:00.000Z', language: 'en' }));
 
   store.syncStudyEvents({
@@ -739,10 +775,22 @@ test('getSpeakingSummary returns retry_rate, drill_sessions_completed, first_rec
 
   // Seed speaking events
   const events = [
-    { client_event_id: 'sum_rec1', event_type: 'speaking_recorded', speaking: { attempt_id: 'a1', duration_ms: 3000, retry_count: 0 } },
-    { client_event_id: 'sum_rec2', event_type: 'speaking_recorded', speaking: { attempt_id: 'a2', duration_ms: 4000, retry_count: 0 } },
+    {
+      client_event_id: 'sum_rec1',
+      event_type: 'speaking_recorded',
+      speaking: { attempt_id: 'a1', duration_ms: 3000, retry_count: 0 }
+    },
+    {
+      client_event_id: 'sum_rec2',
+      event_type: 'speaking_recorded',
+      speaking: { attempt_id: 'a2', duration_ms: 4000, retry_count: 0 }
+    },
     { client_event_id: 'sum_retry', event_type: 'speaking_retried', speaking: { attempt_id: 'a2', retry_count: 1 } },
-    { client_event_id: 'sum_drill', event_type: 'speaking_drill_completed', speaking: { attempt_id: 'sess1', prompts_attempted: 5, total_duration_ms: 170000 } },
+    {
+      client_event_id: 'sum_drill',
+      event_type: 'speaking_drill_completed',
+      speaking: { attempt_id: 'sess1', prompts_attempted: 5, total_duration_ms: 170000 }
+    }
   ].map((e) => ({ ...e, occurred_at: '2026-05-10T12:00:00.000Z', language: 'en' }));
 
   store.syncStudyEvents({ deviceId: 'device_summary_new', language: 'en', userId: null, events });

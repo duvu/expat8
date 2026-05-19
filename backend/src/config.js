@@ -1,8 +1,5 @@
 export function loadConfig(env = process.env) {
-  const logArchiveMaxTotalBytes = Number.parseInt(
-    env.LOG_ARCHIVE_MAX_TOTAL_BYTES ?? String(100 * 1024 * 1024),
-    10
-  );
+  const logArchiveMaxTotalBytes = Number.parseInt(env.LOG_ARCHIVE_MAX_TOTAL_BYTES ?? String(100 * 1024 * 1024), 10);
   return {
     port: Number.parseInt(env.PORT ?? '8787', 10),
     databaseUrl: env.DATABASE_URL,
@@ -14,22 +11,10 @@ export function loadConfig(env = process.env) {
     newWordTimeoutSeconds: Number.parseInt(env.NEW_WORD_TIMEOUT_SECONDS ?? '5', 10),
     corsAllowedOrigin: env.CORS_ALLOWED_ORIGIN ?? '*',
     appCredentials: parseAppCredentials(env.APP_CREDENTIALS_JSON),
-    appCredentialTimestampSkewSeconds: Number.parseInt(
-      env.APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS ?? '300',
-      10
-    ),
-    appCredentialNonceTtlSeconds: Number.parseInt(
-      env.APP_CREDENTIAL_NONCE_TTL_SECONDS ?? '300',
-      10
-    ),
-    appCredentialGetBodyLimitBytes: Number.parseInt(
-      env.APP_CREDENTIAL_GET_BODY_LIMIT_BYTES ?? '0',
-      10
-    ),
-    appCredentialPostBodyLimitBytes: Number.parseInt(
-      env.APP_CREDENTIAL_POST_BODY_LIMIT_BYTES ?? '262144',
-      10
-    ),
+    appCredentialTimestampSkewSeconds: Number.parseInt(env.APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS ?? '300', 10),
+    appCredentialNonceTtlSeconds: Number.parseInt(env.APP_CREDENTIAL_NONCE_TTL_SECONDS ?? '300', 10),
+    appCredentialGetBodyLimitBytes: Number.parseInt(env.APP_CREDENTIAL_GET_BODY_LIMIT_BYTES ?? '0', 10),
+    appCredentialPostBodyLimitBytes: Number.parseInt(env.APP_CREDENTIAL_POST_BODY_LIMIT_BYTES ?? '262144', 10),
     logArchiveDir: env.LOG_ARCHIVE_DIR ?? './data/log-archives',
     logArchiveRetentionDays: Number.parseInt(env.LOG_ARCHIVE_RETENTION_DAYS ?? '3', 10),
     logArchiveMaxTotalBytes,
@@ -39,9 +24,7 @@ export function loadConfig(env = process.env) {
     ),
     logLevel: String(env.LOG_LEVEL ?? 'info').toLowerCase(),
     logRedactionEnabled: parseBoolean(env.LOG_REDACTION_ENABLED ?? 'true'),
-    proficiencyCompatibilityMode: String(
-      env.PROFICIENCY_COMPATIBILITY_MODE ?? 'additive'
-    ).toLowerCase(),
+    proficiencyCompatibilityMode: String(env.PROFICIENCY_COMPATIBILITY_MODE ?? 'additive').toLowerCase(),
     vocabSchedulerEnabled: parseBoolean(env.VOCAB_SCHEDULER_ENABLED ?? 'true'),
     vocabPoolMinSize: Number.parseInt(env.VOCAB_POOL_MIN_SIZE ?? '1000', 10),
     vocabFillIntervalSeconds: Number.parseInt(env.VOCAB_FILL_INTERVAL_SECONDS ?? '60', 10),
@@ -55,10 +38,16 @@ export function loadConfig(env = process.env) {
     dbIdleTimeoutMs: Number.parseInt(env.DB_IDLE_TIMEOUT_MS ?? '10000', 10),
     dbConnectionTimeoutMs: Number.parseInt(env.DB_CONNECTION_TIMEOUT_MS ?? '5000', 10),
     validLanguages: new Set(
-      String(env.VALID_LANGUAGES ?? 'en,vi,fr,de,es,ja,ko,zh,pt,it,ru,ar').split(',').map((l) => l.trim()).filter(Boolean)
+      String(env.VALID_LANGUAGES ?? 'en,vi,fr,de,es,ja,ko,zh,pt,it,ru,ar')
+        .split(',')
+        .map((l) => l.trim())
+        .filter(Boolean)
     ),
     adminApiTokens: new Set(
-      String(env.ADMIN_API_TOKENS ?? '').split(',').map((token) => token.trim()).filter(Boolean)
+      String(env.ADMIN_API_TOKENS ?? '')
+        .split(',')
+        .map((token) => token.trim())
+        .filter(Boolean)
     ),
     speakingEventsStrictAttemptId: parseBoolean(env.SPEAKING_EVENTS_STRICT_ATTEMPT_ID ?? 'false')
   };
@@ -76,7 +65,7 @@ function parseAppCredentials(raw) {
   let parsed;
   try {
     parsed = JSON.parse(raw);
-  } catch (error) {
+  } catch (_error) {
     throw new Error('APP_CREDENTIALS_JSON must be valid JSON');
   }
 

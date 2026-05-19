@@ -2,9 +2,11 @@ import { createStore } from './runtime.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { ArticleProcessingWorker } from './article_processing_worker.js';
+import { SubmittedWordWorker } from './submitted_word_worker.js';
 import { LiteLLMClient } from './litellm_client.js';
 import { VocabularyEnrichmentAdapter } from './vocabulary_enrichment_adapter.js';
 import { ArticleProcessingPipeline } from './article_processing_pipeline.js';
+import { VocabularyGenerationService } from './generation_service.js';
 
 const config = loadConfig();
 const logger = createLogger({
@@ -23,6 +25,11 @@ const enrichmentAdapter = new VocabularyEnrichmentAdapter({
   liteLLMClient,
   logger: logger.child({ component: 'vocabulary_enrichment_adapter' })
 });
+const generationService = new VocabularyGenerationService({
+  liteLLMClient,
+  store,
+  logger: logger.child({ component: 'generation_service' })
+});
 const pipeline = new ArticleProcessingPipeline({
   store,
   suggestionAdapter: enrichmentAdapter,
@@ -34,6 +41,13 @@ const worker = new ArticleProcessingWorker({
   logger,
   maxAttempts: Number.parseInt(process.env.ARTICLE_WORKER_MAX_ATTEMPTS ?? '3', 10)
 });
+const submittedWordWorker = new SubmittedWordWorker({
+  store,
+  generationService,
+  logger: logger.child({ component: 'submitted_word_worker' }),
+  maxAttempts: Number.parseInt(process.env.ARTICLE_WORKER_MAX_ATTEMPTS ?? '3', 10),
+  sourceLanguage: config.defaultSourceLanguage
+});
 
 const intervalMs = Number.parseInt(process.env.ARTICLE_WORKER_INTERVAL_MS ?? '1000', 10);
 
@@ -42,6 +56,12 @@ async function tick() {
     await worker.runOnce();
   } catch (error) {
     logger.error?.('article_worker_tick_failed', { error });
+  }
+
+  try {
+    await submittedWordWorker.runOnce();
+  } catch (error) {
+    logger.error?.('submitted_word_worker_tick_failed', { error });
   }
 }
 

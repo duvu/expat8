@@ -15,6 +15,7 @@ import 'articles_screen.dart';
 import 'learning_gesture_surface.dart';
 import 'fitb_card.dart';
 import 'logs_screen.dart';
+import 'submitted_words_screen.dart';
 import 'vocabulary_card.dart';
 import 'workplace_sentence_screen.dart';
 import 'learning_history_screen.dart';
@@ -105,6 +106,7 @@ class _LearningScreenState extends State<LearningScreen> {
         speakingRepository: widget.speakingRepository,
         wordRepository: controller.repository,
         onArticles: _openArticles,
+        onSubmittedWords: _openSubmittedWords,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onWorkplaceSentences: _openWorkplaceSentences,
         onHistory: _openHistory,
@@ -228,6 +230,19 @@ class _LearningScreenState extends State<LearningScreen> {
         builder: (_) => ArticleManagementScreen(
           repository: widget.articleRepository,
           sessionToken: session.sessionToken,
+          initialLanguage: widget.controller.activeLearningLanguage,
+          supportedLanguages: widget.controller.supportedLearningLanguages,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSubmittedWords() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmittedWordsScreen(
+          repository: widget.controller.repository,
           initialLanguage: widget.controller.activeLearningLanguage,
           supportedLanguages: widget.controller.supportedLearningLanguages,
         ),
@@ -413,6 +428,7 @@ class LearningDrawer extends StatelessWidget {
     required this.onWorkplaceSentences,
     required this.onLogs,
     required this.onArticles,
+    required this.onSubmittedWords,
     required this.onHistory,
     required this.onStats,
     required this.onRegister,
@@ -435,6 +451,7 @@ class LearningDrawer extends StatelessWidget {
   final VoidCallback onWorkplaceSentences;
   final VoidCallback onLogs;
   final VoidCallback onArticles;
+  final VoidCallback onSubmittedWords;
   final VoidCallback onHistory;
   final VoidCallback onStats;
   final VoidCallback onRegister;
@@ -466,6 +483,11 @@ class LearningDrawer extends StatelessWidget {
                 title: const Text('Articles'),
                 onTap: onArticles,
               ),
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Add word'),
+              onTap: onSubmittedWords,
+            ),
             if (isSignedIn && onExam != null)
               ListTile(
                 leading: const Icon(Icons.quiz_outlined),

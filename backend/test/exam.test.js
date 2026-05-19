@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { WordStore, selectDistractors, shuffleArray, shuffleChoices, toApiWord } from '../src/word_store.js';
+import { WordStore, selectDistractors, shuffleArray, toApiWord } from '../src/word_store.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -218,13 +218,19 @@ test('submitExamSession is idempotent when same local_attempt_id is provided', (
   const localAttemptId = 'local-uuid-1234';
 
   const first = store.submitExamSession({
-    sessionId: session.session_id, userId, answers: correctAnswers, localAttemptId
+    sessionId: session.session_id,
+    userId,
+    answers: correctAnswers,
+    localAttemptId
   });
   assert.ok(!first.error, 'first submission should succeed');
 
   // Retry with the same local_attempt_id — should return the existing result
   const retry = store.submitExamSession({
-    sessionId: session.session_id, userId, answers: correctAnswers, localAttemptId
+    sessionId: session.session_id,
+    userId,
+    answers: correctAnswers,
+    localAttemptId
   });
   assert.ok(!retry.error, `retry should succeed idempotently, got: ${retry.error}`);
   assert.equal(retry.attempt_id, first.attempt_id, 'retry must return the same attempt');
@@ -237,10 +243,16 @@ test('submitExamSession returns ALREADY_SUBMITTED when different local_attempt_i
   const { session, correctAnswers } = runExamAndGetCorrectAnswers(store, userId);
 
   store.submitExamSession({
-    sessionId: session.session_id, userId, answers: correctAnswers, localAttemptId: 'id-a'
+    sessionId: session.session_id,
+    userId,
+    answers: correctAnswers,
+    localAttemptId: 'id-a'
   });
   const second = store.submitExamSession({
-    sessionId: session.session_id, userId, answers: correctAnswers, localAttemptId: 'id-b'
+    sessionId: session.session_id,
+    userId,
+    answers: correctAnswers,
+    localAttemptId: 'id-b'
   });
 
   assert.equal(second.error, 'ALREADY_SUBMITTED');
@@ -316,7 +328,7 @@ test('getExamResults returns attempts newest first', () => {
   store.submitExamSession({ sessionId: s1.session_id, userId, answers: a1, now: '2026-01-01T10:00:00.000Z' });
 
   // Second attempt: insert separate session manually for timing control
-  const userId2 = seedExamFixture(new WordStore({ seed: false })); // unused, just for clarity
+  const _userId2 = seedExamFixture(new WordStore({ seed: false })); // unused, just for clarity
   const { session: s2, wrongAnswers: a2 } = runExamAndGetCorrectAnswers(store, userId);
   store.submitExamSession({ sessionId: s2.session_id, userId, answers: a2, now: '2026-01-02T10:00:00.000Z' });
 
@@ -375,7 +387,10 @@ test('getExamCertificate returns certificate without user PII', () => {
 test('shuffleArray returns all same elements in potentially different order', () => {
   const original = [1, 2, 3, 4, 5];
   const shuffled = shuffleArray(original);
-  assert.deepEqual([...shuffled].sort((a, b) => a - b), original);
+  assert.deepEqual(
+    [...shuffled].sort((a, b) => a - b),
+    original
+  );
 });
 
 test('selectDistractors picks words from difficulty ±1 bucket when available', () => {
@@ -385,7 +400,7 @@ test('selectDistractors picks words from difficulty ±1 bucket when available', 
     { id: 'd2', difficulty: 'B1' }, // exact
     { id: 'd3', difficulty: 'B2' }, // ±1 ok
     { id: 'd4', difficulty: 'C1' }, // too far
-    { id: 'd5', difficulty: 'A1' }  // too far
+    { id: 'd5', difficulty: 'A1' } // too far
   ];
   const result = selectDistractors({ source, pool, count: 3 });
   assert.equal(result.length, 3);
@@ -427,15 +442,11 @@ test('startExamSession English exam never contains Chinese words', () => {
 
   for (const q of result.questions) {
     // The prompt word is from the English pool
-    const promptWord = store.words.get(
-      [...store.words.values()].find((w) => w.term === q.prompt_word)?.id ?? ''
-    );
+    const promptWord = store.words.get([...store.words.values()].find((w) => w.term === q.prompt_word)?.id ?? '');
     assert.equal(promptWord?.language ?? 'en', 'en', `prompt_word "${q.prompt_word}" must be English`);
     // All choices are Vietnamese meanings of English words (no cross-language leak)
     // The internal question stores the word; verify via word lookup
-    const question = store.examQuestionsBySessionId
-      .get(result.session_id)
-      ?.find((iq) => iq.ordinal === q.ordinal);
+    const question = store.examQuestionsBySessionId.get(result.session_id)?.find((iq) => iq.ordinal === q.ordinal);
     assert.ok(question, 'internal question must exist');
     const srcWord = store.words.get(question.word_id);
     assert.equal(srcWord?.language, 'en', `source word for question ${q.ordinal} must be English`);
@@ -459,9 +470,7 @@ test('startExamSession Chinese exam never contains English words', () => {
   assert.ok(!result.error, `unexpected error: ${result.error}`);
 
   for (const q of result.questions) {
-    const question = store.examQuestionsBySessionId
-      .get(result.session_id)
-      ?.find((iq) => iq.ordinal === q.ordinal);
+    const question = store.examQuestionsBySessionId.get(result.session_id)?.find((iq) => iq.ordinal === q.ordinal);
     assert.ok(question, 'internal question must exist');
     const srcWord = store.words.get(question.word_id);
     assert.equal(srcWord?.language, 'zh', `source word for question ${q.ordinal} must be Chinese`);
@@ -470,7 +479,10 @@ test('startExamSession Chinese exam never contains English words', () => {
 
 // ─── 4.1–4.5  dual question types + word fields ─────────────────────────────
 
-function addWordWithExample(store, { id, term, language = 'en', example = '', entry_type = 'word', explanation = '' } = {}) {
+function addWordWithExample(
+  store,
+  { id, term, language = 'en', example = '', entry_type = 'word', explanation = '' } = {}
+) {
   store.words.set(id, {
     id,
     term,
@@ -502,7 +514,11 @@ test('4.1 startExamSession assigns meaning_choice when example is empty', () => 
   const result = store.startExamSession({ userId, language: 'en' });
   assert.ok(!result.error);
   for (const q of result.questions) {
-    assert.equal(q.question_type, 'meaning_choice', `question ${q.ordinal} must be meaning_choice when example is empty`);
+    assert.equal(
+      q.question_type,
+      'meaning_choice',
+      `question ${q.ordinal} must be meaning_choice when example is empty`
+    );
     assert.equal(q.sentence, undefined);
     assert.equal(q.highlight, undefined);
   }
@@ -553,7 +569,11 @@ test('4.3 startExamSession: words without example are always meaning_choice in a
     const noExTerms = new Set(['noEx0', 'noEx1', 'noEx2', 'noEx3', 'noEx4']);
     for (const q of result.questions) {
       if (noExTerms.has(q.prompt_word)) {
-        assert.equal(q.question_type, 'meaning_choice', `word without example must be meaning_choice, got ${q.question_type}`);
+        assert.equal(
+          q.question_type,
+          'meaning_choice',
+          `word without example must be meaning_choice, got ${q.question_type}`
+        );
       }
     }
   }
@@ -640,7 +660,7 @@ test('4.5 phrase/idiom inserted with empty ipa and part_of_speech is accepted wi
     difficulty: 'B2',
     topics: [],
     entry_type: 'idiom',
-    explanation: 'Cụm từ thông tục để nói ai đó qua đời.',
+    explanation: 'Cụm từ thông tục để nói ai đó qua đời.'
   });
   assert.ok(!result.error, `expected no error, got: ${result.error}`);
   assert.ok(result.word?.id, 'inserted word must have an id');

@@ -33,12 +33,14 @@ test('smoke: new word retrieval, local save, rating queue, and backend sync', as
 
 test('e2e: english CEFR progression reaches A2 after five too_easy ratings', async (t) => {
   const backendStore = new WordStore({ seed: false });
-  backendStore.insertWord(wordInput({
-    id: 'word_en_1',
-    term: 'reliable',
-    language: 'en',
-    difficulty: 'A1'
-  }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_en_1',
+      term: 'reliable',
+      language: 'en',
+      difficulty: 'A1'
+    })
+  );
   const server = http.createServer(
     createApp({
       store: backendStore,
@@ -77,22 +79,26 @@ test('e2e: english CEFR progression reaches A2 after five too_easy ratings', asy
 
 test('e2e: chinese HSK progression reaches HSK2 and drives level-aware selection', async (t) => {
   const backendStore = new WordStore({ seed: false });
-  backendStore.insertWord(wordInput({
-    id: 'word_zh_1',
-    term: '你好',
-    language: 'zh',
-    difficulty: 'HSK1',
-    ipa: '',
-    vietnamese_pronunciation: 'ni hao'
-  }));
-  backendStore.insertWord(wordInput({
-    id: 'word_zh_2',
-    term: '学习',
-    language: 'zh',
-    difficulty: 'HSK2',
-    ipa: '',
-    vietnamese_pronunciation: 'xue xi'
-  }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_zh_1',
+      term: '你好',
+      language: 'zh',
+      difficulty: 'HSK1',
+      ipa: '',
+      vietnamese_pronunciation: 'ni hao'
+    })
+  );
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_zh_2',
+      term: '学习',
+      language: 'zh',
+      difficulty: 'HSK2',
+      ipa: '',
+      vietnamese_pronunciation: 'xue xi'
+    })
+  );
   const server = http.createServer(
     createApp({
       store: backendStore,
@@ -140,67 +146,73 @@ test('e2e: chinese HSK progression reaches HSK2 and drives level-aware selection
   });
   const cardLanguages = cards.items.map((item) => item.language);
   assert.ok(cardLanguages.length > 0, 'expected at least one Chinese card');
-  assert.ok(cardLanguages.every((language) => language === 'zh'),
-    `expected all cards to be Chinese, got ${cardLanguages.join(', ')}`);
+  assert.ok(
+    cardLanguages.every((language) => language === 'zh'),
+    `expected all cards to be Chinese, got ${cardLanguages.join(', ')}`
+  );
 });
 
 test('e2e: proficiency stays isolated by language for the same device', async (t) => {
-   const backendStore = new WordStore({ seed: false });
-   backendStore.insertWord(wordInput({ id: 'word_en_isolation', term: 'focus', language: 'en', difficulty: 'A1' }));
-   backendStore.insertWord(wordInput({
-     id: 'word_zh_isolation',
-     term: '专注',
-     language: 'zh',
-     difficulty: 'HSK1',
-     ipa: '',
-     vietnamese_pronunciation: 'zhuan zhu'
-   }));
-   const server = http.createServer(
-     createApp({
-       store: backendStore,
-       generationService: null,
-       config: loadTestConfig()
-     })
-   );
-   await listen(server);
-   t.after(() => server.close());
+  const backendStore = new WordStore({ seed: false });
+  backendStore.insertWord(wordInput({ id: 'word_en_isolation', term: 'focus', language: 'en', difficulty: 'A1' }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_zh_isolation',
+      term: '专注',
+      language: 'zh',
+      difficulty: 'HSK1',
+      ipa: '',
+      vietnamese_pronunciation: 'zhuan zhu'
+    })
+  );
+  const server = http.createServer(
+    createApp({
+      store: backendStore,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
 
-   const baseUrl = `http://127.0.0.1:${server.address().port}`;
-   const deviceId = 'device_e2e_isolation';
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const deviceId = 'device_e2e_isolation';
 
-   for (let index = 0; index < 5; index += 1) {
-     await fetchJson(`${baseUrl}/v1/study-events`, {
-       method: 'POST',
-       headers: { 'content-type': 'application/json' },
-       body: JSON.stringify({
-         device_id: deviceId,
-         language: 'en',
-         client_event_id: `evt_isolation_en_${index + 1}`,
-         server_word_id: 'word_en_isolation',
-         local_word_id: `local_iso_en_${index + 1}`,
-         rating: 'too_easy',
-         occurred_at: `2026-05-06T10:4${index}:00.000Z`
-       })
-     });
-   }
+  for (let index = 0; index < 5; index += 1) {
+    await fetchJson(`${baseUrl}/v1/study-events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_id: deviceId,
+        language: 'en',
+        client_event_id: `evt_isolation_en_${index + 1}`,
+        server_word_id: 'word_en_isolation',
+        local_word_id: `local_iso_en_${index + 1}`,
+        rating: 'too_easy',
+        occurred_at: `2026-05-06T10:4${index}:00.000Z`
+      })
+    });
+  }
 
-   const english = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
-   const chinese = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=zh`);
+  const english = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
+  const chinese = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=zh`);
 
-   assert.equal(english.scale, 'cefr');
-   assert.equal(english.level, 'A2');
-   assert.equal(chinese.scale, 'hsk');
-   assert.equal(chinese.level, 'HSK1');
+  assert.equal(english.scale, 'cefr');
+  assert.equal(english.level, 'A2');
+  assert.equal(chinese.scale, 'hsk');
+  assert.equal(chinese.level, 'HSK1');
 });
 
 test('smoke: mixed rating and speaking event batch sync without audio payloads', async (t) => {
   const backendStore = new WordStore({ seed: false });
-  backendStore.insertWord(wordInput({
-    id: 'word_speaking_smoke',
-    term: 'hello',
-    language: 'en',
-    difficulty: 'A1'
-  }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_speaking_smoke',
+      term: 'hello',
+      language: 'en',
+      difficulty: 'A1'
+    })
+  );
   const server = http.createServer(
     createApp({
       store: backendStore,
@@ -290,18 +302,9 @@ test('smoke: mixed rating and speaking event batch sync without audio payloads',
 
   // Verify all events were accepted
   assert.equal(body.accepted_event_ids.length, 7, 'expected 7 accepted events');
-  assert.ok(
-    body.accepted_event_ids.includes('evt_rating_smoke_1'),
-    'expected rating event to be accepted'
-  );
-  assert.ok(
-    body.accepted_event_ids.includes('evt_speaking_1'),
-    'expected speaking_recorded to be accepted'
-  );
-  assert.ok(
-    body.accepted_event_ids.includes('evt_speaking_2'),
-    'expected speaking_self_rated_clear to be accepted'
-  );
+  assert.ok(body.accepted_event_ids.includes('evt_rating_smoke_1'), 'expected rating event to be accepted');
+  assert.ok(body.accepted_event_ids.includes('evt_speaking_1'), 'expected speaking_recorded to be accepted');
+  assert.ok(body.accepted_event_ids.includes('evt_speaking_2'), 'expected speaking_self_rated_clear to be accepted');
 
   // Verify speaking events do not affect proficiency, only rating events do
   const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
@@ -366,9 +369,7 @@ class SmokeLocalClient {
     const response = await fetch(url, signedFetchOptions(url, options));
     assert.equal(response.status, 200);
     const body = await response.json();
-    this.syncQueue = this.syncQueue.filter(
-      (event) => !body.accepted_event_ids.includes(event.client_event_id)
-    );
+    this.syncQueue = this.syncQueue.filter((event) => !body.accepted_event_ids.includes(event.client_event_id));
   }
 }
 

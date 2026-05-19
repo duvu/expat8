@@ -39,22 +39,57 @@ test('mobile log uploads require app credentials and are browsable by admins', a
   });
   assert.equal(unsigned.status, 400);
 
-  const upload = await fetch(uploadUrl, signedFetchOptions(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'content-type': 'text/plain; charset=utf-8',
-      'x-expat8-device-id': 'device-123',
-      'x-expat8-log-source': 'mobile',
-      'x-expat8-log-filename': 'app.log'
-    },
-    body: 'hello from logs\nsecond line\n'
-  }));
+  const emptyUpload = await fetch(
+    uploadUrl,
+    signedFetchOptions(uploadUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+      body: ''
+    })
+  );
+  assert.equal(emptyUpload.status, 400);
+
+  const invalidSessionUpload = await fetch(
+    uploadUrl,
+    signedFetchOptions(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        authorization: 'Bearer invalid-session-token'
+      },
+      body: 'logs with invalid session'
+    })
+  );
+  assert.equal(invalidSessionUpload.status, 401);
+
+  const registered = store.registerUser({
+    identifier: 'logs-user@example.com',
+    password: 'correct-password',
+    deviceId: 'device-123'
+  });
+  const payload = 'hello from logs\nsecond line\nxin chào\n';
+
+  const upload = await fetch(
+    uploadUrl,
+    signedFetchOptions(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain; charset=utf-8',
+        'x-expat8-device-id': 'device-123',
+        'x-expat8-log-source': 'mobile',
+        'x-expat8-log-filename': 'app.log',
+        authorization: `Bearer ${registered.sessionToken}`
+      },
+      body: payload
+    })
+  );
   assert.equal(upload.status, 201);
 
   const uploaded = await upload.json();
   assert.equal(uploaded.file_name, 'app.log');
-  assert.equal(uploaded.size_bytes, 'hello from logs\nsecond line\n'.length);
+  assert.equal(uploaded.size_bytes, Buffer.byteLength(payload));
   assert.equal(uploaded.source_device_id, 'device-123');
+  assert.equal(uploaded.source_user_id, registered.user.id);
   assert.equal(uploaded.source_app_id, 'app_mobile_test');
 
   const listUrl = `${baseUrl}/v1/admin/log-archives?limit=10`;
@@ -79,7 +114,7 @@ test('mobile log uploads require app credentials and are browsable by admins', a
     })
   );
   assert.equal(contentResponse.status, 200);
-  assert.equal(await contentResponse.text(), 'hello from logs\nsecond line\n');
+  assert.equal(await contentResponse.text(), payload);
 
   const downloadResponse = await fetch(
     `${baseUrl}/v1/admin/log-archives/${uploaded.id}/download`,
@@ -89,7 +124,50 @@ test('mobile log uploads require app credentials and are browsable by admins', a
   );
   assert.equal(downloadResponse.status, 200);
   assert.match(downloadResponse.headers.get('content-disposition') ?? '', /attachment/);
-  assert.equal(await downloadResponse.text(), 'hello from logs\nsecond line\n');
+  assert.equal(await downloadResponse.text(), payload);
+
+  // DELETE — missing token → 403
+  const deleteNoToken = await fetch(
+    `${baseUrl}/v1/admin/log-archives/${uploaded.id}`,
+    signedFetchOptions(`${baseUrl}/v1/admin/log-archives/${uploaded.id}`, { method: 'DELETE' })
+  );
+  assert.equal(deleteNoToken.status, 403);
+
+  // DELETE — not found → 404
+  const deleteNotFound = await fetch(
+    `${baseUrl}/v1/admin/log-archives/nonexistent-id`,
+    signedFetchOptions(`${baseUrl}/v1/admin/log-archives/nonexistent-id`, {
+      method: 'DELETE',
+      headers: { 'x-expat8-admin-token': 'admin-token' }
+    })
+  );
+  assert.equal(deleteNotFound.status, 404);
+
+  // DELETE — success → 204
+  const deleteOk = await fetch(
+    `${baseUrl}/v1/admin/log-archives/${uploaded.id}`,
+    signedFetchOptions(`${baseUrl}/v1/admin/log-archives/${uploaded.id}`, {
+      method: 'DELETE',
+      headers: { 'x-expat8-admin-token': 'admin-token' }
+    })
+  );
+  assert.equal(deleteOk.status, 204);
+
+  // Archive is gone from the list
+  const listAfterDelete = await fetchJson(listUrl, {
+    headers: { 'x-expat8-admin-token': 'admin-token' }
+  });
+  assert.equal(listAfterDelete.items.length, 0);
+
+  // DELETE again → 404
+  const deleteAgain = await fetch(
+    `${baseUrl}/v1/admin/log-archives/${uploaded.id}`,
+    signedFetchOptions(`${baseUrl}/v1/admin/log-archives/${uploaded.id}`, {
+      method: 'DELETE',
+      headers: { 'x-expat8-admin-token': 'admin-token' }
+    })
+  );
+  assert.equal(deleteAgain.status, 404);
 });
 
 async function listen(server) {

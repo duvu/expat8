@@ -18,20 +18,24 @@ The dashboard SHALL provide a `/users/[id]` page that displays the selected user
 - **WHEN** a user has no rows in `user_cached_words`
 - **THEN** the words-in-cache count displays as 0
 
-### Requirement: Dashboard shows per-user study-event breakdown and activity log
-The dashboard SHALL display the selected user's study events grouped by rating as a summary table, and list the 20 most recent study events with word ID, rating, and timestamp as an activity log.
+### Requirement: User detail shows complete learning statistics
+The user learning stats page SHALL display study event breakdown by rating, proficiency levels per language, speaking activity metrics, SRS word state summary, and exam attempt history.
 
-#### Scenario: Admin views study event breakdown
-- **WHEN** a user has submitted study events with ratings 1 through 5
-- **THEN** the dashboard renders a breakdown table with each distinct rating and its event count
+#### Scenario: Study event breakdown shows all ratings
+- **WHEN** an operator views a user's learning stats
+- **THEN** the page shows total counts and trend for each rating type (easy, too_easy, hard, too_hard)
 
-#### Scenario: Admin views recent activity log
-- **WHEN** a user has submitted at least one study event
-- **THEN** the dashboard lists the 20 most recent events ordered by `occurred_at` descending, showing word ID (or local_word_id if word_id is null), rating, and occurred_at
+#### Scenario: Speaking metrics are included
+- **WHEN** an operator views a user's learning stats
+- **THEN** metrics include total speaking events, drill completions, average self-rating, and last speaking date
 
-#### Scenario: User has no study events
-- **WHEN** a user has submitted no study events
-- **THEN** the dashboard shows an empty-state message for both the breakdown table and the activity log
+#### Scenario: SRS state summary is included
+- **WHEN** an operator views a user's learning stats
+- **THEN** a summary shows word count by SRS status (new, learning, review, completed) and overdue count
+
+#### Scenario: Exam history is included
+- **WHEN** an operator views a user's learning stats
+- **THEN** a table shows all exam attempts with topic, score, pass/fail, and date
 
 ### Requirement: Dashboard user detail page is linked from the user list
 The dashboard SHALL link each user row on the `/users` page to that user's detail page at `/users/[id]`.

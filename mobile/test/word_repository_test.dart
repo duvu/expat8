@@ -9,6 +9,7 @@ import 'package:expat8_language_app/src/data/word_repository.dart';
 import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/study_event.dart';
+import 'package:expat8_language_app/src/models/submitted_word.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -519,6 +520,27 @@ void main() {
     expect(exported.payload.contains('# Entries: 0'), true);
   });
 
+  test('send logs skips backend upload when no logs match', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_send_logs_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      logger: const NoopLogger(),
+    );
+
+    final exported = await repository.sendLogsToServer(
+      minimumLevel: AppLogLevel.warning,
+    );
+
+    expect(exported.count, 0);
+    expect(apiClient.uploadLogArchiveCalls, 0);
+    expect(apiClient.lastUploadedLogPayload, isNull);
+  });
+
   test('sends sanitized logs to the backend archive endpoint', () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -549,6 +571,7 @@ void main() {
     );
 
     expect(exported.count, 1);
+    expect(apiClient.uploadLogArchiveCalls, 1);
     expect(apiClient.lastUploadedLogDeviceId, isNotNull);
     expect(apiClient.lastUploadedLogFileName, endsWith('.txt'));
     expect(apiClient.lastUploadedLogPayload, isNotNull);
@@ -717,6 +740,83 @@ void main() {
     expect(words.map((word) => word.serverWordId).toSet(), hasLength(100));
     expect(words.map((word) => word.term).toSet(), hasLength(100));
   });
+
+  test('submitted word stays queued locally when backend create fails',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_offline_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateError = BackendApiException('offline');
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    final submission = await repository.submitSubmittedWord(
+      term: 'stubborn',
+      language: 'en',
+    );
+    final dueEntries = await database.dueSyncEntries(
+      DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+
+    expect(submission.status, SubmittedWordStatus.queuedSync);
+    expect(dueEntries.any((entry) => entry.type == 'submitted_word_create'),
+        isTrue);
+  });
+
+  test('submitted word sync imports ready resolved word into local inventory',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_ready_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final resolvedWord = _word('resolved_word');
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateResult = _submittedWord(
+        localId: 'local_submission_1',
+        serverId: 'submission_1',
+        term: 'reliable',
+        status: SubmittedWordStatus.queued,
+      )
+      ..submittedWordFetchItems = [
+        _submittedWord(
+          localId: 'submission_1',
+          serverId: 'submission_1',
+          term: 'reliable',
+          status: SubmittedWordStatus.ready,
+          resolutionType: SubmittedWordResolutionType.generatedWord,
+          resolvedWord: resolvedWord,
+        ),
+      ];
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    await repository.submitSubmittedWord(
+      term: 'reliable',
+      language: 'en',
+    );
+    await repository.refreshSubmittedWords();
+
+    final deviceId = await repository.getOrCreateDeviceId();
+    await repository.syncPendingEvents(
+      deviceId: deviceId,
+      now: DateTime.now().toUtc().add(const Duration(minutes: 2)),
+    );
+
+    final items = await repository.loadSubmittedWords();
+    final localWord = await database.nextNewWord(language: 'en');
+    expect(items.single.status, SubmittedWordStatus.ready);
+    expect(items.single.resolutionType,
+        SubmittedWordResolutionType.generatedWord);
+    expect(localWord?.serverWordId, resolvedWord.serverWordId);
+  });
 }
 
 class _StubSeedLoader extends SeedVocabularyLoader {
@@ -763,6 +863,9 @@ class _RecordingApiClient extends BackendApiClient {
 
   final bool failSubmit;
   final List<VocabularyWord> learningCardItems;
+  Object? submittedWordCreateError;
+  List<SubmittedWord> submittedWordFetchItems = const [];
+  SubmittedWord? submittedWordCreateResult;
   String? lastLearningCardsDeviceId;
   int? lastLearningCardsLimit;
   String? lastSessionToken;
@@ -774,6 +877,9 @@ class _RecordingApiClient extends BackendApiClient {
   String? lastUploadedLogDeviceId;
   String? lastUploadedLogSessionToken;
   String? lastUploadedLogSourceLabel;
+  int uploadLogArchiveCalls = 0;
+  int createSubmittedWordCalls = 0;
+  int fetchSubmittedWordsCalls = 0;
 
   @override
   Future<CacheInventoryResult> syncCacheInventory({
@@ -879,11 +985,48 @@ class _RecordingApiClient extends BackendApiClient {
     String sourceLabel = 'mobile',
     String contentType = 'text/plain; charset=utf-8',
   }) async {
+    uploadLogArchiveCalls += 1;
     lastUploadedLogPayload = payload;
     lastUploadedLogFileName = fileName;
     lastUploadedLogDeviceId = deviceId;
     lastUploadedLogSessionToken = sessionToken;
     lastUploadedLogSourceLabel = sourceLabel;
+  }
+
+  @override
+  Future<SubmittedWord> createSubmittedWord({
+    required String localSubmissionId,
+    required String deviceId,
+    required String term,
+    required String targetLanguage,
+    String? sessionToken,
+  }) async {
+    createSubmittedWordCalls += 1;
+    lastSessionToken = sessionToken;
+    if (submittedWordCreateError != null) {
+      throw submittedWordCreateError!;
+    }
+    return submittedWordCreateResult ??
+        SubmittedWord(
+          localSubmissionId: localSubmissionId,
+          serverSubmissionId: 'submission_recording',
+          submittedTerm: term,
+          targetLanguage: targetLanguage,
+          status: SubmittedWordStatus.queued,
+          createdAt: DateTime.utc(2026, 5, 19),
+          updatedAt: DateTime.utc(2026, 5, 19),
+        );
+  }
+
+  @override
+  Future<List<SubmittedWord>> fetchSubmittedWords({
+    required String deviceId,
+    int limit = 50,
+    String? sessionToken,
+  }) async {
+    fetchSubmittedWordsCalls += 1;
+    lastSessionToken = sessionToken;
+    return submittedWordFetchItems.take(limit).toList(growable: false);
   }
 }
 
@@ -924,6 +1067,32 @@ VocabularyWord _word(String id, [DateTime? timestamp, String language = 'en']) {
     status: WordStatus.newWord,
     createdAt: ts,
     updatedAt: ts,
+  );
+}
+
+SubmittedWord _submittedWord({
+  required String localId,
+  String? serverId,
+  required String term,
+  required SubmittedWordStatus status,
+  String language = 'en',
+  SubmittedWordResolutionType? resolutionType,
+  VocabularyWord? resolvedWord,
+  String? failureReason,
+}) {
+  final now = DateTime.utc(2026, 5, 19);
+  return SubmittedWord(
+    localSubmissionId: localId,
+    serverSubmissionId: serverId,
+    submittedTerm: term,
+    targetLanguage: language,
+    status: status,
+    failureReason: failureReason,
+    resolutionType: resolutionType,
+    resolvedWord: resolvedWord,
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: status == SubmittedWordStatus.ready ? now : null,
   );
 }
 

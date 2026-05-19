@@ -153,6 +153,18 @@ the persisted `device_id`; signed-in learning keeps that `device_id` and adds a
 bearer session token to eligible feed, study-event, sync, and proficiency
 requests.
 
+Manual word capture:
+
+- The learning drawer exposes an `Add word` flow for learner-entered words or
+  short expressions.
+- Mobile stores those submissions locally first, then syncs them through
+  `POST /v1/user-submitted-words` and refreshes status through
+  `GET /v1/user-submitted-words`.
+- Submission lifecycle is `queued`, `processing`, `ready`, or `failed`.
+- When a submission becomes `ready`, the resolved canonical word is inserted
+  into the normal local vocabulary inventory and becomes part of the standard
+  study flow.
+
 Auth UX behavior:
 
 - Register, sign-in, and sign-out show SnackBar feedback for success and

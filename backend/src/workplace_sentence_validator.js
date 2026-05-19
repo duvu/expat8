@@ -13,7 +13,9 @@ export function normalizeSentenceText(text) {
 
 export function validateWorkplaceSentenceItem(item) {
   const text = String(item.text ?? '').trim();
-  const language = String(item.language ?? '').trim().toLowerCase();
+  const language = String(item.language ?? '')
+    .trim()
+    .toLowerCase();
   const meaningVi = String(item.meaning_vi ?? '').trim();
 
   if (!text) {

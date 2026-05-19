@@ -4,7 +4,7 @@
 TBD - created by archiving change resolve-codebase-consistency-drift. Update Purpose after archive.
 ## Requirements
 ### Requirement: Current project documentation follows canonical sources
-The project SHALL keep current, non-dated developer documentation aligned with accepted OpenSpec specs and `contracts/api.md`.
+The project SHALL keep current, non-dated developer documentation aligned with accepted OpenSpec specs and `contracts/api.md`. Additionally, the backend SHALL enforce code style consistency through automated linting and formatting tools.
 
 #### Scenario: API behavior changes
 - **WHEN** an API endpoint, method, parameter, response shape, or status code changes
@@ -17,6 +17,10 @@ The project SHALL keep current, non-dated developer documentation aligned with a
 #### Scenario: Historical investigation remains in the repo
 - **WHEN** a dated investigation document describes an obsolete route, storage engine, or workflow
 - **THEN** the document is marked as historical and not a current source of truth
+
+#### Scenario: Backend code style is enforced by tooling
+- **WHEN** a developer submits backend code changes
+- **THEN** `npm run lint` reports zero errors and `npm run format:check` reports zero unformatted files
 
 ### Requirement: OpenSpec active changes reflect current project state
 The project SHALL keep active OpenSpec changes synchronized with implemented architecture decisions or explicitly mark stale sections as superseded.

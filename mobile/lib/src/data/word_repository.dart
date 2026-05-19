@@ -12,6 +12,7 @@ import '../logging/logger.dart';
 import '../models/learning_progress.dart';
 import '../models/proficiency_state.dart';
 import '../models/study_event.dart';
+import '../models/submitted_word.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import 'local_database.dart';
@@ -218,6 +219,66 @@ class WordRepository {
       language: language,
       sessionToken: session?.sessionToken,
     );
+  }
+
+  Future<SubmittedWord> submitSubmittedWord({
+    required String term,
+    required String language,
+  }) async {
+    final deviceId = await getOrCreateDeviceId();
+    final now = DateTime.now().toUtc();
+    final localSubmission = SubmittedWord(
+      localSubmissionId: _uuid.v4(),
+      submittedTerm: term.trim(),
+      targetLanguage: language,
+      status: SubmittedWordStatus.queuedSync,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await database.upsertSubmittedWord(localSubmission);
+    await database.enqueueSubmittedWordCreate(localSubmission.localSubmissionId);
+    try {
+      await syncPendingEvents(deviceId: deviceId, now: now);
+    } catch (_) {
+      // The queued local submission remains visible and will retry later.
+    }
+    return (await database.getSubmittedWord(localSubmission.localSubmissionId)) ??
+        localSubmission;
+  }
+
+  Future<List<SubmittedWord>> loadSubmittedWords() {
+    return database.listSubmittedWords();
+  }
+
+  Future<List<SubmittedWord>> refreshSubmittedWords() async {
+    final deviceId = await getOrCreateDeviceId();
+    final now = DateTime.now().toUtc();
+    final submissions = await database.listSubmittedWords();
+    for (final submission in submissions) {
+      switch (submission.status) {
+        case SubmittedWordStatus.queuedSync:
+          await database.enqueueSubmittedWordCreate(
+            submission.localSubmissionId,
+            nextRetryAt: now,
+          );
+          break;
+        case SubmittedWordStatus.queued:
+        case SubmittedWordStatus.processing:
+          if (submission.serverSubmissionId != null) {
+            await database.enqueueSubmittedWordStatus(
+              submission.localSubmissionId,
+              serverSubmissionId: submission.serverSubmissionId!,
+              nextRetryAt: now,
+            );
+          }
+          break;
+        case SubmittedWordStatus.ready:
+        case SubmittedWordStatus.failed:
+          break;
+      }
+    }
+    await syncPendingEvents(deviceId: deviceId, now: now);
+    return database.listSubmittedWords();
   }
 
   Future<VocabularyWord?> getNewWordWithFallback(
@@ -752,6 +813,92 @@ class WordRepository {
             passed: response.passed,
             certificateId: response.certificateId,
           );
+        } else if (entry.type == 'submitted_word_create') {
+          final localSubmissionId = payload['local_submission_id'] as String?;
+          if (localSubmissionId == null) {
+            continue;
+          }
+          final submission = await database.getSubmittedWord(localSubmissionId);
+          if (submission == null) {
+            if (entry.id != null) {
+              await database.removeSyncQueueEntry(entry.id!);
+            }
+            continue;
+          }
+          final session = await database.loadUserSession();
+          final remote = await apiClient.createSubmittedWord(
+            localSubmissionId: submission.localSubmissionId,
+            deviceId: deviceId,
+            term: submission.submittedTerm,
+            targetLanguage: submission.targetLanguage,
+            sessionToken: session?.sessionToken,
+          );
+          final merged = await _applyRemoteSubmittedWord(
+            localSubmission: submission,
+            remoteSubmission: remote,
+          );
+          if (entry.id != null) {
+            await database.removeSyncQueueEntry(entry.id!);
+          }
+          if (!merged.isTerminal && merged.serverSubmissionId != null) {
+            await database.enqueueSubmittedWordStatus(
+              merged.localSubmissionId,
+              serverSubmissionId: merged.serverSubmissionId!,
+              nextRetryAt: effectiveNow.add(const Duration(minutes: 1)),
+            );
+          } else {
+            await database.removeSubmittedWordQueueEntries(
+              merged.localSubmissionId,
+            );
+          }
+        } else if (entry.type == 'submitted_word_status') {
+          final localSubmissionId = payload['local_submission_id'] as String?;
+          final serverSubmissionId = payload['server_submission_id'] as String?;
+          if (localSubmissionId == null || serverSubmissionId == null) {
+            continue;
+          }
+          final submission = await database.getSubmittedWord(localSubmissionId);
+          if (submission == null) {
+            if (entry.id != null) {
+              await database.removeSyncQueueEntry(entry.id!);
+            }
+            continue;
+          }
+          final session = await database.loadUserSession();
+          final remoteItems = await apiClient.fetchSubmittedWords(
+            deviceId: deviceId,
+            sessionToken: session?.sessionToken,
+          );
+          SubmittedWord? remote;
+          for (final item in remoteItems) {
+            if (item.serverSubmissionId == serverSubmissionId) {
+              remote = item.copyWith(
+                localSubmissionId: submission.localSubmissionId,
+              );
+              break;
+            }
+          }
+          if (remote == null) {
+            throw StateError('submitted_word_not_found');
+          }
+          final merged = await _applyRemoteSubmittedWord(
+            localSubmission: submission,
+            remoteSubmission: remote,
+          );
+          if (entry.id != null) {
+            await database.removeSyncQueueEntry(entry.id!);
+          }
+          if (!merged.isTerminal && merged.serverSubmissionId != null) {
+            await database.enqueueSubmittedWordStatus(
+              merged.localSubmissionId,
+              serverSubmissionId: merged.serverSubmissionId!,
+              nextRetryAt: effectiveNow.add(const Duration(minutes: 1)),
+            );
+          } else {
+            await database.removeSubmittedWordQueueEntries(
+              merged.localSubmissionId,
+            );
+          }
         } else {
           // study_event and other existing types.
           final session = await database.loadUserSession();
@@ -778,6 +925,21 @@ class WordRepository {
         );
       }
     }
+  }
+
+  Future<SubmittedWord> _applyRemoteSubmittedWord({
+    required SubmittedWord localSubmission,
+    required SubmittedWord remoteSubmission,
+  }) async {
+    if (remoteSubmission.resolvedWord != null) {
+      await database.upsertWord(remoteSubmission.resolvedWord!);
+    }
+    final merged = remoteSubmission.copyWith(
+      localSubmissionId: localSubmission.localSubmissionId,
+    );
+    await database.upsertSubmittedWord(merged);
+    return (await database.getSubmittedWord(localSubmission.localSubmissionId)) ??
+        merged;
   }
 
   Future<List<LogEntry>> loadLogs({

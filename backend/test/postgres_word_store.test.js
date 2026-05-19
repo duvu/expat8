@@ -19,7 +19,10 @@ test('postgres store persists words, parses topics, and prevents duplicates', as
   assert.equal(second.inserted, false);
   assert.equal(first.word.id, second.word.id);
   assert.deepEqual(first.word.topics, ['work', 'people']);
-  assert.deepEqual(batch.items.map((card) => card.word.id), [first.word.id]);
+  assert.deepEqual(
+    batch.items.map((card) => card.word.id),
+    [first.word.id]
+  );
 });
 
 test('postgres store syncs study events idempotently', async () => {
@@ -112,7 +115,10 @@ test('postgres store excludes active cache claims when loading learning cards', 
     limit: 1
   });
 
-  assert.deepEqual(batch.items.map((card) => card.word.id), [first.word.id]);
+  assert.deepEqual(
+    batch.items.map((card) => card.word.id),
+    [first.word.id]
+  );
 });
 
 test('postgres store claims cached words when cache unique indexes are missing', async () => {
@@ -266,7 +272,10 @@ test('postgres store registers users, resolves sessions, revokes sessions, and e
     userId: registered.user.id
   });
 
-  assert.deepEqual(batch.items.map((card) => card.word.id), [older.word.id]);
+  assert.deepEqual(
+    batch.items.map((card) => card.word.id),
+    [older.word.id]
+  );
 
   const revoked = await store.revokeUserSession({ sessionToken: signedIn.sessionToken });
   const afterRevoke = await store.resolveUserSession({ sessionToken: signedIn.sessionToken });
@@ -340,10 +349,7 @@ class FakePool {
       return { rows: [row] };
     }
 
-    if (
-      normalizedSql.startsWith('SELECT * FROM words') &&
-      normalizedSql.includes('normalized_term = $2')
-    ) {
+    if (normalizedSql.startsWith('SELECT * FROM words') && normalizedSql.includes('normalized_term = $2')) {
       return {
         rows: [...this.words.values()].filter(
           (word) => word.language === params[0] && word.normalized_term === params[1]
@@ -351,10 +357,7 @@ class FakePool {
       };
     }
 
-    if (
-      normalizedSql.startsWith('SELECT * FROM words') &&
-      normalizedSql.includes('ORDER BY updated_at DESC')
-    ) {
+    if (normalizedSql.startsWith('SELECT * FROM words') && normalizedSql.includes('ORDER BY updated_at DESC')) {
       return {
         rows: [...this.words.values()]
           .filter((word) => word.language === params[0])
@@ -371,9 +374,7 @@ class FakePool {
 
     if (normalizedSql.startsWith('SELECT id FROM words WHERE id = ANY')) {
       return {
-        rows: params[0]
-          .filter((wordId) => this.words.has(wordId))
-          .map((id) => ({ id }))
+        rows: params[0].filter((wordId) => this.words.has(wordId)).map((id) => ({ id }))
       };
     }
 
@@ -392,9 +393,7 @@ class FakePool {
 
     if (normalizedSql.startsWith('UPDATE user_cached_words')) {
       const ownerKind = normalizedSql.includes('WHERE user_id = $2') ? 'user' : 'device';
-      const key = ownerKind === 'user'
-        ? `user:${params[1]}:${params[2]}`
-        : `device:${params[0]}:${params[2]}`;
+      const key = ownerKind === 'user' ? `user:${params[1]}:${params[2]}` : `device:${params[0]}:${params[2]}`;
       const existing = this.userCachedWords.get(key);
       if (!existing) {
         return { rows: [], rowCount: 0 };
@@ -407,9 +406,7 @@ class FakePool {
 
     if (normalizedSql.startsWith('INSERT INTO user_cached_words')) {
       const row = cachedWordRowFromParams(params);
-      const key = row.user_id
-        ? `user:${row.user_id}:${row.word_id}`
-        : `device:${row.device_id}:${row.word_id}`;
+      const key = row.user_id ? `user:${row.user_id}:${row.word_id}` : `device:${row.device_id}:${row.word_id}`;
       this.userCachedWords.set(key, row);
       return { rows: [] };
     }
@@ -419,9 +416,7 @@ class FakePool {
       return {
         rows: [...this.userCachedWords.values()]
           .filter((row) =>
-            ownerKind === 'user'
-              ? row.user_id === params[0]
-              : row.device_id === params[0] && row.user_id === null
+            ownerKind === 'user' ? row.user_id === params[0] : row.device_id === params[0] && row.user_id === null
           )
           .map((row) => ({ word_id: row.word_id }))
       };
@@ -475,17 +470,12 @@ class FakePool {
         rows: [...this.userWordStates.values()]
           .filter((state) => state.language === params[1])
           .filter((state) =>
-            ownerKind === 'user'
-              ? state.user_id === params[0]
-              : state.device_id === params[0] && state.user_id === null
+            ownerKind === 'user' ? state.user_id === params[0] : state.device_id === params[0] && state.user_id === null
           )
       };
     }
 
-    if (
-      normalizedSql.startsWith('SELECT * FROM study_events') &&
-      normalizedSql.includes('ORDER BY occurred_at DESC')
-    ) {
+    if (normalizedSql.startsWith('SELECT * FROM study_events') && normalizedSql.includes('ORDER BY occurred_at DESC')) {
       const ownerField = normalizedSql.includes('WHERE user_id = $1') ? 'user_id' : 'device_id';
       return {
         rows: [...this.studyEvents.values()]
@@ -582,16 +572,12 @@ class FakePool {
 
     throw new Error(`Unexpected SQL: ${normalizedSql}`);
   }
-
 }
 
 class MissingCacheConflictTargetPool extends FakePool {
   async query(sql, params = []) {
     const normalizedSql = sql.replace(/\s+/g, ' ').trim();
-    if (
-      normalizedSql.startsWith('INSERT INTO user_cached_words') &&
-      normalizedSql.includes('ON CONFLICT (')
-    ) {
+    if (normalizedSql.startsWith('INSERT INTO user_cached_words') && normalizedSql.includes('ON CONFLICT (')) {
       throw new Error('there is no unique or exclusion constraint matching the ON CONFLICT specification');
     }
     return super.query(sql, params);
@@ -621,9 +607,7 @@ class ConcurrentCacheReplacePool extends FakePool {
 
     if (normalizedSql.startsWith('INSERT INTO user_cached_words')) {
       const row = cachedWordRowFromParams(params);
-      const key = row.user_id
-        ? `user:${row.user_id}:${row.word_id}`
-        : `device:${row.device_id}:${row.word_id}`;
+      const key = row.user_id ? `user:${row.user_id}:${row.word_id}` : `device:${row.device_id}:${row.word_id}`;
       if (this.userCachedWords.has(key)) {
         if (normalizedSql.includes('ON CONFLICT DO NOTHING')) {
           return { rows: [] };
@@ -677,18 +661,8 @@ function wordRowFromParams(params) {
 }
 
 function studyEventRowFromParams(params) {
-  const [
-    id,
-    event_id,
-    client_event_id,
-    device_id,
-    user_id,
-    word_id,
-    local_word_id,
-    rating,
-    occurred_at,
-    received_at
-  ] = params;
+  const [id, event_id, client_event_id, device_id, user_id, word_id, local_word_id, rating, occurred_at, received_at] =
+    params;
   return {
     id,
     event_id,
@@ -704,18 +678,8 @@ function studyEventRowFromParams(params) {
 }
 
 function wordStateRowFromParams(params) {
-  const [
-    id,
-    user_id,
-    device_id,
-    word_id,
-    language,
-    status,
-    last_rating,
-    last_studied_at,
-    next_review_at,
-    updated_at
-  ] = params;
+  const [id, user_id, device_id, word_id, language, status, last_rating, last_studied_at, next_review_at, updated_at] =
+    params;
   return {
     id,
     user_id,
@@ -758,9 +722,7 @@ function sessionRowFromParams(params) {
 }
 
 function proficiencyKey(row) {
-  return row.user_id
-    ? `user:${row.user_id}:${row.language}`
-    : `device:${row.device_id}:${row.language}`;
+  return row.user_id ? `user:${row.user_id}:${row.language}` : `device:${row.device_id}:${row.language}`;
 }
 
 function proficiencyKeyFromQuery(normalizedSql, params) {

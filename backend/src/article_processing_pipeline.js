@@ -1,13 +1,7 @@
 import { normalizeTerm } from './normalize.js';
 import { normalizeDifficultyLevel } from './proficiency.js';
-import {
-  normalizeSuggestionType,
-  validateVocabularyItem
-} from './vocabulary_validator.js';
-import {
-  normalizeSentenceText,
-  validateWorkplaceSentenceItem
-} from './workplace_sentence_validator.js';
+import { normalizeSuggestionType, validateVocabularyItem } from './vocabulary_validator.js';
+import { normalizeSentenceText, validateWorkplaceSentenceItem } from './workplace_sentence_validator.js';
 
 const DEFAULT_MAX_CHUNK_CHARS = 1800;
 const DEFAULT_MAX_SUGGESTIONS_PER_CHUNK = 10;
@@ -88,7 +82,9 @@ export class ArticleProcessingPipeline {
           difficulty:
             normalizeDifficultyLevel(suggestion.difficulty ?? suggestion.level, {
               language: suggestion.language ?? article.language
-            }) ?? suggestion.difficulty ?? suggestion.level,
+            }) ??
+            suggestion.difficulty ??
+            suggestion.level,
           level: suggestion.level ?? suggestion.difficulty ?? null,
           suggestion_type: normalizeSuggestionType(suggestion.suggestion_type, suggestion.term),
           frequency: suggestion.frequency ?? 1,
@@ -169,7 +165,7 @@ export class ArticleProcessingPipeline {
       return acc;
     }, {});
 
-      this.logger.info?.('article_processing_pipeline_completed', {
+    this.logger.info?.('article_processing_pipeline_completed', {
       article_id: articleId,
       extracted_count: extracted.length,
       accepted_count: accepted.length,
@@ -182,7 +178,7 @@ export class ArticleProcessingPipeline {
 
     return {
       success: true,
-      classification: (rejected.length > 0 || rejectedSentences.length > 0) ? 'partial_success' : 'success',
+      classification: rejected.length > 0 || rejectedSentences.length > 0 ? 'partial_success' : 'success',
       extracted_count: extracted.length + extractedSentences.length,
       accepted_count: accepted.length + acceptedSentences.length,
       rejected_count: rejected.length + rejectedSentences.length,
@@ -267,7 +263,7 @@ function chunkArticleText(text, { maxChars }) {
       continue;
     }
 
-    if ((current.length + 2 + paragraph.length) <= maxChars) {
+    if (current.length + 2 + paragraph.length <= maxChars) {
       current = `${current}\n\n${paragraph}`;
       continue;
     }
@@ -308,7 +304,7 @@ function splitLongParagraph(paragraph, maxChars) {
       continue;
     }
 
-    if ((current.length + 1 + sentence.length) <= maxChars) {
+    if (current.length + 1 + sentence.length <= maxChars) {
       current = `${current} ${sentence}`;
       continue;
     }

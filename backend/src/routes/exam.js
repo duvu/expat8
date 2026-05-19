@@ -1,4 +1,5 @@
 import express from 'express';
+import { asyncHandler, resolveRequiredUserSession } from './helpers.js';
 
 const EXAM_PASS_THRESHOLD = 0.7;
 const EXAM_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
@@ -124,32 +125,4 @@ export function createExamRouter({ store }) {
   );
 
   return router;
-}
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-function asyncHandler(handler) {
-  return (request, response, next) => {
-    Promise.resolve(handler(request, response, next)).catch(next);
-  };
-}
-
-async function resolveRequiredUserSession({ request, response, store }) {
-  const token = bearerToken(request);
-  if (!token) {
-    response.status(401).json({ error: 'invalid_session' });
-    return null;
-  }
-  const session = await store.resolveUserSession({ sessionToken: token });
-  if (!session) {
-    response.status(401).json({ error: 'invalid_session' });
-    return null;
-  }
-  return session;
-}
-
-function bearerToken(request) {
-  const authorization = request.get('authorization') ?? '';
-  const [scheme, token] = authorization.split(/\s+/);
-  return scheme?.toLowerCase() === 'bearer' && token ? token : null;
 }

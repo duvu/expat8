@@ -1,13 +1,7 @@
 import { createId } from './ids.js';
 
 export class VocabularyPoolScheduler {
-  constructor({
-    store,
-    generationService,
-    config,
-    logger = console,
-    now = () => new Date()
-  }) {
+  constructor({ store, generationService, config, logger = console, now = () => new Date() }) {
     this.store = store;
     this.generationService = generationService;
     this.config = config;
@@ -45,9 +39,10 @@ export class VocabularyPoolScheduler {
       }
     }
 
-    const requestedCount = mode === 'fill'
-      ? Math.min(this.config.vocabGenerationBatchSize, poolMin - count)
-      : this.config.vocabDailyGenerationCount;
+    const requestedCount =
+      mode === 'fill'
+        ? Math.min(this.config.vocabGenerationBatchSize, poolMin - count)
+        : this.config.vocabDailyGenerationCount;
     if (requestedCount <= 0) {
       return { mode: 'idle', reason: 'nothing_to_generate', count };
     }

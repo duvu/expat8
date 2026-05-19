@@ -40,14 +40,14 @@ test('article ingest: status transitions from pending_processing → processed',
     userId: 'user_a',
     title: 'Ingest Integration',
     language: 'en',
-    rawText: 'Resilience is a key trait for modern engineering teams under pressure.',
+    rawText: 'Resilience is a key trait for modern engineering teams under pressure.'
   });
 
   assert.equal(article.status, 'pending_processing', 'article starts pending');
 
   const pipeline = new ArticleProcessingPipeline({
     store,
-    suggestionAdapter: makeSuggestionAdapter('resilience'),
+    suggestionAdapter: makeSuggestionAdapter('resilience')
   });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
 
@@ -64,18 +64,21 @@ test('article ingest: vocabulary items created and accessible to owner after pro
     userId: 'user_b',
     title: 'Vocab Extraction Test',
     language: 'en',
-    rawText: 'Consistency and reliability are fundamental to robust systems.',
+    rawText: 'Consistency and reliability are fundamental to robust systems.'
   });
 
   const pipeline = new ArticleProcessingPipeline({
     store,
-    suggestionAdapter: makeSuggestionAdapter('reliability'),
+    suggestionAdapter: makeSuggestionAdapter('reliability')
   });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
 
   const vocab = store.getArticleVocabulary({ articleId: article.id, userId: 'user_b' });
-  assert.ok(vocab && Array.isArray(vocab.items) && vocab.items.length > 0, 'owner can read vocabulary after processing');
+  assert.ok(
+    vocab && Array.isArray(vocab.items) && vocab.items.length > 0,
+    'owner can read vocabulary after processing'
+  );
   assert.equal(vocab.items[0].classification, 'article_keyword');
 });
 
@@ -85,12 +88,12 @@ test('vocabulary review: pending items are surfaced for admin approval', async (
     adminUserId: 'admin_1',
     title: 'Review Batch',
     language: 'en',
-    rawText: 'Automation enables consistent and repeatable deployments at scale.',
+    rawText: 'Automation enables consistent and repeatable deployments at scale.'
   });
 
   const pipeline = new ArticleProcessingPipeline({
     store,
-    suggestionAdapter: makeSuggestionAdapter('automation'),
+    suggestionAdapter: makeSuggestionAdapter('automation')
   });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
@@ -109,12 +112,12 @@ test('publish eligibility: admin article requires vocabulary review before publi
     adminUserId: 'admin_2',
     title: 'Publish Eligibility',
     language: 'en',
-    rawText: 'Observability tools enable engineers to detect anomalies early.',
+    rawText: 'Observability tools enable engineers to detect anomalies early.'
   });
 
   const pipeline = new ArticleProcessingPipeline({
     store,
-    suggestionAdapter: makeSuggestionAdapter('observability'),
+    suggestionAdapter: makeSuggestionAdapter('observability')
   });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
@@ -129,7 +132,7 @@ test('publish eligibility: admin article requires vocabulary review before publi
     store.reviewVocabularyItem({
       itemId: item.id,
       status: 'approved',
-      reviewerUserId: 'admin_2',
+      reviewerUserId: 'admin_2'
     });
   }
 
@@ -145,12 +148,12 @@ test('publish eligibility: non-owner cannot read unpublished vocabulary', async 
     userId: 'owner_c',
     title: 'Private Article',
     language: 'en',
-    rawText: 'Private notes for owner only.',
+    rawText: 'Private notes for owner only.'
   });
 
   const pipeline = new ArticleProcessingPipeline({
     store,
-    suggestionAdapter: makeSuggestionAdapter('private'),
+    suggestionAdapter: makeSuggestionAdapter('private')
   });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
@@ -172,12 +175,12 @@ test('publish eligibility: non-owner can read published article vocabulary', asy
     adminUserId: 'admin_pub',
     title: 'Public Article',
     language: 'en',
-    rawText: 'Public knowledge grows when knowledge is shared openly.',
+    rawText: 'Public knowledge grows when knowledge is shared openly.'
   });
 
   const pipeline = new ArticleProcessingPipeline({
     store,
-    suggestionAdapter: makeSuggestionAdapter('knowledge'),
+    suggestionAdapter: makeSuggestionAdapter('knowledge')
   });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
@@ -189,7 +192,10 @@ test('publish eligibility: non-owner can read published article vocabulary', asy
 
   // Any authenticated user can now see the vocabulary
   const anyUser = store.getArticleVocabulary({ articleId: article.id, userId: 'random_user' });
-  assert.ok(anyUser && Array.isArray(anyUser.items) && anyUser.items.length > 0, 'published vocabulary is world-readable');
+  assert.ok(
+    anyUser && Array.isArray(anyUser.items) && anyUser.items.length > 0,
+    'published vocabulary is world-readable'
+  );
 });
 
 test('content pack listing: in-memory store returns empty list (Postgres-only feature)', () => {

@@ -677,10 +677,95 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "11:391133553608201731",
+      "lastPropertyId": "12:8554069777923827095",
+      "name": "SubmittedWordEntity",
+      "properties": [
+        {
+          "id": "1:678512408047998987",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8116206321873322702",
+          "name": "localSubmissionId",
+          "indexId": "41:122373600711202737",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:2955792410197618859",
+          "name": "serverSubmissionId",
+          "indexId": "42:8464084824742748147",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5502148205198462794",
+          "name": "submittedTerm",
+          "type": 9
+        },
+        {
+          "id": "5:649046068340762660",
+          "name": "targetLanguage",
+          "indexId": "43:373752126373439503",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:267067576251403847",
+          "name": "status",
+          "indexId": "44:427968820041091089",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "7:4145540585640737157",
+          "name": "failureReason",
+          "type": 9
+        },
+        {
+          "id": "8:7160964161807826780",
+          "name": "resolutionType",
+          "type": 9
+        },
+        {
+          "id": "9:8404661050014485449",
+          "name": "resolvedWordServerId",
+          "indexId": "45:6099683019866534066",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "10:1968228559894307145",
+          "name": "createdAtMs",
+          "indexId": "46:1852434849237283561",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "11:2907129057556953036",
+          "name": "updatedAtMs",
+          "indexId": "47:3074921035244711233",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "12:8554069777923827095",
+          "name": "resolvedAtMs",
+          "indexId": "48:4623037698306536221",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "10:8684125017994145344",
-  "lastIndexId": "40:2227461795146005189",
+  "lastEntityId": "11:391133553608201731",
+  "lastIndexId": "48:4623037698306536221",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

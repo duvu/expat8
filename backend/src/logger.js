@@ -7,7 +7,8 @@ const LOG_LEVELS = {
 
 const REDACTED = '[REDACTED]';
 const SENSITIVE_KEY_PATTERN = /pass(word)?|secret|token|authorization|api[_-]?key|credential/i;
-const SENSITIVE_VALUE_PATTERN = /(Bearer\s+[A-Za-z0-9._~+/=-]+|sk-[A-Za-z0-9_-]+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+)/gi;
+const SENSITIVE_VALUE_PATTERN =
+  /(Bearer\s+[A-Za-z0-9._~+/=-]+|sk-[A-Za-z0-9_-]+|(?:password|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;]+)/gi;
 
 export function createLogger({
   level = 'info',

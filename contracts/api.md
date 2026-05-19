@@ -84,6 +84,47 @@ request `device_id` for device/offline context. Invalid bearer sessions return:
 { "error": "invalid_session" }
 ```
 
+## POST /v1/mobile/log-archives
+
+Uploads a sanitized mobile diagnostic log archive for support investigation.
+The request body is raw UTF-8 text, not JSON. The app credential signature MUST
+hash the exact bytes sent in the request body.
+
+Additional headers:
+
+- `Content-Type`: `text/plain; charset=utf-8`.
+- `X-Expat8-Device-Id`: optional source device identifier.
+- `X-Expat8-Log-Source`: optional source label, defaulting to `mobile`.
+- `X-Expat8-Log-Filename`: optional original filename. The backend sanitizes it before storage.
+- `Authorization`: optional bearer session token. Invalid sessions return `401`.
+
+Success response `201`:
+
+```json
+{
+  "id": "archive_123",
+  "file_name": "app-logs-2026-05-04.txt",
+  "content_type": "text/plain; charset=utf-8",
+  "size_bytes": 102400,
+  "uploaded_at": "2026-05-04T12:00:00.000Z",
+  "source_app_id": "app_mobile_prod",
+  "source_device_id": "device_abc",
+  "source_user_id": "user_123",
+  "source_label": "mobile",
+  "retention_expires_at": "2026-05-07T12:00:00.000Z",
+  "retention_state": "active",
+  "content_url": "/v1/admin/log-archives/archive_123/content",
+  "download_url": "/v1/admin/log-archives/archive_123/download"
+}
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                                            |
+|--------|-------------------|----------------------------------------------------|
+| 400    | `bad_request`     | Missing/invalid app credentials or empty body      |
+| 401    | `invalid_session` | Optional bearer token is present but not valid     |
+
 ## POST /v1/users/register
 
 Request:
@@ -433,6 +474,142 @@ retaining `device_id`.
 Signed-in sync uses the same JSON body and adds `Authorization: Bearer
 <session_token>`. Accepted events are associated with the user while retaining
 the submitted `device_id`.
+
+## POST /v1/user-submitted-words
+
+Creates or reuses a learner-owned vocabulary submission for asynchronous AI
+enrichment.
+
+Request:
+
+```json
+{
+  "device_id": "anonymous_550e8400-e29b-41d4-a716-446655440000",
+  "term": "reliable",
+  "target_language": "en"
+}
+```
+
+Fields:
+
+- `device_id`: required stable anonymous or device identifier. Signed-in mobile
+  clients still send the current device identifier.
+- `term`: required submitted word or short expression.
+- `target_language`: required target language code. Must be one of the backend's
+  configured valid languages.
+
+When signed in, include `Authorization: Bearer <session_token>`; the backend
+stores the submission under the user while still retaining `device_id` for
+device context.
+
+Response `201` (new queued submission):
+
+```json
+{
+  "id": "submission_123",
+  "submitted_term": "reliable",
+  "target_language": "en",
+  "status": "queued",
+  "resolution_type": null,
+  "failure_reason": null,
+  "resolved_word": null,
+  "created_at": "2026-05-19T10:00:00.000Z",
+  "updated_at": "2026-05-19T10:00:00.000Z",
+  "resolved_at": null
+}
+```
+
+Response `200` (reused active submission or immediate existing-word match):
+
+```json
+{
+  "id": "submission_123",
+  "submitted_term": "reliable",
+  "target_language": "en",
+  "status": "ready",
+  "resolution_type": "existing_word",
+  "failure_reason": null,
+  "resolved_word": {
+    "server_word_id": "word_123",
+    "term": "reliable",
+    "language": "en",
+    "meaning_vi": "dang tin cay",
+    "part_of_speech": "adjective",
+    "ipa": "/rɪˈlaɪəbl/",
+    "vietnamese_pronunciation": "ri-lai-uh-bol",
+    "example": "She is a reliable teammate.",
+    "example_vi": "Co ay la mot dong doi dang tin cay.",
+    "entry_type": "word",
+    "blank_word": null,
+    "explanation": "",
+    "difficulty": "B1",
+    "topics": ["work", "people"],
+    "created_at": "2026-05-04T00:00:00.000Z"
+  },
+  "created_at": "2026-05-19T10:00:00.000Z",
+  "updated_at": "2026-05-19T10:00:05.000Z",
+  "resolved_at": "2026-05-19T10:00:05.000Z"
+}
+```
+
+Status lifecycle:
+
+- `queued`: accepted and waiting for worker pickup
+- `processing`: worker claimed the submission and is generating the word
+- `ready`: submission resolved to a canonical stored word
+- `failed`: worker could not generate a valid canonical word
+
+Error responses:
+
+| Status | `error` field     | Meaning                                         |
+|--------|-------------------|-------------------------------------------------|
+| 400    | `bad_request`     | Missing/invalid `device_id`, `term`, or language |
+| 401    | `invalid_session` | Optional bearer token is present but not valid  |
+
+## GET /v1/user-submitted-words
+
+Lists submitted vocabulary records for the current learner context.
+
+Query parameters:
+
+- `device_id`: required stable anonymous or device identifier.
+- `limit`: optional max `100`, default `50`.
+
+When signed in, results are scoped to the signed-in user. Without a bearer
+session, results are scoped to the anonymous/device owner.
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "submission_123",
+      "submitted_term": "reliable",
+      "target_language": "en",
+      "status": "processing",
+      "resolution_type": null,
+      "failure_reason": null,
+      "resolved_word": null,
+      "created_at": "2026-05-19T10:00:00.000Z",
+      "updated_at": "2026-05-19T10:00:05.000Z",
+      "resolved_at": null
+    },
+    {
+      "id": "submission_124",
+      "submitted_term": "stubborn",
+      "target_language": "en",
+      "status": "failed",
+      "resolution_type": null,
+      "failure_reason": "Unable to generate a valid vocabulary item for this term.",
+      "resolved_word": null,
+      "created_at": "2026-05-19T09:50:00.000Z",
+      "updated_at": "2026-05-19T09:50:12.000Z",
+      "resolved_at": null
+    }
+  ]
+}
+```
 
 ## POST /v1/study-events/sync
 
@@ -925,3 +1102,394 @@ Error responses:
 | Status | `error` field | Meaning                    |
 |--------|---------------|----------------------------|
 | 404    | `not_found`   | Certificate ID not found   |
+
+---
+
+## Admin Endpoints
+
+All `/v1/admin/*` endpoints require:
+
+1. Standard app-credential HMAC headers (like all `/v1/*` endpoints)
+2. `X-Expat8-Admin-Token` header containing a valid token from the
+   `ADMIN_API_TOKENS` environment variable
+
+Missing app credentials return `400 { "error": "bad_request" }`. Valid app
+credentials without a valid admin token return:
+
+```json
+{ "error": "forbidden" }
+```
+
+---
+
+### POST /v1/admin/articles
+
+Creates a new article for processing.
+
+Request:
+
+```json
+{
+  "title": "How to negotiate a raise",
+  "language": "en",
+  "raw_text": "Full article text content...",
+  "source_url": "https://example.com/article",
+  "visibility": "published"
+}
+```
+
+Fields:
+
+- `title`: required, non-empty string.
+- `language`: required, non-empty string (e.g. `"en"`).
+- `raw_text`: required, non-empty string containing the article body.
+- `source_url`: optional string URL of the original article.
+- `visibility`: optional, `"private"` or `"published"`. Defaults to
+  `"published"`. Invalid values are normalised to `"private"`.
+
+Success response (201):
+
+```json
+{
+  "id": "article_123",
+  "title": "How to negotiate a raise",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "published",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-04T00:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field  | Meaning                                         |
+|--------|----------------|-------------------------------------------------|
+| 400    | `bad_request`  | Missing or empty `title`, `language`, `raw_text` |
+| 403    | `forbidden`    | Missing or invalid admin token                  |
+
+---
+
+### GET /v1/admin/articles
+
+Lists admin articles with optional filters.
+
+Query parameters:
+
+- `limit`: optional, max `100`, default `100`.
+- `status`: optional string filter (e.g. `"pending"`, `"processed"`).
+
+Success response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "article_123",
+      "title": "How to negotiate a raise",
+      "source_url": "https://example.com/article",
+      "language": "en",
+      "visibility": "published",
+      "status": "processed",
+      "processing_error": null,
+      "created_at": "2026-05-04T00:00:00.000Z",
+      "updated_at": "2026-05-04T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### POST /v1/admin/articles/:id/publish
+
+Publishes an article by ID.
+
+No request body required.
+
+Success response (200):
+
+```json
+{
+  "id": "article_123",
+  "title": "How to negotiate a raise",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "published",
+  "status": "processed",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-04T00:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Article ID not found           |
+
+---
+
+### POST /v1/admin/articles/:id/reprocess
+
+Resets an article for reprocessing by the background worker.
+
+No request body required.
+
+Success response (200):
+
+```json
+{
+  "id": "article_123",
+  "title": "How to negotiate a raise",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "published",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-05T08:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Article ID not found           |
+
+---
+
+### PATCH /v1/admin/articles/:id
+
+Updates article metadata. Only provided fields are patched.
+
+Request:
+
+```json
+{
+  "title": "Updated title",
+  "language": "en",
+  "visibility": "private",
+  "status": "pending"
+}
+```
+
+Fields (all optional):
+
+- `title`: string.
+- `language`: string.
+- `visibility`: `"private"` or `"published"`. `"shared"` is not accepted and
+  returns `400`.
+- `status`: string (e.g. `"pending"`, `"processed"`).
+
+Success response (200):
+
+```json
+{
+  "id": "article_123",
+  "title": "Updated title",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "private",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-05T09:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                    |
+|--------|---------------|--------------------------------------------|
+| 400    | `bad_request` | Invalid `visibility` value (e.g. `"shared"`) |
+| 403    | `forbidden`   | Missing or invalid admin token             |
+| 404    | `not_found`   | Article ID not found                       |
+
+---
+
+### GET /v1/admin/review/vocabulary
+
+Lists vocabulary items pending admin review.
+
+Query parameters:
+
+- `limit`: optional, max `200`, default `200`.
+- `status`: optional filter string, default `"pending"`.
+
+Success response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "vocab_item_123",
+      "term": "reliable",
+      "status": "pending",
+      "word_sense_id": "sense_123"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### PATCH /v1/admin/vocabulary/:id
+
+Approves, rejects, or resets a vocabulary item.
+
+Request:
+
+```json
+{
+  "status": "approved",
+  "review_note": "Looks good"
+}
+```
+
+Fields:
+
+- `status`: required, one of `"approved"`, `"rejected"`, `"pending"`.
+- `review_note`: optional string note.
+
+Success response (200):
+
+```json
+{
+  "id": "vocab_item_123",
+  "term": "reliable",
+  "status": "approved",
+  "review_note": "Looks good"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                          |
+|--------|---------------|--------------------------------------------------|
+| 400    | `bad_request` | Missing or invalid `status` value                |
+| 403    | `forbidden`   | Missing or invalid admin token                   |
+| 404    | `not_found`   | Vocabulary item ID not found                     |
+
+---
+
+### GET /v1/admin/log-archives
+
+Lists uploaded log archives.
+
+Query parameters:
+
+- `limit`: optional, max `200`, default `100`.
+
+Success response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "archive_123",
+      "file_name": "app-logs-2026-05-04.txt",
+      "content_type": "text/plain; charset=utf-8",
+      "size_bytes": 102400,
+      "uploaded_at": "2026-05-04T12:00:00.000Z",
+      "source_app_id": "app_mobile_prod",
+      "source_device_id": "device_abc",
+      "source_user_id": "user_123",
+      "source_label": "crash_report",
+      "retention_expires_at": "2026-06-04T12:00:00.000Z",
+      "retention_state": "active",
+      "content_url": "/v1/admin/log-archives/archive_123/content",
+      "download_url": "/v1/admin/log-archives/archive_123/download"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### GET /v1/admin/log-archives/:id
+
+Returns metadata for a single log archive.
+
+Success response (200):
+
+```json
+{
+  "id": "archive_123",
+  "file_name": "app-logs-2026-05-04.txt",
+  "content_type": "text/plain; charset=utf-8",
+  "size_bytes": 102400,
+  "uploaded_at": "2026-05-04T12:00:00.000Z",
+  "source_app_id": "app_mobile_prod",
+  "source_device_id": "device_abc",
+  "source_user_id": "user_123",
+  "source_label": "crash_report",
+  "retention_expires_at": "2026-06-04T12:00:00.000Z",
+  "retention_state": "active",
+  "content_url": "/v1/admin/log-archives/archive_123/content",
+  "download_url": "/v1/admin/log-archives/archive_123/download"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Archive ID not found           |
+
+---
+
+### DELETE /v1/admin/log-archives/:id
+
+Permanently removes a single log archive (both content and metadata).
+
+Success response (204): no body.
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Archive ID not found           |
+
+---
+
+### GET /v1/admin/log-archives/:id/content
+
+Streams the raw log archive content. The response `Content-Type` matches the
+archive's stored content type (typically `text/plain; charset=utf-8`).
+
+Success response (200): raw file content streamed as the archive's content type.
+
+Error responses:
+
+| Status | `error` field    | Meaning                        |
+|--------|------------------|--------------------------------|
+| 403    | `forbidden`      | Missing or invalid admin token |
+| 404    | `not_found`      | Archive ID not found           |
+| 500    | `internal_error` | Stream read failure            |

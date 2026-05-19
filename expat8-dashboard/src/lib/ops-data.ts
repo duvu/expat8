@@ -137,6 +137,19 @@ export async function loadLogArchiveContent(id: string): Promise<{
   }
 }
 
+export async function deleteLogArchive(id: string): Promise<{ error: string | null }> {
+  try {
+    ensureDashboardCredentials();
+    const response = await backendFetch(`/v1/admin/log-archives/${id}`, { method: 'DELETE' });
+    if (!response.ok) {
+      return { error: await readErrorMessage(response, 'Unable to delete log archive') };
+    }
+    return { error: null };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unable to delete log archive' };
+  }
+}
+
 async function probeHealth(path: string, label: string, checkedAt: string): Promise<HealthProbe> {
   const config = getAdminConfig();
   const url = new URL(path, config.backendBaseUrl);

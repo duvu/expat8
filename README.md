@@ -15,6 +15,9 @@ The current app/backend flow includes an adaptive CEFR proficiency ladder:
   backend-selected batches using learner state
 - The mobile app stores local vocabulary, study events, settings, sync queue
   entries, and logs in ObjectBox.
+- Learners can also capture their own unfamiliar words from the mobile app; the
+  app queues the submission locally, the backend enriches it asynchronously,
+  and the resolved word joins the normal study inventory.
 - All mobile `/v1/*` calls are signed with app credential headers; optional
   user sessions ride inside that app-credential layer.
 
@@ -62,6 +65,9 @@ Mobile card loading uses `POST /v1/learning/cards` with `card_mode: "new"`.
 The backend owns duplicate avoidance through learner state and
 `PUT /v1/user-word-cache`; mobile no longer sends exclusion lists for card
 refill.
+User-entered words are submitted through `POST /v1/user-submitted-words` and
+polled through `GET /v1/user-submitted-words`, with status values
+`queued`/`processing`/`ready`/`failed` documented in `contracts/api.md`.
 
 Backend environment:
 
@@ -116,6 +122,7 @@ The v1 milestone covers the full offline-first vocabulary learning loop, speakin
 | Adaptive HSK proficiency | Chinese HSK1→HSK6; same mechanics |
 | User accounts | Register, sign-in, sign-out, anonymous fallback via `device_id` |
 | Study event sync | Single and batch; offline queue with retry |
+| User-submitted vocabulary | Learner types a word; mobile queues it locally; backend AI enriches it asynchronously |
 | Article-based vocabulary | LLM enrichment pipeline; admin publish flow |
 | Speaking foundation | Local record + playback + self-rate drill; behavioral event sync (no audio upload) |
 | Weekly speaking summary | `GET /v1/speaking/summary` |

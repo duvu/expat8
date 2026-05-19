@@ -11,7 +11,8 @@ test('worker processes queued article and persists extracted vocabulary', async 
     userId: 'user_1',
     title: 'Learning text',
     language: 'en',
-    rawText: 'Reliable teams build reliable systems. They share knowledge across functions. The article also mentions reliable systems again.'
+    rawText:
+      'Reliable teams build reliable systems. They share knowledge across functions. The article also mentions reliable systems again.'
   });
 
   const enrichmentAdapter = {

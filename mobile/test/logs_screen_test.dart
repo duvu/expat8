@@ -121,6 +121,33 @@ void main() {
     expect(persisted.length, 1);
   });
 
+  testWidgets('send shows no-log feedback without backend upload',
+      (tester) async {
+    final repository =
+        await _repositoryWithLogs(const []) as _FakeLogRepository;
+    final shareService = _RecordingLogShareService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LogsScreen(
+          repository: repository,
+          shareService: shareService,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Send logs to server'));
+    await _pumpUntil(
+      tester,
+      () => find.text('No logs to send to the server.').evaluate().isNotEmpty,
+    );
+
+    expect(find.text('No logs to send to the server.'), findsOneWidget);
+    expect(repository.sentExports, isEmpty);
+    expect(shareService.exports, isEmpty);
+  });
+
   testWidgets('send shows success feedback and keeps export intact',
       (tester) async {
     final repository = await _repositoryWithLogs([
@@ -129,7 +156,7 @@ void main() {
         event: 'api.warning',
         message: 'Request warning',
       ),
-    ]);
+    ]) as _FakeLogRepository;
     final shareService = _RecordingLogShareService();
 
     await tester.pumpWidget(
@@ -149,6 +176,8 @@ void main() {
     );
 
     expect(find.text('Sent 1 logs to the server.'), findsOneWidget);
+    expect(repository.sentExports.length, 1);
+    expect(repository.sentExports.single.count, 1);
     expect(shareService.exports, isEmpty);
   });
 
@@ -296,6 +325,9 @@ class _FakeLogRepository extends WordRepository {
       to: to,
       limit: limit,
     );
+    if (export.count == 0) {
+      return export;
+    }
     if (sendError != null) {
       throw sendError!;
     }

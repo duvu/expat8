@@ -123,36 +123,46 @@ export class VocabularyEnrichmentAdapter {
   }
 
   #fallbackSuggestions({ article, chunk, chunkIndex, maxSuggestions }) {
-    const tokens = [...new Set(
-      String(chunk ?? '')
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}\s']/gu, ' ')
-        .split(/\s+/)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 4)
-        .filter((token) => !['this', 'that', 'with', 'from', 'have', 'there', 'their', 'about'].includes(token))
-    )];
+    const tokens = [
+      ...new Set(
+        String(chunk ?? '')
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter((token) => token.length >= 4)
+          .filter((token) => !['this', 'that', 'with', 'from', 'have', 'there', 'their', 'about'].includes(token))
+      )
+    ];
 
-    return tokens.slice(0, maxSuggestions).map((term, index) => this.#normalizeSuggestion({
-      term,
-      language: article.language,
-      meaning_vi: `Nghia cua ${term}`,
-      part_of_speech: 'unknown',
-      ipa: '/na/',
-      vietnamese_pronunciation: term,
-      example: `This chunk mentions ${term}.`,
-      example_vi: `Doan nay de cap den ${term}.`,
-      difficulty: 'A1',
-      topics: ['article-ingestion'],
-      classification: 'fallback_suggestion',
-      suggestion_type: term.includes(' ') ? 'phrase' : 'word',
-      frequency: 1,
-      confidence: Number((0.5 + (index * 0.05)).toFixed(2)),
-      quality_score: Number((0.5 + (index * 0.05)).toFixed(2)),
-      article_chunk_index: chunkIndex,
-      article_chunk_text: chunk,
-      isStub: true
-    }, { article, chunk, chunkIndex })).filter(Boolean);
+    return tokens
+      .slice(0, maxSuggestions)
+      .map((term, index) =>
+        this.#normalizeSuggestion(
+          {
+            term,
+            language: article.language,
+            meaning_vi: `Nghia cua ${term}`,
+            part_of_speech: 'unknown',
+            ipa: '/na/',
+            vietnamese_pronunciation: term,
+            example: `This chunk mentions ${term}.`,
+            example_vi: `Doan nay de cap den ${term}.`,
+            difficulty: 'A1',
+            topics: ['article-ingestion'],
+            classification: 'fallback_suggestion',
+            suggestion_type: term.includes(' ') ? 'phrase' : 'word',
+            frequency: 1,
+            confidence: Number((0.5 + index * 0.05).toFixed(2)),
+            quality_score: Number((0.5 + index * 0.05).toFixed(2)),
+            article_chunk_index: chunkIndex,
+            article_chunk_text: chunk,
+            isStub: true
+          },
+          { article, chunk, chunkIndex }
+        )
+      )
+      .filter(Boolean);
   }
 
   #fallbackWorkplaceSentences({ article, chunk, maxSuggestions }) {
@@ -161,21 +171,24 @@ export class VocabularyEnrichmentAdapter {
       .map((sentence) => sentence.trim())
       .filter((sentence) => normalizeSentenceText(sentence).split(' ').filter(Boolean).length >= 4);
 
-    return sentences.slice(0, maxSuggestions).map((text, index) => {
-      const normalized = normalizeSentenceText(text);
-      if (!normalized) {
-        return null;
-      }
-      return {
-        text,
-        language: article.language,
-        meaning_vi: `Cau giao tiep cong viec: ${normalized}`,
-        topic: 'work',
-        confidence: Number((0.5 + (index * 0.05)).toFixed(2)),
-        isStub: true,
-        generation_source: 'article_workplace_sentence'
-      };
-    }).filter(Boolean);
+    return sentences
+      .slice(0, maxSuggestions)
+      .map((text, index) => {
+        const normalized = normalizeSentenceText(text);
+        if (!normalized) {
+          return null;
+        }
+        return {
+          text,
+          language: article.language,
+          meaning_vi: `Cau giao tiep cong viec: ${normalized}`,
+          topic: 'work',
+          confidence: Number((0.5 + index * 0.05).toFixed(2)),
+          isStub: true,
+          generation_source: 'article_workplace_sentence'
+        };
+      })
+      .filter(Boolean);
   }
 
   #normalizeSuggestion(item, { article, chunk, chunkIndex }) {
@@ -195,8 +208,10 @@ export class VocabularyEnrichmentAdapter {
       vietnamese_pronunciation: String(item.vietnamese_pronunciation ?? term).trim() || term,
       example: String(item.example ?? '').trim() || `${term} appears in the uploaded article.`,
       example_vi: String(item.example_vi ?? '').trim() || `${term} xuat hien trong bai viet duoc tai len.`,
-      difficulty: normalizeDifficultyLevel(item.difficulty ?? item.level, { language }) ?? item.difficulty ?? item.level ?? 'A1',
-      level: normalizeDifficultyLevel(item.level ?? item.difficulty, { language }) ?? item.level ?? item.difficulty ?? 'A1',
+      difficulty:
+        normalizeDifficultyLevel(item.difficulty ?? item.level, { language }) ?? item.difficulty ?? item.level ?? 'A1',
+      level:
+        normalizeDifficultyLevel(item.level ?? item.difficulty, { language }) ?? item.level ?? item.difficulty ?? 'A1',
       topics: Array.isArray(item.topics) && item.topics.length > 0 ? item.topics : ['article-ingestion'],
       classification: String(item.classification ?? 'article_suggestion').trim() || 'article_suggestion',
       suggestion_type: normalizeSuggestionType(item.suggestion_type, term),
@@ -230,7 +245,11 @@ export class VocabularyEnrichmentAdapter {
 
 function parseSuggestions(raw) {
   try {
-    const text = String(raw ?? '').trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+    const text = String(raw ?? '')
+      .trim()
+      .replace(/^```(?:json)?/i, '')
+      .replace(/```$/i, '')
+      .trim();
     const parsed = JSON.parse(text);
     if (Array.isArray(parsed)) {
       return parsed;

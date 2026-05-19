@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 import PageShell from '@/components/PageShell';
 import { formatBytes, formatDateTime, filterLogContentLines } from '@/lib/ops';
 import { loadLogArchive, loadLogArchiveContent } from '@/lib/ops-data';
+import { deleteArchiveAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export default async function OpsLogDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; level?: string }>;
+  searchParams: Promise<{ q?: string; level?: string; deleteError?: string }>;
 }) {
   const [{ id }, filters] = await Promise.all([params, searchParams]);
   const [{ archive, error: archiveError }, { content, error: contentError }] = await Promise.all([
@@ -34,8 +35,30 @@ export default async function OpsLogDetailPage({
 
   const lineResult = filterLogContentLines(content ?? '', filters);
 
+  async function handleDelete() {
+    'use server';
+    const result = await deleteArchiveAction(id);
+    if (result?.error) {
+      redirect(`/ops/logs/${id}?deleteError=${encodeURIComponent(result.error)}`);
+    }
+  }
+
   return (
-    <PageShell title={archive.file_name} actions={<a href={archive.download_url} className="button">Download</a>}>
+    <PageShell
+      title={archive.file_name}
+      actions={
+        <div className="ops-detail-actions">
+          <a href={archive.download_url} className="button">Download</a>
+          <form action={handleDelete} style={{ display: 'inline' }}>
+            <button type="submit" className="button danger">Delete</button>
+          </form>
+        </div>
+      }
+    >
+      {filters.deleteError && (
+        <div className="empty-state error-state">{filters.deleteError}</div>
+      )}
+
       <section className="ops-detail-grid">
         <dl className="ops-meta">
           <div><dt>Uploaded</dt><dd>{formatDateTime(archive.uploaded_at)}</dd></div>

@@ -21,7 +21,8 @@ export class LiteLLMClient {
       throw new Error('LiteLLM base URL is not configured. Set the LITELLM_BASE_URL environment variable.');
     }
     const profile = getProficiencyProfile({ language: targetLanguage });
-    const resolvedDifficulty = normalizeDifficultyLevel(difficultyLevel, { language: targetLanguage }) ?? difficultyLevel;
+    const resolvedDifficulty =
+      normalizeDifficultyLevel(difficultyLevel, { language: targetLanguage }) ?? difficultyLevel;
     const userPromptLines = buildPromptLines({
       sourceLanguage,
       targetLanguage,
@@ -52,8 +53,7 @@ export class LiteLLMClient {
           messages: [
             {
               role: 'system',
-              content:
-                'Generate vocabulary for Vietnamese learners. Return valid JSON only.'
+              content: 'Generate vocabulary for Vietnamese learners. Return valid JSON only.'
             },
             {
               role: 'user',
@@ -81,6 +81,75 @@ export class LiteLLMClient {
     this.logger.debug?.('litellm_request_completed', {
       status_code: response.status,
       elapsed_ms: Date.now() - startedAt
+    });
+    return body.choices?.[0]?.message?.content ?? '';
+  }
+
+  async generateSubmittedVocabulary({
+    sourceLanguage = 'vi',
+    targetLanguage = 'en',
+    term,
+    difficultyLevel = 'A1'
+  }) {
+    const startedAt = Date.now();
+    if (!this.baseUrl) {
+      throw new Error('LiteLLM base URL is not configured. Set the LITELLM_BASE_URL environment variable.');
+    }
+    const profile = getProficiencyProfile({ language: targetLanguage });
+    const resolvedDifficulty =
+      normalizeDifficultyLevel(difficultyLevel, { language: targetLanguage }) ?? difficultyLevel;
+    const userPromptLines = buildSubmittedVocabularyPromptLines({
+      sourceLanguage,
+      targetLanguage,
+      term,
+      profile,
+      difficultyLevel: resolvedDifficulty
+    });
+
+    let response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'Generate one exact vocabulary item for a submitted learner term. Return valid JSON only.'
+            },
+            {
+              role: 'user',
+              content: userPromptLines.join('\n')
+            }
+          ],
+          temperature: 0.2
+        })
+      });
+    } catch (error) {
+      this.logger.error?.('litellm_submitted_vocabulary_failed', {
+        elapsed_ms: Date.now() - startedAt,
+        error
+      });
+      throw error;
+    }
+
+    if (!response.ok) {
+      this.logger.error?.('litellm_submitted_vocabulary_failed', {
+        status_code: response.status,
+        elapsed_ms: Date.now() - startedAt
+      });
+      throw new Error(`LiteLLM request failed: ${response.status}`);
+    }
+
+    const body = await response.json();
+    this.logger.debug?.('litellm_submitted_vocabulary_completed', {
+      status_code: response.status,
+      elapsed_ms: Date.now() - startedAt,
+      target_language: targetLanguage
     });
     return body.choices?.[0]?.message?.content ?? '';
   }
@@ -133,8 +202,7 @@ export class LiteLLMClient {
           messages: [
             {
               role: 'system',
-              content:
-                'Suggest article vocabulary for Vietnamese learners. Return valid JSON only.'
+              content: 'Suggest article vocabulary for Vietnamese learners. Return valid JSON only.'
             },
             {
               role: 'user',
@@ -211,8 +279,7 @@ export class LiteLLMClient {
           messages: [
             {
               role: 'system',
-              content:
-                'Suggest practical workplace English sentences for Vietnamese learners. Return valid JSON only.'
+              content: 'Suggest practical workplace English sentences for Vietnamese learners. Return valid JSON only.'
             },
             {
               role: 'user',
@@ -247,14 +314,7 @@ export class LiteLLMClient {
   }
 }
 
-function buildPromptLines({
-  sourceLanguage,
-  targetLanguage,
-  limit,
-  avoidTerms,
-  profile,
-  difficultyLevel
-}) {
+function buildPromptLines({ sourceLanguage, targetLanguage, limit, avoidTerms, profile, difficultyLevel }) {
   const difficultyLevels = profile.levels.join('/');
   if (profile.scale === 'hsk') {
     return [
@@ -276,6 +336,28 @@ function buildPromptLines({
       ? `Do not return any term from this forbidden list: ${avoidTerms.join(', ')}.`
       : 'Return terms that are different from previously generated results.',
     `Return a JSON array of ${limit} objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics, entry_type, blank_word.`
+  ];
+}
+
+function buildSubmittedVocabularyPromptLines({ sourceLanguage, targetLanguage, term, profile, difficultyLevel }) {
+  const difficultyLevels = profile.levels.join('/');
+  if (profile.scale === 'hsk') {
+    return [
+      `Generate exactly one ${targetLanguage} vocabulary item for the submitted learner term \"${term}\".`,
+      `The final term MUST stay the same submitted term after normalization; do not replace it with a synonym or different expression.`,
+      `Target proficiency scale is HSK and target level is ${difficultyLevel}.`,
+      `Return a JSON array with exactly one object containing these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics, entry_type, blank_word, explanation.`,
+      `Set language to \"${targetLanguage}\". Chinese does not use IPA so ipa MUST be empty. vietnamese_pronunciation MUST contain pinyin-style romanization.`,
+      `Difficulty must be one of ${difficultyLevels} and should equal ${difficultyLevel}. explanation is a short Vietnamese usage note. blank_word is null for word entry_type.`
+    ];
+  }
+
+  return [
+    `Generate exactly one ${targetLanguage} vocabulary item for the submitted learner term \"${term}\".`,
+    `The final term MUST stay the same submitted term after normalization; do not replace it with a synonym or different expression.`,
+    `Target proficiency scale is CEFR and target level is ${difficultyLevel}.`,
+    `Return a JSON array with exactly one object containing these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics, entry_type, blank_word, explanation.`,
+    `Set language to \"${targetLanguage}\". explanation is a short Vietnamese usage note. entry_type is one of \"word\"/\"phrase\"/\"idiom\". blank_word is null for word entry_type.`
   ];
 }
 

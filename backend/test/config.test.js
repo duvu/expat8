@@ -77,9 +77,7 @@ test('rejects malformed app credential configuration', () => {
   assert.throws(
     () =>
       loadConfig({
-        APP_CREDENTIALS_JSON: JSON.stringify([
-          { appId: 'app_mobile_test', secret: '', status: 'active' }
-        ])
+        APP_CREDENTIALS_JSON: JSON.stringify([{ appId: 'app_mobile_test', secret: '', status: 'active' }])
       }),
     /APP_CREDENTIALS_JSON/
   );

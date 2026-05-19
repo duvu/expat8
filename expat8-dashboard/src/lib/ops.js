@@ -45,6 +45,7 @@ export function summarizeLogArchives(archives) {
 
 export function filterLogArchives(archives, filters = {}) {
   const query = normalizeText(filters.q ?? '');
+  const user = normalizeText(filters.user ?? '');
   const source = normalizeText(filters.source ?? 'all');
   const state = normalizeText(filters.state ?? 'all');
   const from = parseDateBoundary(filters.from, 'start');
@@ -56,6 +57,9 @@ export function filterLogArchives(archives, filters = {}) {
         return false;
       }
       if (source !== 'all' && normalizeText(archive.source_label ?? '') !== source) {
+        return false;
+      }
+      if (user && !normalizeText(archive.source_user_id ?? '').includes(user)) {
         return false;
       }
       const uploadedAt = Date.parse(archive.uploaded_at ?? '');
