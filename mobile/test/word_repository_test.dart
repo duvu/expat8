@@ -741,7 +741,7 @@ void main() {
     expect(words.map((word) => word.term).toSet(), hasLength(100));
   });
 
-  test('submitted word stays queued locally when backend create fails',
+  test('submitted word failure is stored immediately without queued sync',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -759,16 +759,12 @@ void main() {
       term: 'stubborn',
       language: 'en',
     );
-    final dueEntries = await database.dueSyncEntries(
-      DateTime.now().toUtc().add(const Duration(minutes: 1)),
-    );
 
-    expect(submission.status, SubmittedWordStatus.queuedSync);
-    expect(dueEntries.any((entry) => entry.type == 'submitted_word_create'),
-        isTrue);
+    expect(submission.status, SubmittedWordStatus.failed);
+    expect(submission.failureReason, contains('offline'));
   });
 
-  test('submitted word sync imports ready resolved word into local inventory',
+  test('submitted word success imports ready resolved word into local inventory and counts as learned',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -780,18 +776,58 @@ void main() {
         localId: 'local_submission_1',
         serverId: 'submission_1',
         term: 'reliable',
-        status: SubmittedWordStatus.queued,
-      )
-      ..submittedWordFetchItems = [
-        _submittedWord(
-          localId: 'submission_1',
-          serverId: 'submission_1',
-          term: 'reliable',
-          status: SubmittedWordStatus.ready,
-          resolutionType: SubmittedWordResolutionType.generatedWord,
-          resolvedWord: resolvedWord,
-        ),
-      ];
+        status: SubmittedWordStatus.ready,
+        resolutionType: SubmittedWordResolutionType.generatedWord,
+        resolvedWord: resolvedWord,
+      );
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    final submission = await repository.submitSubmittedWord(
+      term: 'reliable',
+      language: 'en',
+    );
+
+    final deviceId = await repository.getOrCreateDeviceId();
+    final items = await repository.loadSubmittedWords();
+    final localWord = await database.getWordByServerId(resolvedWord.serverWordId!);
+    final history = await database.getLearningHistory();
+    final totals = await database.getLearningProgressTotals();
+    expect(submission.status, SubmittedWordStatus.ready);
+    expect(items.single.status, SubmittedWordStatus.ready);
+    expect(items.single.resolutionType,
+        SubmittedWordResolutionType.generatedWord);
+    expect(localWord?.serverWordId, resolvedWord.serverWordId);
+    expect(localWord?.status, WordStatus.learning);
+    expect(history.single.snapshot.title, 'resolved_word');
+    expect(totals.learned, 1);
+    expect(apiClient.fetchSubmittedWordsCalls, 0);
+    expect(apiClient.lastSyncedDeviceId, deviceId);
+  });
+
+  test('submitted word preserves stronger existing local progress', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_preserve_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final existing = _word('resolved_word').copyWith(
+      status: WordStatus.review,
+      lastSeenAt: DateTime.utc(2026, 5, 19, 9),
+      nextReviewAt: DateTime.utc(2026, 5, 20, 9),
+    );
+    await database.upsertWord(existing);
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateResult = _submittedWord(
+        localId: 'local_submission_2',
+        serverId: 'submission_2',
+        term: 'resolved_word',
+        status: SubmittedWordStatus.ready,
+        resolutionType: SubmittedWordResolutionType.existingWord,
+        resolvedWord: _word('resolved_word'),
+      );
     final repository = WordRepository(
       database: database,
       apiClient: apiClient,
@@ -799,23 +835,14 @@ void main() {
     );
 
     await repository.submitSubmittedWord(
-      term: 'reliable',
+      term: 'resolved_word',
       language: 'en',
     );
-    await repository.refreshSubmittedWords();
 
-    final deviceId = await repository.getOrCreateDeviceId();
-    await repository.syncPendingEvents(
-      deviceId: deviceId,
-      now: DateTime.now().toUtc().add(const Duration(minutes: 2)),
-    );
-
-    final items = await repository.loadSubmittedWords();
-    final localWord = await database.nextNewWord(language: 'en');
-    expect(items.single.status, SubmittedWordStatus.ready);
-    expect(items.single.resolutionType,
-        SubmittedWordResolutionType.generatedWord);
-    expect(localWord?.serverWordId, resolvedWord.serverWordId);
+    final localWord = await database.getWordByServerId('resolved_word');
+    final history = await database.getLearningHistory();
+    expect(localWord?.status, WordStatus.review);
+    expect(history.length, 1);
   });
 }
 
@@ -1012,7 +1039,7 @@ class _RecordingApiClient extends BackendApiClient {
           serverSubmissionId: 'submission_recording',
           submittedTerm: term,
           targetLanguage: targetLanguage,
-          status: SubmittedWordStatus.queued,
+          status: SubmittedWordStatus.ready,
           createdAt: DateTime.utc(2026, 5, 19),
           updatedAt: DateTime.utc(2026, 5, 19),
         );

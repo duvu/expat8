@@ -477,8 +477,8 @@ the submitted `device_id`.
 
 ## POST /v1/user-submitted-words
 
-Creates or reuses a learner-owned vocabulary submission for asynchronous AI
-enrichment.
+Creates or reuses a learner-owned vocabulary submission and resolves it in the
+same request.
 
 Request:
 
@@ -502,24 +502,40 @@ When signed in, include `Authorization: Bearer <session_token>`; the backend
 stores the submission under the user while still retaining `device_id` for
 device context.
 
-Response `201` (new queued submission):
+Response `201` (new submission resolved immediately):
 
 ```json
 {
   "id": "submission_123",
   "submitted_term": "reliable",
   "target_language": "en",
-  "status": "queued",
-  "resolution_type": null,
+  "status": "ready",
+  "resolution_type": "generated_word",
   "failure_reason": null,
-  "resolved_word": null,
+  "resolved_word": {
+    "server_word_id": "word_123",
+    "term": "reliable",
+    "language": "en",
+    "meaning_vi": "dang tin cay",
+    "part_of_speech": "adjective",
+    "ipa": "/rɪˈlaɪəbl/",
+    "vietnamese_pronunciation": "ri-lai-uh-bol",
+    "example": "She is a reliable teammate.",
+    "example_vi": "Co ay la mot dong doi dang tin cay.",
+    "entry_type": "word",
+    "blank_word": null,
+    "explanation": "",
+    "difficulty": "B1",
+    "topics": ["work", "people"],
+    "created_at": "2026-05-19T10:00:00.000Z"
+  },
   "created_at": "2026-05-19T10:00:00.000Z",
   "updated_at": "2026-05-19T10:00:00.000Z",
-  "resolved_at": null
+  "resolved_at": "2026-05-19T10:00:00.000Z"
 }
 ```
 
-Response `200` (reused active submission or immediate existing-word match):
+Response `200` (reused ready submission or immediate existing-word match):
 
 ```json
 {
@@ -552,12 +568,31 @@ Response `200` (reused active submission or immediate existing-word match):
 }
 ```
 
-Status lifecycle:
+Response `201` (new failed submission with terminal result):
 
-- `queued`: accepted and waiting for worker pickup
-- `processing`: worker claimed the submission and is generating the word
-- `ready`: submission resolved to a canonical stored word
-- `failed`: worker could not generate a valid canonical word
+```json
+{
+  "id": "submission_124",
+  "submitted_term": "stubborn",
+  "target_language": "en",
+  "status": "failed",
+  "resolution_type": null,
+  "failure_reason": "llm_unavailable",
+  "resolved_word": null,
+  "created_at": "2026-05-19T10:00:00.000Z",
+  "updated_at": "2026-05-19T10:00:00.000Z",
+  "resolved_at": null
+}
+```
+
+Normal learner-facing status lifecycle:
+
+- `ready`: submission resolved to an existing or newly generated canonical word in-request
+- `failed`: in-request generation could not produce a valid canonical word
+
+Historical records may still contain `queued` or `processing` from older builds,
+but new learner-facing add-word submissions are expected to be terminal
+immediately.
 
 Error responses:
 
@@ -587,13 +622,29 @@ Response `200`:
       "id": "submission_123",
       "submitted_term": "reliable",
       "target_language": "en",
-      "status": "processing",
-      "resolution_type": null,
+      "status": "ready",
+      "resolution_type": "existing_word",
       "failure_reason": null,
-      "resolved_word": null,
+      "resolved_word": {
+        "server_word_id": "word_123",
+        "term": "reliable",
+        "language": "en",
+        "meaning_vi": "dang tin cay",
+        "part_of_speech": "adjective",
+        "ipa": "/rɪˈlaɪəbl/",
+        "vietnamese_pronunciation": "ri-lai-uh-bol",
+        "example": "She is a reliable teammate.",
+        "example_vi": "Co ay la mot dong doi dang tin cay.",
+        "entry_type": "word",
+        "blank_word": null,
+        "explanation": "",
+        "difficulty": "B1",
+        "topics": ["work", "people"],
+        "created_at": "2026-05-04T00:00:00.000Z"
+      },
       "created_at": "2026-05-19T10:00:00.000Z",
       "updated_at": "2026-05-19T10:00:05.000Z",
-      "resolved_at": null
+      "resolved_at": "2026-05-19T10:00:05.000Z"
     },
     {
       "id": "submission_124",
@@ -610,6 +661,10 @@ Response `200`:
   ]
 }
 ```
+
+Historical records may still include `queued` or `processing` from older app
+versions, but new learner-facing add-word submissions are expected to be
+terminal (`ready` or `failed`) immediately.
 
 ## POST /v1/study-events/sync
 

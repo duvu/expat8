@@ -11,6 +11,7 @@ import {
   normalizeSpeakingPromptInput,
   resolveEventKey,
   selectDistractors,
+  submittedWordFailureReason,
   shuffleArray,
   shuffleChoices,
   toApiSpeakingPrompt
@@ -45,7 +46,7 @@ export class PostgresWordStore {
     this.strictAttemptId = strictAttemptId;
   }
 
-  async insertWord(input) {
+  async insertWord(input, { client = this.pool } = {}) {
     const normalizedTerm = normalizeTerm(input.term);
     const now = new Date().toISOString();
     const startedAt = Date.now();
@@ -70,7 +71,7 @@ export class PostgresWordStore {
       updated_at: input.updated_at ?? now
     };
 
-    const inserted = await this.pool.query(
+    const inserted = await client.query(
       `INSERT INTO words (
         id,
         term,
@@ -125,7 +126,7 @@ export class PostgresWordStore {
       return { word: rowToWord(inserted.rows[0]), inserted: true };
     }
 
-    const existing = await this.pool.query(
+    const existing = await client.query(
       `SELECT * FROM words
       WHERE language = $1 AND normalized_term = $2
       LIMIT 1`,
@@ -353,7 +354,7 @@ export class PostgresWordStore {
     return new Set(result.rows.map((row) => row.word_id));
   }
 
-  async createUserSubmittedWord({ deviceId, userId = null, term, language }) {
+  async createUserSubmittedWord({ deviceId, userId = null, term, language, generationService = null }) {
     return this.#withOptionalTransaction(async (client) => {
       const submittedTerm = String(term ?? '').trim();
       const normalizedTerm = normalizeTerm(submittedTerm);
@@ -429,6 +430,84 @@ export class PostgresWordStore {
           submission: await this.#hydrateSubmittedWord(client, rowToSubmittedWord(insertedReady.rows[0])),
           created: false
         };
+      }
+
+      if (generationService?.generateSubmittedWord) {
+        try {
+          const result = await generationService.generateSubmittedWord({
+            targetLanguage: language,
+            term: submittedTerm,
+            persistWord: (candidate) => this.insertWord(candidate, { client })
+          });
+          const insertedReady = await client.query(
+            `INSERT INTO user_submitted_words (
+              id,
+              user_id,
+              device_id,
+              submitted_term,
+              normalized_term,
+              language,
+              status,
+              failure_reason,
+              resolution_type,
+              resolved_word_id,
+              created_at,
+              updated_at,
+              resolved_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, 'ready', NULL, $7, $8, $9, $9, $9)
+            RETURNING *`,
+            [
+              createId('submitted_word'),
+              userId,
+              deviceId,
+              submittedTerm,
+              normalizedTerm,
+              language,
+              result.resolutionType ?? 'generated_word',
+              result.word.id,
+              now
+            ]
+          );
+          return {
+            submission: await this.#hydrateSubmittedWord(client, rowToSubmittedWord(insertedReady.rows[0])),
+            created: true
+          };
+        } catch (error) {
+          const insertedFailed = await client.query(
+            `INSERT INTO user_submitted_words (
+              id,
+              user_id,
+              device_id,
+              submitted_term,
+              normalized_term,
+              language,
+              status,
+              failure_reason,
+              resolution_type,
+              resolved_word_id,
+              created_at,
+              updated_at,
+              resolved_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, 'failed', $7, NULL, NULL, $8, $8, NULL)
+            RETURNING *`,
+            [
+              createId('submitted_word'),
+              userId,
+              deviceId,
+              submittedTerm,
+              normalizedTerm,
+              language,
+              submittedWordFailureReason(error),
+              now
+            ]
+          );
+          return {
+            submission: await this.#hydrateSubmittedWord(client, rowToSubmittedWord(insertedFailed.rows[0])),
+            created: true
+          };
+        }
       }
 
       const insertedSubmission = await client.query(

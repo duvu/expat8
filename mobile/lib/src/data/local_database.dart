@@ -348,6 +348,17 @@ class LocalDatabase {
     );
   }
 
+  Future<void> appendWordLearnedHistory({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    await _appendLearningHistory(
+      snapshot: LearningItemSnapshot.fromVocabularyWord(word),
+      state: LearningItemState.learned,
+      occurredAt: now,
+    );
+  }
+
   Future<VocabularyWord?> nextNewWord({String language = 'en'}) async {
     final rows = _localWords
         .query(
@@ -604,6 +615,14 @@ class LocalDatabase {
         .build()
         .findFirst();
     return row == null ? null : _submittedWordFromEntity(row);
+  }
+
+  Future<VocabularyWord?> getWordByServerId(String serverWordId) async {
+    final row = _localWords
+        .query(LocalWordEntity_.serverWordId.equals(serverWordId))
+        .build()
+        .findFirst();
+    return row == null ? null : _wordFromEntity(row);
   }
 
   Future<List<SubmittedWord>> listSubmittedWords({int limit = 200}) async {

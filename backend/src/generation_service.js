@@ -79,7 +79,7 @@ export class VocabularyGenerationService {
     return accepted;
   }
 
-  async generateSubmittedWord({ sourceLanguage = 'vi', targetLanguage = 'en', term }) {
+  async generateSubmittedWord({ sourceLanguage = 'vi', targetLanguage = 'en', term, persistWord }) {
     const resolvedDifficulty = getDefaultProficiencyLevel({ language: targetLanguage });
     const raw = await this.liteLLMClient.generateSubmittedVocabulary({
       sourceLanguage,
@@ -108,7 +108,11 @@ export class VocabularyGenerationService {
       throw new Error(validation.reason);
     }
 
-    const { word, inserted } = await this.store.insertWord(candidate);
+    const insertWord =
+      typeof persistWord === 'function'
+        ? persistWord
+        : (nextCandidate) => this.store.insertWord(nextCandidate);
+    const { word, inserted } = await insertWord(candidate);
     return {
       word,
       inserted,

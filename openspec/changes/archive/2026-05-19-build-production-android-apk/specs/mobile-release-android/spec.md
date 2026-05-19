@@ -33,6 +33,8 @@ Before release publication, Android validation MUST verify the gesture-only lear
 - **WHEN** release candidate is executed on emulator or device
 - **THEN** right-to-left, left-to-right, bottom-to-top, and top-to-bottom swipes each trigger the expected learning intent without runtime crash
 
+## ADDED Requirements
+
 ### Requirement: Release APK SHALL be installable on target devices
 The signed release APK MUST be installable on emulator or physical devices without requiring a debug certificate or debug signing config.
 

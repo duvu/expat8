@@ -30,6 +30,8 @@ The project SHALL remove markdown documents whose main content contradicts curre
 - **WHEN** a document mentions removed behavior only to state that it was removed or unsupported
 - **THEN** the mention MAY remain if it cannot be mistaken for current implementation guidance
 
+## ADDED Requirements
+
 ### Requirement: Review artifacts summarize completed and incomplete sentence work
 The project SHALL produce a markdown review report that summarizes the sentence-label rename, bundled sentence expansion, Vietnamese copy cleanup, and any remaining follow-up work.
 

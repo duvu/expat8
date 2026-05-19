@@ -268,7 +268,7 @@ void main() {
     expect(result.unknownServerWordIds, const ['missing_word']);
   });
 
-  test('creates submitted words with signed JSON body and parses status', () async {
+  test('creates submitted words with signed JSON body and parses immediate ready status', () async {
     late http.Request captured;
     final client = MockClient((request) async {
       captured = request;
@@ -277,13 +277,26 @@ void main() {
           'id': 'submission_1',
           'submitted_term': 'stubborn',
           'target_language': 'en',
-          'status': 'queued',
-          'resolution_type': null,
+          'status': 'ready',
+          'resolution_type': 'generated_word',
           'failure_reason': null,
-          'resolved_word': null,
+          'resolved_word': {
+            'server_word_id': 'word_1',
+            'term': 'stubborn',
+            'language': 'en',
+            'meaning_vi': 'bướng bỉnh',
+            'part_of_speech': 'adjective',
+            'ipa': '/ˈstʌbərn/',
+            'vietnamese_pronunciation': 'stuh-burn',
+            'example': 'He is stubborn about changing his plan.',
+            'example_vi': 'Anh ay rat buong binh ve viec doi ke hoach.',
+            'difficulty': 'B1',
+            'topics': ['people'],
+            'created_at': '2026-05-19T00:00:00.000Z',
+          },
           'created_at': '2026-05-19T00:00:00.000Z',
           'updated_at': '2026-05-19T00:00:00.000Z',
-          'resolved_at': null,
+          'resolved_at': '2026-05-19T00:00:00.000Z',
         }),
         201,
         headers: {'content-type': 'application/json'},
@@ -316,7 +329,9 @@ void main() {
     });
     expect(submission.localSubmissionId, 'local_submission_1');
     expect(submission.serverSubmissionId, 'submission_1');
-    expect(submission.status, SubmittedWordStatus.queued);
+    expect(submission.status, SubmittedWordStatus.ready);
+    expect(submission.resolutionType, SubmittedWordResolutionType.generatedWord);
+    expect(submission.resolvedWord?.serverWordId, 'word_1');
   });
 
   test('fetches submitted words and parses ready resolved word payload', () async {

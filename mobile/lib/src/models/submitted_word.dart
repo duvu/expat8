@@ -102,10 +102,10 @@ class SubmittedWord {
 
 SubmittedWordStatus _submittedWordStatusFromJson(String? raw) {
   return switch (raw) {
-    'queued' => SubmittedWordStatus.queued,
-    'processing' => SubmittedWordStatus.processing,
     'ready' => SubmittedWordStatus.ready,
     'failed' => SubmittedWordStatus.failed,
+    'queued' => SubmittedWordStatus.queued,
+    'processing' => SubmittedWordStatus.processing,
     _ => SubmittedWordStatus.queuedSync,
   };
 }

@@ -39,7 +39,7 @@ The mobile app MUST redact sensitive values from logs before writing or exportin
 - **THEN** the app stores a sanitized message that excludes the original sensitive value
 
 ### Requirement: Users can inspect and export logs on-device
-The mobile app SHALL provide an in-app log viewer that supports filtering and exporting sanitized logs as a shareable text file through the device share sheet without requiring emulator attachment.
+The mobile app SHALL provide an in-app log viewer that supports filtering and exporting sanitized logs as a shareable text file through the device share sheet without requiring emulator attachment, and SHALL provide a send-to-server action for the same sanitized log bundle.
 
 #### Scenario: User filters logs by severity
 - **WHEN** the user selects a severity filter in the log viewer
@@ -48,6 +48,10 @@ The mobile app SHALL provide an in-app log viewer that supports filtering and ex
 #### Scenario: User exports logs for debugging
 - **WHEN** the user triggers log export and matching logs exist
 - **THEN** the app generates a UTF-8 text file containing sanitized persisted entries within the selected range and opens the platform share sheet with that file attached
+
+#### Scenario: User sends logs to the server
+- **WHEN** the user taps the send-logs action and matching logs exist
+- **THEN** the app uploads the sanitized log file to the authenticated backend archive endpoint and shows success feedback
 
 #### Scenario: User exports logs when none match
 - **WHEN** the user triggers log export and no persisted logs match the selected filters

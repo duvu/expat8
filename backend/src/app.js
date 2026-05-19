@@ -20,7 +20,7 @@ import { createUserRouter } from './routes/user.js';
 
 export function createApp({
   store,
-  generationService: _generationService,
+  generationService = null,
   config,
   logger = createLogger({
     level: config.logLevel,
@@ -84,7 +84,7 @@ export function createApp({
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
     parseJsonFromCapturedBody,
-    createV1Router({ store, config, logArchiveStore: resolvedLogArchiveStore, rateLimiters })
+    createV1Router({ store, generationService, config, logArchiveStore: resolvedLogArchiveStore, rateLimiters })
   );
 
   app.use((request, response) => {
@@ -135,7 +135,7 @@ function createRateLimiters({
 
 // ─── V1 Router (mounts all domain routers) ──────────────────────────────────
 
-function createV1Router({ store, config, logArchiveStore, rateLimiters = {} }) {
+function createV1Router({ store, generationService, config, logArchiveStore, rateLimiters = {} }) {
   const router = express.Router();
 
   router.use('/exam', createExamRouter({ store }));
@@ -147,7 +147,7 @@ function createV1Router({ store, config, logArchiveStore, rateLimiters = {} }) {
   router.use('/proficiency', createProficiencyRouter({ store, config }));
   router.use('/study-events', createStudyEventsRouter({ store, config, rateLimiters }));
   router.use('/content-packs', createContentPacksRouter({ store, config }));
-  router.use('/', createUserRouter({ store, config, logArchiveStore }));
+  router.use('/', createUserRouter({ store, generationService, config, logArchiveStore }));
 
   return router;
 }

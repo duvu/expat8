@@ -37,7 +37,7 @@ Android release builds use the same production `--dart-define` values for the si
 ```bash
 cd mobile
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
-  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
+  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
   --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
   --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \

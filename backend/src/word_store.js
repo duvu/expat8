@@ -258,7 +258,7 @@ export class WordStore {
     return new Set(this.cachedWordIdsByOwner.get(this.#ownerKey({ deviceId, userId }))?.wordIds ?? []);
   }
 
-  createUserSubmittedWord({ deviceId, userId = null, term, language }) {
+  async createUserSubmittedWord({ deviceId, userId = null, term, language, generationService = null }) {
     const submittedTerm = String(term ?? '').trim();
     const normalizedTerm = normalizeTerm(submittedTerm);
     const now = new Date().toISOString();
@@ -297,6 +297,50 @@ export class WordStore {
       };
       this.userSubmittedWordsById.set(submission.id, submission);
       return { submission: this.#hydrateUserSubmittedWord(submission), created: false };
+    }
+
+    if (generationService?.generateSubmittedWord) {
+      try {
+        const result = await generationService.generateSubmittedWord({
+          targetLanguage: language,
+          term: submittedTerm
+        });
+        const submission = {
+          id: createId('submitted_word'),
+          user_id: userId,
+          device_id: deviceId,
+          submitted_term: submittedTerm,
+          normalized_term: normalizedTerm,
+          language,
+          status: 'ready',
+          failure_reason: null,
+          resolution_type: result.resolutionType ?? 'generated_word',
+          resolved_word_id: result.word.id,
+          created_at: now,
+          updated_at: now,
+          resolved_at: now
+        };
+        this.userSubmittedWordsById.set(submission.id, submission);
+        return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+      } catch (error) {
+        const submission = {
+          id: createId('submitted_word'),
+          user_id: userId,
+          device_id: deviceId,
+          submitted_term: submittedTerm,
+          normalized_term: normalizedTerm,
+          language,
+          status: 'failed',
+          failure_reason: submittedWordFailureReason(error),
+          resolution_type: null,
+          resolved_word_id: null,
+          created_at: now,
+          updated_at: now,
+          resolved_at: null
+        };
+        this.userSubmittedWordsById.set(submission.id, submission);
+        return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+      }
     }
 
     const submission = {
@@ -1721,6 +1765,11 @@ export class WordStore {
   #wordStateKey({ deviceId, userId = null, wordId }) {
     return `${this.#ownerKey({ deviceId, userId })}:word:${wordId}`;
   }
+}
+
+export function submittedWordFailureReason(error) {
+  const message = error?.message ?? error;
+  return String(message || 'generation_failed');
 }
 
 function bCompareCreated(left, right) {

@@ -8,9 +8,28 @@ import { SubmittedWordWorker } from '../src/submitted_word_worker.js';
 import { WordStore } from '../src/word_store.js';
 import { loadTestConfig, signedFetchOptions } from './support/app_credential_helpers.js';
 
-test('user-submitted words API creates, lists, and reuses active submissions', async () => {
+test('user-submitted words API resolves immediately and reuses ready submissions', async () => {
   const store = new WordStore({ seed: false });
-  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  const generationService = {
+    async generateSubmittedWord({ term, targetLanguage }) {
+      const { word } = store.insertWord({
+        term,
+        language: targetLanguage,
+        meaning_vi: 'bướng bỉnh',
+        part_of_speech: 'adjective',
+        ipa: '/ˈstʌbərn/',
+        vietnamese_pronunciation: 'stuh-burn',
+        example: 'He is stubborn about changing his plan.',
+        example_vi: 'Anh ay rat buong binh ve viec doi ke hoach.',
+        difficulty: 'B1',
+        topics: ['people'],
+        explanation: '',
+        generation_source: 'user_submission'
+      });
+      return { word, resolutionType: 'generated_word' };
+    }
+  };
+  const server = http.createServer(createApp({ store, generationService, config: loadTestConfig() }));
   await listen(server);
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -31,7 +50,9 @@ test('user-submitted words API creates, lists, and reuses active submissions', a
     );
     assert.equal(createdResponse.status, 201);
     const created = await createdResponse.json();
-    assert.equal(created.status, 'queued');
+    assert.equal(created.status, 'ready');
+    assert.equal(created.resolution_type, 'generated_word');
+    assert.equal(created.resolved_word.term, 'stubborn');
     assert.equal(created.submitted_term, 'stubborn');
     assert.equal(created.target_language, 'en');
 
@@ -46,13 +67,13 @@ test('user-submitted words API creates, lists, and reuses active submissions', a
     assert.equal(duplicateResponse.status, 200);
     const duplicate = await duplicateResponse.json();
     assert.equal(duplicate.id, created.id);
-    assert.equal(duplicate.status, 'queued');
+    assert.equal(duplicate.status, 'ready');
 
     const listUrl = `${baseUrl}/v1/user-submitted-words?device_id=anonymous_device_1&limit=10`;
     const list = await fetchJson(listUrl);
     assert.equal(list.items.length, 1);
     assert.equal(list.items[0].id, created.id);
-    assert.equal(list.items[0].status, 'queued');
+    assert.equal(list.items[0].status, 'ready');
   } finally {
     server.close();
   }
@@ -103,12 +124,31 @@ test('user-submitted words API returns existing canonical word immediately', asy
 
 test('user-submitted words API validates body and optional session', async () => {
   const store = new WordStore({ seed: false });
+  const generationService = {
+    async generateSubmittedWord({ term, targetLanguage }) {
+      const { word } = store.insertWord({
+        term,
+        language: targetLanguage,
+        meaning_vi: 'cẩn thận',
+        part_of_speech: 'adjective',
+        ipa: '/ˈkerfəl/',
+        vietnamese_pronunciation: 'ke-rồ-phồl',
+        example: 'Be careful with that glass.',
+        example_vi: 'Hay can than voi cai ly do.',
+        difficulty: 'A2',
+        topics: ['daily'],
+        explanation: '',
+        generation_source: 'user_submission'
+      });
+      return { word, resolutionType: 'generated_word' };
+    }
+  };
   const registered = store.registerUser({
     identifier: 'submitted@example.com',
     password: 'correct-password',
     deviceId: 'device-auth'
   });
-  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  const server = http.createServer(createApp({ store, generationService, config: loadTestConfig() }));
   await listen(server);
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -149,6 +189,46 @@ test('user-submitted words API validates body and optional session', async () =>
       })
     );
     assert.equal(signedIn.status, 201);
+    const body = await signedIn.json();
+    assert.equal(body.status, 'ready');
+  } finally {
+    server.close();
+  }
+});
+
+test('user-submitted words API returns terminal failed submission when immediate generation fails', async () => {
+  const store = new WordStore({ seed: false });
+  const generationService = {
+    async generateSubmittedWord() {
+      throw new Error('llm_unavailable');
+    }
+  };
+  const server = http.createServer(createApp({ store, generationService, config: loadTestConfig() }));
+  await listen(server);
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const createUrl = `${baseUrl}/v1/user-submitted-words`;
+    const response = await fetch(
+      createUrl,
+      signedFetchOptions(createUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          device_id: 'anonymous_device_4',
+          term: 'hesitate',
+          target_language: 'en'
+        })
+      })
+    );
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.status, 'failed');
+    assert.match(body.failure_reason, /llm_unavailable/);
+
+    const listUrl = `${baseUrl}/v1/user-submitted-words?device_id=anonymous_device_4&limit=10`;
+    const list = await fetchJson(listUrl);
+    assert.equal(list.items.length, 1);
+    assert.equal(list.items[0].status, 'failed');
   } finally {
     server.close();
   }
@@ -189,7 +269,7 @@ test('submitted vocabulary generation stores the requested canonical word', asyn
 
 test('submitted word worker retries then fails after max attempts', async () => {
   const store = new WordStore({ seed: false });
-  const created = store.createUserSubmittedWord({
+  const created = await store.createUserSubmittedWord({
     deviceId: 'anonymous_device_3',
     term: 'hesitate',
     language: 'en'

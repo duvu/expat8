@@ -41,14 +41,14 @@ Use the same production `--dart-define` set for both the signed APK and the sign
 ```bash
 # For emulator / public access
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ~/snap/flutter/common/flutter/bin/flutter build apk --release \
-  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
+  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
   --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
   --dart-define=APP_LOG_LEVEL=info
 
 # Production bundle
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ~/snap/flutter/common/flutter/bin/flutter build appbundle --release \
-  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
+  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
   --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
   --dart-define=APP_LOG_LEVEL=info

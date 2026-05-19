@@ -88,15 +88,15 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
   String _feedbackMessageFor(SubmittedWord submission) {
     return switch (submission.status) {
       SubmittedWordStatus.queuedSync =>
-        'Saved locally. The app will upload this word when it can connect.',
-      SubmittedWordStatus.queued => 'Word saved and queued for AI processing.',
-      SubmittedWordStatus.processing => 'Word saved. AI is preparing it now.',
+        'The request did not finish. Please try again when your connection is stable.',
+      SubmittedWordStatus.queued => 'This word is still pending from an older app flow.',
+      SubmittedWordStatus.processing => 'This word is still processing from an older app flow.',
       SubmittedWordStatus.ready => submission.resolutionType ==
               SubmittedWordResolutionType.existingWord
-          ? 'This word already exists and is ready to study.'
-          : 'Word is ready and has been added to your study list.',
+          ? 'This word already exists. It was added and counted as one learned item.'
+          : 'Word created and added to your study list. Counted as one learned item.',
       SubmittedWordStatus.failed => submission.failureReason ??
-          'The app could not prepare this word yet. Try again later.',
+          'The app could not prepare this word right now. Please try again.',
     };
   }
 
@@ -123,14 +123,15 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    Text(
-                      'Capture a word to study later',
+                     Text(
+                      'Add a word instantly',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     SizedBox(height: 8),
                     Text(
                       'If you find an unfamiliar word while reading, type it here. '
-                      'The app saves it, the backend enriches it with AI, and then it joins your normal study flow.',
+                      'If the word already exists, the app returns it immediately. '
+                      'If it does not, the backend generates it now, saves it, and adds it to your normal study flow as one learned item.',
                     ),
                   ],
                 ),
@@ -176,8 +177,8 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
                             },
                     ),
                     const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _isSubmitting ? null : _submit,
+                      FilledButton.icon(
+                        onPressed: _isSubmitting ? null : _submit,
                       icon: _isSubmitting
                           ? const SizedBox(
                               width: 16,
@@ -185,8 +186,8 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.add),
-                      label: Text(_isSubmitting ? 'Saving...' : 'Save word'),
-                    ),
+                        label: Text(_isSubmitting ? 'Adding...' : 'Add word'),
+                      ),
                   ],
                 ),
               ),
@@ -249,12 +250,12 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
   String _statusLabel(SubmittedWord submission) {
     return switch (submission.status) {
       SubmittedWordStatus.queuedSync => 'Saved locally',
-      SubmittedWordStatus.queued => 'Queued',
-      SubmittedWordStatus.processing => 'Processing',
+      SubmittedWordStatus.queued => 'Pending (legacy)',
+      SubmittedWordStatus.processing => 'Processing (legacy)',
       SubmittedWordStatus.ready => submission.resolutionType ==
               SubmittedWordResolutionType.existingWord
-          ? 'Ready (already existed)'
-          : 'Ready to study',
+          ? 'Added (already existed)'
+          : 'Added now',
       SubmittedWordStatus.failed => 'Failed',
     };
   }

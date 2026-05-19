@@ -42,6 +42,35 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('renders immediate success copy for existing ready word',
+      (tester) async {
+    final repository = await _buildRepository([
+      SubmittedWord(
+        localSubmissionId: 'local_submission_2',
+        serverSubmissionId: 'submission_2',
+        submittedTerm: 'reliable',
+        targetLanguage: 'en',
+        status: SubmittedWordStatus.ready,
+        resolutionType: SubmittedWordResolutionType.existingWord,
+        createdAt: DateTime.utc(2026, 5, 19),
+        updatedAt: DateTime.utc(2026, 5, 19),
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SubmittedWordsScreen(
+          repository: repository,
+          initialLanguage: 'en',
+          supportedLanguages: const ['en', 'zh', 'vi'],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Added (already existed)'), findsOneWidget);
+  });
 }
 
 Future<_FakeSubmittedWordRepository> _buildRepository(

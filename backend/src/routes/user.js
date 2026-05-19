@@ -2,7 +2,13 @@ import express from 'express';
 import { toApiWord, toApiWorkplaceSentence } from '../word_store.js';
 import { asyncHandler, clampLimit, resolveOptionalUserSession, resolveRequiredUserSession } from './helpers.js';
 
-export function createUserRouter({ store, config, logArchiveStore }) {
+const unavailableSubmittedWordGenerationService = {
+  async generateSubmittedWord() {
+    throw new Error('generation_unavailable');
+  }
+};
+
+export function createUserRouter({ store, generationService, config, logArchiveStore }) {
   const router = express.Router();
 
   router.get(
@@ -67,7 +73,8 @@ export function createUserRouter({ store, config, logArchiveStore }) {
         deviceId,
         userId: userSession?.user.id ?? null,
         term,
-        language: targetLanguage
+        language: targetLanguage,
+        generationService: generationService ?? unavailableSubmittedWordGenerationService
       });
       return response.status(result.created ? 201 : 200).json(toApiSubmittedWord(result.submission));
     })
