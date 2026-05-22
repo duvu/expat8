@@ -293,3 +293,93 @@ CREATE INDEX idx_user_submitted_word_jobs_status_queued ON user_submitted_word_j
 CREATE INDEX idx_workplace_sentences_language_updated ON workplace_sentences(language, updated_at DESC);
 CREATE INDEX idx_article_workplace_sentences_article ON article_workplace_sentences(article_id);
 CREATE INDEX idx_article_workplace_sentences_sentence ON article_workplace_sentences(workplace_sentence_id);
+
+CREATE TABLE release_versions (
+  id TEXT PRIMARY KEY,
+  platform TEXT NOT NULL,
+  version_code INTEGER NOT NULL,
+  version_name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  file_size_bytes INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_release_versions_platform_code ON release_versions(platform, version_code DESC);
+
+CREATE TABLE memorization_passages (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  language TEXT NOT NULL,
+  raw_text TEXT NOT NULL,
+  owner_type TEXT NOT NULL DEFAULT 'user',
+  owner_user_id TEXT,
+  visibility TEXT NOT NULL DEFAULT 'private',
+  status TEXT NOT NULL DEFAULT 'pending_segmentation',
+  enrichment_status TEXT NOT NULL DEFAULT 'none',
+  processing_error TEXT,
+  segment_count INTEGER NOT NULL DEFAULT 0,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  enrichment_attempt_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (owner_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE memorization_segments (
+  id TEXT PRIMARY KEY,
+  passage_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  word_count INTEGER NOT NULL DEFAULT 0,
+  ipa_text TEXT,
+  translation_text TEXT,
+  translation_language TEXT,
+  viet_reading_text TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (passage_id) REFERENCES memorization_passages(id) ON DELETE CASCADE
+);
+
+CREATE TABLE memorization_segment_progress (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  segment_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'new',
+  review_count INTEGER NOT NULL DEFAULT 0,
+  ease_factor REAL NOT NULL DEFAULT 2.5,
+  last_reviewed_at TEXT,
+  next_review_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (segment_id) REFERENCES memorization_segments(id) ON DELETE CASCADE
+);
+
+CREATE TABLE memorization_segment_terms (
+  id TEXT PRIMARY KEY,
+  passage_id TEXT NOT NULL,
+  segment_id TEXT NOT NULL,
+  term_id TEXT NOT NULL,
+  word_sense_id TEXT,
+  surface_text TEXT NOT NULL,
+  sentence_context TEXT,
+  frequency INTEGER NOT NULL DEFAULT 1,
+  extraction_confidence REAL,
+  classification TEXT,
+  suggestion_type TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (passage_id) REFERENCES memorization_passages(id) ON DELETE CASCADE,
+  FOREIGN KEY (segment_id) REFERENCES memorization_segments(id) ON DELETE CASCADE,
+  FOREIGN KEY (term_id) REFERENCES terms(id),
+  FOREIGN KEY (word_sense_id) REFERENCES word_senses(id)
+);
+
+CREATE INDEX idx_memorization_passages_visibility_status ON memorization_passages(visibility, status);
+CREATE INDEX idx_memorization_passages_enrichment_status ON memorization_passages(enrichment_status);
+CREATE INDEX idx_memorization_passages_owner ON memorization_passages(owner_user_id) WHERE owner_user_id IS NOT NULL;
+CREATE INDEX idx_memorization_passages_status ON memorization_passages(status);
+CREATE UNIQUE INDEX idx_memorization_segments_passage_position ON memorization_segments(passage_id, position);
+CREATE UNIQUE INDEX idx_memorization_segment_progress_user_segment ON memorization_segment_progress(user_id, segment_id);
+CREATE INDEX idx_memorization_segment_progress_user ON memorization_segment_progress(user_id, next_review_at);
+CREATE INDEX idx_memorization_segment_terms_passage ON memorization_segment_terms(passage_id);
+CREATE INDEX idx_memorization_segment_terms_segment ON memorization_segment_terms(segment_id);

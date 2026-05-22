@@ -12,3 +12,4 @@ backend/data/
 **/*serviceAccount*.json
 node_modules/
 coverage/
+openspec/

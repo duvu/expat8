@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../api/backend_api_client.dart';
 import '../data/article_repository.dart';
+import '../data/memorization_repository.dart';
 import '../data/workplace_sentence_repository.dart';
 import '../data/word_repository.dart';
 import '../exam/exam_session_controller.dart';
@@ -12,10 +14,12 @@ import '../session/workplace_sentence_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
 import 'articles_screen.dart';
+import 'memorization_screen.dart';
 import 'learning_gesture_surface.dart';
 import 'fitb_card.dart';
 import 'logs_screen.dart';
 import 'submitted_words_screen.dart';
+import 'upgrade_check_screen.dart';
 import 'vocabulary_card.dart';
 import 'workplace_sentence_screen.dart';
 import 'learning_history_screen.dart';
@@ -31,6 +35,7 @@ class LearningScreen extends StatefulWidget {
   const LearningScreen({
     required this.controller,
     required this.articleRepository,
+    required this.memorizationRepository,
     required this.workplaceSentenceRepository,
     this.speakingRepository,
     super.key,
@@ -38,6 +43,7 @@ class LearningScreen extends StatefulWidget {
 
   final LearningSessionController controller;
   final ArticleRepository articleRepository;
+  final MemorizationRepository memorizationRepository;
   final WorkplaceSentenceRepository workplaceSentenceRepository;
   final SpeakingRepository? speakingRepository;
 
@@ -106,6 +112,7 @@ class _LearningScreenState extends State<LearningScreen> {
         speakingRepository: widget.speakingRepository,
         wordRepository: controller.repository,
         onArticles: _openArticles,
+        onMemorization: _openMemorization,
         onSubmittedWords: _openSubmittedWords,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onWorkplaceSentences: _openWorkplaceSentences,
@@ -120,6 +127,20 @@ class _LearningScreenState extends State<LearningScreen> {
           );
         },
         onExam: controller.userSession == null ? null : _openExam,
+        onCheckUpdates: () {
+          Navigator.of(context).maybePop();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => UpgradeCheckScreen(
+                apiClient: controller.repository.apiClient,
+                onInstallApk: (apkPath) async {
+                  await OpenFilex.open(apkPath,
+                      type: 'application/vnd.android.package-archive');
+                },
+              ),
+            ),
+          );
+        },
         onRegister: _register,
         onSignIn: _signIn,
         onSignOut: () async {
@@ -232,6 +253,22 @@ class _LearningScreenState extends State<LearningScreen> {
           sessionToken: session.sessionToken,
           initialLanguage: widget.controller.activeLearningLanguage,
           supportedLanguages: widget.controller.supportedLearningLanguages,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMemorization() async {
+    final session = widget.controller.userSession;
+    if (session == null) {
+      return;
+    }
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MemorizationScreen(
+          repository: widget.memorizationRepository,
+          userSession: session,
         ),
       ),
     );
@@ -428,6 +465,7 @@ class LearningDrawer extends StatelessWidget {
     required this.onWorkplaceSentences,
     required this.onLogs,
     required this.onArticles,
+    required this.onMemorization,
     required this.onSubmittedWords,
     required this.onHistory,
     required this.onStats,
@@ -439,6 +477,7 @@ class LearningDrawer extends StatelessWidget {
     this.userSession,
     this.isAuthInProgress = false,
     this.onExam,
+    this.onCheckUpdates,
     super.key,
   });
 
@@ -451,6 +490,7 @@ class LearningDrawer extends StatelessWidget {
   final VoidCallback onWorkplaceSentences;
   final VoidCallback onLogs;
   final VoidCallback onArticles;
+  final VoidCallback onMemorization;
   final VoidCallback onSubmittedWords;
   final VoidCallback onHistory;
   final VoidCallback onStats;
@@ -461,94 +501,115 @@ class LearningDrawer extends StatelessWidget {
   /// Called when the user taps "Take Exam". Only shown when signed in.
   final VoidCallback? onExam;
 
+  /// Called when the user taps "Check for updates".
+  final VoidCallback? onCheckUpdates;
+
   @override
   Widget build(BuildContext context) {
     return Drawer(
       child: SafeArea(
         child: Column(
           children: [
-            ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
-              title: const Text('Vocabulary'),
-              onTap: onVocabulary,
-            ),
-            ListTile(
-              leading: const Icon(Icons.record_voice_over_outlined),
-              title: const Text('Sentences'),
-              onTap: onWorkplaceSentences,
-            ),
-            if (isSignedIn)
-              ListTile(
-                leading: const Icon(Icons.article_outlined),
-                title: const Text('Articles'),
-                onTap: onArticles,
-              ),
-            ListTile(
-              leading: const Icon(Icons.add_circle_outline),
-              title: const Text('Add word'),
-              onTap: onSubmittedWords,
-            ),
-            if (isSignedIn && onExam != null)
-              ListTile(
-                leading: const Icon(Icons.quiz_outlined),
-                title: const Text('Take Exam'),
-                onTap: () {
-                  Navigator.of(context).maybePop();
-                  onExam!();
-                },
-              ),
-            ListTile(
-              leading: const Icon(Icons.bug_report_outlined),
-              title: const Text('Logs'),
-              onTap: onLogs,
-            ),
-            ListTile(
-              leading: const Icon(Icons.history_outlined),
-              title: const Text('History'),
-              onTap: onHistory,
-            ),
-            ListTile(
-              leading: const Icon(Icons.bar_chart_outlined),
-              title: const Text('Stats'),
-              onTap: onStats,
-            ),
-            if (speakingRepository != null) ...[
-              ListTile(
-                leading: const Icon(Icons.mic_outlined),
-                title: const Text('3-minute drill'),
-                onTap: () {
-                  Navigator.of(context).maybePop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SpeakingDrillScreen(
-                        repository: speakingRepository!,
-                      ),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.menu_book_outlined),
+                    title: const Text('Vocabulary'),
+                    onTap: onVocabulary,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.record_voice_over_outlined),
+                    title: const Text('Sentences'),
+                    onTap: onWorkplaceSentences,
+                  ),
+                  if (isSignedIn)
+                    ListTile(
+                      leading: const Icon(Icons.auto_stories),
+                      title: const Text('Memorization'),
+                      onTap: onMemorization,
                     ),
-                  );
-                },
+                  if (isSignedIn)
+                    ListTile(
+                      leading: const Icon(Icons.article_outlined),
+                      title: const Text('Articles'),
+                      onTap: onArticles,
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.add_circle_outline),
+                    title: const Text('Add word'),
+                    onTap: onSubmittedWords,
+                  ),
+                  if (isSignedIn && onExam != null)
+                    ListTile(
+                      leading: const Icon(Icons.quiz_outlined),
+                      title: const Text('Take Exam'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        onExam!();
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Logs'),
+                    onTap: onLogs,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.history_outlined),
+                    title: const Text('History'),
+                    onTap: onHistory,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.bar_chart_outlined),
+                    title: const Text('Stats'),
+                    onTap: onStats,
+                  ),
+                  if (speakingRepository != null) ...[
+                    ListTile(
+                      leading: const Icon(Icons.mic_outlined),
+                      title: const Text('3-minute drill'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SpeakingDrillScreen(
+                              repository: speakingRepository!,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.bar_chart_outlined),
+                      title: const Text('Speaking stats'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        _showSpeakingStats(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.delete_outline),
+                      title: const Text('Delete all recordings'),
+                      onTap: () async {
+                        Navigator.of(context).maybePop();
+                        await _confirmDeleteAll(context);
+                      },
+                    ),
+                  ],
+                  if (isSignedIn)
+                    _DrawerUserInfo(
+                      userSession: userSession,
+                    ),
+                  if (onCheckUpdates != null)
+                    ListTile(
+                      leading: const Icon(Icons.system_update_outlined),
+                      title: const Text('Check for updates'),
+                      onTap: onCheckUpdates,
+                    ),
+                ],
               ),
-              ListTile(
-                leading: const Icon(Icons.bar_chart_outlined),
-                title: const Text('Speaking stats'),
-                onTap: () {
-                  Navigator.of(context).maybePop();
-                  _showSpeakingStats(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete all recordings'),
-                onTap: () async {
-                  Navigator.of(context).maybePop();
-                  await _confirmDeleteAll(context);
-                },
-              ),
-            ],
-            if (isSignedIn)
-              _DrawerUserInfo(
-                userSession: userSession,
-              ),
-            const Spacer(),
+            ),
             if (isSignedIn)
               ListTile(
                 leading: const Icon(Icons.logout),

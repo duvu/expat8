@@ -763,4 +763,91 @@ void main() {
       expect(error.message, 'Create article failed: 400');
     }
   });
+
+  // ─── Release endpoints ──────────────────────────────────────────────────────
+
+  test('fetchLatestRelease returns ReleaseInfo when release exists', () async {
+    final client = MockClient((request) async {
+      expect(request.url.path, '/v1/releases/latest');
+      expect(request.url.queryParameters['platform'], 'android');
+      expect(request.method, 'GET');
+      return http.Response(
+        jsonEncode({
+          'release': {
+            'id': 'rel-1',
+            'platform': 'android',
+            'version_code': 10,
+            'version_name': '2.1.0',
+            'file_size_bytes': 15000000,
+            'sha256': 'abcdef',
+            'created_at': '2026-05-19T10:00:00.000Z',
+          }
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    final release = await apiClient.fetchLatestRelease(platform: 'android');
+
+    expect(release, isNotNull);
+    expect(release!.id, 'rel-1');
+    expect(release.versionCode, 10);
+    expect(release.versionName, '2.1.0');
+    expect(release.fileSizeBytes, 15000000);
+    expect(release.sha256, 'abcdef');
+  });
+
+  test('fetchLatestRelease returns null when no release exists', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'release': null}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    final release = await apiClient.fetchLatestRelease();
+
+    expect(release, isNull);
+  });
+
+  test('fetchLatestRelease throws on server error', () async {
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({'error': 'internal_error'}),
+        500,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.com',
+      timeout: const Duration(seconds: 5),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    expect(
+      () => apiClient.fetchLatestRelease(),
+      throwsA(isA<BackendApiException>()),
+    );
+  });
 }

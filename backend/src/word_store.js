@@ -71,6 +71,11 @@ export class WordStore {
     this.examAttemptsById = new Map();
     this.examAttemptsBySessionId = new Map();
     this.examCertificatesById = new Map();
+    // memorization state
+    this.memorizationPassagesById = new Map();
+    this.memorizationSegmentsById = new Map();
+    this.memorizationSegmentProgressById = new Map();
+    this.memorizationSegmentTermsById = new Map();
     if (seed) {
       seedWords().forEach((word) => this.insertWord(word));
     }
@@ -733,6 +738,9 @@ export class WordStore {
     };
     this.usersById.set(user.id, user);
     this.usersByIdentifier.set(user.identifier, user);
+    // Claim device-only word states and cached words for the new user
+    this.#claimDeviceWordStates({ userId: user.id, deviceId });
+    this.#claimDeviceCachedWords({ userId: user.id, deviceId });
     const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
@@ -746,6 +754,9 @@ export class WordStore {
     if (!verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
+    // Claim device-only word states and cached words for the signing-in user
+    this.#claimDeviceWordStates({ userId: user.id, deviceId });
+    this.#claimDeviceCachedWords({ userId: user.id, deviceId });
     const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
@@ -784,6 +795,90 @@ export class WordStore {
     };
     this.userSessionsByTokenHash.set(session.token_hash, session);
     return { session, sessionToken: token };
+  }
+
+  #claimDeviceWordStates({ userId, deviceId }) {
+    if (!deviceId) return { claimed: 0, conflicts: 0 };
+
+    const deviceOwnerKey = `device:${deviceId}`;
+    const userOwnerKey = `user:${userId}`;
+    let claimed = 0;
+    let conflicts = 0;
+
+    // Find all device-only word states for this device
+    const deviceStateEntries = [];
+    for (const [key, state] of this.wordStatesByOwnerWord.entries()) {
+      if (key.startsWith(deviceOwnerKey + ':word:') && state.user_id === null) {
+        deviceStateEntries.push([key, state]);
+      }
+    }
+
+    for (const [deviceKey, deviceState] of deviceStateEntries) {
+      const wordId = deviceState.word_id;
+      const userKey = `${userOwnerKey}:word:${wordId}`;
+      const existingUserState = this.wordStatesByOwnerWord.get(userKey);
+
+      if (existingUserState) {
+        // Conflict: decide which state wins
+        conflicts++;
+        const deviceWins =
+          deviceState.review_count > existingUserState.review_count ||
+          (deviceState.review_count === existingUserState.review_count &&
+            (deviceState.last_studied_at ?? '') > (existingUserState.last_studied_at ?? ''));
+
+        if (deviceWins) {
+          // Device state wins: replace user state with claimed device state
+          this.wordStatesByOwnerWord.delete(deviceKey);
+          const claimedState = { ...deviceState, user_id: userId };
+          this.wordStatesByOwnerWord.set(userKey, claimedState);
+        } else {
+          // User state wins: just delete the device state
+          this.wordStatesByOwnerWord.delete(deviceKey);
+        }
+      } else {
+        // No conflict: claim the device state
+        this.wordStatesByOwnerWord.delete(deviceKey);
+        const claimedState = { ...deviceState, user_id: userId };
+        this.wordStatesByOwnerWord.set(userKey, claimedState);
+        claimed++;
+      }
+    }
+
+    return { claimed, conflicts };
+  }
+
+  #claimDeviceCachedWords({ userId, deviceId }) {
+    if (!deviceId) return { claimed: 0, duplicatesRemoved: 0 };
+
+    const deviceOwnerKey = `device:${deviceId}`;
+    const userOwnerKey = `user:${userId}`;
+
+    const deviceCache = this.cachedWordIdsByOwner.get(deviceOwnerKey);
+    if (!deviceCache || deviceCache.wordIds.size === 0) {
+      return { claimed: 0, duplicatesRemoved: 0 };
+    }
+
+    const userCache = this.cachedWordIdsByOwner.get(userOwnerKey) ?? {
+      wordIds: new Set(),
+      observed_at: deviceCache.observed_at
+    };
+
+    let claimed = 0;
+    let duplicatesRemoved = 0;
+
+    for (const wordId of deviceCache.wordIds) {
+      if (userCache.wordIds.has(wordId)) {
+        duplicatesRemoved++;
+      } else {
+        userCache.wordIds.add(wordId);
+        claimed++;
+      }
+    }
+
+    this.cachedWordIdsByOwner.set(userOwnerKey, userCache);
+    this.cachedWordIdsByOwner.delete(deviceOwnerKey);
+
+    return { claimed, duplicatesRemoved };
   }
 
   #applyProficiencyChange({ deviceId, userId = null, language, rating }) {
@@ -1765,6 +1860,504 @@ export class WordStore {
   #wordStateKey({ deviceId, userId = null, wordId }) {
     return `${this.#ownerKey({ deviceId, userId })}:word:${wordId}`;
   }
+
+  // ─── Memorization Passages ───────────────────────────────────────────
+
+  createPassage({ title, language, rawText, ownerType = 'user', ownerUserId = null, visibility = 'private' }) {
+    const now = new Date().toISOString();
+    const passage = {
+      id: createId('passage'),
+      title,
+      language,
+      raw_text: rawText,
+      owner_type: ownerType,
+      owner_user_id: ownerUserId,
+      visibility,
+      status: 'pending_segmentation',
+      enrichment_status: 'none',
+      processing_error: null,
+      segment_count: 0,
+      attempt_count: 0,
+      enrichment_attempt_count: 0,
+      created_at: now,
+      updated_at: now
+    };
+    this.memorizationPassagesById.set(passage.id, passage);
+    return passage;
+  }
+
+  getPassage({ passageId }) {
+    return this.memorizationPassagesById.get(passageId) ?? null;
+  }
+
+  listPassages({ userId = null, status = null, ownerType = null } = {}) {
+    let passages = [...this.memorizationPassagesById.values()];
+    if (status) {
+      passages = passages.filter((p) => p.status === status);
+    }
+    if (ownerType) {
+      passages = passages.filter((p) => p.owner_type === ownerType);
+    }
+    if (userId) {
+      // User sees: own passages + published passages
+      passages = passages.filter(
+        (p) => p.owner_user_id === userId || p.visibility === 'published'
+      );
+    }
+    return passages.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  listPublishedPassages() {
+    return [...this.memorizationPassagesById.values()]
+      .filter((p) => p.visibility === 'published' && p.status === 'published')
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  listAdminPassages({ status = null } = {}) {
+    let passages = [...this.memorizationPassagesById.values()];
+    if (status) {
+      passages = passages.filter((p) => p.status === status);
+    }
+    return passages.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  updatePassage({ passageId, ...updates }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return null;
+    const allowed = ['title', 'language', 'visibility', 'status', 'enrichment_status', 'processing_error', 'segment_count', 'attempt_count', 'enrichment_attempt_count'];
+    for (const key of allowed) {
+      if (updates[key] !== undefined) {
+        passage[key] = updates[key];
+      }
+    }
+    passage.updated_at = new Date().toISOString();
+    return passage;
+  }
+
+  deletePassage({ passageId }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return false;
+    this.#deletePassageVocabularyLinks(passageId);
+    // Delete associated segments and progress
+    for (const [id, seg] of this.memorizationSegmentsById) {
+      if (seg.passage_id === passageId) {
+        // Delete progress for this segment
+        for (const [pid, prog] of this.memorizationSegmentProgressById) {
+          if (prog.segment_id === id) {
+            this.memorizationSegmentProgressById.delete(pid);
+          }
+        }
+        this.memorizationSegmentsById.delete(id);
+      }
+    }
+    this.memorizationPassagesById.delete(passageId);
+    return true;
+  }
+
+  persistPassageVocabulary({ passageId, items = [] }) {
+    const now = new Date().toISOString();
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) {
+      throw new Error('passage_not_found');
+    }
+
+    this.#deletePassageVocabularyLinks(passageId);
+
+    const persisted = [];
+    const seen = new Set();
+    const requiresReview = passage.owner_type !== 'user';
+    for (const item of items) {
+      const segment = this.memorizationSegmentsById.get(item.segment_id);
+      if (!segment || segment.passage_id !== passageId) {
+        continue;
+      }
+      const normalized = normalizeTerm(item.term);
+      if (!normalized) {
+        continue;
+      }
+      const dedupeKey = `${item.segment_id}:${item.language}:${normalized}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+
+      let term = [...this.termsById.values()].find(
+        (entry) => entry.language === item.language && entry.normalized_term === normalized
+      );
+      if (!term) {
+        term = {
+          id: createId('term'),
+          language: item.language,
+          display_term: item.term,
+          normalized_term: normalized,
+          lemma: null,
+          created_at: now
+        };
+        this.termsById.set(term.id, term);
+      }
+
+      const sense = {
+        id: createId('sense'),
+        term_id: term.id,
+        part_of_speech: item.part_of_speech ?? null,
+        meaning_vi: item.meaning_vi,
+        short_definition: item.short_definition ?? null,
+        pronunciation: item.vietnamese_pronunciation,
+        ipa: item.ipa ?? null,
+        pinyin: item.pinyin ?? null,
+        level_scale: item.level_scale ?? 'cefr',
+        level: item.level ?? item.difficulty ?? 'A1',
+        quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
+        status: requiresReview ? 'pending_review' : 'approved',
+        created_at: now,
+        updated_at: now
+      };
+      this.wordSensesById.set(sense.id, sense);
+
+      if (!requiresReview) {
+        this.insertWord({
+          term: item.term,
+          language: item.language,
+          meaning_vi: item.meaning_vi ?? '',
+          part_of_speech: item.part_of_speech ?? null,
+          ipa: item.ipa ?? '',
+          vietnamese_pronunciation: item.vietnamese_pronunciation ?? '',
+          example: item.example ?? segment.text,
+          example_vi: '',
+          difficulty: item.level ?? item.difficulty ?? 'A1',
+          topics: ['memorization'],
+          generation_source: 'memorization_passage_vocabulary'
+        });
+      }
+
+      const segmentTerm = {
+        id: createId('segment_term'),
+        passage_id: passageId,
+        segment_id: item.segment_id,
+        term_id: term.id,
+        word_sense_id: sense.id,
+        surface_text: item.term,
+        sentence_context: item.example ?? segment.text,
+        frequency: Number(item.frequency ?? 1),
+        extraction_confidence: Number(item.confidence ?? 0.5),
+        classification: item.classification ?? null,
+        suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term),
+        created_at: now
+      };
+      this.memorizationSegmentTermsById.set(segmentTerm.id, segmentTerm);
+
+      const reviewItem = {
+        id: createId('review_item'),
+        word_sense_id: sense.id,
+        article_id: null,
+        status: requiresReview ? 'pending' : 'approved',
+        reviewer_user_id: null,
+        review_note: null,
+        reviewed_at: requiresReview ? null : now,
+        created_at: now,
+        updated_at: now
+      };
+      this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
+      persisted.push({ term, sense, segmentTerm, reviewItem });
+    }
+
+    return { count: persisted.length, items: persisted };
+  }
+
+  // ─── Memorization Segments ──────────────────────────────────────────
+
+  createSegments({ passageId, segments }) {
+    const now = new Date().toISOString();
+    const created = [];
+    for (const seg of segments) {
+      const segment = {
+        id: createId('segment'),
+        passage_id: passageId,
+        position: seg.position,
+        text: seg.text,
+        word_count: seg.text.split(/\s+/).length,
+        ipa_text: null,
+        translation_text: null,
+        translation_language: null,
+        viet_reading_text: null,
+        created_at: now
+      };
+      this.memorizationSegmentsById.set(segment.id, segment);
+      created.push(segment);
+    }
+    // Update passage segment_count
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (passage) {
+      passage.segment_count = created.length;
+      passage.updated_at = now;
+    }
+    return created;
+  }
+
+  getSegmentsByPassage({ passageId }) {
+    return [...this.memorizationSegmentsById.values()]
+      .filter((s) => s.passage_id === passageId)
+      .sort((a, b) => a.position - b.position);
+  }
+
+  updateSegment({ segmentId, text, position }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    if (!segment) return null;
+    if (text !== undefined) {
+      segment.text = text;
+      segment.word_count = text.split(/\s+/).length;
+    }
+    if (position !== undefined) {
+      segment.position = position;
+    }
+    return segment;
+  }
+
+  splitSegment({ segmentId, splitAt }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    if (!segment) return null;
+    const index = Number(splitAt);
+    if (!Number.isInteger(index) || index <= 0 || index >= segment.text.length) {
+      return null;
+    }
+
+    const leftText = segment.text.slice(0, index).trim();
+    const rightText = segment.text.slice(index).trim();
+    if (!leftText || !rightText) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const originalPosition = segment.position;
+    for (const other of this.memorizationSegmentsById.values()) {
+      if (other.passage_id === segment.passage_id && other.position > originalPosition) {
+        other.position += 1;
+      }
+    }
+
+    segment.text = leftText;
+    segment.word_count = countWords(leftText);
+    const newSegment = {
+      id: createId('segment'),
+      passage_id: segment.passage_id,
+      position: originalPosition + 1,
+      text: rightText,
+      word_count: countWords(rightText),
+      created_at: now
+    };
+    this.memorizationSegmentsById.set(newSegment.id, newSegment);
+    this.#refreshPassageSegmentCount(segment.passage_id);
+    return this.getSegmentsByPassage({ passageId: segment.passage_id });
+  }
+
+  mergeSegments({ segmentId, nextSegmentId }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    const next = this.memorizationSegmentsById.get(nextSegmentId);
+    if (!segment || !next || segment.passage_id !== next.passage_id) {
+      return null;
+    }
+    if (next.position !== segment.position + 1) {
+      return null;
+    }
+
+    segment.text = `${segment.text.trim()} ${next.text.trim()}`.trim();
+    segment.word_count = countWords(segment.text);
+    this.memorizationSegmentsById.delete(next.id);
+    for (const progress of this.memorizationSegmentProgressById.values()) {
+      if (progress.segment_id === next.id) {
+        progress.segment_id = segment.id;
+      }
+    }
+    for (const link of this.memorizationSegmentTermsById.values()) {
+      if (link.segment_id === next.id) {
+        link.segment_id = segment.id;
+      }
+    }
+    for (const other of this.memorizationSegmentsById.values()) {
+      if (other.passage_id === segment.passage_id && other.position > next.position) {
+        other.position -= 1;
+      }
+    }
+    this.#refreshPassageSegmentCount(segment.passage_id);
+    return this.getSegmentsByPassage({ passageId: segment.passage_id });
+  }
+
+  deleteSegmentsByPassage({ passageId }) {
+    this.#deletePassageVocabularyLinks(passageId);
+    for (const [id, seg] of this.memorizationSegmentsById) {
+      if (seg.passage_id === passageId) {
+        // Delete progress for this segment
+        for (const [pid, prog] of this.memorizationSegmentProgressById) {
+          if (prog.segment_id === id) {
+            this.memorizationSegmentProgressById.delete(pid);
+          }
+        }
+        this.memorizationSegmentsById.delete(id);
+      }
+    }
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (passage) {
+      passage.segment_count = 0;
+      passage.updated_at = new Date().toISOString();
+    }
+  }
+
+  #refreshPassageSegmentCount(passageId) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (passage) {
+      passage.segment_count = this.getSegmentsByPassage({ passageId }).length;
+      passage.updated_at = new Date().toISOString();
+    }
+  }
+
+  #deletePassageVocabularyLinks(passageId) {
+    const oldSenseIds = [];
+    for (const [id, link] of this.memorizationSegmentTermsById) {
+      if (link.passage_id === passageId) {
+        if (link.word_sense_id) oldSenseIds.push(link.word_sense_id);
+        this.memorizationSegmentTermsById.delete(id);
+      }
+    }
+    if (oldSenseIds.length === 0) {
+      return;
+    }
+    const oldSenseIdSet = new Set(oldSenseIds);
+    for (const [id, item] of this.vocabularyReviewItemsById) {
+      if (oldSenseIdSet.has(item.word_sense_id)) {
+        this.vocabularyReviewItemsById.delete(id);
+      }
+    }
+    for (const id of oldSenseIdSet) {
+      this.wordSensesById.delete(id);
+    }
+  }
+
+  // ─── Memorization Segment Progress ──────────────────────────────────
+
+  upsertSegmentProgress({ userId, segmentId, status, reviewCount, easeFactor, lastReviewedAt, nextReviewAt }) {
+    // Find existing by user+segment
+    const existing = [...this.memorizationSegmentProgressById.values()].find(
+      (p) => p.user_id === userId && p.segment_id === segmentId
+    );
+    const now = new Date().toISOString();
+    if (existing) {
+      if (status !== undefined) existing.status = status;
+      if (reviewCount !== undefined) existing.review_count = reviewCount;
+      if (easeFactor !== undefined) existing.ease_factor = easeFactor;
+      if (lastReviewedAt !== undefined) existing.last_reviewed_at = lastReviewedAt;
+      if (nextReviewAt !== undefined) existing.next_review_at = nextReviewAt;
+      existing.updated_at = now;
+      return existing;
+    }
+    const progress = {
+      id: createId('segprog'),
+      user_id: userId,
+      segment_id: segmentId,
+      status: status ?? 'new',
+      review_count: reviewCount ?? 0,
+      ease_factor: easeFactor ?? 2.5,
+      last_reviewed_at: lastReviewedAt ?? null,
+      next_review_at: nextReviewAt ?? null,
+      created_at: now,
+      updated_at: now
+    };
+    this.memorizationSegmentProgressById.set(progress.id, progress);
+    return progress;
+  }
+
+  getSegmentProgress({ userId, passageId }) {
+    const segmentIds = new Set(
+      this.getSegmentsByPassage({ passageId }).map((s) => s.id)
+    );
+    return [...this.memorizationSegmentProgressById.values()].filter(
+      (p) => p.user_id === userId && segmentIds.has(p.segment_id)
+    );
+  }
+
+  getPassageProgress({ userId, passageId }) {
+    const segments = this.getSegmentsByPassage({ passageId });
+    if (segments.length === 0) return { total: 0, mastered: 0, reviewing: 0, learning: 0, newCount: 0, percentage: 0 };
+    const progress = this.getSegmentProgress({ userId, passageId });
+    const progressBySegment = new Map(progress.map((p) => [p.segment_id, p]));
+    let mastered = 0, reviewing = 0, learning = 0, newCount = 0;
+    for (const seg of segments) {
+      const p = progressBySegment.get(seg.id);
+      if (!p || p.status === 'new') newCount++;
+      else if (p.status === 'mastered') mastered++;
+      else if (p.status === 'review') reviewing++;
+      else learning++;
+    }
+    const percentage = Math.round(((mastered + reviewing) / segments.length) * 100);
+    return { total: segments.length, mastered, reviewing, learning, newCount, percentage };
+  }
+
+  claimNextPendingPassage() {
+    for (const passage of this.memorizationPassagesById.values()) {
+      if (passage.status === 'pending_segmentation') {
+        passage.status = 'segmenting';
+        passage.updated_at = new Date().toISOString();
+        return passage;
+      }
+    }
+    return null;
+  }
+
+  updateSegmentEnrichment({ segmentId, ipa_text, translation_text, translation_language, viet_reading_text }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    if (!segment) return null;
+    segment.ipa_text = ipa_text ?? null;
+    segment.translation_text = translation_text ?? null;
+    segment.translation_language = translation_language ?? null;
+    segment.viet_reading_text = viet_reading_text ?? null;
+    return segment;
+  }
+
+  updatePassageEnrichmentStatus({ passageId, enrichmentStatus, enrichment_attempt_count }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return null;
+    passage.enrichment_status = enrichmentStatus;
+    if (enrichment_attempt_count !== undefined) {
+      passage.enrichment_attempt_count = enrichment_attempt_count;
+    }
+    passage.updated_at = new Date().toISOString();
+    return passage;
+  }
+
+  claimNextPendingEnrichment() {
+    for (const passage of this.memorizationPassagesById.values()) {
+      if (passage.enrichment_status === 'pending') {
+        passage.enrichment_status = 'enriching';
+        passage.updated_at = new Date().toISOString();
+        return passage;
+      }
+    }
+    return null;
+  }
+
+  retryPassage({ passageId }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return { error: 'not_found' };
+    if (passage.status !== 'failed') return { error: 'passage_not_failed' };
+    passage.status = 'pending_segmentation';
+    passage.processing_error = null;
+    passage.attempt_count = 0;
+    passage.updated_at = new Date().toISOString();
+    return { passage };
+  }
+
+  retryPassageEnrichment({ passageId }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return { error: 'not_found' };
+    if (passage.enrichment_status !== 'failed') return { error: 'enrichment_not_failed' };
+    const segmentCount = [...this.memorizationSegmentsById.values()].filter(
+      (s) => s.passage_id === passageId
+    ).length;
+    if (segmentCount === 0) return { error: 'passage_has_no_segments' };
+    passage.enrichment_status = 'pending';
+    passage.enrichment_attempt_count = 0;
+    passage.updated_at = new Date().toISOString();
+    return { passage };
+  }
 }
 
 export function submittedWordFailureReason(error) {
@@ -2066,4 +2659,8 @@ export function shuffleChoices(choices) {
   const shuffled = shuffleArray(indexed);
   const correctIndex = shuffled.findIndex((item) => item.i === 0); // original index 0 = correct
   return { choices: shuffled.map((item) => item.c), correctIndex };
+}
+
+function countWords(text) {
+  return String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
 }

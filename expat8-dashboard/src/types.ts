@@ -104,3 +104,33 @@ export type SpeakingPrompt = {
   meaning_vi?: string | null;
 };
 
+export type MemorizationSegment = {
+  id: string;
+  passage_id: string;
+  position: number;
+  text: string;
+  word_count: number;
+  ipa_text: string | null;
+  translation_text: string | null;
+  translation_language: string | null;
+  created_at: string;
+};
+
+export type MemorizationPassage = {
+  id: string;
+  title: string;
+  language: string;
+  raw_text: string;
+  owner_type: string;
+  owner_user_id: string | null;
+  visibility: string;
+  status: string;
+  enrichment_status: string;
+  processing_error: string | null;
+  segment_count: number;
+  attempt_count: number;
+  enrichment_attempt_count: number;
+  created_at: string;
+  updated_at: string;
+  segments: MemorizationSegment[];
+};

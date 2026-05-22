@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
 import 'package:expat8_language_app/src/data/article_repository.dart';
+import 'package:expat8_language_app/src/data/memorization_repository.dart';
 import 'package:expat8_language_app/src/data/workplace_sentence_repository.dart';
 import 'package:expat8_language_app/src/data/word_repository.dart';
 import 'package:expat8_language_app/src/exam/exam_question_screen.dart';
@@ -140,6 +141,7 @@ void main() {
             onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
+            onMemorization: () {},
             onSubmittedWords: () {},
             onHistory: () {},
             onStats: () {},
@@ -156,6 +158,7 @@ void main() {
 
     expect(find.text('Vocabulary'), findsOneWidget);
     expect(find.text('Sentences'), findsOneWidget);
+    expect(find.text('Memorization'), findsNothing);
     expect(find.text('Articles'), findsNothing);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
@@ -181,6 +184,7 @@ void main() {
             onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
+            onMemorization: () {},
             onSubmittedWords: () {},
             onHistory: () {},
             onStats: () {},
@@ -199,6 +203,7 @@ void main() {
     expect(find.text('Learner'), findsOneWidget);
     expect(find.text('learner@example.com'), findsOneWidget);
     expect(find.text('Sentences'), findsOneWidget);
+    expect(find.text('Memorization'), findsOneWidget);
     expect(find.text('Articles'), findsOneWidget);
     expect(find.text('Register'), findsNothing);
     expect(find.text('Sign in'), findsNothing);
@@ -238,6 +243,7 @@ void main() {
           home: LearningScreen(
             controller: controller,
             articleRepository: _TestArticleRepository(),
+            memorizationRepository: _TestMemorizationRepository(),
             workplaceSentenceRepository: workplaceSentenceRepository,
           ),
         ),
@@ -293,6 +299,7 @@ void main() {
                   ),
                 );
               },
+              onMemorization: () {},
               onSubmittedWords: () {},
               onHistory: () {},
               onStats: () {},
@@ -466,6 +473,7 @@ void main() {
             onWorkplaceSentences: () {},
             onLogs: () {},
             onArticles: () {},
+            onMemorization: () {},
             onSubmittedWords: () {},
             onHistory: () {},
             onStats: () {},
@@ -776,6 +784,18 @@ class _TestArticleRepository extends ArticleRepository {
   }) {
     throw UnimplementedError();
   }
+}
+
+class _TestMemorizationRepository extends MemorizationRepository {
+  _TestMemorizationRepository()
+      : super(
+          apiClient: BackendApiClient(
+            baseUrl: 'http://unused',
+            timeout: Duration.zero,
+            appId: 'test-app',
+            appSecret: 'test-secret',
+          ),
+        );
 }
 
 class _LearningScreenRepository extends WordRepository {

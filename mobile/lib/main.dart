@@ -7,6 +7,7 @@ import 'src/config.dart';
 import 'src/data/article_repository.dart';
 import 'src/data/content_pack_sync_service.dart';
 import 'src/data/local_database.dart';
+import 'src/data/memorization_repository.dart';
 import 'src/data/workplace_sentence_repository.dart';
 import 'src/data/word_repository.dart';
 import 'src/logging/logger.dart';
@@ -52,6 +53,7 @@ Future<void> main() async {
     logger: logger,
   );
   final articleRepository = ArticleRepository(apiClient: apiClient);
+  final memorizationRepository = MemorizationRepository(apiClient: apiClient);
   final repository = WordRepository(
     database: database,
     apiClient: apiClient,
@@ -141,6 +143,7 @@ Future<void> main() async {
   runApp(LanguageLearningApp(
       controller: controller,
       articleRepository: articleRepository,
+      memorizationRepository: memorizationRepository,
       workplaceSentenceRepository: workplaceSentenceRepository,
       contentPackSyncService: contentPackSyncService,
       speakingRepository: speakingRepository,
@@ -153,6 +156,7 @@ class LanguageLearningApp extends StatefulWidget {
   const LanguageLearningApp({
     required this.controller,
     required this.articleRepository,
+    required this.memorizationRepository,
     required this.workplaceSentenceRepository,
     required this.contentPackSyncService,
     this.speakingRepository,
@@ -163,6 +167,7 @@ class LanguageLearningApp extends StatefulWidget {
 
   final LearningSessionController controller;
   final ArticleRepository articleRepository;
+  final MemorizationRepository memorizationRepository;
   final WorkplaceSentenceRepository workplaceSentenceRepository;
   final ContentPackSyncService contentPackSyncService;
   final SpeakingRepository? speakingRepository;
@@ -213,6 +218,7 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
       home: LearningScreen(
         controller: widget.controller,
         articleRepository: widget.articleRepository,
+        memorizationRepository: widget.memorizationRepository,
         workplaceSentenceRepository: widget.workplaceSentenceRepository,
         speakingRepository: widget.speakingRepository,
       ),

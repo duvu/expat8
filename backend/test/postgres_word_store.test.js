@@ -378,7 +378,7 @@ class FakePool {
       };
     }
 
-    if (normalizedSql.startsWith('DELETE FROM user_cached_words')) {
+    if (normalizedSql.startsWith('DELETE FROM user_cached_words') && !normalizedSql.includes('USING')) {
       const ownerKind = normalizedSql.includes('user_id = $1') ? 'user' : 'device';
       for (const [key, row] of this.userCachedWords.entries()) {
         if (
@@ -391,7 +391,7 @@ class FakePool {
       return { rows: [] };
     }
 
-    if (normalizedSql.startsWith('UPDATE user_cached_words')) {
+    if (normalizedSql.startsWith('UPDATE user_cached_words') && !normalizedSql.includes('SET user_id =')) {
       const ownerKind = normalizedSql.includes('WHERE user_id = $2') ? 'user' : 'device';
       const key = ownerKind === 'user' ? `user:${params[1]}:${params[2]}` : `device:${params[0]}:${params[2]}`;
       const existing = this.userCachedWords.get(key);
@@ -568,6 +568,107 @@ class FakePool {
       }
       session.revoked_at = params[1];
       return { rows: [session] };
+    }
+
+    // --- Device state claim: DELETE device-only word states that lose to user states ---
+    if (
+      normalizedSql.startsWith('DELETE FROM user_word_states AS device_state USING user_word_states AS user_state') &&
+      normalizedSql.includes('user_state.review_count > device_state.review_count')
+    ) {
+      const [deviceId, userId] = params;
+      let rowCount = 0;
+      for (const [key, state] of this.userWordStates.entries()) {
+        if (state.device_id !== deviceId || state.user_id !== null) continue;
+        const userKey = `user:${userId}:${state.word_id}`;
+        const userState = this.userWordStates.get(userKey);
+        if (!userState) continue;
+        const userWins =
+          userState.review_count > state.review_count ||
+          (userState.review_count === state.review_count &&
+            (userState.last_studied_at ?? '') >= (state.last_studied_at ?? ''));
+        if (userWins) {
+          this.userWordStates.delete(key);
+          rowCount++;
+        }
+      }
+      return { rows: [], rowCount };
+    }
+
+    // --- Device state claim: DELETE user word states that lose to device states ---
+    if (
+      normalizedSql.startsWith('DELETE FROM user_word_states AS user_state USING user_word_states AS device_state') &&
+      normalizedSql.includes('device_state.review_count > user_state.review_count')
+    ) {
+      const [deviceId, userId] = params;
+      let rowCount = 0;
+      for (const [key, state] of this.userWordStates.entries()) {
+        if (state.user_id !== userId) continue;
+        const deviceKey = `device:${deviceId}:${state.word_id}`;
+        const deviceState = this.userWordStates.get(deviceKey);
+        if (!deviceState || deviceState.user_id !== null) continue;
+        const deviceWins =
+          deviceState.review_count > state.review_count ||
+          (deviceState.review_count === state.review_count &&
+            (deviceState.last_studied_at ?? '') > (state.last_studied_at ?? ''));
+        if (deviceWins) {
+          this.userWordStates.delete(key);
+          rowCount++;
+        }
+      }
+      return { rows: [], rowCount };
+    }
+
+    // --- Device state claim: UPDATE remaining device-only word states → assign user_id ---
+    if (
+      normalizedSql.startsWith('UPDATE user_word_states SET user_id = $2') &&
+      normalizedSql.includes('WHERE device_id = $1 AND user_id IS NULL')
+    ) {
+      const [deviceId, userId] = params;
+      let rowCount = 0;
+      for (const [key, state] of this.userWordStates.entries()) {
+        if (state.device_id !== deviceId || state.user_id !== null) continue;
+        this.userWordStates.delete(key);
+        state.user_id = userId;
+        const newKey = `user:${userId}:${state.word_id}`;
+        this.userWordStates.set(newKey, state);
+        rowCount++;
+      }
+      return { rows: [], rowCount };
+    }
+
+    // --- Device cached words claim: DELETE duplicate device cached words ---
+    if (
+      normalizedSql.startsWith('DELETE FROM user_cached_words AS device_row USING user_cached_words AS user_row')
+    ) {
+      const [deviceId, userId] = params;
+      let rowCount = 0;
+      for (const [key, row] of this.userCachedWords.entries()) {
+        if (row.device_id !== deviceId || row.user_id !== null) continue;
+        const userKey = `user:${userId}:${row.word_id}`;
+        if (this.userCachedWords.has(userKey)) {
+          this.userCachedWords.delete(key);
+          rowCount++;
+        }
+      }
+      return { rows: [], rowCount };
+    }
+
+    // --- Device cached words claim: UPDATE remaining device cached words → assign user_id ---
+    if (
+      normalizedSql.startsWith('UPDATE user_cached_words SET user_id = $2') &&
+      normalizedSql.includes('WHERE device_id = $1 AND user_id IS NULL')
+    ) {
+      const [deviceId, userId] = params;
+      let rowCount = 0;
+      for (const [key, row] of this.userCachedWords.entries()) {
+        if (row.device_id !== deviceId || row.user_id !== null) continue;
+        this.userCachedWords.delete(key);
+        row.user_id = userId;
+        const newKey = `user:${userId}:${row.word_id}`;
+        this.userCachedWords.set(newKey, row);
+        rowCount++;
+      }
+      return { rows: [], rowCount };
     }
 
     throw new Error(`Unexpected SQL: ${normalizedSql}`);

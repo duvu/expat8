@@ -10,6 +10,8 @@ import { LiteLLMClient } from './litellm_client.js';
 import { createLogger } from './logger.js';
 import { PostgresWordStore } from './postgres_word_store.js';
 import { FileLogArchiveStore } from './log_archive_store.js';
+import { ReleaseStore } from './release_store.js';
+import { PostgresReleaseStore } from './postgres_release_store.js';
 import { VocabularyPoolScheduler } from './vocabulary_pool_scheduler.js';
 import { WordStore } from './word_store.js';
 
@@ -64,6 +66,16 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     maxTotalBytes: config.logArchiveMaxTotalBytes,
     logger: runtimeLogger.child({ component: 'log_archive_store' })
   });
+  const releaseStore = store.pool
+    ? new PostgresReleaseStore({
+        pool: store.pool,
+        storageDir: config.releaseStorageDir,
+        logger: runtimeLogger.child({ component: 'release_store' })
+      })
+    : new ReleaseStore({
+        storageDir: config.releaseStorageDir,
+        logger: runtimeLogger.child({ component: 'release_store' })
+      });
   const vocabularyPoolScheduler = new VocabularyPoolScheduler({
     store,
     generationService,
@@ -83,6 +95,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
       config,
       logger: runtimeLogger.child({ component: 'api' }),
       logArchiveStore,
+      releaseStore,
       ...(nonceCache ? { nonceCache } : {})
     })
   );
@@ -92,6 +105,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     store,
     generationService,
     logArchiveStore,
+    releaseStore,
     vocabularyPoolScheduler,
     server,
     logger: runtimeLogger

@@ -26,6 +26,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    group: 'Memorization',
+    items: [
+      { href: '/memorization/passages', label: 'Passages' },
+    ],
+  },
+  {
     group: 'Analytics',
     items: [
       { href: '/analytics/study-events', label: 'Study Events' },

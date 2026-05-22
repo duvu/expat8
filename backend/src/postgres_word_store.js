@@ -1134,6 +1134,9 @@ export class PostgresWordStore {
         }
         throw error;
       }
+      // Claim device-only word states and cached words for the new user
+      await this.#claimDeviceWordStates({ client, userId: inserted.rows[0].id, deviceId });
+      await this.#claimDeviceCachedWords({ client, userId: inserted.rows[0].id, deviceId });
       const sessionResult = await this.#createSessionForUser({
         client,
         user: inserted.rows[0],
@@ -1158,12 +1161,17 @@ export class PostgresWordStore {
     if (!verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
-    const sessionResult = await this.#createSessionForUser({
-      client: this.pool,
-      user,
-      deviceId
+    return this.#withOptionalTransaction(async (client) => {
+      // Claim device-only word states and cached words for the signing-in user
+      await this.#claimDeviceWordStates({ client, userId: user.id, deviceId });
+      await this.#claimDeviceCachedWords({ client, userId: user.id, deviceId });
+      const sessionResult = await this.#createSessionForUser({
+        client,
+        user,
+        deviceId
+      });
+      return { user, ...sessionResult };
     });
-    return { user, ...sessionResult };
   }
 
   async resolveUserSession({ sessionToken }) {
@@ -2168,6 +2176,85 @@ export class PostgresWordStore {
     };
   }
 
+  async #claimDeviceWordStates({ client, userId, deviceId }) {
+    if (!deviceId) return { claimed: 0, conflicts: 0 };
+
+    // Step 1: Delete device-only rows that conflict with existing user rows
+    // (keep the "better" one based on review_count then last_studied_at)
+    const deleteConflicts = await client.query(
+      `DELETE FROM user_word_states AS device_state
+       USING user_word_states AS user_state
+       WHERE device_state.device_id = $1
+         AND device_state.user_id IS NULL
+         AND user_state.user_id = $2
+         AND device_state.word_id = user_state.word_id
+         AND (
+           user_state.review_count > device_state.review_count
+           OR (
+             user_state.review_count = device_state.review_count
+             AND COALESCE(user_state.last_studied_at, '') >= COALESCE(device_state.last_studied_at, '')
+           )
+         )`,
+      [deviceId, userId]
+    );
+
+    // Step 2: Delete user rows that lose to device-only rows (device has better state)
+    const deleteUserLosers = await client.query(
+      `DELETE FROM user_word_states AS user_state
+       USING user_word_states AS device_state
+       WHERE device_state.device_id = $1
+         AND device_state.user_id IS NULL
+         AND user_state.user_id = $2
+         AND device_state.word_id = user_state.word_id
+         AND (
+           device_state.review_count > user_state.review_count
+           OR (
+             device_state.review_count = user_state.review_count
+             AND COALESCE(device_state.last_studied_at, '') > COALESCE(user_state.last_studied_at, '')
+           )
+         )`,
+      [deviceId, userId]
+    );
+
+    // Step 3: Claim remaining device-only rows (no conflict or device won)
+    const claimed = await client.query(
+      `UPDATE user_word_states
+       SET user_id = $2
+       WHERE device_id = $1
+         AND user_id IS NULL`,
+      [deviceId, userId]
+    );
+
+    const conflicts = deleteConflicts.rowCount + deleteUserLosers.rowCount;
+    return { claimed: claimed.rowCount, conflicts };
+  }
+
+  async #claimDeviceCachedWords({ client, userId, deviceId }) {
+    if (!deviceId) return { claimed: 0, duplicatesRemoved: 0 };
+
+    // Step 1: Delete device-only cached words that duplicate existing user cached words
+    const deleteDuplicates = await client.query(
+      `DELETE FROM user_cached_words AS device_row
+       USING user_cached_words AS user_row
+       WHERE device_row.device_id = $1
+         AND device_row.user_id IS NULL
+         AND user_row.user_id = $2
+         AND device_row.word_id = user_row.word_id`,
+      [deviceId, userId]
+    );
+
+    // Step 2: Claim remaining device-only cached words
+    const claimed = await client.query(
+      `UPDATE user_cached_words
+       SET user_id = $2
+       WHERE device_id = $1
+         AND user_id IS NULL`,
+      [deviceId, userId]
+    );
+
+    return { claimed: claimed.rowCount, duplicatesRemoved: deleteDuplicates.rowCount };
+  }
+
   async #withOptionalTransaction(work) {
     if (typeof this.pool.connect !== 'function') {
       return work(this.pool);
@@ -2475,6 +2562,572 @@ export class PostgresWordStore {
       disclaimer: CERTIFICATE_DISCLAIMER
     };
   }
+
+  // ─── Memorization Passages ───────────────────────────────────────────
+
+  async createPassage({ title, language, rawText, ownerType = 'user', ownerUserId = null, visibility = 'private' }) {
+    const now = new Date().toISOString();
+    const id = createId('passage');
+    const result = await this.pool.query(
+      `INSERT INTO memorization_passages (id, title, language, raw_text, owner_type, owner_user_id, visibility, status, enrichment_status, segment_count, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending_segmentation', 'none', 0, $8, $8)
+       RETURNING *`,
+      [id, title, language, rawText, ownerType, ownerUserId, visibility, now]
+    );
+    return result.rows[0];
+  }
+
+  async getPassage({ passageId }) {
+    const result = await this.pool.query(
+      `SELECT * FROM memorization_passages WHERE id = $1`,
+      [passageId]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async listPassages({ userId = null, status = null, ownerType = null } = {}) {
+    let sql = `SELECT * FROM memorization_passages WHERE 1=1`;
+    const params = [];
+    let idx = 1;
+    if (status) {
+      sql += ` AND status = $${idx++}`;
+      params.push(status);
+    }
+    if (ownerType) {
+      sql += ` AND owner_type = $${idx++}`;
+      params.push(ownerType);
+    }
+    if (userId) {
+      sql += ` AND (owner_user_id = $${idx++} OR visibility = 'published')`;
+      params.push(userId);
+    }
+    sql += ` ORDER BY created_at DESC`;
+    const result = await this.pool.query(sql, params);
+    return result.rows;
+  }
+
+  async listPublishedPassages() {
+    const result = await this.pool.query(
+      `SELECT * FROM memorization_passages WHERE visibility = 'published' AND status = 'published' ORDER BY created_at DESC`
+    );
+    return result.rows;
+  }
+
+  async listAdminPassages({ status = null } = {}) {
+    let sql = `SELECT * FROM memorization_passages`;
+    const params = [];
+    if (status) {
+      sql += ` WHERE status = $1`;
+      params.push(status);
+    }
+    sql += ` ORDER BY created_at DESC`;
+    const result = await this.pool.query(sql, params);
+    return result.rows;
+  }
+
+  async updatePassage({ passageId, ...updates }) {
+    const allowed = ['title', 'language', 'visibility', 'status', 'enrichment_status', 'processing_error', 'segment_count'];
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+    for (const key of allowed) {
+      if (updates[key] !== undefined) {
+        setClauses.push(`${key} = $${idx++}`);
+        params.push(updates[key]);
+      }
+    }
+    if (setClauses.length === 0) return this.getPassage({ passageId });
+    setClauses.push(`updated_at = $${idx++}`);
+    params.push(new Date().toISOString());
+    params.push(passageId);
+    const result = await this.pool.query(
+      `UPDATE memorization_passages SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
+      params
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async deletePassage({ passageId }) {
+    const result = await this.pool.query(
+      `DELETE FROM memorization_passages WHERE id = $1 RETURNING id`,
+      [passageId]
+    );
+    return result.rows.length > 0;
+  }
+
+  async persistPassageVocabulary({ passageId, items = [] }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const passageResult = await client.query(
+        `SELECT * FROM memorization_passages WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [passageId]
+      );
+      const passage = passageResult.rows[0];
+      if (!passage) {
+        throw new Error('passage_not_found');
+      }
+
+      const existingTermsResult = await client.query(
+        `SELECT word_sense_id FROM memorization_segment_terms WHERE passage_id = $1`,
+        [passageId]
+      );
+      const oldSenseIds = existingTermsResult.rows.map((row) => row.word_sense_id).filter(Boolean);
+      if (oldSenseIds.length > 0) {
+        await client.query(`DELETE FROM vocabulary_review_items WHERE word_sense_id = ANY($1)`, [oldSenseIds]);
+      }
+      await client.query(`DELETE FROM memorization_segment_terms WHERE passage_id = $1`, [passageId]);
+      if (oldSenseIds.length > 0) {
+        await client.query(`DELETE FROM word_senses WHERE id = ANY($1)`, [oldSenseIds]);
+      }
+
+      const segmentsResult = await client.query(
+        `SELECT id, text FROM memorization_segments WHERE passage_id = $1`,
+        [passageId]
+      );
+      const segmentById = new Map(segmentsResult.rows.map((segment) => [segment.id, segment]));
+      const now = new Date().toISOString();
+      const requiresReview = passage.owner_type !== 'user';
+      const senseStatus = requiresReview ? 'pending_review' : 'approved';
+      const reviewStatus = requiresReview ? 'pending' : 'approved';
+      const reviewedAt = requiresReview ? null : now;
+      const seen = new Set();
+      let persistedCount = 0;
+
+      for (const item of items) {
+        const segment = segmentById.get(item.segment_id);
+        if (!segment) {
+          continue;
+        }
+        const normalized = normalizeTerm(item.term);
+        if (!normalized) {
+          continue;
+        }
+        const dedupeKey = `${item.segment_id}:${item.language}:${normalized}`;
+        if (seen.has(dedupeKey)) {
+          continue;
+        }
+        seen.add(dedupeKey);
+
+        const suggestionType = normalizeSuggestionType(item.suggestion_type, item.term);
+        const termResult = await client.query(
+          `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
+           VALUES ($1, $2, $3, $4, NULL, $5)
+           ON CONFLICT (language, normalized_term) DO UPDATE SET display_term = EXCLUDED.display_term
+           RETURNING *`,
+          [createId('term'), item.language, item.term, normalized, now]
+        );
+        const term = termResult.rows[0];
+
+        const senseResult = await client.query(
+          `INSERT INTO word_senses (
+            id, term_id, part_of_speech, meaning_vi, short_definition,
+            pronunciation, ipa, pinyin, level_scale, level,
+            quality_score, status, created_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+          RETURNING *`,
+          [
+            createId('sense'),
+            term.id,
+            item.part_of_speech ?? null,
+            item.meaning_vi,
+            item.short_definition ?? null,
+            item.vietnamese_pronunciation ?? null,
+            item.ipa ?? null,
+            item.pinyin ?? null,
+            item.level_scale ?? 'cefr',
+            item.level ?? item.difficulty ?? 'A1',
+            Number(item.quality_score ?? item.confidence ?? 0.5),
+            senseStatus,
+            now
+          ]
+        );
+        const sense = senseResult.rows[0];
+
+        await client.query(
+          `INSERT INTO memorization_segment_terms (
+            id, passage_id, segment_id, term_id, word_sense_id, surface_text,
+            sentence_context, frequency, extraction_confidence, classification,
+            suggestion_type, created_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+          [
+            createId('segment_term'),
+            passageId,
+            item.segment_id,
+            term.id,
+            sense.id,
+            item.term,
+            item.example ?? segment.text,
+            Number(item.frequency ?? 1),
+            Number(item.confidence ?? 0.5),
+            item.classification ?? null,
+            suggestionType,
+            now
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO vocabulary_review_items (
+            id, word_sense_id, article_id, status,
+            reviewer_user_id, review_note, reviewed_at, created_at, updated_at
+          )
+          VALUES ($1, $2, NULL, $3, NULL, NULL, $4, $5, $5)`,
+          [createId('review_item'), sense.id, reviewStatus, reviewedAt, now]
+        );
+
+        if (!requiresReview) {
+          await client.query(
+            `INSERT INTO words (
+              id, term, normalized_term, language, meaning_vi,
+              part_of_speech, ipa, vietnamese_pronunciation,
+              example, example_vi, difficulty, topics_json,
+              generation_source, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', $10, '["memorization"]', 'memorization_passage_vocabulary', $11, $11)
+            ON CONFLICT (language, normalized_term) DO NOTHING`,
+            [
+              createId('word'),
+              item.term,
+              normalized,
+              item.language,
+              item.meaning_vi ?? '',
+              item.part_of_speech ?? null,
+              item.ipa ?? '',
+              item.vietnamese_pronunciation ?? '',
+              item.example ?? segment.text,
+              item.level ?? item.difficulty ?? 'A1',
+              now
+            ]
+          );
+        }
+
+        persistedCount += 1;
+      }
+
+      return { count: persistedCount };
+    });
+  }
+
+  // ─── Memorization Segments ──────────────────────────────────────────
+
+  async createSegments({ passageId, segments }) {
+    const now = new Date().toISOString();
+    const created = [];
+    for (const seg of segments) {
+      const id = createId('segment');
+      const wordCount = seg.text.split(/\s+/).length;
+      const result = await this.pool.query(
+        `INSERT INTO memorization_segments (id, passage_id, position, text, word_count, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [id, passageId, seg.position, seg.text, wordCount, now]
+      );
+      created.push(result.rows[0]);
+    }
+    // Update passage segment_count
+    await this.pool.query(
+      `UPDATE memorization_passages SET segment_count = $1, updated_at = $2 WHERE id = $3`,
+      [created.length, now, passageId]
+    );
+    return created;
+  }
+
+  async getSegmentsByPassage({ passageId }) {
+    const result = await this.pool.query(
+      `SELECT * FROM memorization_segments WHERE passage_id = $1 ORDER BY position ASC`,
+      [passageId]
+    );
+    return result.rows;
+  }
+
+  async updateSegment({ segmentId, text, position }) {
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+    if (text !== undefined) {
+      setClauses.push(`text = $${idx++}`);
+      params.push(text);
+      setClauses.push(`word_count = $${idx++}`);
+      params.push(text.split(/\s+/).length);
+    }
+    if (position !== undefined) {
+      setClauses.push(`position = $${idx++}`);
+      params.push(position);
+    }
+    if (setClauses.length === 0) return null;
+    params.push(segmentId);
+    const result = await this.pool.query(
+      `UPDATE memorization_segments SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *`,
+      params
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async splitSegment({ segmentId, splitAt }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const segmentResult = await client.query(
+        `SELECT * FROM memorization_segments WHERE id = $1 LIMIT 1 FOR UPDATE`,
+        [segmentId]
+      );
+      const segment = segmentResult.rows[0];
+      if (!segment) return null;
+
+      const index = Number(splitAt);
+      if (!Number.isInteger(index) || index <= 0 || index >= segment.text.length) {
+        return null;
+      }
+      const leftText = segment.text.slice(0, index).trim();
+      const rightText = segment.text.slice(index).trim();
+      if (!leftText || !rightText) {
+        return null;
+      }
+
+      await client.query(
+        `UPDATE memorization_segments
+         SET position = position + 1
+         WHERE passage_id = $1 AND position > $2`,
+        [segment.passage_id, segment.position]
+      );
+      const leftResult = await client.query(
+        `UPDATE memorization_segments
+         SET text = $2, word_count = $3
+         WHERE id = $1
+         RETURNING *`,
+        [segmentId, leftText, countWords(leftText)]
+      );
+      await client.query(
+        `INSERT INTO memorization_segments (id, passage_id, position, text, word_count, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [createId('segment'), segment.passage_id, segment.position + 1, rightText, countWords(rightText), new Date().toISOString()]
+      );
+      await client.query(
+        `UPDATE memorization_passages
+         SET segment_count = (SELECT COUNT(*) FROM memorization_segments WHERE passage_id = $1), updated_at = $2
+         WHERE id = $1`,
+        [segment.passage_id, new Date().toISOString()]
+      );
+      const allSegments = await client.query(
+        `SELECT * FROM memorization_segments WHERE passage_id = $1 ORDER BY position ASC`,
+        [segment.passage_id]
+      );
+      return allSegments.rows.length > 0 ? allSegments.rows : [leftResult.rows[0]];
+    });
+  }
+
+  async mergeSegments({ segmentId, nextSegmentId }) {
+    return this.#withOptionalTransaction(async (client) => {
+      const result = await client.query(
+        `SELECT * FROM memorization_segments WHERE id = ANY($1) FOR UPDATE`,
+        [[segmentId, nextSegmentId]]
+      );
+      const segment = result.rows.find((row) => row.id === segmentId);
+      const next = result.rows.find((row) => row.id === nextSegmentId);
+      if (!segment || !next || segment.passage_id !== next.passage_id || next.position !== segment.position + 1) {
+        return null;
+      }
+
+      const mergedText = `${segment.text.trim()} ${next.text.trim()}`.trim();
+      await client.query(
+        `UPDATE memorization_segments SET text = $2, word_count = $3 WHERE id = $1`,
+        [segmentId, mergedText, countWords(mergedText)]
+      );
+      await client.query(
+        `UPDATE memorization_segment_progress SET segment_id = $1 WHERE segment_id = $2`,
+        [segmentId, nextSegmentId]
+      );
+      await client.query(
+        `UPDATE memorization_segment_terms SET segment_id = $1 WHERE segment_id = $2`,
+        [segmentId, nextSegmentId]
+      );
+      await client.query(`DELETE FROM memorization_segments WHERE id = $1`, [nextSegmentId]);
+      await client.query(
+        `UPDATE memorization_segments
+         SET position = position - 1
+         WHERE passage_id = $1 AND position > $2`,
+        [segment.passage_id, next.position]
+      );
+      await client.query(
+        `UPDATE memorization_passages
+         SET segment_count = (SELECT COUNT(*) FROM memorization_segments WHERE passage_id = $1), updated_at = $2
+         WHERE id = $1`,
+        [segment.passage_id, new Date().toISOString()]
+      );
+      const allSegments = await client.query(
+        `SELECT * FROM memorization_segments WHERE passage_id = $1 ORDER BY position ASC`,
+        [segment.passage_id]
+      );
+      return allSegments.rows;
+    });
+  }
+
+  async deleteSegmentsByPassage({ passageId }) {
+    await this.pool.query(
+      `DELETE FROM memorization_segments WHERE passage_id = $1`,
+      [passageId]
+    );
+    await this.pool.query(
+      `UPDATE memorization_passages SET segment_count = 0, updated_at = $1 WHERE id = $2`,
+      [new Date().toISOString(), passageId]
+    );
+  }
+
+  // ─── Memorization Segment Progress ──────────────────────────────────
+
+  async upsertSegmentProgress({ userId, segmentId, status, reviewCount, easeFactor, lastReviewedAt, nextReviewAt }) {
+    const now = new Date().toISOString();
+    const id = createId('segprog');
+    const result = await this.pool.query(
+      `INSERT INTO memorization_segment_progress (id, user_id, segment_id, status, review_count, ease_factor, last_reviewed_at, next_review_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+       ON CONFLICT (user_id, segment_id) DO UPDATE SET
+         status = COALESCE($4, memorization_segment_progress.status),
+         review_count = COALESCE($5, memorization_segment_progress.review_count),
+         ease_factor = COALESCE($6, memorization_segment_progress.ease_factor),
+         last_reviewed_at = COALESCE($7, memorization_segment_progress.last_reviewed_at),
+         next_review_at = COALESCE($8, memorization_segment_progress.next_review_at),
+         updated_at = $9
+       RETURNING *`,
+      [id, userId, segmentId, status ?? 'new', reviewCount ?? 0, easeFactor ?? 2.5, lastReviewedAt ?? null, nextReviewAt ?? null, now]
+    );
+    return result.rows[0];
+  }
+
+  async getSegmentProgress({ userId, passageId }) {
+    const result = await this.pool.query(
+      `SELECT msp.* FROM memorization_segment_progress msp
+       JOIN memorization_segments ms ON ms.id = msp.segment_id
+       WHERE msp.user_id = $1 AND ms.passage_id = $2`,
+      [userId, passageId]
+    );
+    return result.rows;
+  }
+
+  async getPassageProgress({ userId, passageId }) {
+    const segments = await this.getSegmentsByPassage({ passageId });
+    if (segments.length === 0) return { total: 0, mastered: 0, reviewing: 0, learning: 0, newCount: 0, percentage: 0 };
+    const progress = await this.getSegmentProgress({ userId, passageId });
+    const progressBySegment = new Map(progress.map((p) => [p.segment_id, p]));
+    let mastered = 0, reviewing = 0, learning = 0, newCount = 0;
+    for (const seg of segments) {
+      const p = progressBySegment.get(seg.id);
+      if (!p || p.status === 'new') newCount++;
+      else if (p.status === 'mastered') mastered++;
+      else if (p.status === 'review') reviewing++;
+      else learning++;
+    }
+    const percentage = Math.round(((mastered + reviewing) / segments.length) * 100);
+    return { total: segments.length, mastered, reviewing, learning, newCount, percentage };
+  }
+
+  async claimNextPendingPassage() {
+    const result = await this.pool.query(
+      `UPDATE memorization_passages
+       SET status = 'segmenting', updated_at = $1
+       WHERE id = (
+         SELECT id FROM memorization_passages
+         WHERE status = 'pending_segmentation'
+         ORDER BY created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+      [new Date().toISOString()]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async updateSegmentEnrichment({ segmentId, ipa_text, translation_text, translation_language, viet_reading_text }) {
+    const result = await this.pool.query(
+      `UPDATE memorization_segments
+       SET ipa_text = $2, translation_text = $3, translation_language = $4, viet_reading_text = $5
+       WHERE id = $1
+       RETURNING *`,
+      [segmentId, ipa_text ?? null, translation_text ?? null, translation_language ?? null, viet_reading_text ?? null]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async updatePassageEnrichmentStatus({ passageId, enrichmentStatus, enrichment_attempt_count }) {
+    const now = new Date().toISOString();
+    let result;
+    if (enrichment_attempt_count !== undefined) {
+      result = await this.pool.query(
+        `UPDATE memorization_passages
+         SET enrichment_status = $2, enrichment_attempt_count = $3, updated_at = $4
+         WHERE id = $1
+         RETURNING *`,
+        [passageId, enrichmentStatus, enrichment_attempt_count, now]
+      );
+    } else {
+      result = await this.pool.query(
+        `UPDATE memorization_passages
+         SET enrichment_status = $2, updated_at = $3
+         WHERE id = $1
+         RETURNING *`,
+        [passageId, enrichmentStatus, now]
+      );
+    }
+    return result.rows[0] ?? null;
+  }
+
+  async retryPassage({ passageId }) {
+    const result = await this.pool.query(
+      `UPDATE memorization_passages
+       SET status = 'pending_segmentation', processing_error = NULL, attempt_count = 0, updated_at = $2
+       WHERE id = $1 AND status = 'failed'
+       RETURNING *`,
+      [passageId, new Date().toISOString()]
+    );
+    if (result.rows.length === 0) {
+      // Check whether it exists at all to distinguish 404 vs wrong status
+      const check = await this.pool.query(
+        'SELECT id, status FROM memorization_passages WHERE id = $1',
+        [passageId]
+      );
+      if (check.rows.length === 0) return { error: 'not_found' };
+      return { error: 'passage_not_failed' };
+    }
+    return { passage: result.rows[0] };
+  }
+
+  async retryPassageEnrichment({ passageId }) {
+    // Validate passage exists and enrichment_status is 'failed'
+    const check = await this.pool.query(
+      `SELECT p.id, p.enrichment_status,
+              (SELECT COUNT(*) FROM memorization_segments WHERE passage_id = p.id)::int AS segment_count
+       FROM memorization_passages p WHERE p.id = $1`,
+      [passageId]
+    );
+    if (check.rows.length === 0) return { error: 'not_found' };
+    const row = check.rows[0];
+    if (row.enrichment_status !== 'failed') return { error: 'enrichment_not_failed' };
+    if (row.segment_count === 0) return { error: 'passage_has_no_segments' };
+
+    const result = await this.pool.query(
+      `UPDATE memorization_passages
+       SET enrichment_status = 'pending', enrichment_attempt_count = 0, updated_at = $2
+       WHERE id = $1
+       RETURNING *`,
+      [passageId, new Date().toISOString()]
+    );
+    return { passage: result.rows[0] };
+  }
+
+  async claimNextPendingEnrichment() {
+    const result = await this.pool.query(
+      `UPDATE memorization_passages
+       SET enrichment_status = 'enriching', updated_at = $1
+       WHERE id = (
+         SELECT id FROM memorization_passages
+         WHERE enrichment_status = 'pending'
+         ORDER BY created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING *`,
+      [new Date().toISOString()]
+    );
+    return result.rows[0] ?? null;
+  }
 }
 
 function rowToWord(row) {
@@ -2531,4 +3184,8 @@ function rowToSubmittedWord(row) {
     updated_at: row.updated_at,
     resolved_at: row.resolved_at
   };
+}
+
+function countWords(text) {
+  return String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' as io;
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -8,7 +9,9 @@ import 'package:http/http.dart' as http;
 
 import '../logging/logger.dart';
 import '../models/article.dart';
+import '../models/memorization_passage.dart';
 import '../models/proficiency_state.dart';
+import '../models/release_info.dart';
 import '../models/submitted_word.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
@@ -1153,6 +1156,357 @@ class BackendApiClient {
     _throwIfFailed(response, 'Delete article failed');
   }
 
+  // ─── Memorization Passages ──────────────────────────────────────────────────
+
+  Future<List<MemorizationPassage>> listPassages({
+    required String sessionToken,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/memorization/passages');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.list_passages.request',
+      message: 'Fetching memorization passages list.',
+      traceId: traceId,
+      context: {'uri': uri.toString()},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'memorization.list_passages.timeout',
+        message: 'List passages request timed out.',
+        traceId: traceId,
+        context: {'elapsed_ms': stopwatch.elapsedMilliseconds},
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.list_passages.response',
+      message: 'Received passages list response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'List passages failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['items'] as List<dynamic>? ?? [];
+    return items
+        .map((e) => MemorizationPassage.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<MemorizationPassage> createPassage({
+    required String sessionToken,
+    required String title,
+    required String language,
+    required String rawText,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/memorization/passages');
+    final payload = jsonEncode({
+      'title': title,
+      'language': language,
+      'raw_text': rawText,
+    });
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.create_passage.request',
+      message: 'Creating memorization passage.',
+      traceId: traceId,
+      context: {'uri': uri.toString(), 'language': language, 'title_length': title.length},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+                sessionToken: sessionToken,
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'memorization.create_passage.timeout',
+        message: 'Create passage request timed out.',
+        traceId: traceId,
+        context: {'elapsed_ms': stopwatch.elapsedMilliseconds},
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.create_passage.response',
+      message: 'Received create passage response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Create passage failed');
+    return MemorizationPassage.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<MemorizationPassage> getPassage({
+    required String sessionToken,
+    required String passageId,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/memorization/passages/$passageId');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.get_passage.request',
+      message: 'Fetching memorization passage.',
+      traceId: traceId,
+      context: {'passage_id': passageId},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'memorization.get_passage.timeout',
+        message: 'Get passage request timed out.',
+        traceId: traceId,
+        context: {'passage_id': passageId, 'elapsed_ms': stopwatch.elapsedMilliseconds},
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.get_passage.response',
+      message: 'Received get passage response.',
+      traceId: traceId,
+      context: {
+        'passage_id': passageId,
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Fetch passage failed');
+    return MemorizationPassage.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deletePassage({
+    required String sessionToken,
+    required String passageId,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/memorization/passages/$passageId');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.delete_passage.request',
+      message: 'Deleting memorization passage.',
+      traceId: traceId,
+      context: {'passage_id': passageId},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .delete(
+            uri,
+            headers: _signedHeaders(
+              method: 'DELETE',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'memorization.delete_passage.timeout',
+        message: 'Delete passage request timed out.',
+        traceId: traceId,
+        context: {'passage_id': passageId, 'elapsed_ms': stopwatch.elapsedMilliseconds},
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.delete_passage.response',
+      message: 'Received delete passage response.',
+      traceId: traceId,
+      context: {
+        'passage_id': passageId,
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Delete passage failed');
+  }
+
+  Future<List<MemorizationSegmentProgress>> getPassageProgress({
+    required String sessionToken,
+    required String passageId,
+  }) async {
+    final traceId = _newTraceId();
+    final uri =
+        Uri.parse('$baseUrl/v1/memorization/progress?passage_id=$passageId');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.get_progress.request',
+      message: 'Fetching memorization passage progress.',
+      traceId: traceId,
+      context: {'passage_id': passageId},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(
+            uri,
+            headers: _signedHeaders(
+              method: 'GET',
+              uri: uri,
+              sessionToken: sessionToken,
+            ),
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'memorization.get_progress.timeout',
+        message: 'Get passage progress request timed out.',
+        traceId: traceId,
+        context: {'passage_id': passageId, 'elapsed_ms': stopwatch.elapsedMilliseconds},
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.get_progress.response',
+      message: 'Received passage progress response.',
+      traceId: traceId,
+      context: {
+        'passage_id': passageId,
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Fetch passage progress failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['items'] as List<dynamic>? ?? [];
+    return items
+        .map((e) =>
+            MemorizationSegmentProgress.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> upsertSegmentProgress({
+    required String sessionToken,
+    required List<Map<String, dynamic>> progressUpdates,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/memorization/progress');
+    final payload = jsonEncode({'entries': progressUpdates});
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.upsert_progress.request',
+      message: 'Upserting memorization segment progress.',
+      traceId: traceId,
+      context: {'entry_count': progressUpdates.length},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .post(
+            uri,
+            headers: {
+              'content-type': 'application/json',
+              ..._signedHeaders(
+                method: 'POST',
+                uri: uri,
+                body: Uint8List.fromList(utf8.encode(payload)),
+                sessionToken: sessionToken,
+              ),
+            },
+            body: payload,
+          )
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'memorization.upsert_progress.timeout',
+        message: 'Upsert segment progress request timed out.',
+        traceId: traceId,
+        context: {'entry_count': progressUpdates.length, 'elapsed_ms': stopwatch.elapsedMilliseconds},
+      );
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'memorization.upsert_progress.response',
+      message: 'Received upsert progress response.',
+      traceId: traceId,
+      context: {
+        'entry_count': progressUpdates.length,
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Upsert segment progress failed');
+  }
+
   // ─── Exam endpoints ─────────────────────────────────────────────────────────
 
   /// Returns the list of topics the signed-in user has studied words in for
@@ -1598,6 +1952,111 @@ class BackendApiClient {
     _throwIfFailed(response, 'Fetch content pack failed');
     return ContentPack.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
+  }
+
+  /// Fetches the latest available release for [platform].
+  ///
+  /// Returns `null` if no release exists for the given platform.
+  Future<ReleaseInfo?> fetchLatestRelease({
+    String platform = 'android',
+  }) async {
+    final traceId = _newTraceId();
+    final uri =
+        Uri.parse('$baseUrl/v1/releases/latest').replace(queryParameters: {
+      'platform': platform,
+    });
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'releases.latest.request',
+      message: 'Checking latest release.',
+      traceId: traceId,
+      context: {'platform': platform},
+    );
+    final stopwatch = Stopwatch()..start();
+    http.Response response;
+    try {
+      response = await _httpClient
+          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
+          .timeout(timeout);
+    } on TimeoutException {
+      stopwatch.stop();
+      rethrow;
+    } finally {
+      if (stopwatch.isRunning) stopwatch.stop();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'releases.latest.response',
+      message: 'Received latest release response.',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    _throwIfFailed(response, 'Fetch latest release failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final release = body['release'];
+    if (release == null) return null;
+    return ReleaseInfo.fromJson(release as Map<String, dynamic>);
+  }
+
+  /// Downloads the release APK for [releaseId] to a temporary file.
+  ///
+  /// Calls [onProgress] periodically with (bytesReceived, totalBytes).
+  /// Returns the path to the downloaded file.
+  Future<String> downloadRelease(
+    String releaseId, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    final traceId = _newTraceId();
+    final uri = Uri.parse('$baseUrl/v1/releases/$releaseId/download');
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'releases.download.request',
+      message: 'Downloading release APK.',
+      traceId: traceId,
+      context: {'release_id': releaseId},
+    );
+    final request = http.Request('GET', uri);
+    request.headers.addAll(_signedHeaders(method: 'GET', uri: uri));
+    final streamedResponse =
+        await _httpClient.send(request).timeout(timeout);
+    if (streamedResponse.statusCode < 200 ||
+        streamedResponse.statusCode >= 300) {
+      await streamedResponse.stream.drain<void>();
+      throw BackendApiException(
+        'Release download failed: ${streamedResponse.statusCode}',
+        statusCode: streamedResponse.statusCode,
+      );
+    }
+    final totalBytes = streamedResponse.contentLength ?? 0;
+    final tempDir = io.Directory.systemTemp;
+    final filePath = '${tempDir.path}/release-$releaseId.apk';
+    final file = io.File(filePath);
+    final sink = file.openWrite();
+    int received = 0;
+    try {
+      await for (final chunk in streamedResponse.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, totalBytes);
+      }
+    } finally {
+      await sink.close();
+    }
+    await _logger.info(
+      category: AppLogCategory.api,
+      event: 'releases.download.complete',
+      message: 'Release APK downloaded.',
+      traceId: traceId,
+      context: {
+        'release_id': releaseId,
+        'file_path': filePath,
+        'bytes': received,
+      },
+    );
+    return filePath;
   }
 
   String _newTraceId() {

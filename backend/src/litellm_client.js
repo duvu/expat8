@@ -9,6 +9,45 @@ export class LiteLLMClient {
     this.logger = logger;
   }
 
+  /**
+   * Generic chat completion — returns the raw OpenAI-style response object.
+   * @param {{ messages: Array, temperature?: number, response_format?: object }} options
+   */
+  async chatCompletion({ messages, temperature = 0.7, response_format }) {
+    if (!this.baseUrl) {
+      throw new Error('LiteLLM base URL is not configured. Set the LITELLM_BASE_URL environment variable.');
+    }
+    const body = { model: this.model, messages, temperature };
+    if (response_format) body.response_format = response_format;
+
+    this.logger.debug?.('litellm_chat_completion_request', { message_count: messages.length });
+    const startedAt = Date.now();
+    let response;
+    try {
+      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(this.apiKey ? { authorization: `Bearer ${this.apiKey}` } : {})
+        },
+        body: JSON.stringify(body)
+      });
+    } catch (error) {
+      this.logger.error?.('litellm_chat_completion_fetch_error', { error, elapsed_ms: Date.now() - startedAt });
+      throw error;
+    }
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      this.logger.error?.('litellm_chat_completion_http_error', { status: response.status, body: text });
+      throw new Error(`LiteLLM HTTP ${response.status}: ${text}`);
+    }
+
+    const json = await response.json();
+    this.logger.debug?.('litellm_chat_completion_response', { elapsed_ms: Date.now() - startedAt });
+    return json;
+  }
+
   async generateVocabulary({
     sourceLanguage = 'vi',
     targetLanguage = 'en',

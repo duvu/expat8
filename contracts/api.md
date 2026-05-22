@@ -1548,3 +1548,875 @@ Error responses:
 | 403    | `forbidden`      | Missing or invalid admin token |
 | 404    | `not_found`      | Archive ID not found           |
 | 500    | `internal_error` | Stream read failure            |
+
+---
+
+## Release Management
+
+### POST /v1/admin/releases
+
+Upload a new mobile release APK. The binary is sent as the raw request body with
+metadata passed via custom headers.
+
+**Auth:** App credentials + admin token (`x-expat8-admin-token`).
+
+**Request headers:**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `x-expat8-release-platform` | yes | Platform identifier (e.g., `android`) |
+| `x-expat8-release-version-code` | yes | Monotonically increasing integer version code |
+| `x-expat8-release-version-name` | yes | Human-readable version (e.g., `1.2.3`) |
+| `content-type` | yes | `application/octet-stream` |
+
+**Request body:** Raw APK binary.
+
+**Success response (201):**
+
+```json
+{
+  "id": "uuid",
+  "platform": "android",
+  "version_code": 5,
+  "version_name": "1.2.3",
+  "file_size_bytes": 15728640,
+  "sha256": "a1b2c3...",
+  "created_at": "2026-05-19T12:00:00.000Z"
+}
+```
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 400 | `bad_request` | Missing required header or empty body |
+| 403 | `forbidden` | Missing or invalid admin token |
+
+**Pruning:** After a successful upload, the backend retains at most 5 releases per
+platform. Older releases (by version_code) are automatically deleted.
+
+---
+
+### GET /v1/admin/releases
+
+List all stored releases.
+
+**Auth:** App credentials + admin token.
+
+**Success response (200):**
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "platform": "android",
+      "version_code": 5,
+      "version_name": "1.2.3",
+      "file_size_bytes": 15728640,
+      "sha256": "a1b2c3...",
+      "created_at": "2026-05-19T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+Items are ordered by `version_code` descending.
+
+---
+
+### DELETE /v1/admin/releases/:id
+
+Delete a specific release (metadata + binary file).
+
+**Auth:** App credentials + admin token.
+
+**Success response:** 204 No Content.
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 403 | `forbidden` | Missing or invalid admin token |
+| 404 | `not_found` | Release ID not found |
+
+---
+
+### GET /v1/releases/latest
+
+Returns metadata of the most recent release for a given platform.
+
+**Auth:** App credentials only (no user session required).
+
+**Query parameters:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `platform` | yes | Platform to query (e.g., `android`) |
+
+**Success response (200) — release exists:**
+
+```json
+{
+  "release": {
+    "id": "uuid",
+    "platform": "android",
+    "version_code": 5,
+    "version_name": "1.2.3",
+    "file_size_bytes": 15728640,
+    "sha256": "a1b2c3...",
+    "created_at": "2026-05-19T12:00:00.000Z"
+  }
+}
+```
+
+**Success response (200) — no release available:**
+
+```json
+{
+  "release": null
+}
+```
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 400 | `bad_request` | Missing `platform` query parameter |
+
+---
+
+### GET /v1/releases/:id/download
+
+Stream the APK binary for a specific release.
+
+**Auth:** App credentials only (no user session required).
+
+**Success response (200):**
+- `Content-Type: application/vnd.android.package-archive`
+- `Content-Length: <file size in bytes>`
+- Body: raw APK binary stream
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 404 | `not_found` | Release ID not found or file missing from storage |
+
+---
+
+## Memorization
+
+Memorization endpoints manage passages (text content segmented for spaced
+repetition practice) and per-segment learning progress.
+
+User endpoints require a valid bearer session (`Authorization: Bearer <token>`).
+Admin endpoints require app credentials and a valid admin token
+(`X-Expat8-Admin-Token`).
+
+---
+
+### POST /v1/memorization/passages
+
+Creates a new passage owned by the authenticated user. The passage is created
+with `visibility: "private"` and `status: "pending_segmentation"`.
+
+Requires a valid bearer session.
+
+Request:
+
+```json
+{
+  "title": "The Great Gatsby - Chapter 1",
+  "language": "en",
+  "raw_text": "In my younger and more vulnerable years my father gave me some advice..."
+}
+```
+
+Fields:
+
+- `title`: required, non-empty string.
+- `language`: required, one of `"en"`, `"zh"`, `"vi"`.
+- `raw_text`: required, string between 50 and 20000 characters.
+
+Success response (201):
+
+```json
+{
+  "id": "passage_123",
+  "title": "The Great Gatsby - Chapter 1",
+  "language": "en",
+  "raw_text": "In my younger and more vulnerable years...",
+  "owner_type": "user",
+  "owner_user_id": "user_123",
+  "visibility": "private",
+  "status": "pending_segmentation",
+  "processing_error": null,
+  "segment_count": 0,
+  "created_at": "2026-05-21T10:00:00.000Z",
+  "updated_at": "2026-05-21T10:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field           | Meaning                                    |
+|--------|-------------------------|--------------------------------------------|
+| 400    | `title is required`     | Missing or empty `title`                   |
+| 400    | `unsupported language`  | `language` not in `[en, zh, vi]`           |
+| 400    | `raw_text is required`  | Missing `raw_text`                         |
+| 400    | `raw_text must be at least 50 characters` | Text too short      |
+| 400    | `raw_text must not exceed 20000 characters` | Text too long     |
+| 401    | `invalid_session`       | Missing or invalid bearer token            |
+
+---
+
+### GET /v1/memorization/passages
+
+Lists passages visible to the authenticated user (own passages + published
+passages), ordered by creation date descending.
+
+Requires a valid bearer session.
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "passage_123",
+      "title": "The Great Gatsby - Chapter 1",
+      "language": "en",
+      "raw_text": "In my younger and more vulnerable years...",
+      "owner_type": "user",
+      "owner_user_id": "user_123",
+      "visibility": "private",
+      "status": "segmented",
+      "processing_error": null,
+      "segment_count": 5,
+      "created_at": "2026-05-21T10:00:00.000Z",
+      "updated_at": "2026-05-21T10:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                         |
+|--------|-------------------|---------------------------------|
+| 401    | `invalid_session` | Missing or invalid bearer token |
+
+---
+
+### GET /v1/memorization/passages/:id
+
+Returns a single passage with its segments array. The user must own the passage
+or the passage must have `visibility: "published"`.
+
+Requires a valid bearer session.
+
+Response (200):
+
+```json
+{
+  "id": "passage_123",
+  "title": "The Great Gatsby - Chapter 1",
+  "language": "en",
+  "raw_text": "In my younger and more vulnerable years...",
+  "owner_type": "user",
+  "owner_user_id": "user_123",
+  "visibility": "private",
+  "status": "segmented",
+  "enrichment_status": "enriched",
+  "processing_error": null,
+  "segment_count": 2,
+  "created_at": "2026-05-21T10:00:00.000Z",
+  "updated_at": "2026-05-21T10:01:00.000Z",
+  "segments": [
+    {
+      "id": "segment_001",
+      "passage_id": "passage_123",
+      "position": 0,
+      "text": "In my younger and more vulnerable years my father gave me some advice",
+      "word_count": 13,
+      "ipa_text": "/ɪn maɪ ˈjʌŋɡər ænd mɔːr ˈvʌlnərəbl jɪrz maɪ ˈfɑːðər ɡeɪv miː sʌm ədˈvaɪs/",
+      "translation_text": "Trong những năm còn trẻ và dễ bị tổn thương, cha tôi đã cho tôi một lời khuyên",
+      "translation_language": "vi",
+      "viet_reading_text": "in mai giăng-gờ en mo vâl-nờ-rờ-bồ yi-ơz mai fa-đờ gây mi xầm ơt-vais",
+      "created_at": "2026-05-21T10:01:00.000Z"
+    },
+    {
+      "id": "segment_002",
+      "passage_id": "passage_123",
+      "position": 1,
+      "text": "that I've been turning over in my mind ever since.",
+      "word_count": 10,
+      "ipa_text": "/ðæt aɪv bɪn ˈtɜːrnɪŋ ˈoʊvər ɪn maɪ maɪnd ˈɛvər sɪns/",
+      "translation_text": "mà tôi đã suy nghĩ mãi từ đó đến nay.",
+      "translation_language": "vi",
+      "viet_reading_text": "đét ai-v bin tơ-ning âu-vờ in mai mai-nd e-vờ xins",
+      "created_at": "2026-05-21T10:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                       |
+|--------|---------------|-----------------------------------------------|
+| 401    | `invalid_session` | Missing or invalid bearer token           |
+| 404    | `not_found`   | Passage not found or user does not have access |
+
+---
+
+### DELETE /v1/memorization/passages/:id
+
+Deletes a passage owned by the authenticated user, including all associated
+segments and progress records.
+
+Requires a valid bearer session.
+
+Response (200):
+
+```json
+{ "success": true }
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                          |
+|--------|-------------------|----------------------------------|
+| 401    | `invalid_session` | Missing or invalid bearer token  |
+| 403    | `forbidden`       | User is not the passage owner    |
+| 404    | `not_found`       | Passage not found                |
+
+---
+
+### POST /v1/memorization/progress
+
+Upserts learning progress for one or more segments. Creates new progress records
+or updates existing ones for the authenticated user.
+
+Requires a valid bearer session.
+
+Request:
+
+```json
+{
+  "entries": [
+    {
+      "segment_id": "segment_001",
+      "status": "learning",
+      "review_count": 3,
+      "ease_factor": 2.5,
+      "last_reviewed_at": "2026-05-21T10:30:00.000Z",
+      "next_review_at": "2026-05-22T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+Fields per entry:
+
+- `segment_id`: required, ID of the segment.
+- `status`: required, progress status (e.g. `"new"`, `"learning"`, `"reviewing"`, `"mastered"`).
+- `review_count`: optional integer, number of reviews completed.
+- `ease_factor`: optional number, spaced repetition ease factor (default `2.5`).
+- `last_reviewed_at`: optional ISO timestamp of last review.
+- `next_review_at`: optional ISO timestamp of next scheduled review.
+
+Entries missing `segment_id` or `status` are silently skipped.
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segprog_001",
+      "user_id": "user_123",
+      "segment_id": "segment_001",
+      "status": "learning",
+      "review_count": 3,
+      "ease_factor": 2.5,
+      "last_reviewed_at": "2026-05-21T10:30:00.000Z",
+      "next_review_at": "2026-05-22T10:30:00.000Z",
+      "created_at": "2026-05-21T10:00:00.000Z",
+      "updated_at": "2026-05-21T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field                | Meaning                         |
+|--------|------------------------------|---------------------------------|
+| 400    | `entries array is required`  | Missing or empty `entries` array |
+| 401    | `invalid_session`            | Missing or invalid bearer token |
+
+---
+
+### GET /v1/memorization/progress
+
+Returns segment progress records for the authenticated user for a specific
+passage.
+
+Requires a valid bearer session.
+
+Query parameters:
+
+- `passage_id`: required, the passage to retrieve progress for.
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segprog_001",
+      "user_id": "user_123",
+      "segment_id": "segment_001",
+      "status": "learning",
+      "review_count": 3,
+      "ease_factor": 2.5,
+      "last_reviewed_at": "2026-05-21T10:30:00.000Z",
+      "next_review_at": "2026-05-22T10:30:00.000Z",
+      "created_at": "2026-05-21T10:00:00.000Z",
+      "updated_at": "2026-05-21T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field                              | Meaning                         |
+|--------|--------------------------------------------|---------------------------------|
+| 400    | `passage_id query parameter is required`   | Missing `passage_id` query param |
+| 401    | `invalid_session`                          | Missing or invalid bearer token |
+
+---
+
+### POST /v1/admin/memorization/passages
+
+Admin-only. Creates a new passage with configurable visibility.
+
+Request:
+
+```json
+{
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda for today's meeting...",
+  "visibility": "published"
+}
+```
+
+Fields:
+
+- `title`: required, non-empty string.
+- `language`: required, one of `"en"`, `"zh"`, `"vi"`.
+- `raw_text`: required, string between 50 and 20000 characters.
+- `visibility`: optional, defaults to `"private"`.
+
+Success response (201):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "pending_segmentation",
+  "processing_error": null,
+  "segment_count": 0,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T12:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field           | Meaning                                    |
+|--------|-------------------------|--------------------------------------------|
+| 400    | `title is required`     | Missing or empty `title`                   |
+| 400    | `unsupported language`  | `language` not in `[en, zh, vi]`           |
+| 400    | `raw_text is required`  | Missing `raw_text`                         |
+| 400    | `raw_text must be at least 50 characters` | Text too short      |
+| 400    | `raw_text must not exceed 20000 characters` | Text too long     |
+| 403    | `forbidden`             | Missing or invalid admin token             |
+
+---
+
+### GET /v1/admin/memorization/passages
+
+Admin-only. Lists all passages with optional status filter.
+
+Query parameters:
+
+- `status`: optional string filter (e.g. `"pending_segmentation"`, `"segmented"`, `"published"`).
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "passage_456",
+      "title": "Business English - Meeting Phrases",
+      "language": "en",
+      "raw_text": "Let me walk you through the agenda...",
+      "owner_type": "admin",
+      "owner_user_id": null,
+      "visibility": "published",
+      "status": "segmented",
+      "processing_error": null,
+      "segment_count": 4,
+      "created_at": "2026-05-21T12:00:00.000Z",
+      "updated_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### GET /v1/admin/memorization/passages/:id
+
+Admin-only. Returns a single passage with its segments array. No ownership
+restriction.
+
+Response (200):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "segmented",
+  "enrichment_status": "enriched",
+  "processing_error": null,
+  "segment_count": 2,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T12:01:00.000Z",
+  "segments": [
+    {
+      "id": "segment_010",
+      "passage_id": "passage_456",
+      "position": 0,
+      "text": "Let me walk you through the agenda for today's meeting.",
+      "word_count": 10,
+      "ipa_text": "/lɛt miː wɔːk juː θruː ðə əˈdʒɛndə fər təˈdeɪz ˈmiːtɪŋ/",
+      "translation_text": "Để tôi hướng dẫn bạn qua chương trình nghị sự của cuộc họp hôm nay.",
+      "translation_language": "vi",
+      "viet_reading_text": "lét mi uốc diu thruu đờ ơ-jê-đờ-ờ fờ tờ-đây mi-ting",
+      "created_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Passage ID not found           |
+
+---
+
+### PATCH /v1/admin/memorization/passages/:id
+
+Admin-only. Updates passage metadata. Only provided fields are patched.
+
+If `visibility` is set to `"published"` and the passage's current status is
+`"segmented"`, the status is also promoted to `"published"`.
+
+Request:
+
+```json
+{
+  "title": "Updated title",
+  "language": "en",
+  "visibility": "published"
+}
+```
+
+Fields (all optional):
+
+- `title`: string.
+- `language`: string.
+- `visibility`: string (e.g. `"private"`, `"published"`).
+
+Response (200):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Updated title",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "published",
+  "processing_error": null,
+  "segment_count": 2,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T13:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Passage ID not found           |
+
+---
+
+### POST /v1/admin/memorization/passages/:id/resegment
+
+Admin-only. Deletes all existing segments for the passage and resets its status
+to `"pending_segmentation"` so the background worker will re-segment it.
+
+No request body required.
+
+Response (200):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "pending_segmentation",
+  "processing_error": null,
+  "segment_count": 0,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T14:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Passage ID not found           |
+
+---
+
+### PATCH /v1/admin/memorization/passages/:id/enrich
+
+Admin-only. Queues IPA transcription and Vietnamese translation generation for all
+segments of a passage. **Non-destructive** — existing segments and user progress are
+preserved. Sets `enrichment_status` to `"pending"` and the background worker processes it asynchronously.
+
+The passage must have `status` of `"segmented"` or `"published"`. Calling this on
+an already-enriched passage re-queues enrichment (overwrites previous IPA/translations).
+
+No request body required.
+
+Response (200):
+
+```json
+{ "success": true, "message": "enrichment_queued" }
+```
+
+Error responses:
+
+| Status | `error` field              | Meaning                                    |
+|--------|----------------------------|--------------------------------------------|
+| 400    | `passage_not_segmented`    | Passage must be segmented or published first |
+| 403    | `forbidden`                | Missing or invalid admin token             |
+| 404    | `not_found`                | Passage ID not found                       |
+
+---
+
+### POST /v1/admin/memorization/passages/:id/retry
+
+Admin-only. Resets a failed passage back to `pending_segmentation` so the segmentation worker will retry it. Clears `processing_error` and resets `attempt_count` to 0, giving the worker 3 fresh attempts.
+
+The passage must have `status` of `"failed"`.
+
+No request body required.
+
+Response (200):
+
+```json
+{ "success": true, "message": "retry_queued" }
+```
+
+Error responses:
+
+| Status | `error` field          | Meaning                                      |
+|--------|------------------------|----------------------------------------------|
+| 400    | `passage_not_failed`   | Passage status is not `"failed"`             |
+| 403    | `forbidden`            | Missing or invalid admin token               |
+| 404    | `not_found`            | Passage ID not found                         |
+
+---
+
+### PATCH /v1/admin/memorization/passages/:id/retry-enrichment
+
+Admin-only. Resets failed enrichment back to `pending` so the enrichment worker will retry it. **Non-destructive** — existing segments and user progress are preserved. Resets `enrichment_attempt_count` to 0.
+
+The passage must have `enrichment_status` of `"failed"` and must have at least one segment.
+
+No request body required.
+
+Response (200):
+
+```json
+{ "success": true, "message": "enrichment_retry_queued" }
+```
+
+Error responses:
+
+| Status | `error` field                | Meaning                                           |
+|--------|------------------------------|---------------------------------------------------|
+| 400    | `enrichment_not_failed`      | `enrichment_status` is not `"failed"`             |
+| 400    | `passage_has_no_segments`    | Passage has no segments yet                       |
+| 403    | `forbidden`                  | Missing or invalid admin token                    |
+| 404    | `not_found`                  | Passage ID not found                              |
+
+---
+
+### PATCH /v1/admin/memorization/segments/:id
+
+Admin-only. Edits a single segment's text and/or position.
+
+Request:
+
+```json
+{
+  "text": "Updated segment text content.",
+  "position": 2
+}
+```
+
+Fields (all optional):
+
+- `text`: string, new segment text. `word_count` is recalculated automatically.
+- `position`: integer, new ordinal position.
+
+Response (200):
+
+```json
+{
+  "id": "segment_010",
+  "passage_id": "passage_456",
+  "position": 2,
+  "text": "Updated segment text content.",
+  "word_count": 4,
+  "created_at": "2026-05-21T12:01:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Segment ID not found           |
+
+---
+
+### POST /v1/admin/memorization/segments/:id/split
+
+Admin-only. Splits a segment into two segments at a character offset and
+renumbers following segment positions.
+
+Request:
+
+```json
+{
+  "split_at": 120
+}
+```
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segment_010",
+      "passage_id": "passage_456",
+      "position": 0,
+      "text": "First half.",
+      "word_count": 2,
+      "created_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                  |
+|--------|---------------|------------------------------------------|
+| 400    | `bad_request` | Missing or invalid `split_at`            |
+| 403    | `forbidden`   | Missing or invalid admin token           |
+| 404    | `not_found`   | Segment ID not found or invalid split    |
+
+---
+
+### POST /v1/admin/memorization/segments/:id/merge
+
+Admin-only. Merges a segment with the adjacent next segment and renumbers
+following segment positions.
+
+Request:
+
+```json
+{
+  "next_segment_id": "segment_011"
+}
+```
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segment_010",
+      "passage_id": "passage_456",
+      "position": 0,
+      "text": "Merged segment text.",
+      "word_count": 3,
+      "created_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                      |
+|--------|---------------|----------------------------------------------|
+| 400    | `bad_request` | Missing or invalid `next_segment_id`         |
+| 403    | `forbidden`   | Missing or invalid admin token               |
+| 404    | `not_found`   | Segments not found or not adjacent           |

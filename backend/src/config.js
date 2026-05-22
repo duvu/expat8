@@ -22,6 +22,11 @@ export function loadConfig(env = process.env) {
       env.LOG_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES ?? String(logArchiveMaxTotalBytes),
       10
     ),
+    releaseStorageDir: env.RELEASE_STORAGE_DIR ?? './data/releases',
+    releaseUploadBodyLimitBytes: Number.parseInt(
+      env.RELEASE_UPLOAD_BODY_LIMIT_BYTES ?? String(50 * 1024 * 1024),
+      10
+    ),
     logLevel: String(env.LOG_LEVEL ?? 'info').toLowerCase(),
     logRedactionEnabled: parseBoolean(env.LOG_REDACTION_ENABLED ?? 'true'),
     proficiencyCompatibilityMode: String(env.PROFICIENCY_COMPATIBILITY_MODE ?? 'additive').toLowerCase(),

@@ -5,6 +5,7 @@ import type {
   AdminArticle,
   DashboardSummaryStats,
   ExamResult,
+  MemorizationPassage,
   RecentStudyEvent,
   SpeakingPrompt,
   StudyEventSummary,
@@ -60,6 +61,36 @@ type SpeakingPromptRow = {
   updated_at: string;
   display_term: string | null;
   meaning_vi: string | null;
+};
+
+type MemorizationPassageRow = {
+  id: string;
+  title: string;
+  language: string;
+  raw_text: string;
+  owner_type: string;
+  owner_user_id: string | null;
+  visibility: string;
+  status: string;
+  enrichment_status: string;
+  processing_error: string | null;
+  segment_count: number;
+  attempt_count: number;
+  enrichment_attempt_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type MemorizationSegmentRow = {
+  id: string;
+  passage_id: string;
+  position: number;
+  text: string;
+  word_count: number;
+  ipa_text: string | null;
+  translation_text: string | null;
+  translation_language: string | null;
+  created_at: string;
 };
 
 let pool: pg.Pool | null = null;
@@ -430,6 +461,40 @@ type SummaryStatsRow = {
   active_last_7_days: string;
   total_words: string;
 };
+
+// ── Memorization passages ────────────────────────────────────────────────────
+
+export async function listMemorizationPassages({ status, limit = 50 }: { status?: string; limit?: number } = {}) {
+  const pool = getPool();
+  let sql = `SELECT id, title, language, owner_type, owner_user_id, visibility, status, enrichment_status, segment_count, processing_error, attempt_count, enrichment_attempt_count, created_at, updated_at FROM memorization_passages`;
+  const params: (string | number)[] = [];
+  const conditions: string[] = [];
+  if (status) {
+    params.push(status);
+    conditions.push(`status = $${params.length}`);
+  }
+  if (conditions.length > 0) sql += ` WHERE ${conditions.join(' AND ')}`;
+  sql += ` ORDER BY created_at DESC`;
+  params.push(limit);
+  sql += ` LIMIT $${params.length}`;
+  const result = await pool.query<MemorizationPassageRow>(sql, params);
+  return result.rows.map((row) => ({ ...row, segments: [] }));
+}
+
+export async function getMemorizationPassage(id: string) {
+  const pool = getPool();
+  const passageResult = await pool.query<MemorizationPassageRow>(
+    `SELECT * FROM memorization_passages WHERE id = $1`,
+    [id]
+  );
+  if (passageResult.rows.length === 0) return null;
+  const passage = passageResult.rows[0];
+  const segmentsResult = await pool.query<MemorizationSegmentRow>(
+    `SELECT id, passage_id, position, text, word_count, ipa_text, translation_text, translation_language, created_at FROM memorization_segments WHERE passage_id = $1 ORDER BY position ASC`,
+    [id]
+  );
+  return { ...passage, segments: segmentsResult.rows } satisfies MemorizationPassage;
+}
 
 export async function getDashboardSummaryStats(): Promise<DashboardSummaryStats> {
   const result = await getPool().query<SummaryStatsRow>(

@@ -17,6 +17,8 @@ import { createProficiencyRouter } from './routes/proficiency.js';
 import { createStudyEventsRouter } from './routes/study_events.js';
 import { createContentPacksRouter } from './routes/content_packs.js';
 import { createUserRouter } from './routes/user.js';
+import { createMemorizationAdminRouter, createMemorizationRouter } from './routes/memorization.js';
+import { createReleasesRouter } from './routes/releases.js';
 
 export function createApp({
   store,
@@ -28,7 +30,8 @@ export function createApp({
     component: 'api'
   }),
   nonceCache = new InMemoryNonceCache(),
-  logArchiveStore = null
+  logArchiveStore = null,
+  releaseStore = null
 }) {
   const app = express();
   const resolvedLogArchiveStore =
@@ -84,7 +87,7 @@ export function createApp({
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
     parseJsonFromCapturedBody,
-    createV1Router({ store, generationService, config, logArchiveStore: resolvedLogArchiveStore, rateLimiters })
+    createV1Router({ store, generationService, config, logArchiveStore: resolvedLogArchiveStore, releaseStore, rateLimiters })
   );
 
   app.use((request, response) => {
@@ -135,18 +138,21 @@ function createRateLimiters({
 
 // ─── V1 Router (mounts all domain routers) ──────────────────────────────────
 
-function createV1Router({ store, generationService, config, logArchiveStore, rateLimiters = {} }) {
+function createV1Router({ store, generationService, config, logArchiveStore, releaseStore, rateLimiters = {} }) {
   const router = express.Router();
 
   router.use('/exam', createExamRouter({ store }));
   router.use('/', createAuthRouter({ store, config, rateLimiters }));
   router.use('/admin', createAdminRouter({ store, config, logArchiveStore }));
+  router.use('/admin/memorization', createMemorizationAdminRouter({ store, config }));
+  router.use('/', createReleasesRouter({ releaseStore, config }));
   router.use('/learning', createLearningRouter({ store, config, rateLimiters }));
   router.use('/articles', createArticlesRouter({ store, config, rateLimiters }));
   router.use('/speaking', createSpeakingRouter({ store, config }));
   router.use('/proficiency', createProficiencyRouter({ store, config }));
   router.use('/study-events', createStudyEventsRouter({ store, config, rateLimiters }));
   router.use('/content-packs', createContentPacksRouter({ store, config }));
+  router.use('/memorization', createMemorizationRouter({ store, config }));
   router.use('/', createUserRouter({ store, generationService, config, logArchiveStore }));
 
   return router;
@@ -311,7 +317,7 @@ function parseJsonFromCapturedBody(request, response, next) {
   const isJsonContentType = contentType.includes('application/json') || contentType.endsWith('+json');
   if (!isJsonContentType) {
     const pathName = new URL(request.originalUrl, 'http://localhost').pathname;
-    if (pathName === '/v1/mobile/log-archives') {
+    if (pathName === '/v1/mobile/log-archives' || pathName === '/v1/admin/releases') {
       request.body = {};
       return next();
     }
@@ -336,6 +342,9 @@ function resolveBodyLimit({ request, config }) {
   const pathName = new URL(request.originalUrl, 'http://localhost').pathname;
   if (request.method === 'POST' && pathName === '/v1/mobile/log-archives') {
     return config.logArchiveUploadBodyLimitBytes;
+  }
+  if (request.method === 'POST' && pathName === '/v1/admin/releases') {
+    return config.releaseUploadBodyLimitBytes;
   }
   return request.method === 'GET' ? config.appCredentialGetBodyLimitBytes : config.appCredentialPostBodyLimitBytes;
 }
