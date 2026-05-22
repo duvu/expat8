@@ -21,6 +21,10 @@ class LocalWordEntity {
     this.nextReviewAtMs,
     required this.createdAtMs,
     required this.updatedAtMs,
+    this.entryType = 'word',
+    this.explanation = '',
+    this.learningState = '',
+    this.learningStateAtMs,
   });
 
   int id;
@@ -54,6 +58,71 @@ class LocalWordEntity {
   @Index()
   int createdAtMs;
   int updatedAtMs;
+
+  String entryType;
+  String explanation;
+
+  @Index()
+  String learningState = '';
+
+  @Index()
+  int? learningStateAtMs;
+}
+
+@Entity()
+class LocalWorkplaceSentenceEntity {
+  LocalWorkplaceSentenceEntity({
+    this.id = 0,
+    required this.localId,
+    this.serverSentenceId,
+    required this.text,
+    required this.language,
+    required this.meaningVi,
+    this.topic,
+    this.sourceTitle,
+    required this.generationSource,
+    required this.isBundled,
+    required this.status,
+    this.lastSeenAtMs,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.learningState = '',
+    this.learningStateAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String localId;
+
+  @Index()
+  String? serverSentenceId;
+
+  String text;
+  String language;
+  String meaningVi;
+  String? topic;
+  String? sourceTitle;
+  String generationSource;
+
+  /// ObjectBox stores booleans as 0/1 scalar values.
+  int isBundled;
+
+  @Index()
+  String status;
+
+  @Index()
+  int? lastSeenAtMs;
+
+  @Index()
+  int createdAtMs;
+  int updatedAtMs;
+
+  @Index()
+  String learningState = '';
+
+  @Index()
+  int? learningStateAtMs;
 }
 
 @Entity()
@@ -103,6 +172,75 @@ class SyncQueueEntity {
 
   @Index()
   int createdAtMs;
+}
+
+@Entity()
+class SubmittedWordEntity {
+  SubmittedWordEntity({
+    this.id = 0,
+    required this.localSubmissionId,
+    this.serverSubmissionId,
+    required this.submittedTerm,
+    required this.targetLanguage,
+    required this.status,
+    this.failureReason,
+    this.resolutionType,
+    this.resolvedWordServerId,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    this.resolvedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String localSubmissionId;
+
+  @Index()
+  String? serverSubmissionId;
+
+  String submittedTerm;
+
+  @Index()
+  String targetLanguage;
+
+  @Index()
+  String status;
+
+  String? failureReason;
+  String? resolutionType;
+
+  @Index()
+  String? resolvedWordServerId;
+
+  @Index()
+  int createdAtMs;
+
+  @Index()
+  int updatedAtMs;
+
+  @Index()
+  int? resolvedAtMs;
+}
+
+@Entity()
+class LearningHistoryEntity {
+  LearningHistoryEntity({
+    this.id = 0,
+    required this.snapshotJson,
+    required this.learningState,
+    required this.occurredAtMs,
+  });
+
+  int id;
+
+  String snapshotJson;
+
+  @Index()
+  String learningState;
+
+  @Index()
+  int occurredAtMs;
 }
 
 @Entity()
@@ -241,4 +379,58 @@ class SpeakingAttemptEntity {
   /// Local file path — kept here for playback ONLY.
   /// Strip this field before any network transmission.
   String? localAudioPath;
+}
+
+@Entity()
+class ExamAttemptEntity {
+  ExamAttemptEntity({
+    this.id = 0,
+    required this.attemptId,
+    required this.sessionId,
+    required this.topic,
+    required this.language,
+    this.difficultyLevel,
+    required this.totalQuestions,
+    required this.correctCount,
+    required this.scorePct,
+    required this.passed,
+    required this.createdAtMs,
+    this.certificateId,
+    this.syncStatus = 'synced',
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String attemptId;
+
+  @Index()
+  String sessionId;
+
+  @Index()
+  String topic;
+
+  @Index()
+  String language;
+
+  String? difficultyLevel;
+
+  int totalQuestions;
+  int correctCount;
+
+  /// Score as a percentage (0–100).
+  double scorePct;
+
+  /// 1 = passed, 0 = failed.
+  int passed;
+
+  @Index()
+  int createdAtMs;
+
+  /// Non-null when the attempt produced a certificate.
+  String? certificateId;
+
+  /// Sync status: 'pending' (not yet confirmed by backend) or 'synced'.
+  @Index()
+  String syncStatus;
 }

@@ -1,11 +1,27 @@
 import 'dart:async';
 
+import 'package:expat8_language_app/src/api/backend_api_client.dart';
+import 'package:expat8_language_app/src/data/local_database.dart';
+import 'package:expat8_language_app/src/data/article_repository.dart';
+import 'package:expat8_language_app/src/data/memorization_repository.dart';
+import 'package:expat8_language_app/src/data/workplace_sentence_repository.dart';
+import 'package:expat8_language_app/src/data/word_repository.dart';
+import 'package:expat8_language_app/src/exam/exam_question_screen.dart';
+import 'package:expat8_language_app/src/models/proficiency_state.dart';
+import 'package:expat8_language_app/src/models/article.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
+import 'package:expat8_language_app/src/session/learning_session_controller.dart';
+import 'package:expat8_language_app/src/ui/articles_screen.dart';
+import 'package:expat8_language_app/src/ui/learning_gesture_surface.dart';
+import 'package:expat8_language_app/src/ui/learning_history_screen.dart';
+import 'package:expat8_language_app/src/ui/learning_progress_stats_screen.dart';
 import 'package:expat8_language_app/src/ui/learning_screen.dart';
 import 'package:expat8_language_app/src/ui/vocabulary_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -122,7 +138,13 @@ void main() {
           drawer: LearningDrawer(
             isSignedIn: false,
             onVocabulary: () {},
+            onWorkplaceSentences: () {},
             onLogs: () {},
+            onArticles: () {},
+            onMemorization: () {},
+            onSubmittedWords: () {},
+            onHistory: () {},
+            onStats: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -135,6 +157,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Vocabulary'), findsOneWidget);
+    expect(find.text('Sentences'), findsOneWidget);
+    expect(find.text('Memorization'), findsNothing);
+    expect(find.text('Articles'), findsNothing);
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
@@ -156,7 +181,13 @@ void main() {
               sessionToken: 'session_1',
             ),
             onVocabulary: () {},
+            onWorkplaceSentences: () {},
             onLogs: () {},
+            onArticles: () {},
+            onMemorization: () {},
+            onSubmittedWords: () {},
+            onHistory: () {},
+            onStats: () {},
             onRegister: () {},
             onSignIn: () {},
             onSignOut: () {},
@@ -171,8 +202,123 @@ void main() {
     expect(find.text('Sign out'), findsOneWidget);
     expect(find.text('Learner'), findsOneWidget);
     expect(find.text('learner@example.com'), findsOneWidget);
+    expect(find.text('Sentences'), findsOneWidget);
+    expect(find.text('Memorization'), findsOneWidget);
+    expect(find.text('Articles'), findsOneWidget);
     expect(find.text('Register'), findsNothing);
     expect(find.text('Sign in'), findsNothing);
+  });
+
+  testWidgets('Take Exam stays on learning screen when backend is down',
+      (tester) async {
+    var startCalled = false;
+    final httpClient = MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/health/ready') {
+        return http.Response('', 503);
+      }
+      if (request.method == 'POST' && request.url.path == '/v1/exam/start') {
+        startCalled = true;
+        fail('Exam start should not run when readiness fails.');
+      }
+      fail('Unexpected request: ${request.method} ${request.url.path}');
+    });
+
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_screen_test_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final repository = _LearningScreenRepository(
+      database: database,
+      httpClient: httpClient,
+    );
+    final workplaceSentenceRepository = WorkplaceSentenceRepository(
+      database: database,
+      apiClient: repository.apiClient,
+    );
+    final controller = LearningSessionController(repository: repository);
+
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LearningScreen(
+            controller: controller,
+            articleRepository: _TestArticleRepository(),
+            memorizationRepository: _TestMemorizationRepository(),
+            workplaceSentenceRepository: workplaceSentenceRepository,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Open navigation menu'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Take Exam'));
+      await tester.pumpAndSettle();
+
+      expect(startCalled, isFalse);
+      expect(find.byType(ExamQuestionScreen), findsNothing);
+      expect(find.text('Backend unavailable. Please try again.'),
+          findsOneWidget);
+    } finally {
+      controller.dispose();
+      await database.close();
+    }
+  });
+
+  testWidgets('drawer opens article management flow', (tester) async {
+    final scaffoldKey = GlobalKey<ScaffoldState>();
+    final articleRepository = _TestArticleRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            key: scaffoldKey,
+            drawer: LearningDrawer(
+              isSignedIn: true,
+              userSession: const UserSession(
+                userId: 'user_1',
+                identifier: 'learner@example.com',
+                displayName: 'Learner',
+                sessionToken: 'session_1',
+              ),
+              onVocabulary: () {},
+              onWorkplaceSentences: () {},
+              onLogs: () {},
+              onArticles: () {
+                Navigator.of(context).maybePop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ArticleManagementScreen(
+                      repository: articleRepository,
+                      sessionToken: 'session_1',
+                      initialLanguage: 'en',
+                      supportedLanguages: const ['en', 'zh', 'vi'],
+                    ),
+                  ),
+                );
+              },
+              onMemorization: () {},
+              onSubmittedWords: () {},
+              onHistory: () {},
+              onStats: () {},
+              onRegister: () {},
+              onSignIn: () {},
+              onSignOut: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    scaffoldKey.currentState!.openDrawer();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Articles'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Drawer article'), findsOneWidget);
   });
 
   testWidgets(
@@ -324,7 +470,13 @@ void main() {
             isSignedIn: false,
             isAuthInProgress: true,
             onVocabulary: () {},
+            onWorkplaceSentences: () {},
             onLogs: () {},
+            onArticles: () {},
+            onMemorization: () {},
+            onSubmittedWords: () {},
+            onHistory: () {},
+            onStats: () {},
             onRegister: () => registerCount += 1,
             onSignIn: () => signInCount += 1,
             onSignOut: () {},
@@ -450,6 +602,255 @@ void main() {
 
     expect(find.byType(OutlinedButton), findsNothing);
   });
+
+  testWidgets('learning history screen shows empty state', (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_history_screen_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningHistoryScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No learned items yet.'), findsOneWidget);
+  });
+
+  testWidgets('learning progress stats screen shows zero totals', (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_stats_screen_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningProgressStatsScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Learned'), findsOneWidget);
+    expect(find.text('Remembered'), findsOneWidget);
+    expect(find.text('Difficult'), findsOneWidget);
+  });
+
+  testWidgets('learning history screen preserves learned order', (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_history_screen_order_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final first = _word().copyWith(
+      localId: 'history_first',
+      serverWordId: 'history_first',
+      term: 'alpha',
+      meaningVi: 'Alpha',
+    );
+    final second = _word().copyWith(
+      localId: 'history_second',
+      serverWordId: 'history_second',
+      term: 'beta',
+      meaningVi: 'Beta',
+    );
+    await database.upsertWord(first);
+    await database.upsertWord(second);
+    await database.markWordLearned(word: first, now: DateTime.utc(2026, 5, 5, 1));
+    await database.markWordLearned(word: second, now: DateTime.utc(2026, 5, 5, 2));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningHistoryScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('alpha'), findsOneWidget);
+    expect(find.text('beta'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('alpha')).dy,
+        lessThan(tester.getTopLeft(find.text('beta')).dy));
+  });
+
+  testWidgets('learning progress stats screen shows aggregated counts',
+      (tester) async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'learning_stats_screen_counts_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final learned = _word().copyWith(
+      localId: 'stats_learned',
+      serverWordId: 'stats_learned',
+      term: 'learned',
+      meaningVi: 'Learned',
+    );
+    final remembered = _word().copyWith(
+      localId: 'stats_remembered',
+      serverWordId: 'stats_remembered',
+      term: 'remembered',
+      meaningVi: 'Remembered',
+    );
+    final difficult = _word().copyWith(
+      localId: 'stats_difficult',
+      serverWordId: 'stats_difficult',
+      term: 'difficult',
+      meaningVi: 'Difficult',
+    );
+    await database.upsertWord(learned);
+    await database.upsertWord(remembered);
+    await database.upsertWord(difficult);
+    await database.markWordLearned(word: learned, now: DateTime.utc(2026, 5, 5, 1));
+    await database.markWordRememberedLowFrequency(
+      word: remembered,
+      now: DateTime.utc(2026, 5, 5, 2),
+    );
+    await database.markWordDifficultForRelearn(
+      word: difficult,
+      now: DateTime.utc(2026, 5, 5, 3),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LearningProgressStatsScreen(database: database),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Learned'), findsOneWidget);
+    expect(find.text('Remembered'), findsOneWidget);
+    expect(find.text('Difficult'), findsOneWidget);
+    expect(find.text('1'), findsNWidgets(3));
+  });
+}
+
+class _TestArticleRepository extends ArticleRepository {
+  _TestArticleRepository()
+      : super(
+          apiClient: BackendApiClient(
+            baseUrl: 'http://unused',
+            timeout: Duration.zero,
+            appId: 'test-app',
+            appSecret: 'test-secret',
+          ),
+        );
+
+  @override
+  Future<List<ManagedArticle>> listArticles({required String sessionToken}) async {
+    return [
+      ManagedArticle(
+        id: 'article_1',
+        title: 'Drawer article',
+        sourceUrl: 'https://example.com',
+        language: 'en',
+        visibility: 'private',
+        status: 'processed',
+        createdAt: DateTime.utc(2026, 5, 10),
+        updatedAt: DateTime.utc(2026, 5, 10),
+      ),
+    ];
+  }
+
+  @override
+  Future<ManagedArticle> createArticle({
+    required String sessionToken,
+    required String title,
+    required String language,
+    required String rawText,
+    String? sourceUrl,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ManagedArticle> getArticle({
+    required String sessionToken,
+    required String articleId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ArticleVocabularyResponse> getArticleVocabulary({
+    required String sessionToken,
+    required String articleId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> deleteArticle({
+    required String sessionToken,
+    required String articleId,
+  }) {
+    throw UnimplementedError();
+  }
+}
+
+class _TestMemorizationRepository extends MemorizationRepository {
+  _TestMemorizationRepository()
+      : super(
+          apiClient: BackendApiClient(
+            baseUrl: 'http://unused',
+            timeout: Duration.zero,
+            appId: 'test-app',
+            appSecret: 'test-secret',
+          ),
+        );
+}
+
+class _LearningScreenRepository extends WordRepository {
+  _LearningScreenRepository({
+    required LocalDatabase database,
+    required http.Client httpClient,
+  }) : super(
+          database: database,
+          apiClient: BackendApiClient(
+            baseUrl: 'https://example.com',
+            timeout: const Duration(seconds: 5),
+            appId: 'test-app',
+            appSecret: 'test-secret',
+            httpClient: httpClient,
+          ),
+        );
+
+  @override
+  Future<String> getOrCreateDeviceId() async {
+    return 'device_1';
+  }
+
+  @override
+  Future<UserSession?> loadUserSession() async {
+    return const UserSession(
+      userId: 'user_1',
+      identifier: 'learner@example.com',
+      displayName: 'Learner',
+      sessionToken: 'session_1',
+    );
+  }
+
+  @override
+  Future<WordLookupResult> getNewWordWithFallbackResult({
+    String language = 'en',
+  }) async {
+    return const WordLookupResult(
+      word: null,
+      source: WordLookupSource.none,
+      message: 'No learning card is available. Check connection and try again.',
+    );
+  }
+
+  @override
+  Future<ProficiencyState> fetchProficiency({
+    required String deviceId,
+    String language = 'en',
+  }) async {
+    return ProficiencyState.initial();
+  }
+
+  @override
+  Future<TopUpResult> topUpInventoryIfNeeded() async {
+    return const TopUpResult(action: TopUpAction.none);
+  }
 }
 
 VocabularyWord _word() {

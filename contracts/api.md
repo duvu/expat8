@@ -84,6 +84,47 @@ request `device_id` for device/offline context. Invalid bearer sessions return:
 { "error": "invalid_session" }
 ```
 
+## POST /v1/mobile/log-archives
+
+Uploads a sanitized mobile diagnostic log archive for support investigation.
+The request body is raw UTF-8 text, not JSON. The app credential signature MUST
+hash the exact bytes sent in the request body.
+
+Additional headers:
+
+- `Content-Type`: `text/plain; charset=utf-8`.
+- `X-Expat8-Device-Id`: optional source device identifier.
+- `X-Expat8-Log-Source`: optional source label, defaulting to `mobile`.
+- `X-Expat8-Log-Filename`: optional original filename. The backend sanitizes it before storage.
+- `Authorization`: optional bearer session token. Invalid sessions return `401`.
+
+Success response `201`:
+
+```json
+{
+  "id": "archive_123",
+  "file_name": "app-logs-2026-05-04.txt",
+  "content_type": "text/plain; charset=utf-8",
+  "size_bytes": 102400,
+  "uploaded_at": "2026-05-04T12:00:00.000Z",
+  "source_app_id": "app_mobile_prod",
+  "source_device_id": "device_abc",
+  "source_user_id": "user_123",
+  "source_label": "mobile",
+  "retention_expires_at": "2026-05-07T12:00:00.000Z",
+  "retention_state": "active",
+  "content_url": "/v1/admin/log-archives/archive_123/content",
+  "download_url": "/v1/admin/log-archives/archive_123/download"
+}
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                                            |
+|--------|-------------------|----------------------------------------------------|
+| 400    | `bad_request`     | Missing/invalid app credentials or empty body      |
+| 401    | `invalid_session` | Optional bearer token is present but not valid     |
+
 ## POST /v1/users/register
 
 Request:
@@ -194,7 +235,9 @@ Response:
       "part_of_speech": "adjective",
       "ipa": "/rɪˈlaɪəbl/",
       "level": "A1",
-      "status": "approved"
+      "status": "approved",
+      "classification": "article_keyword",
+      "suggestion_type": "word"
     }
   ]
 }
@@ -212,7 +255,7 @@ Response:
 
 ## PATCH /v1/admin/articles/:id
 
-Admin-only metadata patch. Allowed fields: `title`, `language`, `visibility`, `status`.
+Admin-only metadata patch. Allowed fields: `title`, `language`, `visibility`, `status`. Valid `visibility` values are `'private'` and `'published'`; `'shared'` is not accepted and returns `400`.
 
 Response:
 
@@ -236,6 +279,8 @@ Response:
   "vietnamese_pronunciation": "ri-lai-uh-bol",
   "example": "She is a reliable teammate.",
   "example_vi": "Co ay la mot dong doi dang tin cay.",
+  "entry_type": "word",
+  "explanation": "",
   "speaking_prompt": {
     "id": "prompt_123",
     "target_text": "She is a reliable teammate.",
@@ -255,6 +300,11 @@ Response:
 `speaking_prompt` is optional. When present, it contains an approved prompt for
 local speaking practice. Mobile clients MUST treat it as practice text only; no
 audio recording is uploaded as part of card loading or study-event sync.
+
+`entry_type` is one of `"word"`, `"phrase"`, or `"idiom"`. For `phrase` and
+`idiom` entries, `ipa` and `part_of_speech` are empty strings. `explanation`
+contains a Vietnamese usage note for the entry; it is an empty string for plain
+words.
 
 ## POST /v1/learning/cards
 
@@ -359,6 +409,39 @@ Response:
 }
 ```
 
+## GET /v1/workplace-sentences/recent
+
+Query parameters:
+
+- `limit`: maximum returned sentence items, capped at `1000`
+- `target_language`: optional target language code, default `en`
+
+This endpoint returns prepared workplace sentence items for local bootstrap and
+background refill. It is read-only and MUST NOT trigger sentence generation in
+the request path.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "sentence_id": "sentence_123",
+      "text": "Could we move this meeting to tomorrow morning?",
+      "language": "en",
+      "meaning_vi": "Chung ta co the chuyen cuoc hop nay sang sang mai duoc khong?",
+      "topic": "meetings",
+      "source_article_id": "article_123",
+      "source_title": "How teams coordinate deadlines",
+      "generation_source": "article_workplace_sentence",
+      "created_at": "2026-05-16T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Only sentences from published source articles are eligible for this feed.
+
 ## PUT /v1/user-word-cache
 
 Replaces the backend's advisory inventory of server words currently stored on a
@@ -391,6 +474,197 @@ retaining `device_id`.
 Signed-in sync uses the same JSON body and adds `Authorization: Bearer
 <session_token>`. Accepted events are associated with the user while retaining
 the submitted `device_id`.
+
+## POST /v1/user-submitted-words
+
+Creates or reuses a learner-owned vocabulary submission and resolves it in the
+same request.
+
+Request:
+
+```json
+{
+  "device_id": "anonymous_550e8400-e29b-41d4-a716-446655440000",
+  "term": "reliable",
+  "target_language": "en"
+}
+```
+
+Fields:
+
+- `device_id`: required stable anonymous or device identifier. Signed-in mobile
+  clients still send the current device identifier.
+- `term`: required submitted word or short expression.
+- `target_language`: required target language code. Must be one of the backend's
+  configured valid languages.
+
+When signed in, include `Authorization: Bearer <session_token>`; the backend
+stores the submission under the user while still retaining `device_id` for
+device context.
+
+Response `201` (new submission resolved immediately):
+
+```json
+{
+  "id": "submission_123",
+  "submitted_term": "reliable",
+  "target_language": "en",
+  "status": "ready",
+  "resolution_type": "generated_word",
+  "failure_reason": null,
+  "resolved_word": {
+    "server_word_id": "word_123",
+    "term": "reliable",
+    "language": "en",
+    "meaning_vi": "dang tin cay",
+    "part_of_speech": "adjective",
+    "ipa": "/rɪˈlaɪəbl/",
+    "vietnamese_pronunciation": "ri-lai-uh-bol",
+    "example": "She is a reliable teammate.",
+    "example_vi": "Co ay la mot dong doi dang tin cay.",
+    "entry_type": "word",
+    "blank_word": null,
+    "explanation": "",
+    "difficulty": "B1",
+    "topics": ["work", "people"],
+    "created_at": "2026-05-19T10:00:00.000Z"
+  },
+  "created_at": "2026-05-19T10:00:00.000Z",
+  "updated_at": "2026-05-19T10:00:00.000Z",
+  "resolved_at": "2026-05-19T10:00:00.000Z"
+}
+```
+
+Response `200` (reused ready submission or immediate existing-word match):
+
+```json
+{
+  "id": "submission_123",
+  "submitted_term": "reliable",
+  "target_language": "en",
+  "status": "ready",
+  "resolution_type": "existing_word",
+  "failure_reason": null,
+  "resolved_word": {
+    "server_word_id": "word_123",
+    "term": "reliable",
+    "language": "en",
+    "meaning_vi": "dang tin cay",
+    "part_of_speech": "adjective",
+    "ipa": "/rɪˈlaɪəbl/",
+    "vietnamese_pronunciation": "ri-lai-uh-bol",
+    "example": "She is a reliable teammate.",
+    "example_vi": "Co ay la mot dong doi dang tin cay.",
+    "entry_type": "word",
+    "blank_word": null,
+    "explanation": "",
+    "difficulty": "B1",
+    "topics": ["work", "people"],
+    "created_at": "2026-05-04T00:00:00.000Z"
+  },
+  "created_at": "2026-05-19T10:00:00.000Z",
+  "updated_at": "2026-05-19T10:00:05.000Z",
+  "resolved_at": "2026-05-19T10:00:05.000Z"
+}
+```
+
+Response `201` (new failed submission with terminal result):
+
+```json
+{
+  "id": "submission_124",
+  "submitted_term": "stubborn",
+  "target_language": "en",
+  "status": "failed",
+  "resolution_type": null,
+  "failure_reason": "llm_unavailable",
+  "resolved_word": null,
+  "created_at": "2026-05-19T10:00:00.000Z",
+  "updated_at": "2026-05-19T10:00:00.000Z",
+  "resolved_at": null
+}
+```
+
+Normal learner-facing status lifecycle:
+
+- `ready`: submission resolved to an existing or newly generated canonical word in-request
+- `failed`: in-request generation could not produce a valid canonical word
+
+Historical records may still contain `queued` or `processing` from older builds,
+but new learner-facing add-word submissions are expected to be terminal
+immediately.
+
+Error responses:
+
+| Status | `error` field     | Meaning                                         |
+|--------|-------------------|-------------------------------------------------|
+| 400    | `bad_request`     | Missing/invalid `device_id`, `term`, or language |
+| 401    | `invalid_session` | Optional bearer token is present but not valid  |
+
+## GET /v1/user-submitted-words
+
+Lists submitted vocabulary records for the current learner context.
+
+Query parameters:
+
+- `device_id`: required stable anonymous or device identifier.
+- `limit`: optional max `100`, default `50`.
+
+When signed in, results are scoped to the signed-in user. Without a bearer
+session, results are scoped to the anonymous/device owner.
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "submission_123",
+      "submitted_term": "reliable",
+      "target_language": "en",
+      "status": "ready",
+      "resolution_type": "existing_word",
+      "failure_reason": null,
+      "resolved_word": {
+        "server_word_id": "word_123",
+        "term": "reliable",
+        "language": "en",
+        "meaning_vi": "dang tin cay",
+        "part_of_speech": "adjective",
+        "ipa": "/rɪˈlaɪəbl/",
+        "vietnamese_pronunciation": "ri-lai-uh-bol",
+        "example": "She is a reliable teammate.",
+        "example_vi": "Co ay la mot dong doi dang tin cay.",
+        "entry_type": "word",
+        "blank_word": null,
+        "explanation": "",
+        "difficulty": "B1",
+        "topics": ["work", "people"],
+        "created_at": "2026-05-04T00:00:00.000Z"
+      },
+      "created_at": "2026-05-19T10:00:00.000Z",
+      "updated_at": "2026-05-19T10:00:05.000Z",
+      "resolved_at": "2026-05-19T10:00:05.000Z"
+    },
+    {
+      "id": "submission_124",
+      "submitted_term": "stubborn",
+      "target_language": "en",
+      "status": "failed",
+      "resolution_type": null,
+      "failure_reason": "Unable to generate a valid vocabulary item for this term.",
+      "resolved_word": null,
+      "created_at": "2026-05-19T09:50:00.000Z",
+      "updated_at": "2026-05-19T09:50:12.000Z",
+      "resolved_at": null
+    }
+  ]
+}
+```
+
+Historical records may still include `queued` or `processing` from older app
+versions, but new learner-facing add-word submissions are expected to be
+terminal (`ready` or `failed`) immediately.
 
 ## POST /v1/study-events/sync
 
@@ -453,6 +727,7 @@ Supported speaking event types:
 - `speaking_self_rated_clear`
 - `speaking_self_rated_hesitated`
 - `speaking_self_rated_could_not_say`
+- `speaking_drill_completed`
 
 Speaking event example:
 
@@ -544,33 +819,109 @@ Response:
   "spoken_sentence_count": 12,
   "recording_count": 12,
   "retry_count": 3,
+  "retry_rate": 0.25,
+  "drill_sessions_completed": 2,
   "approximate_duration_ms": 52200,
   "self_rating_counts": {
     "clear": 7,
     "hesitated": 4,
     "could_not_say": 1
   },
+  "first_recording_at": "2026-05-01T09:00:00.000Z",
   "latest_activity_at": "2026-05-09T08:15:00.000Z"
 }
 ```
+
+`retry_rate` is `retry_count / recording_count` (0 when no recordings).
+`drill_sessions_completed` counts `speaking_drill_completed` events in the
+requested week. `first_recording_at` is the ISO timestamp of the earliest
+`speaking_recorded` event for the device across all time, or `null`.
+
+Missing `device_id` returns `400 { "error": "bad_request" }`.
+
+## GET /v1/speaking/prompts
+
+Returns approved speaking prompts for mobile offline drill sync.
+
+Query parameters:
+
+- `limit`: optional maximum returned prompts, capped at `200`, default `100`.
+- `word_sense_id`: optional filter to prompts for a specific word sense.
 
 Response:
 
 ```json
 {
-  "success": true,
-  "event_id": "study_event_123",
-  "idempotent": false,
-  "proficiency": {
-    "level": "A2",
-    "level_changed": true,
-    "previous_level": "A1",
-    "triggered_by": "5x consecutive too_easy",
-    "consecutive_count": 0,
-    "consecutive_rating_type": null,
-    "language": "en",
-    "last_updated": "2026-05-04T10:31:00.000Z"
-  }
+  "items": [
+    {
+      "id": "speaking_prompt_123",
+      "target_text": "She is a reliable teammate.",
+      "vi_hint": "Co ay la mot dong doi dang tin cay.",
+      "target_phrase": "reliable teammate",
+      "pronunciation_tip_vi": "Tap trung noi ro am cuoi /l/ trong reliable.",
+      "common_mistake_vi": "Nguoi Viet de bo am cuoi hoac nhan sai trong am.",
+      "difficulty": "B1",
+      "topic": "work"
+    }
+  ]
+}
+```
+
+## GET /v1/admin/speaking-prompts
+
+Admin-only. Lists speaking prompts with optional filters.
+
+Query parameters:
+
+- `status`: optional filter — `pending_review`, `approved`, or `rejected`.
+- `missing_required`: `true` to return only prompts missing `target_text` or `vi_hint`.
+- `limit`: optional maximum returned, capped at `200`, default `100`.
+
+Requires app credentials and admin token (`X-Expat8-Admin-Token`).
+Missing app credentials return `400`. Valid app credentials without admin token return `403`.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "speaking_prompt_123",
+      "word_sense_id": "sense_123",
+      "target_text": "She is a reliable teammate.",
+      "vi_hint": "Co ay la mot dong doi dang tin cay.",
+      "target_phrase": "reliable teammate",
+      "pronunciation_tip_vi": "...",
+      "common_mistake_vi": "...",
+      "difficulty": "B1",
+      "topic": "work",
+      "status": "pending_review",
+      "created_at": "2026-05-04T00:00:00.000Z",
+      "updated_at": "2026-05-04T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+## PATCH /v1/admin/speaking-prompts/:id
+
+Admin-only. Updates speaking prompt fields.
+
+Patchable fields: `target_text`, `vi_hint`, `target_phrase`, `pronunciation_tip_vi`,
+`common_mistake_vi`, `difficulty`, `topic`, `status`.
+
+Valid `status` values: `pending_review`, `approved`, `rejected`.
+Invalid status returns `400 { "error": "bad_request", "message": "invalid_status" }`.
+Unknown prompt ID returns `404 { "error": "not_found" }`.
+
+Response:
+
+```json
+{
+  "id": "speaking_prompt_123",
+  "status": "approved",
+  "target_text": "She is a reliable teammate.",
+  "updated_at": "2026-05-09T10:00:00.000Z"
 }
 ```
 
@@ -600,3 +951,1472 @@ Response:
 
 With a valid bearer session, `user_id` is populated and the level reflects the
 signed-in user's proficiency state instead of anonymous device state.
+
+---
+
+## Exam Endpoints
+
+All exam endpoints (except `GET /v1/exam/certificate/:id`) require the standard
+app-credential headers **and** a valid bearer session token.
+
+`GET /v1/exam/certificate/:id` is public — no auth headers required.
+
+### GET /v1/exam/topics
+
+Returns the distinct topics the authenticated user has studied words in for the
+given language. Topics are normalised (lowercase, trimmed). This endpoint is
+retained for historical browsing, but the primary exam flow no longer depends
+on topic selection.
+
+Query parameters:
+
+- `language`: optional, default `en`
+
+Response:
+
+```json
+{ "topics": ["business", "food", "travel"] }
+```
+
+---
+
+### POST /v1/exam/start
+
+Generates a new exam session with MCQ questions drawn from the user's studied
+words for the requested language. Minimum 5 words required; capped at 20
+questions.
+
+Request body:
+
+```json
+{
+  "language": "en"
+}
+```
+
+Success response (201):
+
+```json
+{
+  "session_id": "exam_sess_<uuid>",
+  "topic": "language",
+  "language": "en",
+  "question_count": 10,
+  "expires_at": "2026-05-11T14:00:00.000Z",
+  "questions": [
+    {
+      "question_id": "exam_q_<uuid>",
+      "ordinal": 0,
+      "prompt_word": "journey",
+      "choices": ["chuyến đi", "bữa ăn", "công việc", "gia đình"],
+      "question_type": "meaning_choice"
+    },
+    {
+      "question_id": "exam_q_<uuid>",
+      "ordinal": 1,
+      "prompt_word": "break the ice",
+      "choices": ["phá vỡ bầu không khí ngại ngùng", "bắt đầu công việc", "tiết lộ bí mật", "cảm thấy mệt mỏi"],
+      "question_type": "sentence_context",
+      "sentence": "He told a joke to break the ice at the meeting.",
+      "highlight": "break the ice"
+    }
+  ]
+}
+```
+
+Each question object always contains `question_type` (`"meaning_choice"` or
+`"sentence_context"`). For `sentence_context` questions, `sentence` (the example
+sentence) and `highlight` (the term to emphasize) are also present. Questions
+with an empty `example` always receive `"meaning_choice"`; questions with a
+non-empty `example` are randomly assigned either type (50/50).
+
+Error responses:
+
+| Status | `error` field        | Meaning                                      |
+|--------|----------------------|----------------------------------------------|
+| 400    | `bad_request`        | `topic` missing from body                    |
+| 401    | `invalid_session`    | Missing or invalid bearer token              |
+| 422    | `INSUFFICIENT_WORDS` | Fewer than 5 studied words exist for language |
+
+```json
+{
+  "error": "INSUFFICIENT_WORDS",
+  "message": "Not enough studied words for language \"en\". Found 3, need at least 5."
+}
+```
+
+---
+
+### POST /v1/exam/submit
+
+Submits answers for an active session and scores it. A passing score (≥ 70%)
+triggers certificate issuance.
+
+Request body:
+
+```json
+{
+  "session_id": "exam_sess_<uuid>",
+  "answers": [2, 0, 1, 3]
+}
+```
+
+`answers` is an array of integer choice indices (0-based) in question ordinal
+order. Its length must equal `question_count` from `POST /v1/exam/start`.
+
+Success response (200):
+
+```json
+{
+  "attempt_id": "exam_att_<uuid>",
+  "session_id": "exam_sess_<uuid>",
+  "topic": "travel",
+  "language": "en",
+  "difficulty_level": null,
+  "total_questions": 10,
+  "correct_count": 8,
+  "score_pct": 80,
+  "passed": true,
+  "certificate_id": "<uuid>",
+  "created_at": "2026-05-11T12:01:00.000Z"
+}
+```
+
+`certificate_id` is `null` when `passed` is `false`.
+
+Error responses:
+
+| Status | `error` field          | Meaning                                    |
+|--------|------------------------|--------------------------------------------|
+| 400    | `bad_request`          | Missing `session_id` or `answers`          |
+| 401    | `invalid_session`      | Missing or invalid bearer token            |
+| 404    | `not_found`            | Session ID not found                       |
+| 409    | `ALREADY_SUBMITTED`    | Session was already submitted              |
+| 410    | `SESSION_EXPIRED`      | Session TTL (2 hours) exceeded             |
+| 422    | `ANSWER_COUNT_MISMATCH`| `answers.length` ≠ `question_count`        |
+
+---
+
+### GET /v1/exam/results
+
+Returns the authenticated user's exam attempt history, newest first.
+
+Query parameters:
+
+- `page`: optional, default `1`
+- `limit`: optional, default `20`, max `100`
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "attempt_id": "exam_att_<uuid>",
+      "topic": "travel",
+      "language": "en",
+      "difficulty_level": null,
+      "score_pct": 80,
+      "passed": true,
+      "created_at": "2026-05-11T12:01:00.000Z",
+      "certificate_id": "<uuid>"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20
+}
+```
+
+`certificate_id` is `null` when the attempt did not pass.
+
+---
+
+### GET /v1/exam/certificate/:id
+
+**Public endpoint** — no app-credential or session headers required.
+
+Returns a certificate record without user PII.
+
+Success response (200):
+
+```json
+{
+  "certificate_id": "<uuid>",
+  "topic": "travel",
+  "language": "en",
+  "difficulty_level": null,
+  "score_pct": 80,
+  "issued_at": "2026-05-11T12:01:00.000Z",
+  "disclaimer": "This is an internal Expat8 completion certificate. It does not represent an official CEFR or HSK examination result."
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                    |
+|--------|---------------|----------------------------|
+| 404    | `not_found`   | Certificate ID not found   |
+
+---
+
+## Admin Endpoints
+
+All `/v1/admin/*` endpoints require:
+
+1. Standard app-credential HMAC headers (like all `/v1/*` endpoints)
+2. `X-Expat8-Admin-Token` header containing a valid token from the
+   `ADMIN_API_TOKENS` environment variable
+
+Missing app credentials return `400 { "error": "bad_request" }`. Valid app
+credentials without a valid admin token return:
+
+```json
+{ "error": "forbidden" }
+```
+
+---
+
+### POST /v1/admin/articles
+
+Creates a new article for processing.
+
+Request:
+
+```json
+{
+  "title": "How to negotiate a raise",
+  "language": "en",
+  "raw_text": "Full article text content...",
+  "source_url": "https://example.com/article",
+  "visibility": "published"
+}
+```
+
+Fields:
+
+- `title`: required, non-empty string.
+- `language`: required, non-empty string (e.g. `"en"`).
+- `raw_text`: required, non-empty string containing the article body.
+- `source_url`: optional string URL of the original article.
+- `visibility`: optional, `"private"` or `"published"`. Defaults to
+  `"published"`. Invalid values are normalised to `"private"`.
+
+Success response (201):
+
+```json
+{
+  "id": "article_123",
+  "title": "How to negotiate a raise",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "published",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-04T00:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field  | Meaning                                         |
+|--------|----------------|-------------------------------------------------|
+| 400    | `bad_request`  | Missing or empty `title`, `language`, `raw_text` |
+| 403    | `forbidden`    | Missing or invalid admin token                  |
+
+---
+
+### GET /v1/admin/articles
+
+Lists admin articles with optional filters.
+
+Query parameters:
+
+- `limit`: optional, max `100`, default `100`.
+- `status`: optional string filter (e.g. `"pending"`, `"processed"`).
+
+Success response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "article_123",
+      "title": "How to negotiate a raise",
+      "source_url": "https://example.com/article",
+      "language": "en",
+      "visibility": "published",
+      "status": "processed",
+      "processing_error": null,
+      "created_at": "2026-05-04T00:00:00.000Z",
+      "updated_at": "2026-05-04T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### POST /v1/admin/articles/:id/publish
+
+Publishes an article by ID.
+
+No request body required.
+
+Success response (200):
+
+```json
+{
+  "id": "article_123",
+  "title": "How to negotiate a raise",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "published",
+  "status": "processed",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-04T00:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Article ID not found           |
+
+---
+
+### POST /v1/admin/articles/:id/reprocess
+
+Resets an article for reprocessing by the background worker.
+
+No request body required.
+
+Success response (200):
+
+```json
+{
+  "id": "article_123",
+  "title": "How to negotiate a raise",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "published",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-05T08:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Article ID not found           |
+
+---
+
+### PATCH /v1/admin/articles/:id
+
+Updates article metadata. Only provided fields are patched.
+
+Request:
+
+```json
+{
+  "title": "Updated title",
+  "language": "en",
+  "visibility": "private",
+  "status": "pending"
+}
+```
+
+Fields (all optional):
+
+- `title`: string.
+- `language`: string.
+- `visibility`: `"private"` or `"published"`. `"shared"` is not accepted and
+  returns `400`.
+- `status`: string (e.g. `"pending"`, `"processed"`).
+
+Success response (200):
+
+```json
+{
+  "id": "article_123",
+  "title": "Updated title",
+  "source_url": "https://example.com/article",
+  "language": "en",
+  "visibility": "private",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-05T09:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                    |
+|--------|---------------|--------------------------------------------|
+| 400    | `bad_request` | Invalid `visibility` value (e.g. `"shared"`) |
+| 403    | `forbidden`   | Missing or invalid admin token             |
+| 404    | `not_found`   | Article ID not found                       |
+
+---
+
+### GET /v1/admin/review/vocabulary
+
+Lists vocabulary items pending admin review.
+
+Query parameters:
+
+- `limit`: optional, max `200`, default `200`.
+- `status`: optional filter string, default `"pending"`.
+
+Success response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "vocab_item_123",
+      "term": "reliable",
+      "status": "pending",
+      "word_sense_id": "sense_123"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### PATCH /v1/admin/vocabulary/:id
+
+Approves, rejects, or resets a vocabulary item.
+
+Request:
+
+```json
+{
+  "status": "approved",
+  "review_note": "Looks good"
+}
+```
+
+Fields:
+
+- `status`: required, one of `"approved"`, `"rejected"`, `"pending"`.
+- `review_note`: optional string note.
+
+Success response (200):
+
+```json
+{
+  "id": "vocab_item_123",
+  "term": "reliable",
+  "status": "approved",
+  "review_note": "Looks good"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                          |
+|--------|---------------|--------------------------------------------------|
+| 400    | `bad_request` | Missing or invalid `status` value                |
+| 403    | `forbidden`   | Missing or invalid admin token                   |
+| 404    | `not_found`   | Vocabulary item ID not found                     |
+
+---
+
+### GET /v1/admin/log-archives
+
+Lists uploaded log archives.
+
+Query parameters:
+
+- `limit`: optional, max `200`, default `100`.
+
+Success response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "archive_123",
+      "file_name": "app-logs-2026-05-04.txt",
+      "content_type": "text/plain; charset=utf-8",
+      "size_bytes": 102400,
+      "uploaded_at": "2026-05-04T12:00:00.000Z",
+      "source_app_id": "app_mobile_prod",
+      "source_device_id": "device_abc",
+      "source_user_id": "user_123",
+      "source_label": "crash_report",
+      "retention_expires_at": "2026-06-04T12:00:00.000Z",
+      "retention_state": "active",
+      "content_url": "/v1/admin/log-archives/archive_123/content",
+      "download_url": "/v1/admin/log-archives/archive_123/download"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### GET /v1/admin/log-archives/:id
+
+Returns metadata for a single log archive.
+
+Success response (200):
+
+```json
+{
+  "id": "archive_123",
+  "file_name": "app-logs-2026-05-04.txt",
+  "content_type": "text/plain; charset=utf-8",
+  "size_bytes": 102400,
+  "uploaded_at": "2026-05-04T12:00:00.000Z",
+  "source_app_id": "app_mobile_prod",
+  "source_device_id": "device_abc",
+  "source_user_id": "user_123",
+  "source_label": "crash_report",
+  "retention_expires_at": "2026-06-04T12:00:00.000Z",
+  "retention_state": "active",
+  "content_url": "/v1/admin/log-archives/archive_123/content",
+  "download_url": "/v1/admin/log-archives/archive_123/download"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Archive ID not found           |
+
+---
+
+### DELETE /v1/admin/log-archives/:id
+
+Permanently removes a single log archive (both content and metadata).
+
+Success response (204): no body.
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Archive ID not found           |
+
+---
+
+### GET /v1/admin/log-archives/:id/content
+
+Streams the raw log archive content. The response `Content-Type` matches the
+archive's stored content type (typically `text/plain; charset=utf-8`).
+
+Success response (200): raw file content streamed as the archive's content type.
+
+Error responses:
+
+| Status | `error` field    | Meaning                        |
+|--------|------------------|--------------------------------|
+| 403    | `forbidden`      | Missing or invalid admin token |
+| 404    | `not_found`      | Archive ID not found           |
+| 500    | `internal_error` | Stream read failure            |
+
+---
+
+## Release Management
+
+### POST /v1/admin/releases
+
+Upload a new mobile release APK. The binary is sent as the raw request body with
+metadata passed via custom headers.
+
+**Auth:** App credentials + admin token (`x-expat8-admin-token`).
+
+**Request headers:**
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `x-expat8-release-platform` | yes | Platform identifier (e.g., `android`) |
+| `x-expat8-release-version-code` | yes | Monotonically increasing integer version code |
+| `x-expat8-release-version-name` | yes | Human-readable version (e.g., `1.2.3`) |
+| `content-type` | yes | `application/octet-stream` |
+
+**Request body:** Raw APK binary.
+
+**Success response (201):**
+
+```json
+{
+  "id": "uuid",
+  "platform": "android",
+  "version_code": 5,
+  "version_name": "1.2.3",
+  "file_size_bytes": 15728640,
+  "sha256": "a1b2c3...",
+  "created_at": "2026-05-19T12:00:00.000Z"
+}
+```
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 400 | `bad_request` | Missing required header or empty body |
+| 403 | `forbidden` | Missing or invalid admin token |
+
+**Pruning:** After a successful upload, the backend retains at most 5 releases per
+platform. Older releases (by version_code) are automatically deleted.
+
+---
+
+### GET /v1/admin/releases
+
+List all stored releases.
+
+**Auth:** App credentials + admin token.
+
+**Success response (200):**
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "platform": "android",
+      "version_code": 5,
+      "version_name": "1.2.3",
+      "file_size_bytes": 15728640,
+      "sha256": "a1b2c3...",
+      "created_at": "2026-05-19T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+Items are ordered by `version_code` descending.
+
+---
+
+### DELETE /v1/admin/releases/:id
+
+Delete a specific release (metadata + binary file).
+
+**Auth:** App credentials + admin token.
+
+**Success response:** 204 No Content.
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 403 | `forbidden` | Missing or invalid admin token |
+| 404 | `not_found` | Release ID not found |
+
+---
+
+### GET /v1/releases/latest
+
+Returns metadata of the most recent release for a given platform.
+
+**Auth:** App credentials only (no user session required).
+
+**Query parameters:**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `platform` | yes | Platform to query (e.g., `android`) |
+
+**Success response (200) — release exists:**
+
+```json
+{
+  "release": {
+    "id": "uuid",
+    "platform": "android",
+    "version_code": 5,
+    "version_name": "1.2.3",
+    "file_size_bytes": 15728640,
+    "sha256": "a1b2c3...",
+    "created_at": "2026-05-19T12:00:00.000Z"
+  }
+}
+```
+
+**Success response (200) — no release available:**
+
+```json
+{
+  "release": null
+}
+```
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 400 | `bad_request` | Missing `platform` query parameter |
+
+---
+
+### GET /v1/releases/:id/download
+
+Stream the APK binary for a specific release.
+
+**Auth:** App credentials only (no user session required).
+
+**Success response (200):**
+- `Content-Type: application/vnd.android.package-archive`
+- `Content-Length: <file size in bytes>`
+- Body: raw APK binary stream
+
+**Error responses:**
+
+| Status | `error` field | Meaning |
+|--------|---------------|---------|
+| 404 | `not_found` | Release ID not found or file missing from storage |
+
+---
+
+## Memorization
+
+Memorization endpoints manage passages (text content segmented for spaced
+repetition practice) and per-segment learning progress.
+
+User endpoints require a valid bearer session (`Authorization: Bearer <token>`).
+Admin endpoints require app credentials and a valid admin token
+(`X-Expat8-Admin-Token`).
+
+---
+
+### POST /v1/memorization/passages
+
+Creates a new passage owned by the authenticated user. The passage is created
+with `visibility: "private"` and `status: "pending_segmentation"`.
+
+Requires a valid bearer session.
+
+Request:
+
+```json
+{
+  "title": "The Great Gatsby - Chapter 1",
+  "language": "en",
+  "raw_text": "In my younger and more vulnerable years my father gave me some advice..."
+}
+```
+
+Fields:
+
+- `title`: required, non-empty string.
+- `language`: required, one of `"en"`, `"zh"`, `"vi"`.
+- `raw_text`: required, string between 50 and 20000 characters.
+
+Success response (201):
+
+```json
+{
+  "id": "passage_123",
+  "title": "The Great Gatsby - Chapter 1",
+  "language": "en",
+  "raw_text": "In my younger and more vulnerable years...",
+  "owner_type": "user",
+  "owner_user_id": "user_123",
+  "visibility": "private",
+  "status": "pending_segmentation",
+  "processing_error": null,
+  "segment_count": 0,
+  "created_at": "2026-05-21T10:00:00.000Z",
+  "updated_at": "2026-05-21T10:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field           | Meaning                                    |
+|--------|-------------------------|--------------------------------------------|
+| 400    | `title is required`     | Missing or empty `title`                   |
+| 400    | `unsupported language`  | `language` not in `[en, zh, vi]`           |
+| 400    | `raw_text is required`  | Missing `raw_text`                         |
+| 400    | `raw_text must be at least 50 characters` | Text too short      |
+| 400    | `raw_text must not exceed 20000 characters` | Text too long     |
+| 401    | `invalid_session`       | Missing or invalid bearer token            |
+
+---
+
+### GET /v1/memorization/passages
+
+Lists passages visible to the authenticated user (own passages + published
+passages), ordered by creation date descending.
+
+Requires a valid bearer session.
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "passage_123",
+      "title": "The Great Gatsby - Chapter 1",
+      "language": "en",
+      "raw_text": "In my younger and more vulnerable years...",
+      "owner_type": "user",
+      "owner_user_id": "user_123",
+      "visibility": "private",
+      "status": "segmented",
+      "processing_error": null,
+      "segment_count": 5,
+      "created_at": "2026-05-21T10:00:00.000Z",
+      "updated_at": "2026-05-21T10:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                         |
+|--------|-------------------|---------------------------------|
+| 401    | `invalid_session` | Missing or invalid bearer token |
+
+---
+
+### GET /v1/memorization/passages/:id
+
+Returns a single passage with its segments array. The user must own the passage
+or the passage must have `visibility: "published"`.
+
+Requires a valid bearer session.
+
+Response (200):
+
+```json
+{
+  "id": "passage_123",
+  "title": "The Great Gatsby - Chapter 1",
+  "language": "en",
+  "raw_text": "In my younger and more vulnerable years...",
+  "owner_type": "user",
+  "owner_user_id": "user_123",
+  "visibility": "private",
+  "status": "segmented",
+  "enrichment_status": "enriched",
+  "processing_error": null,
+  "segment_count": 2,
+  "created_at": "2026-05-21T10:00:00.000Z",
+  "updated_at": "2026-05-21T10:01:00.000Z",
+  "segments": [
+    {
+      "id": "segment_001",
+      "passage_id": "passage_123",
+      "position": 0,
+      "text": "In my younger and more vulnerable years my father gave me some advice",
+      "word_count": 13,
+      "ipa_text": "/ɪn maɪ ˈjʌŋɡər ænd mɔːr ˈvʌlnərəbl jɪrz maɪ ˈfɑːðər ɡeɪv miː sʌm ədˈvaɪs/",
+      "translation_text": "Trong những năm còn trẻ và dễ bị tổn thương, cha tôi đã cho tôi một lời khuyên",
+      "translation_language": "vi",
+      "viet_reading_text": "in mai giăng-gờ en mo vâl-nờ-rờ-bồ yi-ơz mai fa-đờ gây mi xầm ơt-vais",
+      "created_at": "2026-05-21T10:01:00.000Z"
+    },
+    {
+      "id": "segment_002",
+      "passage_id": "passage_123",
+      "position": 1,
+      "text": "that I've been turning over in my mind ever since.",
+      "word_count": 10,
+      "ipa_text": "/ðæt aɪv bɪn ˈtɜːrnɪŋ ˈoʊvər ɪn maɪ maɪnd ˈɛvər sɪns/",
+      "translation_text": "mà tôi đã suy nghĩ mãi từ đó đến nay.",
+      "translation_language": "vi",
+      "viet_reading_text": "đét ai-v bin tơ-ning âu-vờ in mai mai-nd e-vờ xins",
+      "created_at": "2026-05-21T10:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                       |
+|--------|---------------|-----------------------------------------------|
+| 401    | `invalid_session` | Missing or invalid bearer token           |
+| 404    | `not_found`   | Passage not found or user does not have access |
+
+---
+
+### DELETE /v1/memorization/passages/:id
+
+Deletes a passage owned by the authenticated user, including all associated
+segments and progress records.
+
+Requires a valid bearer session.
+
+Response (200):
+
+```json
+{ "success": true }
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                          |
+|--------|-------------------|----------------------------------|
+| 401    | `invalid_session` | Missing or invalid bearer token  |
+| 403    | `forbidden`       | User is not the passage owner    |
+| 404    | `not_found`       | Passage not found                |
+
+---
+
+### POST /v1/memorization/progress
+
+Upserts learning progress for one or more segments. Creates new progress records
+or updates existing ones for the authenticated user.
+
+Requires a valid bearer session.
+
+Request:
+
+```json
+{
+  "entries": [
+    {
+      "segment_id": "segment_001",
+      "status": "learning",
+      "review_count": 3,
+      "ease_factor": 2.5,
+      "last_reviewed_at": "2026-05-21T10:30:00.000Z",
+      "next_review_at": "2026-05-22T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+Fields per entry:
+
+- `segment_id`: required, ID of the segment.
+- `status`: required, progress status (e.g. `"new"`, `"learning"`, `"reviewing"`, `"mastered"`).
+- `review_count`: optional integer, number of reviews completed.
+- `ease_factor`: optional number, spaced repetition ease factor (default `2.5`).
+- `last_reviewed_at`: optional ISO timestamp of last review.
+- `next_review_at`: optional ISO timestamp of next scheduled review.
+
+Entries missing `segment_id` or `status` are silently skipped.
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segprog_001",
+      "user_id": "user_123",
+      "segment_id": "segment_001",
+      "status": "learning",
+      "review_count": 3,
+      "ease_factor": 2.5,
+      "last_reviewed_at": "2026-05-21T10:30:00.000Z",
+      "next_review_at": "2026-05-22T10:30:00.000Z",
+      "created_at": "2026-05-21T10:00:00.000Z",
+      "updated_at": "2026-05-21T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field                | Meaning                         |
+|--------|------------------------------|---------------------------------|
+| 400    | `entries array is required`  | Missing or empty `entries` array |
+| 401    | `invalid_session`            | Missing or invalid bearer token |
+
+---
+
+### GET /v1/memorization/progress
+
+Returns segment progress records for the authenticated user for a specific
+passage.
+
+Requires a valid bearer session.
+
+Query parameters:
+
+- `passage_id`: required, the passage to retrieve progress for.
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segprog_001",
+      "user_id": "user_123",
+      "segment_id": "segment_001",
+      "status": "learning",
+      "review_count": 3,
+      "ease_factor": 2.5,
+      "last_reviewed_at": "2026-05-21T10:30:00.000Z",
+      "next_review_at": "2026-05-22T10:30:00.000Z",
+      "created_at": "2026-05-21T10:00:00.000Z",
+      "updated_at": "2026-05-21T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field                              | Meaning                         |
+|--------|--------------------------------------------|---------------------------------|
+| 400    | `passage_id query parameter is required`   | Missing `passage_id` query param |
+| 401    | `invalid_session`                          | Missing or invalid bearer token |
+
+---
+
+### POST /v1/admin/memorization/passages
+
+Admin-only. Creates a new passage with configurable visibility.
+
+Request:
+
+```json
+{
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda for today's meeting...",
+  "visibility": "published"
+}
+```
+
+Fields:
+
+- `title`: required, non-empty string.
+- `language`: required, one of `"en"`, `"zh"`, `"vi"`.
+- `raw_text`: required, string between 50 and 20000 characters.
+- `visibility`: optional, defaults to `"private"`.
+
+Success response (201):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "pending_segmentation",
+  "processing_error": null,
+  "segment_count": 0,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T12:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field           | Meaning                                    |
+|--------|-------------------------|--------------------------------------------|
+| 400    | `title is required`     | Missing or empty `title`                   |
+| 400    | `unsupported language`  | `language` not in `[en, zh, vi]`           |
+| 400    | `raw_text is required`  | Missing `raw_text`                         |
+| 400    | `raw_text must be at least 50 characters` | Text too short      |
+| 400    | `raw_text must not exceed 20000 characters` | Text too long     |
+| 403    | `forbidden`             | Missing or invalid admin token             |
+
+---
+
+### GET /v1/admin/memorization/passages
+
+Admin-only. Lists all passages with optional status filter.
+
+Query parameters:
+
+- `status`: optional string filter (e.g. `"pending_segmentation"`, `"segmented"`, `"published"`).
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "passage_456",
+      "title": "Business English - Meeting Phrases",
+      "language": "en",
+      "raw_text": "Let me walk you through the agenda...",
+      "owner_type": "admin",
+      "owner_user_id": null,
+      "visibility": "published",
+      "status": "segmented",
+      "processing_error": null,
+      "segment_count": 4,
+      "created_at": "2026-05-21T12:00:00.000Z",
+      "updated_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+
+---
+
+### GET /v1/admin/memorization/passages/:id
+
+Admin-only. Returns a single passage with its segments array. No ownership
+restriction.
+
+Response (200):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "segmented",
+  "enrichment_status": "enriched",
+  "processing_error": null,
+  "segment_count": 2,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T12:01:00.000Z",
+  "segments": [
+    {
+      "id": "segment_010",
+      "passage_id": "passage_456",
+      "position": 0,
+      "text": "Let me walk you through the agenda for today's meeting.",
+      "word_count": 10,
+      "ipa_text": "/lɛt miː wɔːk juː θruː ðə əˈdʒɛndə fər təˈdeɪz ˈmiːtɪŋ/",
+      "translation_text": "Để tôi hướng dẫn bạn qua chương trình nghị sự của cuộc họp hôm nay.",
+      "translation_language": "vi",
+      "viet_reading_text": "lét mi uốc diu thruu đờ ơ-jê-đờ-ờ fờ tờ-đây mi-ting",
+      "created_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Passage ID not found           |
+
+---
+
+### PATCH /v1/admin/memorization/passages/:id
+
+Admin-only. Updates passage metadata. Only provided fields are patched.
+
+If `visibility` is set to `"published"` and the passage's current status is
+`"segmented"`, the status is also promoted to `"published"`.
+
+Request:
+
+```json
+{
+  "title": "Updated title",
+  "language": "en",
+  "visibility": "published"
+}
+```
+
+Fields (all optional):
+
+- `title`: string.
+- `language`: string.
+- `visibility`: string (e.g. `"private"`, `"published"`).
+
+Response (200):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Updated title",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "published",
+  "processing_error": null,
+  "segment_count": 2,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T13:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Passage ID not found           |
+
+---
+
+### POST /v1/admin/memorization/passages/:id/resegment
+
+Admin-only. Deletes all existing segments for the passage and resets its status
+to `"pending_segmentation"` so the background worker will re-segment it.
+
+No request body required.
+
+Response (200):
+
+```json
+{
+  "id": "passage_456",
+  "title": "Business English - Meeting Phrases",
+  "language": "en",
+  "raw_text": "Let me walk you through the agenda...",
+  "owner_type": "admin",
+  "owner_user_id": null,
+  "visibility": "published",
+  "status": "pending_segmentation",
+  "processing_error": null,
+  "segment_count": 0,
+  "created_at": "2026-05-21T12:00:00.000Z",
+  "updated_at": "2026-05-21T14:00:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Passage ID not found           |
+
+---
+
+### PATCH /v1/admin/memorization/passages/:id/enrich
+
+Admin-only. Queues IPA transcription and Vietnamese translation generation for all
+segments of a passage. **Non-destructive** — existing segments and user progress are
+preserved. Sets `enrichment_status` to `"pending"` and the background worker processes it asynchronously.
+
+The passage must have `status` of `"segmented"` or `"published"`. Calling this on
+an already-enriched passage re-queues enrichment (overwrites previous IPA/translations).
+
+No request body required.
+
+Response (200):
+
+```json
+{ "success": true, "message": "enrichment_queued" }
+```
+
+Error responses:
+
+| Status | `error` field              | Meaning                                    |
+|--------|----------------------------|--------------------------------------------|
+| 400    | `passage_not_segmented`    | Passage must be segmented or published first |
+| 403    | `forbidden`                | Missing or invalid admin token             |
+| 404    | `not_found`                | Passage ID not found                       |
+
+---
+
+### POST /v1/admin/memorization/passages/:id/retry
+
+Admin-only. Resets a failed passage back to `pending_segmentation` so the segmentation worker will retry it. Clears `processing_error` and resets `attempt_count` to 0, giving the worker 3 fresh attempts.
+
+The passage must have `status` of `"failed"`.
+
+No request body required.
+
+Response (200):
+
+```json
+{ "success": true, "message": "retry_queued" }
+```
+
+Error responses:
+
+| Status | `error` field          | Meaning                                      |
+|--------|------------------------|----------------------------------------------|
+| 400    | `passage_not_failed`   | Passage status is not `"failed"`             |
+| 403    | `forbidden`            | Missing or invalid admin token               |
+| 404    | `not_found`            | Passage ID not found                         |
+
+---
+
+### PATCH /v1/admin/memorization/passages/:id/retry-enrichment
+
+Admin-only. Resets failed enrichment back to `pending` so the enrichment worker will retry it. **Non-destructive** — existing segments and user progress are preserved. Resets `enrichment_attempt_count` to 0.
+
+The passage must have `enrichment_status` of `"failed"` and must have at least one segment.
+
+No request body required.
+
+Response (200):
+
+```json
+{ "success": true, "message": "enrichment_retry_queued" }
+```
+
+Error responses:
+
+| Status | `error` field                | Meaning                                           |
+|--------|------------------------------|---------------------------------------------------|
+| 400    | `enrichment_not_failed`      | `enrichment_status` is not `"failed"`             |
+| 400    | `passage_has_no_segments`    | Passage has no segments yet                       |
+| 403    | `forbidden`                  | Missing or invalid admin token                    |
+| 404    | `not_found`                  | Passage ID not found                              |
+
+---
+
+### PATCH /v1/admin/memorization/segments/:id
+
+Admin-only. Edits a single segment's text and/or position.
+
+Request:
+
+```json
+{
+  "text": "Updated segment text content.",
+  "position": 2
+}
+```
+
+Fields (all optional):
+
+- `text`: string, new segment text. `word_count` is recalculated automatically.
+- `position`: integer, new ordinal position.
+
+Response (200):
+
+```json
+{
+  "id": "segment_010",
+  "passage_id": "passage_456",
+  "position": 2,
+  "text": "Updated segment text content.",
+  "word_count": 4,
+  "created_at": "2026-05-21T12:01:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                        |
+|--------|---------------|--------------------------------|
+| 403    | `forbidden`   | Missing or invalid admin token |
+| 404    | `not_found`   | Segment ID not found           |
+
+---
+
+### POST /v1/admin/memorization/segments/:id/split
+
+Admin-only. Splits a segment into two segments at a character offset and
+renumbers following segment positions.
+
+Request:
+
+```json
+{
+  "split_at": 120
+}
+```
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segment_010",
+      "passage_id": "passage_456",
+      "position": 0,
+      "text": "First half.",
+      "word_count": 2,
+      "created_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                  |
+|--------|---------------|------------------------------------------|
+| 400    | `bad_request` | Missing or invalid `split_at`            |
+| 403    | `forbidden`   | Missing or invalid admin token           |
+| 404    | `not_found`   | Segment ID not found or invalid split    |
+
+---
+
+### POST /v1/admin/memorization/segments/:id/merge
+
+Admin-only. Merges a segment with the adjacent next segment and renumbers
+following segment positions.
+
+Request:
+
+```json
+{
+  "next_segment_id": "segment_011"
+}
+```
+
+Response (200):
+
+```json
+{
+  "items": [
+    {
+      "id": "segment_010",
+      "passage_id": "passage_456",
+      "position": 0,
+      "text": "Merged segment text.",
+      "word_count": 3,
+      "created_at": "2026-05-21T12:01:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field | Meaning                                      |
+|--------|---------------|----------------------------------------------|
+| 400    | `bad_request` | Missing or invalid `next_segment_id`         |
+| 403    | `forbidden`   | Missing or invalid admin token               |
+| 404    | `not_found`   | Segments not found or not adjacent           |

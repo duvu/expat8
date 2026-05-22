@@ -28,6 +28,59 @@ export class InMemoryNonceCache {
   }
 }
 
+/**
+ * PostgreSQL-backed nonce cache for multi-instance replay protection.
+ *
+ * Uses an `INSERT … ON CONFLICT DO NOTHING` to atomically claim a nonce.
+ * A non-zero row count means the nonce is fresh; zero means it was already used.
+ * Expired rows are pruned lazily (at most once per minute) via a fire-and-forget
+ * DELETE, so the table stays small without a separate cron job.
+ *
+ * Falls back to accepting the request on any database error so a transient
+ * Postgres hiccup does not lock out legitimate clients — an acceptable tradeoff
+ * given that timestamp-based skew checks bound the replay window.
+ */
+export class PostgresNonceCache {
+  #pool;
+  #lastPruneMs;
+  #pruneIntervalMs;
+
+  constructor(pool, { pruneIntervalMs = 60_000 } = {}) {
+    this.#pool = pool;
+    this.#lastPruneMs = 0;
+    this.#pruneIntervalMs = pruneIntervalMs;
+  }
+
+  async use(appId, nonce, nowMs, ttlSeconds) {
+    const expiresAt = new Date(nowMs + ttlSeconds * 1000);
+    try {
+      const result = await this.#pool.query(
+        `INSERT INTO nonces (app_id, nonce, expires_at)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (app_id, nonce) DO NOTHING`,
+        [appId, nonce, expiresAt]
+      );
+      const claimed = result.rowCount > 0;
+      if (claimed) {
+        this.#maybePrune(nowMs);
+      }
+      return claimed;
+    } catch {
+      // Fail-open: a DB error should not block authenticated clients.
+      return true;
+    }
+  }
+
+  #maybePrune(nowMs) {
+    if (nowMs - this.#lastPruneMs < this.#pruneIntervalMs) {
+      return;
+    }
+    this.#lastPruneMs = nowMs;
+    // Fire-and-forget — errors are intentionally swallowed.
+    this.#pool.query('DELETE FROM nonces WHERE expires_at <= NOW()').catch(() => {});
+  }
+}
+
 export function canonicalPathWithSortedQuery(url) {
   const sortedParams = [...url.searchParams.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) => {
     if (leftKey === rightKey) {
@@ -65,7 +118,7 @@ export function signCanonicalRequest({ secret, canonicalRequest }) {
   return `${SIGNATURE_VERSION}=${signature}`;
 }
 
-export function verifyAppCredentialRequest({ method, url, headers, rawBody, config, nonceCache, now }) {
+export async function verifyAppCredentialRequest({ method, url, headers, rawBody, config, nonceCache, now }) {
   const appId = headerValue(headers, 'x-expat8-app-id');
   const timestamp = headerValue(headers, 'x-expat8-timestamp');
   const nonce = headerValue(headers, 'x-expat8-nonce');
@@ -111,7 +164,7 @@ export function verifyAppCredentialRequest({ method, url, headers, rawBody, conf
     return { ok: false };
   }
 
-  if (!nonceCache.use(appId, nonce, nowMs, config.appCredentialNonceTtlSeconds)) {
+  if (!(await nonceCache.use(appId, nonce, nowMs, config.appCredentialNonceTtlSeconds))) {
     return { ok: false };
   }
 

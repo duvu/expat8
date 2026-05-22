@@ -62,6 +62,9 @@ class VocabularyWord {
     this.cardType,
     this.selectionReason,
     this.speakingPrompt,
+    this.entryType = 'word',
+    this.explanation = '',
+    this.blankWord,
   });
 
   factory VocabularyWord.fromJson(Map<String, dynamic> json) {
@@ -86,6 +89,9 @@ class VocabularyWord {
       cardType: _cardTypeFromJson(json['card_type'] as String?),
       selectionReason: json['selection_reason'] as String?,
       speakingPrompt: spJson != null ? SpeakingPrompt.fromJson(spJson) : null,
+      entryType: json['entry_type'] as String? ?? 'word',
+      explanation: json['explanation'] as String? ?? '',
+      blankWord: json['blank_word'] as String?,
     );
   }
 
@@ -113,6 +119,17 @@ class VocabularyWord {
   /// Null when no approved prompt exists — UI falls back to [example].
   final SpeakingPrompt? speakingPrompt;
 
+  /// Entry type: `'word'`, `'phrase'`, or `'idiom'`.
+  final String entryType;
+
+  /// Vietnamese usage note for phrase/idiom entries. Empty string for plain words.
+  final String explanation;
+
+  /// The specific word to blank in the example sentence for FITB cards.
+  /// Null for `word` entry type (the whole [term] is blanked) and for
+  /// phrase/idiom entries that predate the blank_word field.
+  final String? blankWord;
+
   VocabularyWord copyWith({
     String? localId,
     String? serverWordId,
@@ -134,6 +151,9 @@ class VocabularyWord {
     LearningCardType? cardType,
     String? selectionReason,
     SpeakingPrompt? speakingPrompt,
+    String? entryType,
+    String? explanation,
+    String? blankWord,
   }) {
     return VocabularyWord(
       localId: localId ?? this.localId,
@@ -157,6 +177,9 @@ class VocabularyWord {
       cardType: cardType ?? this.cardType,
       selectionReason: selectionReason ?? this.selectionReason,
       speakingPrompt: speakingPrompt ?? this.speakingPrompt,
+      entryType: entryType ?? this.entryType,
+      explanation: explanation ?? this.explanation,
+      blankWord: blankWord ?? this.blankWord,
     );
   }
 }

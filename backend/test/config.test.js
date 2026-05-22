@@ -3,13 +3,13 @@ import test from 'node:test';
 
 import { loadConfig } from '../src/config.js';
 
-test('loads database URL and deployment LiteLLM defaults from environment', () => {
+test('loads database URL from environment; liteLLMBaseUrl is undefined when LITELLM_BASE_URL is not set', () => {
   const config = loadConfig({
     DATABASE_URL: 'postgres://expat8:secret@db:5432/expat8'
   });
 
   assert.equal(config.databaseUrl, 'postgres://expat8:secret@db:5432/expat8');
-  assert.equal(config.liteLLMBaseUrl, 'https://lite.x51.vn');
+  assert.equal(config.liteLLMBaseUrl, undefined);
 });
 
 test('loads app credential security settings from environment', () => {
@@ -32,6 +32,19 @@ test('loads app credential security settings from environment', () => {
   assert.equal(config.appCredentialNonceTtlSeconds, 180);
   assert.equal(config.appCredentialGetBodyLimitBytes, 0);
   assert.equal(config.appCredentialPostBodyLimitBytes, 1024);
+});
+
+test('loads log archive storage settings from environment', () => {
+  const config = loadConfig({
+    LOG_ARCHIVE_DIR: '/tmp/archives',
+    LOG_ARCHIVE_RETENTION_DAYS: '7',
+    LOG_ARCHIVE_MAX_TOTAL_BYTES: '4096'
+  });
+
+  assert.equal(config.logArchiveDir, '/tmp/archives');
+  assert.equal(config.logArchiveRetentionDays, 7);
+  assert.equal(config.logArchiveMaxTotalBytes, 4096);
+  assert.equal(config.logArchiveUploadBodyLimitBytes, 4096);
 });
 
 test('loads CORS allowed origin with a development default', () => {
@@ -64,9 +77,7 @@ test('rejects malformed app credential configuration', () => {
   assert.throws(
     () =>
       loadConfig({
-        APP_CREDENTIALS_JSON: JSON.stringify([
-          { appId: 'app_mobile_test', secret: '', status: 'active' }
-        ])
+        APP_CREDENTIALS_JSON: JSON.stringify([{ appId: 'app_mobile_test', secret: '', status: 'active' }])
       }),
     /APP_CREDENTIALS_JSON/
   );

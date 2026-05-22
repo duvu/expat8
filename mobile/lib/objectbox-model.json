@@ -86,7 +86,7 @@
     },
     {
       "id": "3:8516035737042230106",
-      "lastPropertyId": "18:437125655485656215",
+      "lastPropertyId": "22:2815687485679262804",
       "name": "LocalWordEntity",
       "properties": [
         {
@@ -191,6 +191,30 @@
           "id": "18:437125655485656215",
           "name": "updatedAtMs",
           "type": 6
+        },
+        {
+          "id": "19:2591849130354322576",
+          "name": "entryType",
+          "type": 9
+        },
+        {
+          "id": "20:1231534066534358010",
+          "name": "explanation",
+          "type": 9
+        },
+        {
+          "id": "21:7321897576493477191",
+          "name": "learningState",
+          "indexId": "37:4098806720918912800",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "22:2815687485679262804",
+          "name": "learningStateAtMs",
+          "indexId": "38:3998636556806580351",
+          "type": 6,
+          "flags": 8
         }
       ],
       "relations": []
@@ -431,10 +455,317 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "8:3288235631848983449",
+      "lastPropertyId": "13:5086087933662608190",
+      "name": "ExamAttemptEntity",
+      "properties": [
+        {
+          "id": "1:3915316147005991805",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7593726105439092256",
+          "name": "attemptId",
+          "indexId": "24:7324109485228087763",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:9106092122372414060",
+          "name": "sessionId",
+          "indexId": "25:7825048621324828907",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:7888529095864896888",
+          "name": "topic",
+          "indexId": "26:4700645075651854157",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:8661363817368612234",
+          "name": "language",
+          "indexId": "27:701676634767163217",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:583399123505937220",
+          "name": "difficultyLevel",
+          "type": 9
+        },
+        {
+          "id": "7:6460503402813561281",
+          "name": "totalQuestions",
+          "type": 6
+        },
+        {
+          "id": "8:2527633305818626451",
+          "name": "correctCount",
+          "type": 6
+        },
+        {
+          "id": "9:6656541848572048795",
+          "name": "scorePct",
+          "type": 8
+        },
+        {
+          "id": "10:1470170022498231884",
+          "name": "passed",
+          "type": 6
+        },
+        {
+          "id": "11:1273051271994143427",
+          "name": "createdAtMs",
+          "indexId": "28:3393559323606846162",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "12:7588106210396541618",
+          "name": "certificateId",
+          "type": 9
+        },
+        {
+          "id": "13:5086087933662608190",
+          "name": "syncStatus",
+          "indexId": "29:5177855304185512194",
+          "type": 9,
+          "flags": 2048
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "9:7623126289449930472",
+      "lastPropertyId": "16:6434398058747500286",
+      "name": "LocalWorkplaceSentenceEntity",
+      "properties": [
+        {
+          "id": "1:3075656904735009019",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:4812383148060157714",
+          "name": "localId",
+          "indexId": "30:5325547818262788490",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:2089978830348000993",
+          "name": "serverSentenceId",
+          "indexId": "31:254264944844424605",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5349643798033280791",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "5:3534248391845193183",
+          "name": "language",
+          "type": 9
+        },
+        {
+          "id": "6:1446670116255896604",
+          "name": "meaningVi",
+          "type": 9
+        },
+        {
+          "id": "7:4447217739024682745",
+          "name": "topic",
+          "type": 9
+        },
+        {
+          "id": "8:6660193928940505961",
+          "name": "sourceTitle",
+          "type": 9
+        },
+        {
+          "id": "9:7575864257028155336",
+          "name": "generationSource",
+          "type": 9
+        },
+        {
+          "id": "10:4475300493876454539",
+          "name": "isBundled",
+          "type": 6
+        },
+        {
+          "id": "11:4791717315805413297",
+          "name": "status",
+          "indexId": "32:1377162962780106685",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "12:4149242005305884948",
+          "name": "lastSeenAtMs",
+          "indexId": "33:176399341513004656",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "13:6287386393774510740",
+          "name": "createdAtMs",
+          "indexId": "34:7547890276824839143",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "14:5135544224436699283",
+          "name": "updatedAtMs",
+          "type": 6
+        },
+        {
+          "id": "15:4494176078376399146",
+          "name": "learningState",
+          "indexId": "39:974236529602551773",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "16:6434398058747500286",
+          "name": "learningStateAtMs",
+          "indexId": "40:2227461795146005189",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "10:8684125017994145344",
+      "lastPropertyId": "4:2463553389133121710",
+      "name": "LearningHistoryEntity",
+      "properties": [
+        {
+          "id": "1:3194772920161611213",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:719476831379784014",
+          "name": "snapshotJson",
+          "type": 9
+        },
+        {
+          "id": "3:8656097539817571863",
+          "name": "learningState",
+          "indexId": "35:8217938479671569544",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:2463553389133121710",
+          "name": "occurredAtMs",
+          "indexId": "36:4882799473228111344",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "11:391133553608201731",
+      "lastPropertyId": "12:8554069777923827095",
+      "name": "SubmittedWordEntity",
+      "properties": [
+        {
+          "id": "1:678512408047998987",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8116206321873322702",
+          "name": "localSubmissionId",
+          "indexId": "41:122373600711202737",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:2955792410197618859",
+          "name": "serverSubmissionId",
+          "indexId": "42:8464084824742748147",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5502148205198462794",
+          "name": "submittedTerm",
+          "type": 9
+        },
+        {
+          "id": "5:649046068340762660",
+          "name": "targetLanguage",
+          "indexId": "43:373752126373439503",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:267067576251403847",
+          "name": "status",
+          "indexId": "44:427968820041091089",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "7:4145540585640737157",
+          "name": "failureReason",
+          "type": 9
+        },
+        {
+          "id": "8:7160964161807826780",
+          "name": "resolutionType",
+          "type": 9
+        },
+        {
+          "id": "9:8404661050014485449",
+          "name": "resolvedWordServerId",
+          "indexId": "45:6099683019866534066",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "10:1968228559894307145",
+          "name": "createdAtMs",
+          "indexId": "46:1852434849237283561",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "11:2907129057556953036",
+          "name": "updatedAtMs",
+          "indexId": "47:3074921035244711233",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "12:8554069777923827095",
+          "name": "resolvedAtMs",
+          "indexId": "48:4623037698306536221",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "7:5907671979540824477",
-  "lastIndexId": "23:6588260673035546186",
+  "lastEntityId": "11:391133553608201731",
+  "lastIndexId": "48:4623037698306536221",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

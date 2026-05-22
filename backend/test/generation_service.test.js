@@ -24,9 +24,10 @@ test('stores valid generated words and rejects duplicates', async () => {
   const service = new VocabularyGenerationService({
     store,
     liteLLMClient: {
-      generateVocabulary: async ({ difficultyLevel }) => JSON.stringify({
-        items: [wordInput({ difficulty: difficultyLevel }), wordInput({ difficulty: difficultyLevel })]
-      })
+      generateVocabulary: async ({ difficultyLevel }) =>
+        JSON.stringify({
+          items: [wordInput({ difficulty: difficultyLevel }), wordInput({ difficulty: difficultyLevel })]
+        })
     },
     logger: { warn() {} }
   });
@@ -65,7 +66,9 @@ test('retries generation with avoided terms when the first result is a duplicate
         if (attempts.length === 1) {
           return JSON.stringify({ items: [wordInput({ term: 'Accomplish' })] });
         }
-        return JSON.stringify({ items: [wordInput({ term: 'Opportunity', example: 'This opportunity could change your life.' })] });
+        return JSON.stringify({
+          items: [wordInput({ term: 'Opportunity', example: 'This opportunity could change your life.' })]
+        });
       }
     },
     logger: { warn() {} }
@@ -104,17 +107,18 @@ test('rejects Chinese generation items with non-HSK difficulty values', async ()
   const service = new VocabularyGenerationService({
     store,
     liteLLMClient: {
-      generateVocabulary: async () => JSON.stringify({
-        items: [
-          wordInput({
-            language: 'zh',
-            term: 'xuexi',
-            difficulty: 'B1',
-            vietnamese_pronunciation: 'xue xi',
-            ipa: ''
-          })
-        ]
-      })
+      generateVocabulary: async () =>
+        JSON.stringify({
+          items: [
+            wordInput({
+              language: 'zh',
+              term: 'xuexi',
+              difficulty: 'B1',
+              vietnamese_pronunciation: 'xue xi',
+              ipa: ''
+            })
+          ]
+        })
     },
     logger: { warn() {} }
   });
@@ -134,17 +138,18 @@ test('rejects Chinese generation items with invalid pronunciation metadata', asy
   const service = new VocabularyGenerationService({
     store,
     liteLLMClient: {
-      generateVocabulary: async () => JSON.stringify({
-        items: [
-          wordInput({
-            language: 'zh',
-            term: 'xuexi',
-            difficulty: 'HSK2',
-            vietnamese_pronunciation: '1234',
-            ipa: ''
-          })
-        ]
-      })
+      generateVocabulary: async () =>
+        JSON.stringify({
+          items: [
+            wordInput({
+              language: 'zh',
+              term: 'xuexi',
+              difficulty: 'HSK2',
+              vietnamese_pronunciation: '1234',
+              ipa: ''
+            })
+          ]
+        })
     },
     logger: {
       warn(event, context) {
@@ -175,18 +180,19 @@ test('stores Chinese generation item with pinyin and no IPA', async () => {
   const service = new VocabularyGenerationService({
     store,
     liteLLMClient: {
-      generateVocabulary: async () => JSON.stringify({
-        items: [
-          wordInput({
-            language: 'zh',
-            term: '资格',
-            difficulty: 'HSK2',
-            vietnamese_pronunciation: 'zi ge',
-            ipa: '',
-            example: '我有这个资格。'
-          })
-        ]
-      })
+      generateVocabulary: async () =>
+        JSON.stringify({
+          items: [
+            wordInput({
+              language: 'zh',
+              term: '资格',
+              difficulty: 'HSK2',
+              vietnamese_pronunciation: 'zi ge',
+              ipa: '',
+              example: '我有这个资格。'
+            })
+          ]
+        })
     },
     logger: {
       warn(event, context) {

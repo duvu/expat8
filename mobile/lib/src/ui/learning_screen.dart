@@ -1,14 +1,29 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../api/backend_api_client.dart';
+import '../data/article_repository.dart';
+import '../data/memorization_repository.dart';
+import '../data/workplace_sentence_repository.dart';
 import '../data/word_repository.dart';
+import '../exam/exam_session_controller.dart';
+import '../exam/exam_question_screen.dart';
 import '../models/user_session.dart';
 import '../session/learning_session_controller.dart';
+import '../session/workplace_sentence_session_controller.dart';
+import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
+import 'articles_screen.dart';
+import 'memorization_screen.dart';
+import 'learning_gesture_surface.dart';
+import 'fitb_card.dart';
 import 'logs_screen.dart';
+import 'submitted_words_screen.dart';
+import 'upgrade_check_screen.dart';
 import 'vocabulary_card.dart';
+import 'workplace_sentence_screen.dart';
+import 'learning_history_screen.dart';
+import 'learning_progress_stats_screen.dart';
 
 const Map<String, String> kLearningLanguageLabels = {
   'en': 'English',
@@ -19,11 +34,17 @@ const Map<String, String> kLearningLanguageLabels = {
 class LearningScreen extends StatefulWidget {
   const LearningScreen({
     required this.controller,
+    required this.articleRepository,
+    required this.memorizationRepository,
+    required this.workplaceSentenceRepository,
     this.speakingRepository,
     super.key,
   });
 
   final LearningSessionController controller;
+  final ArticleRepository articleRepository;
+  final MemorizationRepository memorizationRepository;
+  final WorkplaceSentenceRepository workplaceSentenceRepository;
   final SpeakingRepository? speakingRepository;
 
   @override
@@ -90,12 +111,33 @@ class _LearningScreenState extends State<LearningScreen> {
         isAuthInProgress: controller.isAuthInProgress,
         speakingRepository: widget.speakingRepository,
         wordRepository: controller.repository,
+        onArticles: _openArticles,
+        onMemorization: _openMemorization,
+        onSubmittedWords: _openSubmittedWords,
         onVocabulary: () => Navigator.of(context).maybePop(),
+        onWorkplaceSentences: _openWorkplaceSentences,
+        onHistory: _openHistory,
+        onStats: _openStats,
         onLogs: () {
           Navigator.of(context).maybePop();
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => LogsScreen(repository: controller.repository),
+            ),
+          );
+        },
+        onExam: controller.userSession == null ? null : _openExam,
+        onCheckUpdates: () {
+          Navigator.of(context).maybePop();
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => UpgradeCheckScreen(
+                apiClient: controller.repository.apiClient,
+                onInstallApk: (apkPath) async {
+                  await OpenFilex.open(apkPath,
+                      type: 'application/vnd.android.package-archive');
+                },
+              ),
             ),
           );
         },
@@ -109,7 +151,7 @@ class _LearningScreenState extends State<LearningScreen> {
       body: LearningCardGestureSurface(
         isEnabled: !controller.isLoading,
         onSwipeRightToLeft: controller.onSwipeRightToLeft,
-        onSwipeLeftToRight: controller.onSwipeLeftToRight,
+        onSwipeLeftToRight: _handleHistoryGesture,
         onSwipeBottomToTop: controller.onSwipeBottomToTop,
         onSwipeTopToBottom: controller.onSwipeTopToBottom,
         child: ListView(
@@ -129,10 +171,15 @@ class _LearningScreenState extends State<LearningScreen> {
             if (controller.isLoading)
               const Center(child: CircularProgressIndicator())
             else if (controller.currentWord != null)
-              VocabularyCardView(
-                word: controller.currentWord!,
-                speakingRepository: widget.speakingRepository,
+              controller.shouldShowFitb(
+                controller.currentWord!,
+                cardKind: controller.currentCardKind,
               )
+                  ? FitbCard(word: controller.currentWord!)
+                  : VocabularyCardView(
+                      word: controller.currentWord!,
+                      speakingRepository: widget.speakingRepository,
+                    )
             else
               Padding(
                 padding: const EdgeInsets.all(24),
@@ -142,9 +189,9 @@ class _LearningScreenState extends State<LearningScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Text(
                 'Swipe Right->Left: next card (15% new, 85% review). '
-                'Swipe Left->Right: review-first flow.\n'
-                'Swipe Bottom->Top: remembered (10% relearn). '
-                'Swipe Top->Bottom: difficult (relearn group).',
+                 'Swipe Left->Right: open history.\n'
+                 'Swipe Bottom->Top: remembered (10% relearn). '
+                 'Swipe Top->Bottom: difficult (relearn group).',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
@@ -190,6 +237,128 @@ class _LearningScreenState extends State<LearningScreen> {
     await widget.controller.signIn(
       identifier: credentials.identifier,
       password: credentials.password,
+    );
+  }
+
+  Future<void> _openArticles() async {
+    final session = widget.controller.userSession;
+    if (session == null) {
+      return;
+    }
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArticleManagementScreen(
+          repository: widget.articleRepository,
+          sessionToken: session.sessionToken,
+          initialLanguage: widget.controller.activeLearningLanguage,
+          supportedLanguages: widget.controller.supportedLearningLanguages,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openMemorization() async {
+    final session = widget.controller.userSession;
+    if (session == null) {
+      return;
+    }
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MemorizationScreen(
+          repository: widget.memorizationRepository,
+          userSession: session,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSubmittedWords() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmittedWordsScreen(
+          repository: widget.controller.repository,
+          initialLanguage: widget.controller.activeLearningLanguage,
+          supportedLanguages: widget.controller.supportedLearningLanguages,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openExam() async {
+    final session = widget.controller.userSession;
+    if (session == null) {
+      return;
+    }
+    final repository = widget.controller.repository;
+    final examController = ExamSessionController(
+      apiClient: repository.apiClient,
+      database: repository.database,
+    );
+    await examController.startSession(
+      userSession: session,
+      language: widget.controller.activeLearningLanguage,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (examController.state == ExamState.active) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ExamQuestionScreen(
+            controller: examController,
+            userSession: session,
+          ),
+        ),
+      );
+    } else if (examController.errorMessage != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(examController.errorMessage!)));
+    }
+  }
+
+  Future<void> _openWorkplaceSentences() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkplaceSentenceScreen(
+          controller: WorkplaceSentenceSessionController(
+            repository: widget.workplaceSentenceRepository,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleHistoryGesture() async {
+    await widget.controller.onSwipeLeftToRight();
+    if (!mounted) {
+      return;
+    }
+    await _openHistory();
+  }
+
+  Future<void> _openHistory() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LearningHistoryScreen(
+          database: widget.controller.repository.database,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStats() async {
+    Navigator.of(context).maybePop();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LearningProgressStatsScreen(
+          database: widget.controller.repository.database,
+        ),
+      ),
     );
   }
 }
@@ -289,92 +458,17 @@ class LearningLanguageSelector extends StatelessWidget {
   }
 }
 
-class LearningCardGestureSurface extends StatefulWidget {
-  const LearningCardGestureSurface({
-    required this.onSwipeRightToLeft,
-    required this.onSwipeLeftToRight,
-    required this.onSwipeBottomToTop,
-    required this.onSwipeTopToBottom,
-    required this.child,
-    this.isEnabled = true,
-    super.key,
-  });
-
-  final bool isEnabled;
-  final Future<void> Function() onSwipeRightToLeft;
-  final Future<void> Function() onSwipeLeftToRight;
-  final Future<void> Function() onSwipeBottomToTop;
-  final Future<void> Function() onSwipeTopToBottom;
-  final Widget child;
-
-  @override
-  State<LearningCardGestureSurface> createState() =>
-      _LearningCardGestureSurfaceState();
-}
-
-class _LearningCardGestureSurfaceState
-    extends State<LearningCardGestureSurface> {
-  Offset _panDelta = Offset.zero;
-  bool _gestureInFlight = false;
-
-  void _dispatchGesture(Future<void> Function() callback) {
-    if (_gestureInFlight) {
-      return;
-    }
-    _gestureInFlight = true;
-    unawaited(() async {
-      try {
-        await callback();
-      } catch (_) {
-        // Gesture failures must not leave the surface permanently disabled.
-      } finally {
-        _gestureInFlight = false;
-      }
-    }());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (_) => _panDelta = Offset.zero,
-      onPanUpdate: (details) {
-        _panDelta += details.delta;
-      },
-      onPanEnd: (details) {
-        if (!widget.isEnabled || _gestureInFlight) {
-          _panDelta = Offset.zero;
-          return;
-        }
-        final dx = _panDelta.dx;
-        final dy = _panDelta.dy;
-        final vel = details.velocity.pixelsPerSecond;
-        _panDelta = Offset.zero;
-        // Determine primary axis from whichever had more movement.
-        if (dx.abs() >= dy.abs()) {
-          if (vel.dx < -200 || dx < -80) {
-            _dispatchGesture(widget.onSwipeRightToLeft);
-          } else if (vel.dx > 200 || dx > 80) {
-            _dispatchGesture(widget.onSwipeLeftToRight);
-          }
-        } else {
-          if (vel.dy < -200 || dy < -80) {
-            _dispatchGesture(widget.onSwipeBottomToTop);
-          } else if (vel.dy > 200 || dy > 80) {
-            _dispatchGesture(widget.onSwipeTopToBottom);
-          }
-        }
-      },
-      child: widget.child,
-    );
-  }
-}
-
 class LearningDrawer extends StatelessWidget {
   const LearningDrawer({
     required this.isSignedIn,
     required this.onVocabulary,
+    required this.onWorkplaceSentences,
     required this.onLogs,
+    required this.onArticles,
+    required this.onMemorization,
+    required this.onSubmittedWords,
+    required this.onHistory,
+    required this.onStats,
     required this.onRegister,
     required this.onSignIn,
     required this.onSignOut,
@@ -382,6 +476,8 @@ class LearningDrawer extends StatelessWidget {
     this.wordRepository,
     this.userSession,
     this.isAuthInProgress = false,
+    this.onExam,
+    this.onCheckUpdates,
     super.key,
   });
 
@@ -391,10 +487,22 @@ class LearningDrawer extends StatelessWidget {
   final SpeakingRepository? speakingRepository;
   final WordRepository? wordRepository; // for speaking stats fetch
   final VoidCallback onVocabulary;
+  final VoidCallback onWorkplaceSentences;
   final VoidCallback onLogs;
+  final VoidCallback onArticles;
+  final VoidCallback onMemorization;
+  final VoidCallback onSubmittedWords;
+  final VoidCallback onHistory;
+  final VoidCallback onStats;
   final VoidCallback onRegister;
   final VoidCallback onSignIn;
   final VoidCallback onSignOut;
+
+  /// Called when the user taps "Take Exam". Only shown when signed in.
+  final VoidCallback? onExam;
+
+  /// Called when the user taps "Check for updates".
+  final VoidCallback? onCheckUpdates;
 
   @override
   Widget build(BuildContext context) {
@@ -402,39 +510,106 @@ class LearningDrawer extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
-            ListTile(
-              leading: const Icon(Icons.menu_book_outlined),
-              title: const Text('Vocabulary'),
-              onTap: onVocabulary,
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.menu_book_outlined),
+                    title: const Text('Vocabulary'),
+                    onTap: onVocabulary,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.record_voice_over_outlined),
+                    title: const Text('Sentences'),
+                    onTap: onWorkplaceSentences,
+                  ),
+                  if (isSignedIn)
+                    ListTile(
+                      leading: const Icon(Icons.auto_stories),
+                      title: const Text('Memorization'),
+                      onTap: onMemorization,
+                    ),
+                  if (isSignedIn)
+                    ListTile(
+                      leading: const Icon(Icons.article_outlined),
+                      title: const Text('Articles'),
+                      onTap: onArticles,
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.add_circle_outline),
+                    title: const Text('Add word'),
+                    onTap: onSubmittedWords,
+                  ),
+                  if (isSignedIn && onExam != null)
+                    ListTile(
+                      leading: const Icon(Icons.quiz_outlined),
+                      title: const Text('Take Exam'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        onExam!();
+                      },
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.bug_report_outlined),
+                    title: const Text('Logs'),
+                    onTap: onLogs,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.history_outlined),
+                    title: const Text('History'),
+                    onTap: onHistory,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.bar_chart_outlined),
+                    title: const Text('Stats'),
+                    onTap: onStats,
+                  ),
+                  if (speakingRepository != null) ...[
+                    ListTile(
+                      leading: const Icon(Icons.mic_outlined),
+                      title: const Text('3-minute drill'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SpeakingDrillScreen(
+                              repository: speakingRepository!,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.bar_chart_outlined),
+                      title: const Text('Speaking stats'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        _showSpeakingStats(context);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.delete_outline),
+                      title: const Text('Delete all recordings'),
+                      onTap: () async {
+                        Navigator.of(context).maybePop();
+                        await _confirmDeleteAll(context);
+                      },
+                    ),
+                  ],
+                  if (isSignedIn)
+                    _DrawerUserInfo(
+                      userSession: userSession,
+                    ),
+                  if (onCheckUpdates != null)
+                    ListTile(
+                      leading: const Icon(Icons.system_update_outlined),
+                      title: const Text('Check for updates'),
+                      onTap: onCheckUpdates,
+                    ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.bug_report_outlined),
-              title: const Text('Logs'),
-              onTap: onLogs,
-            ),
-            if (speakingRepository != null) ...[
-              ListTile(
-                leading: const Icon(Icons.bar_chart_outlined),
-                title: const Text('Speaking stats'),
-                onTap: () {
-                  Navigator.of(context).maybePop();
-                  _showSpeakingStats(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete all recordings'),
-                onTap: () async {
-                  Navigator.of(context).maybePop();
-                  await _confirmDeleteAll(context);
-                },
-              ),
-            ],
-            if (isSignedIn)
-              _DrawerUserInfo(
-                userSession: userSession,
-              ),
-            const Spacer(),
             if (isSignedIn)
               ListTile(
                 leading: const Icon(Icons.logout),

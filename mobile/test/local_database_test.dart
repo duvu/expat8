@@ -98,22 +98,24 @@ void main() {
       databaseName: 'local_database_test_recent_review.db',
     );
     final now = DateTime.utc(2026, 5, 4);
+    // Both words are due (nextReviewAt in the past) so the scheduling gate
+    // passes; the more recently seen word should be returned.
     await database.upsertWord(
       _word('older', now.subtract(const Duration(minutes: 3))).copyWith(
         status: WordStatus.review,
         lastSeenAt: now.subtract(const Duration(minutes: 3)),
-        nextReviewAt: now.add(const Duration(days: 1)),
+        nextReviewAt: now.subtract(const Duration(minutes: 3)),
       ),
     );
     await database.upsertWord(
       _word('newer', now.subtract(const Duration(minutes: 1))).copyWith(
         status: WordStatus.learning,
         lastSeenAt: now.subtract(const Duration(minutes: 1)),
-        nextReviewAt: now.add(const Duration(days: 1)),
+        nextReviewAt: now.subtract(const Duration(minutes: 1)),
       ),
     );
 
-    final word = await database.recentlyLearnedReviewWord();
+    final word = await database.recentlyLearnedReviewWord(now);
 
     expect(word?.localId, 'newer');
   });
@@ -425,7 +427,10 @@ void main() {
 
     await database.markWordRememberedLowFrequency(word: word, now: now);
 
-    final updated = await database.recentlyLearnedReviewWord();
+    // Fetch via nextDueReviewWord at a time when the scheduled review is due
+    final updated = await database.nextDueReviewWord(
+      now.add(const Duration(days: 11)),
+    );
     expect(updated, isNotNull);
     expect(updated!.status, WordStatus.mastered);
     expect(updated.nextReviewAt, isNotNull);
@@ -636,6 +641,113 @@ void main() {
     // Next nextNewWord should be the other word
     final second = await database.nextNewWord();
     expect(second?.localId, isNot(equals(first.localId)));
+  });
+
+  // ── markWordLearned + recentlyLearnedReviewWord dedup tests ──────────────
+
+  test(
+      'recentlyLearnedReviewWord does not return a word just learned via markWordLearned',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_dedup_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime(2024, 6, 1, 12, 0, 0).toUtc();
+    final word = _word('word_a', base).copyWith(
+      status: WordStatus.learning,
+      nextReviewAt: base.subtract(const Duration(hours: 1)), // was due
+    );
+    await database.upsertWord(word);
+
+    // Simulate right-to-left swipe: mark as learned
+    await database.markWordLearned(word: word, now: base);
+
+    // Should not be returned immediately — nextReviewAtMs is now in the future
+    final result = await database.recentlyLearnedReviewWord(base);
+    expect(result, isNull);
+  });
+
+  test('markWordLearned sets nextReviewAtMs to max(existing, now + 30 min)',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_mark_learned_max_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime(2024, 6, 1, 12, 0, 0).toUtc();
+    final word = _word('word_b', base).copyWith(
+      status: WordStatus.learning,
+      nextReviewAt: base.subtract(const Duration(hours: 1)),
+    );
+    await database.upsertWord(word);
+
+    // First call — no existing future nextReviewAtMs
+    await database.markWordLearned(word: word, now: base);
+
+    // Reload and check
+    final first = await database.nextDueReviewWord(
+      base.add(const Duration(minutes: 29)),
+    );
+    expect(first, isNull, reason: 'Should not be due within 30 minutes');
+
+    final afterThirty = await database.nextDueReviewWord(
+      base.add(const Duration(minutes: 31)),
+    );
+    expect(afterThirty?.localId, 'word_b',
+        reason: 'Should be due after 30 minutes');
+
+    // Second call with the same base time — max wins, value unchanged
+    await database.markWordLearned(word: afterThirty!, now: base);
+    final stillDue = await database.nextDueReviewWord(
+      base.add(const Duration(minutes: 31)),
+    );
+    expect(stillDue?.localId, 'word_b');
+  });
+
+  test('recentlyLearnedReviewWord returns word with null nextReviewAtMs',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_null_review_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime(2024, 6, 1, 12, 0, 0).toUtc();
+    // A learning word with no nextReviewAtMs (null)
+    final word = _word('word_c', base).copyWith(
+      status: WordStatus.learning,
+      // nextReviewAt left null
+    );
+    await database.upsertWord(word);
+    await database.markWordAsLearning(word: word, now: base);
+
+    // Overwrite nextReviewAtMs back to null by upserting directly
+    await database.upsertWord(
+      word.copyWith(
+        status: WordStatus.learning,
+        lastSeenAt: base,
+        nextReviewAt: null,
+      ),
+    );
+
+    final result = await database.recentlyLearnedReviewWord(base);
+    expect(result?.localId, 'word_c');
+  });
+
+  test(
+      'recentlyLearnedReviewWord excludes word with nextReviewAtMs one hour in the future',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_future_review_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final base = DateTime(2024, 6, 1, 12, 0, 0).toUtc();
+    final word = _word('word_d', base).copyWith(
+      status: WordStatus.learning,
+      lastSeenAt: base,
+      nextReviewAt: base.add(const Duration(hours: 1)),
+    );
+    await database.upsertWord(word);
+
+    final result = await database.recentlyLearnedReviewWord(base);
+    expect(result, isNull);
   });
 }
 

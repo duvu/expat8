@@ -8,37 +8,55 @@ test('accepts English item with IPA', () => {
 });
 
 test('rejects English item without IPA', () => {
-  assert.deepEqual(
-    validateVocabularyItem(wordInput({ ipa: '' })),
-    { ok: false, reason: 'missing_ipa' }
-  );
+  assert.deepEqual(validateVocabularyItem(wordInput({ ipa: '' })), { ok: false, reason: 'missing_ipa' });
 });
 
 test('accepts Chinese item with pinyin and no IPA', () => {
   assert.deepEqual(
-    validateVocabularyItem(wordInput({
-      language: 'zh',
-      term: '资格',
-      ipa: '',
-      vietnamese_pronunciation: 'zi ge',
-      difficulty: 'HSK2',
-      example: '我有这个资格。'
-    })),
+    validateVocabularyItem(
+      wordInput({
+        language: 'zh',
+        term: '资格',
+        ipa: '',
+        vietnamese_pronunciation: 'zi ge',
+        difficulty: 'HSK2',
+        example: '我有这个资格。'
+      })
+    ),
     { ok: true }
   );
 });
 
 test('rejects Chinese item without pinyin even when IPA is present', () => {
   assert.deepEqual(
-    validateVocabularyItem(wordInput({
-      language: 'zh',
-      term: '技能',
-      ipa: '/ignored/',
-      vietnamese_pronunciation: '1234',
-      difficulty: 'HSK2',
-      example: '这个技能很重要。'
-    })),
+    validateVocabularyItem(
+      wordInput({
+        language: 'zh',
+        term: '技能',
+        ipa: '/ignored/',
+        vietnamese_pronunciation: '1234',
+        difficulty: 'HSK2',
+        example: '这个技能很重要。'
+      })
+    ),
     { ok: false, reason: 'invalid_chinese_pinyin' }
+  );
+});
+
+test('accepts article suggestions with explicit classification and suggestion type', () => {
+  assert.deepEqual(
+    validateVocabularyItem(
+      wordInput({
+        term: 'share knowledge',
+        example: 'Teams share knowledge across functions.',
+        classification: 'article_phrase',
+        suggestion_type: 'phrase',
+        difficulty: 'A1',
+        level: 'A1'
+      }),
+      { requireSuggestionMetadata: true }
+    ),
+    { ok: true }
   );
 });
 

@@ -49,11 +49,28 @@ cd mobile
 flutter test                                   # Run all tests
 flutter test test/learning_session_controller_test.dart  # Single test file
 flutter run \
-  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
   --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
+
+For production Android verification, use the same define set for the signed APK and the signed bundle. Keep the real values out of the repo and inject them from your environment or secret store at build time:
+
+```bash
+cd mobile
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
+  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
+  --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
+  --dart-define=APP_LOG_LEVEL=info
+```
+
+The APK output is `build/app/outputs/flutter-apk/app-release.apk`; the matching bundle flow remains `build/app/outputs/bundle/release/app-release.aab`. Any change to `BACKEND_BASE_URL`, `APP_CREDENTIAL_APP_ID`, `APP_CREDENTIAL_SECRET`, `NEW_WORD_TIMEOUT_SECONDS`, or `APP_LOG_LEVEL` requires a fresh rebuild.
+
+Build-time values should be sourced from local environment files or a secret manager and injected at build time. Do not add real production values to GitHub-tracked docs or scripts.
+Before every package build, load the current values from env/secret storage and then rebuild the APK/AAB. Never assume a previous build is still valid after changing any compile-time input.
 
 All compile-time configuration is passed via `--dart-define`. `AppConfig.fromEnvironment()` reads these at startup.
 

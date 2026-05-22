@@ -75,9 +75,9 @@ flutter:
 
 ```bash
 # 1. Khởi động backend (vd. docker compose up -d backend) hoặc trỏ đến staging:
-export BACKEND_URL=http://localhost:8787    # hoặc https://expat8.x51.vn
+export BACKEND_URL=http://localhost:8787    # hoặc <YOUR_BACKEND_URL>
 export APP_ID=expat8-mobile-app             # khớp 1 credential active
-export APP_SECRET=expat8-mobile-secret
+export APP_SECRET=<YOUR_APP_SECRET>
 
 # 2. (Optional) tuỳ chỉnh:
 export TARGET_PER_LANGUAGE=1000             # default 1000

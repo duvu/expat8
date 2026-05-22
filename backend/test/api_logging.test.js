@@ -28,11 +28,14 @@ test('request lifecycle logs include request correlation id', async (t) => {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   const requestId = 'req_test_123';
   const url = `${baseUrl}/v1/words/recent?limit=1&target_language=en`;
-  const response = await fetch(url, signedFetchOptions(url, {
-    headers: {
-      'x-request-id': requestId
-    }
-  }));
+  const response = await fetch(
+    url,
+    signedFetchOptions(url, {
+      headers: {
+        'x-request-id': requestId
+      }
+    })
+  );
 
   assert.equal(response.status, 200);
 

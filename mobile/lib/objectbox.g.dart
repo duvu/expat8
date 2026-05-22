@@ -112,7 +112,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 8516035737042230106),
     name: 'LocalWordEntity',
-    lastPropertyId: const obx_int.IdUid(18, 437125655485656215),
+    lastPropertyId: const obx_int.IdUid(22, 2815687485679262804),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -228,6 +228,32 @@ final _entities = <obx_int.ModelEntity>[
         name: 'updatedAtMs',
         type: 6,
         flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(19, 2591849130354322576),
+        name: 'entryType',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(20, 1231534066534358010),
+        name: 'explanation',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(21, 7321897576493477191),
+        name: 'learningState',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(37, 4098806720918912800),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(22, 2815687485679262804),
+        name: 'learningStateAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(38, 3998636556806580351),
       ),
     ],
     relations: <obx_int.ModelRelation>[],
@@ -496,6 +522,339 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(8, 3288235631848983449),
+    name: 'ExamAttemptEntity',
+    lastPropertyId: const obx_int.IdUid(13, 5086087933662608190),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3915316147005991805),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 7593726105439092256),
+        name: 'attemptId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(24, 7324109485228087763),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 9106092122372414060),
+        name: 'sessionId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(25, 7825048621324828907),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 7888529095864896888),
+        name: 'topic',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(26, 4700645075651854157),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 8661363817368612234),
+        name: 'language',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(27, 701676634767163217),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 583399123505937220),
+        name: 'difficultyLevel',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 6460503402813561281),
+        name: 'totalQuestions',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 2527633305818626451),
+        name: 'correctCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 6656541848572048795),
+        name: 'scorePct',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 1470170022498231884),
+        name: 'passed',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 1273051271994143427),
+        name: 'createdAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(28, 3393559323606846162),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 7588106210396541618),
+        name: 'certificateId',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 5086087933662608190),
+        name: 'syncStatus',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(29, 5177855304185512194),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(9, 7623126289449930472),
+    name: 'LocalWorkplaceSentenceEntity',
+    lastPropertyId: const obx_int.IdUid(16, 6434398058747500286),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3075656904735009019),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 4812383148060157714),
+        name: 'localId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(30, 5325547818262788490),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 2089978830348000993),
+        name: 'serverSentenceId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(31, 254264944844424605),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 5349643798033280791),
+        name: 'text',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 3534248391845193183),
+        name: 'language',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 1446670116255896604),
+        name: 'meaningVi',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 4447217739024682745),
+        name: 'topic',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 6660193928940505961),
+        name: 'sourceTitle',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 7575864257028155336),
+        name: 'generationSource',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 4475300493876454539),
+        name: 'isBundled',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 4791717315805413297),
+        name: 'status',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(32, 1377162962780106685),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 4149242005305884948),
+        name: 'lastSeenAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(33, 176399341513004656),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 6287386393774510740),
+        name: 'createdAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(34, 7547890276824839143),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(14, 5135544224436699283),
+        name: 'updatedAtMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(15, 4494176078376399146),
+        name: 'learningState',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(39, 974236529602551773),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(16, 6434398058747500286),
+        name: 'learningStateAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(40, 2227461795146005189),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(10, 8684125017994145344),
+    name: 'LearningHistoryEntity',
+    lastPropertyId: const obx_int.IdUid(4, 2463553389133121710),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3194772920161611213),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 719476831379784014),
+        name: 'snapshotJson',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 8656097539817571863),
+        name: 'learningState',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(35, 8217938479671569544),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 2463553389133121710),
+        name: 'occurredAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(36, 4882799473228111344),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(11, 391133553608201731),
+    name: 'SubmittedWordEntity',
+    lastPropertyId: const obx_int.IdUid(12, 8554069777923827095),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 678512408047998987),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 8116206321873322702),
+        name: 'localSubmissionId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(41, 122373600711202737),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 2955792410197618859),
+        name: 'serverSubmissionId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(42, 8464084824742748147),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 5502148205198462794),
+        name: 'submittedTerm',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 649046068340762660),
+        name: 'targetLanguage',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(43, 373752126373439503),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 267067576251403847),
+        name: 'status',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(44, 427968820041091089),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 4145540585640737157),
+        name: 'failureReason',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 7160964161807826780),
+        name: 'resolutionType',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 8404661050014485449),
+        name: 'resolvedWordServerId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(45, 6099683019866534066),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 1968228559894307145),
+        name: 'createdAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(46, 1852434849237283561),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 2907129057556953036),
+        name: 'updatedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(47, 3074921035244711233),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 8554069777923827095),
+        name: 'resolvedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(48, 4623037698306536221),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -536,8 +895,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(7, 5907671979540824477),
-    lastIndexId: const obx_int.IdUid(23, 6588260673035546186),
+    lastEntityId: const obx_int.IdUid(11, 391133553608201731),
+    lastIndexId: const obx_int.IdUid(48, 4623037698306536221),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -696,7 +1055,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final difficultyOffset = fbb.writeString(object.difficulty);
         final topicsJsonOffset = fbb.writeString(object.topicsJson);
         final statusOffset = fbb.writeString(object.status);
-        fbb.startTable(19);
+        final entryTypeOffset = fbb.writeString(object.entryType);
+        final explanationOffset = fbb.writeString(object.explanation);
+        final learningStateOffset = fbb.writeString(object.learningState);
+        fbb.startTable(23);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, localIdOffset);
         fbb.addOffset(2, serverWordIdOffset);
@@ -715,6 +1077,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addInt64(15, object.nextReviewAtMs);
         fbb.addInt64(16, object.createdAtMs);
         fbb.addInt64(17, object.updatedAtMs);
+        fbb.addOffset(18, entryTypeOffset);
+        fbb.addOffset(19, explanationOffset);
+        fbb.addOffset(20, learningStateOffset);
+        fbb.addInt64(21, object.learningStateAtMs);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -788,6 +1154,20 @@ obx_int.ModelDefinition getObjectBoxModel() {
           38,
           0,
         );
+        final entryTypeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 40, '');
+        final explanationParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 42, '');
+        final learningStateParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 44, '');
+        final learningStateAtMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          46,
+        );
         final object = LocalWordEntity(
           id: idParam,
           localId: localIdParam,
@@ -807,6 +1187,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
           nextReviewAtMs: nextReviewAtMsParam,
           createdAtMs: createdAtMsParam,
           updatedAtMs: updatedAtMsParam,
+          entryType: entryTypeParam,
+          explanation: explanationParam,
+          learningState: learningStateParam,
+          learningStateAtMs: learningStateAtMsParam,
         );
 
         return object;
@@ -1161,6 +1545,417 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    ExamAttemptEntity: obx_int.EntityDefinition<ExamAttemptEntity>(
+      model: _entities[7],
+      toOneRelations: (ExamAttemptEntity object) => [],
+      toManyRelations: (ExamAttemptEntity object) => {},
+      getId: (ExamAttemptEntity object) => object.id,
+      setId: (ExamAttemptEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (ExamAttemptEntity object, fb.Builder fbb) {
+        final attemptIdOffset = fbb.writeString(object.attemptId);
+        final sessionIdOffset = fbb.writeString(object.sessionId);
+        final topicOffset = fbb.writeString(object.topic);
+        final languageOffset = fbb.writeString(object.language);
+        final difficultyLevelOffset = object.difficultyLevel == null
+            ? null
+            : fbb.writeString(object.difficultyLevel!);
+        final certificateIdOffset = object.certificateId == null
+            ? null
+            : fbb.writeString(object.certificateId!);
+        final syncStatusOffset = fbb.writeString(object.syncStatus);
+        fbb.startTable(14);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, attemptIdOffset);
+        fbb.addOffset(2, sessionIdOffset);
+        fbb.addOffset(3, topicOffset);
+        fbb.addOffset(4, languageOffset);
+        fbb.addOffset(5, difficultyLevelOffset);
+        fbb.addInt64(6, object.totalQuestions);
+        fbb.addInt64(7, object.correctCount);
+        fbb.addFloat64(8, object.scorePct);
+        fbb.addInt64(9, object.passed);
+        fbb.addInt64(10, object.createdAtMs);
+        fbb.addOffset(11, certificateIdOffset);
+        fbb.addOffset(12, syncStatusOffset);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final attemptIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final sessionIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final topicParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final languageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final difficultyLevelParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 14);
+        final totalQuestionsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          16,
+          0,
+        );
+        final correctCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          18,
+          0,
+        );
+        final scorePctParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          20,
+          0,
+        );
+        final passedParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          22,
+          0,
+        );
+        final createdAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          24,
+          0,
+        );
+        final certificateIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 26);
+        final syncStatusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 28, '');
+        final object = ExamAttemptEntity(
+          id: idParam,
+          attemptId: attemptIdParam,
+          sessionId: sessionIdParam,
+          topic: topicParam,
+          language: languageParam,
+          difficultyLevel: difficultyLevelParam,
+          totalQuestions: totalQuestionsParam,
+          correctCount: correctCountParam,
+          scorePct: scorePctParam,
+          passed: passedParam,
+          createdAtMs: createdAtMsParam,
+          certificateId: certificateIdParam,
+          syncStatus: syncStatusParam,
+        );
+
+        return object;
+      },
+    ),
+    LocalWorkplaceSentenceEntity:
+        obx_int.EntityDefinition<LocalWorkplaceSentenceEntity>(
+          model: _entities[8],
+          toOneRelations: (LocalWorkplaceSentenceEntity object) => [],
+          toManyRelations: (LocalWorkplaceSentenceEntity object) => {},
+          getId: (LocalWorkplaceSentenceEntity object) => object.id,
+          setId: (LocalWorkplaceSentenceEntity object, int id) {
+            object.id = id;
+          },
+          objectToFB: (LocalWorkplaceSentenceEntity object, fb.Builder fbb) {
+            final localIdOffset = fbb.writeString(object.localId);
+            final serverSentenceIdOffset = object.serverSentenceId == null
+                ? null
+                : fbb.writeString(object.serverSentenceId!);
+            final textOffset = fbb.writeString(object.text);
+            final languageOffset = fbb.writeString(object.language);
+            final meaningViOffset = fbb.writeString(object.meaningVi);
+            final topicOffset = object.topic == null
+                ? null
+                : fbb.writeString(object.topic!);
+            final sourceTitleOffset = object.sourceTitle == null
+                ? null
+                : fbb.writeString(object.sourceTitle!);
+            final generationSourceOffset = fbb.writeString(
+              object.generationSource,
+            );
+            final statusOffset = fbb.writeString(object.status);
+            final learningStateOffset = fbb.writeString(object.learningState);
+            fbb.startTable(17);
+            fbb.addInt64(0, object.id);
+            fbb.addOffset(1, localIdOffset);
+            fbb.addOffset(2, serverSentenceIdOffset);
+            fbb.addOffset(3, textOffset);
+            fbb.addOffset(4, languageOffset);
+            fbb.addOffset(5, meaningViOffset);
+            fbb.addOffset(6, topicOffset);
+            fbb.addOffset(7, sourceTitleOffset);
+            fbb.addOffset(8, generationSourceOffset);
+            fbb.addInt64(9, object.isBundled);
+            fbb.addOffset(10, statusOffset);
+            fbb.addInt64(11, object.lastSeenAtMs);
+            fbb.addInt64(12, object.createdAtMs);
+            fbb.addInt64(13, object.updatedAtMs);
+            fbb.addOffset(14, learningStateOffset);
+            fbb.addInt64(15, object.learningStateAtMs);
+            fbb.finish(fbb.endTable());
+            return object.id;
+          },
+          objectFromFB: (obx.Store store, ByteData fbData) {
+            final buffer = fb.BufferContext(fbData);
+            final rootOffset = buffer.derefObject(0);
+            final idParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              4,
+              0,
+            );
+            final localIdParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 6, '');
+            final serverSentenceIdParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGetNullable(buffer, rootOffset, 8);
+            final textParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 10, '');
+            final languageParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 12, '');
+            final meaningViParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 14, '');
+            final topicParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGetNullable(buffer, rootOffset, 16);
+            final sourceTitleParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGetNullable(buffer, rootOffset, 18);
+            final generationSourceParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 20, '');
+            final isBundledParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              22,
+              0,
+            );
+            final statusParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 24, '');
+            final lastSeenAtMsParam = const fb.Int64Reader().vTableGetNullable(
+              buffer,
+              rootOffset,
+              26,
+            );
+            final createdAtMsParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              28,
+              0,
+            );
+            final updatedAtMsParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              30,
+              0,
+            );
+            final learningStateParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 32, '');
+            final learningStateAtMsParam = const fb.Int64Reader()
+                .vTableGetNullable(buffer, rootOffset, 34);
+            final object = LocalWorkplaceSentenceEntity(
+              id: idParam,
+              localId: localIdParam,
+              serverSentenceId: serverSentenceIdParam,
+              text: textParam,
+              language: languageParam,
+              meaningVi: meaningViParam,
+              topic: topicParam,
+              sourceTitle: sourceTitleParam,
+              generationSource: generationSourceParam,
+              isBundled: isBundledParam,
+              status: statusParam,
+              lastSeenAtMs: lastSeenAtMsParam,
+              createdAtMs: createdAtMsParam,
+              updatedAtMs: updatedAtMsParam,
+              learningState: learningStateParam,
+              learningStateAtMs: learningStateAtMsParam,
+            );
+
+            return object;
+          },
+        ),
+    LearningHistoryEntity: obx_int.EntityDefinition<LearningHistoryEntity>(
+      model: _entities[9],
+      toOneRelations: (LearningHistoryEntity object) => [],
+      toManyRelations: (LearningHistoryEntity object) => {},
+      getId: (LearningHistoryEntity object) => object.id,
+      setId: (LearningHistoryEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LearningHistoryEntity object, fb.Builder fbb) {
+        final snapshotJsonOffset = fbb.writeString(object.snapshotJson);
+        final learningStateOffset = fbb.writeString(object.learningState);
+        fbb.startTable(5);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, snapshotJsonOffset);
+        fbb.addOffset(2, learningStateOffset);
+        fbb.addInt64(3, object.occurredAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final snapshotJsonParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final learningStateParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final occurredAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          10,
+          0,
+        );
+        final object = LearningHistoryEntity(
+          id: idParam,
+          snapshotJson: snapshotJsonParam,
+          learningState: learningStateParam,
+          occurredAtMs: occurredAtMsParam,
+        );
+
+        return object;
+      },
+    ),
+    SubmittedWordEntity: obx_int.EntityDefinition<SubmittedWordEntity>(
+      model: _entities[10],
+      toOneRelations: (SubmittedWordEntity object) => [],
+      toManyRelations: (SubmittedWordEntity object) => {},
+      getId: (SubmittedWordEntity object) => object.id,
+      setId: (SubmittedWordEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (SubmittedWordEntity object, fb.Builder fbb) {
+        final localSubmissionIdOffset = fbb.writeString(
+          object.localSubmissionId,
+        );
+        final serverSubmissionIdOffset = object.serverSubmissionId == null
+            ? null
+            : fbb.writeString(object.serverSubmissionId!);
+        final submittedTermOffset = fbb.writeString(object.submittedTerm);
+        final targetLanguageOffset = fbb.writeString(object.targetLanguage);
+        final statusOffset = fbb.writeString(object.status);
+        final failureReasonOffset = object.failureReason == null
+            ? null
+            : fbb.writeString(object.failureReason!);
+        final resolutionTypeOffset = object.resolutionType == null
+            ? null
+            : fbb.writeString(object.resolutionType!);
+        final resolvedWordServerIdOffset = object.resolvedWordServerId == null
+            ? null
+            : fbb.writeString(object.resolvedWordServerId!);
+        fbb.startTable(13);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, localSubmissionIdOffset);
+        fbb.addOffset(2, serverSubmissionIdOffset);
+        fbb.addOffset(3, submittedTermOffset);
+        fbb.addOffset(4, targetLanguageOffset);
+        fbb.addOffset(5, statusOffset);
+        fbb.addOffset(6, failureReasonOffset);
+        fbb.addOffset(7, resolutionTypeOffset);
+        fbb.addOffset(8, resolvedWordServerIdOffset);
+        fbb.addInt64(9, object.createdAtMs);
+        fbb.addInt64(10, object.updatedAtMs);
+        fbb.addInt64(11, object.resolvedAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final localSubmissionIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final serverSubmissionIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 8);
+        final submittedTermParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final targetLanguageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final statusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 14, '');
+        final failureReasonParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 16);
+        final resolutionTypeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 18);
+        final resolvedWordServerIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 20);
+        final createdAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          22,
+          0,
+        );
+        final updatedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          24,
+          0,
+        );
+        final resolvedAtMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          26,
+        );
+        final object = SubmittedWordEntity(
+          id: idParam,
+          localSubmissionId: localSubmissionIdParam,
+          serverSubmissionId: serverSubmissionIdParam,
+          submittedTerm: submittedTermParam,
+          targetLanguage: targetLanguageParam,
+          status: statusParam,
+          failureReason: failureReasonParam,
+          resolutionType: resolutionTypeParam,
+          resolvedWordServerId: resolvedWordServerIdParam,
+          createdAtMs: createdAtMsParam,
+          updatedAtMs: updatedAtMsParam,
+          resolvedAtMs: resolvedAtMsParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -1316,6 +2111,26 @@ class LocalWordEntity_ {
   /// See [LocalWordEntity.updatedAtMs].
   static final updatedAtMs = obx.QueryIntegerProperty<LocalWordEntity>(
     _entities[2].properties[17],
+  );
+
+  /// See [LocalWordEntity.entryType].
+  static final entryType = obx.QueryStringProperty<LocalWordEntity>(
+    _entities[2].properties[18],
+  );
+
+  /// See [LocalWordEntity.explanation].
+  static final explanation = obx.QueryStringProperty<LocalWordEntity>(
+    _entities[2].properties[19],
+  );
+
+  /// See [LocalWordEntity.learningState].
+  static final learningState = obx.QueryStringProperty<LocalWordEntity>(
+    _entities[2].properties[20],
+  );
+
+  /// See [LocalWordEntity.learningStateAtMs].
+  static final learningStateAtMs = obx.QueryIntegerProperty<LocalWordEntity>(
+    _entities[2].properties[21],
   );
 }
 
@@ -1503,5 +2318,250 @@ class SpeakingPromptEntity_ {
   /// See [SpeakingPromptEntity.cachedAtMs].
   static final cachedAtMs = obx.QueryIntegerProperty<SpeakingPromptEntity>(
     _entities[6].properties[11],
+  );
+}
+
+/// [ExamAttemptEntity] entity fields to define ObjectBox queries.
+class ExamAttemptEntity_ {
+  /// See [ExamAttemptEntity.id].
+  static final id = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[0],
+  );
+
+  /// See [ExamAttemptEntity.attemptId].
+  static final attemptId = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[1],
+  );
+
+  /// See [ExamAttemptEntity.sessionId].
+  static final sessionId = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[2],
+  );
+
+  /// See [ExamAttemptEntity.topic].
+  static final topic = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[3],
+  );
+
+  /// See [ExamAttemptEntity.language].
+  static final language = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[4],
+  );
+
+  /// See [ExamAttemptEntity.difficultyLevel].
+  static final difficultyLevel = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[5],
+  );
+
+  /// See [ExamAttemptEntity.totalQuestions].
+  static final totalQuestions = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[6],
+  );
+
+  /// See [ExamAttemptEntity.correctCount].
+  static final correctCount = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[7],
+  );
+
+  /// See [ExamAttemptEntity.scorePct].
+  static final scorePct = obx.QueryDoubleProperty<ExamAttemptEntity>(
+    _entities[7].properties[8],
+  );
+
+  /// See [ExamAttemptEntity.passed].
+  static final passed = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[9],
+  );
+
+  /// See [ExamAttemptEntity.createdAtMs].
+  static final createdAtMs = obx.QueryIntegerProperty<ExamAttemptEntity>(
+    _entities[7].properties[10],
+  );
+
+  /// See [ExamAttemptEntity.certificateId].
+  static final certificateId = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[11],
+  );
+
+  /// See [ExamAttemptEntity.syncStatus].
+  static final syncStatus = obx.QueryStringProperty<ExamAttemptEntity>(
+    _entities[7].properties[12],
+  );
+}
+
+/// [LocalWorkplaceSentenceEntity] entity fields to define ObjectBox queries.
+class LocalWorkplaceSentenceEntity_ {
+  /// See [LocalWorkplaceSentenceEntity.id].
+  static final id = obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[0],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.localId].
+  static final localId = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[1],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.serverSentenceId].
+  static final serverSentenceId =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[2],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.text].
+  static final text = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[3],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.language].
+  static final language = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[4],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.meaningVi].
+  static final meaningVi =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[5],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.topic].
+  static final topic = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[6],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.sourceTitle].
+  static final sourceTitle =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[7],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.generationSource].
+  static final generationSource =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[8],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.isBundled].
+  static final isBundled =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[9],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.status].
+  static final status = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+    _entities[8].properties[10],
+  );
+
+  /// See [LocalWorkplaceSentenceEntity.lastSeenAtMs].
+  static final lastSeenAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[11],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.createdAtMs].
+  static final createdAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[12],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.updatedAtMs].
+  static final updatedAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[13],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.learningState].
+  static final learningState =
+      obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[14],
+      );
+
+  /// See [LocalWorkplaceSentenceEntity.learningStateAtMs].
+  static final learningStateAtMs =
+      obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
+        _entities[8].properties[15],
+      );
+}
+
+/// [LearningHistoryEntity] entity fields to define ObjectBox queries.
+class LearningHistoryEntity_ {
+  /// See [LearningHistoryEntity.id].
+  static final id = obx.QueryIntegerProperty<LearningHistoryEntity>(
+    _entities[9].properties[0],
+  );
+
+  /// See [LearningHistoryEntity.snapshotJson].
+  static final snapshotJson = obx.QueryStringProperty<LearningHistoryEntity>(
+    _entities[9].properties[1],
+  );
+
+  /// See [LearningHistoryEntity.learningState].
+  static final learningState = obx.QueryStringProperty<LearningHistoryEntity>(
+    _entities[9].properties[2],
+  );
+
+  /// See [LearningHistoryEntity.occurredAtMs].
+  static final occurredAtMs = obx.QueryIntegerProperty<LearningHistoryEntity>(
+    _entities[9].properties[3],
+  );
+}
+
+/// [SubmittedWordEntity] entity fields to define ObjectBox queries.
+class SubmittedWordEntity_ {
+  /// See [SubmittedWordEntity.id].
+  static final id = obx.QueryIntegerProperty<SubmittedWordEntity>(
+    _entities[10].properties[0],
+  );
+
+  /// See [SubmittedWordEntity.localSubmissionId].
+  static final localSubmissionId = obx.QueryStringProperty<SubmittedWordEntity>(
+    _entities[10].properties[1],
+  );
+
+  /// See [SubmittedWordEntity.serverSubmissionId].
+  static final serverSubmissionId =
+      obx.QueryStringProperty<SubmittedWordEntity>(_entities[10].properties[2]);
+
+  /// See [SubmittedWordEntity.submittedTerm].
+  static final submittedTerm = obx.QueryStringProperty<SubmittedWordEntity>(
+    _entities[10].properties[3],
+  );
+
+  /// See [SubmittedWordEntity.targetLanguage].
+  static final targetLanguage = obx.QueryStringProperty<SubmittedWordEntity>(
+    _entities[10].properties[4],
+  );
+
+  /// See [SubmittedWordEntity.status].
+  static final status = obx.QueryStringProperty<SubmittedWordEntity>(
+    _entities[10].properties[5],
+  );
+
+  /// See [SubmittedWordEntity.failureReason].
+  static final failureReason = obx.QueryStringProperty<SubmittedWordEntity>(
+    _entities[10].properties[6],
+  );
+
+  /// See [SubmittedWordEntity.resolutionType].
+  static final resolutionType = obx.QueryStringProperty<SubmittedWordEntity>(
+    _entities[10].properties[7],
+  );
+
+  /// See [SubmittedWordEntity.resolvedWordServerId].
+  static final resolvedWordServerId =
+      obx.QueryStringProperty<SubmittedWordEntity>(_entities[10].properties[8]);
+
+  /// See [SubmittedWordEntity.createdAtMs].
+  static final createdAtMs = obx.QueryIntegerProperty<SubmittedWordEntity>(
+    _entities[10].properties[9],
+  );
+
+  /// See [SubmittedWordEntity.updatedAtMs].
+  static final updatedAtMs = obx.QueryIntegerProperty<SubmittedWordEntity>(
+    _entities[10].properties[10],
+  );
+
+  /// See [SubmittedWordEntity.resolvedAtMs].
+  static final resolvedAtMs = obx.QueryIntegerProperty<SubmittedWordEntity>(
+    _entities[10].properties[11],
   );
 }

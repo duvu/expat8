@@ -11,32 +11,72 @@ test('worker processes queued article and persists extracted vocabulary', async 
     userId: 'user_1',
     title: 'Learning text',
     language: 'en',
-    rawText: 'Reliable teams build reliable systems and adjust plans quickly.'
+    rawText:
+      'Reliable teams build reliable systems. They share knowledge across functions. The article also mentions reliable systems again.'
   });
 
   const enrichmentAdapter = {
-    async enrichTerm({ term, language, frequency, confidence, context }) {
-      return {
-        ok: true,
-        item: {
-          term,
-          language,
-          meaning_vi: `Nghia cua ${term}`,
-          part_of_speech: 'noun',
-          ipa: '/na/',
-          vietnamese_pronunciation: term,
-          example: context || `${term} in article`,
-          example_vi: `${term} trong bai viet`,
-          difficulty: 'A1',
-          topics: ['article-ingestion'],
-          frequency,
-          confidence
-        }
-      };
+    async suggestVocabulary({ chunk }) {
+      return chunk.includes('share knowledge')
+        ? [
+            {
+              term: 'share knowledge',
+              language: 'en',
+              meaning_vi: 'chia se kien thuc',
+              part_of_speech: 'verb phrase',
+              ipa: '/ʃer ˈnɑlɪdʒ/',
+              vietnamese_pronunciation: 'sher nayldj',
+              example: 'Teams share knowledge.',
+              example_vi: 'Cac doi chia se kien thuc.',
+              difficulty: 'A1',
+              level: 'A1',
+              topics: ['article-ingestion'],
+              classification: 'article_phrase',
+              suggestion_type: 'phrase',
+              frequency: 1,
+              confidence: 0.9
+            }
+          ]
+        : [
+            {
+              term: 'reliable',
+              language: 'en',
+              meaning_vi: 'dang tin cay',
+              part_of_speech: 'adjective',
+              ipa: '/rɪˈlaɪəbl/',
+              vietnamese_pronunciation: 'ri-lai-uh-bol',
+              example: 'Reliable teams build better systems.',
+              example_vi: 'Cac doi dang tin cay xay dung he thong tot hon.',
+              difficulty: 'A1',
+              level: 'A1',
+              topics: ['article-ingestion'],
+              classification: 'article_keyword',
+              suggestion_type: 'word',
+              frequency: 2,
+              confidence: 0.85
+            },
+            {
+              term: 'reliable',
+              language: 'en',
+              meaning_vi: 'dang tin cay',
+              part_of_speech: 'adjective',
+              ipa: '/rɪˈlaɪəbl/',
+              vietnamese_pronunciation: 'ri-lai-uh-bol',
+              example: 'Reliable systems stay reliable.',
+              example_vi: 'He thong dang tin cay giu vung do tin cay.',
+              difficulty: 'A1',
+              level: 'A1',
+              topics: ['article-ingestion'],
+              classification: 'article_keyword',
+              suggestion_type: 'word',
+              frequency: 1,
+              confidence: 0.8
+            }
+          ];
     }
   };
 
-  const pipeline = new ArticleProcessingPipeline({ store, enrichmentAdapter });
+  const pipeline = new ArticleProcessingPipeline({ store, suggestionAdapter: enrichmentAdapter, maxChunkChars: 80 });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
 
   const result = await worker.runOnce();
@@ -44,8 +84,11 @@ test('worker processes queued article and persists extracted vocabulary', async 
   assert.equal(result.processed, 1);
   const processedArticle = store.getArticleById({ articleId: article.id });
   assert.equal(processedArticle.status, 'processed');
-  assert.ok(store.articleTermsById.size > 0);
-  assert.ok(store.wordSensesById.size > 0);
+  assert.equal(store.articleTermsById.size, 2);
+  assert.equal(store.wordSensesById.size, 2);
+  const persisted = [...store.articleTermsById.values()];
+  assert.ok(persisted.some((item) => item.classification === 'article_keyword'));
+  assert.ok(persisted.some((item) => item.classification === 'article_phrase'));
 });
 
 test('worker retries then dead-letters after max attempts', async () => {
@@ -89,28 +132,30 @@ test('admin-created article transitions to pending_review on successful processi
   });
 
   const enrichmentAdapter = {
-    async enrichTerm({ term, language, frequency, confidence }) {
-      return {
-        ok: true,
-        item: {
-          term,
-          language,
-          meaning_vi: `Nghia cua ${term}`,
+    async suggestVocabulary() {
+      return [
+        {
+          term: 'workflow',
+          language: 'en',
+          meaning_vi: 'quy trinh',
           part_of_speech: 'noun',
-          ipa: '/na/',
-          vietnamese_pronunciation: term,
-          example: `${term} in article`,
-          example_vi: `${term} trong bai viet`,
+          ipa: '/ˈwɜrkfloʊ/',
+          vietnamese_pronunciation: 'uoc-flow',
+          example: 'The workflow needs review.',
+          example_vi: 'Quy trinh can duoc xem xet.',
           difficulty: 'A1',
+          level: 'A1',
           topics: ['article-ingestion'],
-          frequency,
-          confidence
+          classification: 'article_keyword',
+          suggestion_type: 'word',
+          frequency: 1,
+          confidence: 0.7
         }
-      };
+      ];
     }
   };
 
-  const pipeline = new ArticleProcessingPipeline({ store, enrichmentAdapter });
+  const pipeline = new ArticleProcessingPipeline({ store, suggestionAdapter: enrichmentAdapter });
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
 
   await worker.runOnce();

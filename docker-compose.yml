@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-expat8}
       POSTGRES_USER: ${POSTGRES_USER:-expat8}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expat8_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGEME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
@@ -24,8 +24,8 @@ services:
         condition: service_healthy
     environment:
       PORT: ${PORT:-8787}
-      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
-      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-https://lite.x51.vn}
+      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
       LITELLM_API_KEY: ${LITELLM_API_KEY:-}
       LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}
       DEFAULT_SOURCE_LANGUAGE: ${DEFAULT_SOURCE_LANGUAGE:-vi}
@@ -36,8 +36,15 @@ services:
       APP_CREDENTIAL_NONCE_TTL_SECONDS: ${APP_CREDENTIAL_NONCE_TTL_SECONDS:-300}
       APP_CREDENTIAL_GET_BODY_LIMIT_BYTES: ${APP_CREDENTIAL_GET_BODY_LIMIT_BYTES:-0}
       APP_CREDENTIAL_POST_BODY_LIMIT_BYTES: ${APP_CREDENTIAL_POST_BODY_LIMIT_BYTES:-262144}
+      LOG_ARCHIVE_DIR: ${LOG_ARCHIVE_DIR:-./data/log-archives}
+      LOG_ARCHIVE_RETENTION_DAYS: ${LOG_ARCHIVE_RETENTION_DAYS:-3}
+      LOG_ARCHIVE_MAX_TOTAL_BYTES: ${LOG_ARCHIVE_MAX_TOTAL_BYTES:-104857600}
+      LOG_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES: ${LOG_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES:-104857600}
+      ADMIN_API_TOKENS: ${ADMIN_API_TOKENS:-}
     ports:
       - "${BACKEND_PORT:-8787}:${PORT:-8787}"
+    volumes:
+      - backend_data:/app/data
     healthcheck:
       test:
         [
@@ -47,6 +54,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 6
+
+  article-worker:
+    build:
+      context: ./backend
+    command: ["npm", "run", "start:worker"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}
+      DEFAULT_SOURCE_LANGUAGE: ${DEFAULT_SOURCE_LANGUAGE:-vi}
+      DEFAULT_TARGET_LANGUAGE: ${DEFAULT_TARGET_LANGUAGE:-en}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_REDACTION_ENABLED: ${LOG_REDACTION_ENABLED:-true}
+      ARTICLE_WORKER_INTERVAL_MS: ${ARTICLE_WORKER_INTERVAL_MS:-1000}
+      ARTICLE_WORKER_MAX_ATTEMPTS: ${ARTICLE_WORKER_MAX_ATTEMPTS:-3}
 
   expat8-dashboard:
     build:
@@ -59,7 +86,7 @@ services:
         condition: service_healthy
     environment:
       BACKEND_BASE_URL: ${DASHBOARD_BACKEND_BASE_URL:-http://backend:8787}
-      EXPAT8_DASHBOARD_DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-expat8_password}@postgres:5432/${POSTGRES_DB:-expat8}
+      EXPAT8_DASHBOARD_DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       APP_CREDENTIAL_APP_ID: ${DASHBOARD_APP_CREDENTIAL_APP_ID:-}
       APP_CREDENTIAL_SECRET: ${DASHBOARD_APP_CREDENTIAL_SECRET:-}
@@ -68,3 +95,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_data:

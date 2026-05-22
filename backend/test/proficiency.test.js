@@ -41,7 +41,12 @@ test('increments and decrements levels within active scale', () => {
 
 test('computes fallback ordering and level index by scale', () => {
   assert.deepEqual(getFallbackDifficultyLevels('B1', { language: 'en' }).slice(0, 4), ['B1', 'B2', 'A2', 'A1']);
-  assert.deepEqual(getFallbackDifficultyLevels('HSK3', { language: 'zh' }).slice(0, 4), ['HSK3', 'HSK4', 'HSK2', 'HSK1']);
+  assert.deepEqual(getFallbackDifficultyLevels('HSK3', { language: 'zh' }).slice(0, 4), [
+    'HSK3',
+    'HSK4',
+    'HSK2',
+    'HSK1'
+  ]);
   assert.equal(getLevelIndex('B2', { language: 'en' }), 3);
   assert.equal(getLevelIndex('HSK5', { language: 'zh' }), 4);
 });

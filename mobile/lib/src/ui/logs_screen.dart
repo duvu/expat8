@@ -23,6 +23,7 @@ class _LogsScreenState extends State<LogsScreen> {
   AppLogCategory? _category;
   bool _isLoading = true;
   bool _isExporting = false;
+  bool _isSending = false;
   List<LogEntry> _entries = const [];
 
   @override
@@ -82,6 +83,34 @@ class _LogsScreenState extends State<LogsScreen> {
     }
   }
 
+  Future<void> _sendLogsToServer() async {
+    setState(() => _isSending = true);
+    try {
+      final result = await widget.repository.sendLogsToServer(
+        minimumLevel: _minimumLevel,
+        category: _category,
+        limit: 2000,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result.count == 0) {
+        _showSnackBar('No logs to send to the server.');
+        return;
+      }
+      _showSnackBar('Sent ${result.count} logs to the server.');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar('Failed to send logs to server: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
+    }
+  }
+
   Rect? _sharePositionOrigin() {
     final renderObject = context.findRenderObject();
     if (renderObject is! RenderBox || !renderObject.hasSize) {
@@ -117,8 +146,23 @@ class _LogsScreenState extends State<LogsScreen> {
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
+            tooltip: 'Send logs to server',
+            onPressed: (_isLoading || _isExporting || _isSending)
+                ? null
+                : _sendLogsToServer,
+            icon: _isSending
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_upload_outlined),
+          ),
+          IconButton(
             tooltip: 'Export logs',
-            onPressed: _isExporting ? null : _exportLogs,
+            onPressed: (_isLoading || _isExporting || _isSending)
+                ? null
+                : _exportLogs,
             icon: _isExporting
                 ? const SizedBox(
                     width: 18,

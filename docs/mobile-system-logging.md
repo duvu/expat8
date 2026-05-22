@@ -8,6 +8,10 @@ App ho tro cac bien `--dart-define` sau:
 - `APP_LOG_LEVEL`: muc log toi thieu (`debug`, `info`, `warning`, `error`)
 - `APP_LOG_MAX_ENTRIES`: so ban ghi toi da giu lai trong local store
 
+Luu y build:
+- Moi khi thay `BACKEND_BASE_URL`, `APP_CREDENTIAL_APP_ID`, `APP_CREDENTIAL_SECRET`, `APP_LOG_LEVEL`, hoac `APP_LOG_MAX_ENTRIES`, phai rebuild APK/AAB de binary lay cau hinh moi.
+- Gia tri that phai duoc cung cap tu env file local hoac secret store, khong hardcode trong file commit len GitHub.
+
 Retention theo tuoi duoc co dinh o 60 phut. Normal build khong ho tro cau hinh
 giu log lau hon moc nay.
 
@@ -19,9 +23,9 @@ Gia tri mac dinh:
 Vi du chay debug:
 ```bash
 flutter run -d emulator-5554 \
-  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define=BACKEND_BASE_URL=<YOUR_BACKEND_URL> \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
   --dart-define=APP_LOG_LEVEL=debug
 ```
 

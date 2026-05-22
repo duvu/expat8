@@ -13,7 +13,7 @@
 - **Project:** expat8
 - **Description:** This workspace contains the OpenSpec-driven MVP implementation for a Flutter vocabulary learning app and a lightweight backend service.
 - **Repo guidance:** `backend/` is Node.js 22 + Express, `mobile/` is Flutter, `contracts/api.md` is the API source of truth, and `docker-compose.yml` starts PostgreSQL + backend locally.
-- **Host mapping:** `10.113.213.9` is the local machine for this workspace, so deploy commands targeting that IP are effectively local-host operations here.
+- **Host mapping:** `<INTERNAL_HOST>` is the local machine for this workspace, so deploy commands targeting that IP are effectively local-host operations here.
 
 ## User Preferences
 

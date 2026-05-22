@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 
 import { backendFetch } from '@/lib/backend';
 import { listSpeakingPrompts } from '@/lib/db';
+import PageShell from '@/components/PageShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,19 +29,18 @@ async function updateSpeakingPrompt(formData: FormData) {
 export default async function SpeakingPromptsPage({
   searchParams
 }: {
-  searchParams?: { status?: string; missing?: string };
+  searchParams?: Promise<{ status?: string; missing?: string }>;
 }) {
-  const status = searchParams?.status ?? 'pending_review';
-  const missingRequired = searchParams?.missing === 'true';
+  const params = await searchParams;
+  const status = params?.status ?? 'pending_review';
+  const missingRequired = params?.missing === 'true';
 
   const items = await listSpeakingPrompts({ status, missingRequired });
 
   const statusOptions = ['pending_review', 'approved', 'rejected'];
 
   return (
-    <main>
-      <h1>Speaking prompt review</h1>
-
+    <PageShell title="Speaking Prompts">
       <div className="filter-bar">
         <form method="GET" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <label>
@@ -111,6 +111,6 @@ export default async function SpeakingPromptsPage({
           </tbody>
         </table>
       </section>
-    </main>
+    </PageShell>
   );
 }

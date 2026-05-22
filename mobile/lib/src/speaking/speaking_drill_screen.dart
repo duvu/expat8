@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../data/local_database_entities.dart';
+import '../speaking/speaking_audio_service.dart';
 import '../speaking/speaking_panel.dart';
 import '../speaking/speaking_repository.dart';
 
 /// 3-minute speaking drill.
 ///
-/// Selects up to 5 cached prompts from [SpeakingRepository.selectDrillPrompts]
+/// Selects up to 5 cached prompts from [SpeakingRepository.getDrillCandidates]
 /// and walks the user through: listen → record → retry → self-rate.
 ///
 /// Shows an encouraging summary at the end.
@@ -22,6 +23,7 @@ class SpeakingDrillScreen extends StatefulWidget {
 
 class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
   late final List<SpeakingPromptEntity> _prompts;
+  late final DateTime _sessionStart;
   int _current = 0;
   bool _done = false;
   int _totalAttempts = 0;
@@ -30,7 +32,12 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
   @override
   void initState() {
     super.initState();
-    _prompts = widget.repository.selectDrillPrompts(count: 5);
+    _prompts = widget.repository.getDrillCandidates(limit: 5);
+    _sessionStart = DateTime.now().toUtc();
+    widget.repository.beginDrillSession();
+    if (_prompts.isNotEmpty) {
+      widget.repository.onDrillPromptViewed(_prompts[0]);
+    }
   }
 
   SpeakingPromptEntity get _currentPrompt => _prompts[_current];
@@ -41,8 +48,16 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
       _totalRetries += retries;
       if (_current < _prompts.length - 1) {
         _current++;
+        widget.repository.onDrillPromptViewed(_prompts[_current]);
       } else {
         _done = true;
+        final durationMs =
+            DateTime.now().toUtc().difference(_sessionStart).inMilliseconds;
+        widget.repository.onDrillCompleted(
+          promptsAttempted: _totalAttempts,
+          promptsCompleted: _totalAttempts,
+          totalDurationMs: durationMs,
+        );
       }
     });
   }
@@ -187,15 +202,16 @@ enum _DrillPhase { listen, record, recording, recorded, rated }
 class _DrillPromptCardState extends State<_DrillPromptCard> {
   _DrillPhase _phase = _DrillPhase.listen;
   String? _attemptId;
-  SpeakingRating? _rating;
   int _retries = 0;
   bool _permDenied = false;
 
   String get _targetText => widget.prompt.targetText ?? '';
   String? get _viHint => widget.prompt.viHint;
+  String get _promptId => widget.prompt.promptId;
 
   Future<void> _onListen() async {
     await widget.repository.playSample(_targetText);
+    widget.repository.onDrillSamplePlayed(widget.prompt);
     setState(() => _phase = _DrillPhase.record);
   }
 
@@ -206,25 +222,40 @@ class _DrillPromptCardState extends State<_DrillPromptCard> {
       return;
     }
     if (status != MicPermissionStatus.granted) return;
-    // Minimal VocabularyWord-like surface for repository calls.
-    // Drill prompts are already cached; we pass null for serverWordId.
     setState(() => _phase = _DrillPhase.recording);
+    final id =
+        await widget.repository.startDrillRecording(promptId: _promptId);
+    setState(() => _attemptId = id);
   }
 
   Future<void> _onStop() async {
+    await widget.repository.stopDrillRecording(promptId: _promptId);
     setState(() => _phase = _DrillPhase.recorded);
   }
 
   void _onRetry() {
     _retries++;
+    final id = _attemptId;
+    if (id != null) {
+      widget.repository.onDrillRetried(
+        attemptId: id,
+        promptId: _promptId,
+        retryCount: _retries,
+      );
+    }
     setState(() => _phase = _DrillPhase.record);
   }
 
-  void _onRate(SpeakingRating rating) {
-    setState(() {
-      _rating = rating;
-      _phase = _DrillPhase.rated;
-    });
+  void _onRate(SpeakingDrillRating rating) {
+    final id = _attemptId;
+    if (id != null) {
+      widget.repository.onDrillSelfRated(
+        attemptId: id,
+        promptId: _promptId,
+        rating: rating,
+      );
+    }
+    setState(() => _phase = _DrillPhase.rated);
   }
 
   void _onNext() {
@@ -293,20 +324,12 @@ class _DrillPromptCardState extends State<_DrillPromptCard> {
             const SizedBox(height: 8),
             Text('How did that feel?', style: theme.textTheme.labelLarge),
             const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: SpeakingRating.values.map((r) {
-                final label = switch (r) {
-                  SpeakingRating.easy => 'Easy',
-                  SpeakingRating.ok => 'OK',
-                  SpeakingRating.hard => 'Hard',
-                };
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: OutlinedButton(
-                    onPressed: () => _onRate(r),
-                    child: Text(label),
-                  ),
+            Wrap(
+              spacing: 8,
+              children: SpeakingDrillRating.values.map((r) {
+                return OutlinedButton(
+                  onPressed: () => _onRate(r),
+                  child: Text(r.label),
                 );
               }).toList(),
             ),

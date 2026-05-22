@@ -11,6 +11,11 @@ export class ArticleProcessingWorker {
       return { processed: 0 };
     }
 
+    if (typeof this.store.countPendingArticleJobs === 'function') {
+      const pendingCount = await this.store.countPendingArticleJobs();
+      this.logger.info?.('article_processing_backlog', { pending_count: pendingCount });
+    }
+
     const job = await this.store.claimNextArticleProcessingJob();
     if (!job) {
       return { processed: 0 };

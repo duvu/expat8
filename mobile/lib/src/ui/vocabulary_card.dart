@@ -38,6 +38,9 @@ class _VocabularyCardViewState extends State<VocabularyCardView> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final word = widget.word;
+    final isPhrase =
+        word.entryType == 'phrase' || word.entryType == 'idiom';
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -51,25 +54,33 @@ class _VocabularyCardViewState extends State<VocabularyCardView> {
               children: [
                 Expanded(
                   child: Text(
-                    widget.word.term,
+                    word.term,
                     style: textTheme.headlineMedium,
                   ),
                 ),
-                if (widget.word.partOfSpeech != null)
-                  Text(widget.word.partOfSpeech!, style: textTheme.labelLarge),
+                if (!isPhrase && word.partOfSpeech != null)
+                  Text(word.partOfSpeech!, style: textTheme.labelLarge),
               ],
             ),
             const SizedBox(height: 12),
-            Text(widget.word.meaningVi, style: textTheme.titleMedium),
+            if (isPhrase && word.explanation.isNotEmpty) ...[
+              Text(word.explanation,
+                  style: textTheme.titleMedium
+                      ?.copyWith(fontStyle: FontStyle.italic)),
+              const SizedBox(height: 8),
+            ],
+            Text(word.meaningVi, style: textTheme.titleMedium),
             const Divider(height: 32),
-            _Detail(
-                label: 'Vietnamese reading',
-                value: widget.word.vietnamesePronunciation),
-            _Detail(label: 'IPA', value: widget.word.ipa),
-            const SizedBox(height: 16),
-            Text(widget.word.example, style: textTheme.bodyLarge),
+            if (!isPhrase) ...[
+              _Detail(
+                  label: 'Vietnamese reading',
+                  value: word.vietnamesePronunciation),
+              _Detail(label: 'IPA', value: word.ipa),
+              const SizedBox(height: 16),
+            ],
+            Text(word.example, style: textTheme.bodyLarge),
             const SizedBox(height: 8),
-            Text(widget.word.exampleVi, style: textTheme.bodyMedium),
+            Text(word.exampleVi, style: textTheme.bodyMedium),
             if (_speakingEnabled) ...[
               const SizedBox(height: 16),
               _SpeakingToggle(

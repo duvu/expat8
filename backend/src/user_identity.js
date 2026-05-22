@@ -8,9 +8,10 @@ export class DuplicateUserError extends Error {
 }
 
 export class InvalidCredentialsError extends Error {
-  constructor() {
+  constructor({ reason = null } = {}) {
     super('invalid user credentials');
     this.name = 'InvalidCredentialsError';
+    this.reason = reason;
   }
 }
 
@@ -22,7 +23,9 @@ export class InvalidRegistrationInputError extends Error {
 }
 
 export function normalizeUserIdentifier(identifier) {
-  return String(identifier ?? '').trim().toLowerCase();
+  return String(identifier ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 export function requireRegistrationInput({ identifier, password }) {

@@ -60,9 +60,8 @@ export function resolveScaleForLanguage(language = null) {
 }
 
 export function getProficiencyProfile({ language = null, scale = null } = {}) {
-  const resolvedScale = (typeof scale === 'string' && scale.trim()
-    ? scale.trim().toLowerCase()
-    : resolveScaleForLanguage(language));
+  const resolvedScale =
+    typeof scale === 'string' && scale.trim() ? scale.trim().toLowerCase() : resolveScaleForLanguage(language);
   return PROFICIENCY_PROFILES[resolvedScale] ?? PROFICIENCY_PROFILES.cefr;
 }
 
@@ -150,8 +149,7 @@ export function getLevelIndex(level, options = {}) {
 
 export function buildScaleLevelState({ level, language = null, scale = null } = {}) {
   const profile = getProficiencyProfile({ language, scale });
-  const normalizedLevel = normalizeDifficultyLevel(level, { language, scale: profile.scale })
-    ?? profile.defaultLevel;
+  const normalizedLevel = normalizeDifficultyLevel(level, { language, scale: profile.scale }) ?? profile.defaultLevel;
   return {
     scale: profile.scale,
     level: normalizedLevel,

@@ -32,7 +32,8 @@ const REQUIRED_INDEXES = [
   'idx_speaking_events_device_occurred',
   'idx_speaking_events_user_occurred',
   'idx_speaking_events_prompt_occurred',
-  'idx_speaking_events_attempt'
+  'idx_speaking_events_attempt',
+  'idx_speaking_events_device_type_occurred'
 ];
 
 async function main() {

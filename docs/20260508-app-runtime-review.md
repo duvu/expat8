@@ -34,19 +34,19 @@ Window #6 Window{95c0d92 u0 com.example.expat8_language_app/MainActivity}:
 ## Build & Deployment Details
 
 ### Backend
-- **Latest Image**: `docker.x51.vn/x-ai/expat8-backend:20260508.2309`
+- **Latest Image**: `<YOUR_REGISTRY>/expat8-backend:20260508.2309`
 - **Status**: ✅ Healthy
-- **Health Check**: `curl http://10.113.213.9:18787/health` → HTTP 200 OK
-- **URL in App**: `https://expat8.x51.vn` (public, accessible from emulator)
+- **Health Check**: `curl http://<INTERNAL_HOST>:18787/health` → HTTP 200 OK
+- **URL in App**: `<YOUR_BACKEND_URL>` (public, accessible from emulator)
 
 ### Mobile Build
 - **APK Size**: 25.4 MB
 - **Build Date**: 2026-05-08 ~23:08
-- **Backend URL**: `https://expat8.x51.vn` (public endpoint)
+- **Backend URL**: `<YOUR_BACKEND_URL>` (public endpoint)
 - **Dart Defines**:
-  - `BACKEND_BASE_URL=https://expat8.x51.vn`
+  - `BACKEND_BASE_URL=<YOUR_BACKEND_URL>`
   - `APP_CREDENTIAL_APP_ID=expat8-mobile-app`
-  - `APP_CREDENTIAL_SECRET=expat8-mobile-secret`
+  - `APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>`
   - `APP_LOG_LEVEL=info`
 
 ### Emulator
@@ -184,7 +184,7 @@ adb -s emulator-5554 shell "cat /proc/15288/status"
 
 **Solutions**:
 1. Increase timeouts hơn (hiện tại 12s)
-2. Verify backend connectivity từ emulator: `curl https://expat8.x51.vn/health`
+2. Verify backend connectivity từ emulator: `curl <YOUR_BACKEND_URL>/health`
 3. Check nếu backend có response timeout
 
 ### Issue 3: Không có logs từ ứng dụng
@@ -233,7 +233,7 @@ adb -s emulator-5554 install build/app/outputs/flutter-apk/app-release.apk
 ```
 
 ### If Still Not Working
-1. **Check backend connectivity**: `curl https://expat8.x51.vn/health -v`
+1. **Check backend connectivity**: `curl <YOUR_BACKEND_URL>/health -v`
 2. **Check emulator network**: `adb -s emulator-5554 shell "ping 8.8.8.8 -c 3"`
 3. **Rebuild with debug symbols**: `flutter build apk` (không --release)
 4. **Check ObjectBox initialization**: ORM có thể lỗi khi load từ file

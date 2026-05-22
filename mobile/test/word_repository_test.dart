@@ -9,6 +9,7 @@ import 'package:expat8_language_app/src/data/word_repository.dart';
 import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/study_event.dart';
+import 'package:expat8_language_app/src/models/submitted_word.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -519,6 +520,69 @@ void main() {
     expect(exported.payload.contains('# Entries: 0'), true);
   });
 
+  test('send logs skips backend upload when no logs match', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_send_logs_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      logger: const NoopLogger(),
+    );
+
+    final exported = await repository.sendLogsToServer(
+      minimumLevel: AppLogLevel.warning,
+    );
+
+    expect(exported.count, 0);
+    expect(apiClient.uploadLogArchiveCalls, 0);
+    expect(apiClient.lastUploadedLogPayload, isNull);
+  });
+
+  test('sends sanitized logs to the backend archive endpoint', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_send_logs_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.persistLogEntry(
+      LogEntry(
+        timestamp: DateTime.utc(2026, 5, 5, 10, 0),
+        level: AppLogLevel.warning,
+        category: AppLogCategory.api,
+        event: 'api.warning',
+        message: 'Request failed with Bearer secret-token',
+        context: const {
+          'status_code': 500,
+          'app_secret': 'secret-value',
+        },
+      ),
+    );
+    final apiClient = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      logger: const NoopLogger(),
+    );
+
+    final exported = await repository.sendLogsToServer(
+      minimumLevel: AppLogLevel.warning,
+    );
+
+    expect(exported.count, 1);
+    expect(apiClient.uploadLogArchiveCalls, 1);
+    expect(apiClient.lastUploadedLogDeviceId, isNotNull);
+    expect(apiClient.lastUploadedLogFileName, endsWith('.txt'));
+    expect(apiClient.lastUploadedLogPayload, isNotNull);
+    expect(apiClient.lastUploadedLogPayload!.contains('secret-token'), false);
+    expect(apiClient.lastUploadedLogPayload!.contains('secret-value'), false);
+    expect(
+      apiClient.lastUploadedLogPayload!.contains('# Expat8 mobile logs'),
+      true,
+    );
+  });
+
   test('topUpInventoryIfNeeded loads threshold batch when DB is empty',
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
@@ -666,6 +730,120 @@ void main() {
         reason: 'existing en data is preserved');
     expect(await database.countWords(language: 'zh'), 2);
   });
+
+  test('bundled English vocabulary asset stays duplicate-free', () async {
+    const loader = SeedVocabularyLoader();
+
+    final words = await loader.loadForLanguage('en');
+
+    expect(words, hasLength(100));
+    expect(words.map((word) => word.serverWordId).toSet(), hasLength(100));
+    expect(words.map((word) => word.term).toSet(), hasLength(100));
+  });
+
+  test('submitted word failure is stored immediately without queued sync',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_offline_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateError = BackendApiException('offline');
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    final submission = await repository.submitSubmittedWord(
+      term: 'stubborn',
+      language: 'en',
+    );
+
+    expect(submission.status, SubmittedWordStatus.failed);
+    expect(submission.failureReason, contains('offline'));
+  });
+
+  test('submitted word success imports ready resolved word into local inventory and counts as learned',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_ready_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final resolvedWord = _word('resolved_word');
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateResult = _submittedWord(
+        localId: 'local_submission_1',
+        serverId: 'submission_1',
+        term: 'reliable',
+        status: SubmittedWordStatus.ready,
+        resolutionType: SubmittedWordResolutionType.generatedWord,
+        resolvedWord: resolvedWord,
+      );
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    final submission = await repository.submitSubmittedWord(
+      term: 'reliable',
+      language: 'en',
+    );
+
+    final deviceId = await repository.getOrCreateDeviceId();
+    final items = await repository.loadSubmittedWords();
+    final localWord = await database.getWordByServerId(resolvedWord.serverWordId!);
+    final history = await database.getLearningHistory();
+    final totals = await database.getLearningProgressTotals();
+    expect(submission.status, SubmittedWordStatus.ready);
+    expect(items.single.status, SubmittedWordStatus.ready);
+    expect(items.single.resolutionType,
+        SubmittedWordResolutionType.generatedWord);
+    expect(localWord?.serverWordId, resolvedWord.serverWordId);
+    expect(localWord?.status, WordStatus.learning);
+    expect(history.single.snapshot.title, 'resolved_word');
+    expect(totals.learned, 1);
+    expect(apiClient.fetchSubmittedWordsCalls, 0);
+    expect(apiClient.lastSyncedDeviceId, deviceId);
+  });
+
+  test('submitted word preserves stronger existing local progress', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_preserve_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final existing = _word('resolved_word').copyWith(
+      status: WordStatus.review,
+      lastSeenAt: DateTime.utc(2026, 5, 19, 9),
+      nextReviewAt: DateTime.utc(2026, 5, 20, 9),
+    );
+    await database.upsertWord(existing);
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateResult = _submittedWord(
+        localId: 'local_submission_2',
+        serverId: 'submission_2',
+        term: 'resolved_word',
+        status: SubmittedWordStatus.ready,
+        resolutionType: SubmittedWordResolutionType.existingWord,
+        resolvedWord: _word('resolved_word'),
+      );
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    await repository.submitSubmittedWord(
+      term: 'resolved_word',
+      language: 'en',
+    );
+
+    final localWord = await database.getWordByServerId('resolved_word');
+    final history = await database.getLearningHistory();
+    expect(localWord?.status, WordStatus.review);
+    expect(history.length, 1);
+  });
 }
 
 class _StubSeedLoader extends SeedVocabularyLoader {
@@ -712,12 +890,23 @@ class _RecordingApiClient extends BackendApiClient {
 
   final bool failSubmit;
   final List<VocabularyWord> learningCardItems;
+  Object? submittedWordCreateError;
+  List<SubmittedWord> submittedWordFetchItems = const [];
+  SubmittedWord? submittedWordCreateResult;
   String? lastLearningCardsDeviceId;
   int? lastLearningCardsLimit;
   String? lastSessionToken;
   bool signOutCalled = false;
   String? lastSyncedDeviceId;
   List<String> lastSyncedCachedServerWordIds = const [];
+  String? lastUploadedLogPayload;
+  String? lastUploadedLogFileName;
+  String? lastUploadedLogDeviceId;
+  String? lastUploadedLogSessionToken;
+  String? lastUploadedLogSourceLabel;
+  int uploadLogArchiveCalls = 0;
+  int createSubmittedWordCalls = 0;
+  int fetchSubmittedWordsCalls = 0;
 
   @override
   Future<CacheInventoryResult> syncCacheInventory({
@@ -813,6 +1002,59 @@ class _RecordingApiClient extends BackendApiClient {
   Future<void> signOut({required UserSession session}) async {
     signOutCalled = true;
   }
+
+  @override
+  Future<void> uploadLogArchive({
+    required String payload,
+    required String fileName,
+    required String deviceId,
+    String? sessionToken,
+    String sourceLabel = 'mobile',
+    String contentType = 'text/plain; charset=utf-8',
+  }) async {
+    uploadLogArchiveCalls += 1;
+    lastUploadedLogPayload = payload;
+    lastUploadedLogFileName = fileName;
+    lastUploadedLogDeviceId = deviceId;
+    lastUploadedLogSessionToken = sessionToken;
+    lastUploadedLogSourceLabel = sourceLabel;
+  }
+
+  @override
+  Future<SubmittedWord> createSubmittedWord({
+    required String localSubmissionId,
+    required String deviceId,
+    required String term,
+    required String targetLanguage,
+    String? sessionToken,
+  }) async {
+    createSubmittedWordCalls += 1;
+    lastSessionToken = sessionToken;
+    if (submittedWordCreateError != null) {
+      throw submittedWordCreateError!;
+    }
+    return submittedWordCreateResult ??
+        SubmittedWord(
+          localSubmissionId: localSubmissionId,
+          serverSubmissionId: 'submission_recording',
+          submittedTerm: term,
+          targetLanguage: targetLanguage,
+          status: SubmittedWordStatus.ready,
+          createdAt: DateTime.utc(2026, 5, 19),
+          updatedAt: DateTime.utc(2026, 5, 19),
+        );
+  }
+
+  @override
+  Future<List<SubmittedWord>> fetchSubmittedWords({
+    required String deviceId,
+    int limit = 50,
+    String? sessionToken,
+  }) async {
+    fetchSubmittedWordsCalls += 1;
+    lastSessionToken = sessionToken;
+    return submittedWordFetchItems.take(limit).toList(growable: false);
+  }
 }
 
 class _SyncFailingApiClient extends BackendApiClient {
@@ -852,6 +1094,32 @@ VocabularyWord _word(String id, [DateTime? timestamp, String language = 'en']) {
     status: WordStatus.newWord,
     createdAt: ts,
     updatedAt: ts,
+  );
+}
+
+SubmittedWord _submittedWord({
+  required String localId,
+  String? serverId,
+  required String term,
+  required SubmittedWordStatus status,
+  String language = 'en',
+  SubmittedWordResolutionType? resolutionType,
+  VocabularyWord? resolvedWord,
+  String? failureReason,
+}) {
+  final now = DateTime.utc(2026, 5, 19);
+  return SubmittedWord(
+    localSubmissionId: localId,
+    serverSubmissionId: serverId,
+    submittedTerm: term,
+    targetLanguage: language,
+    status: status,
+    failureReason: failureReason,
+    resolutionType: resolutionType,
+    resolvedWord: resolvedWord,
+    createdAt: now,
+    updatedAt: now,
+    resolvedAt: status == SubmittedWordStatus.ready ? now : null,
   );
 }
 

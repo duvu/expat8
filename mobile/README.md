@@ -13,6 +13,11 @@ Flutter client for the Expat8 vocabulary learning MVP.
 - Duplicate avoidance is backend-owned through learner state and
   `PUT /v1/user-word-cache`; the mobile app does not send word exclusion lists
   for refill.
+- The app exposes an `Add word` flow where a learner can type a word or short
+  expression, store it locally if offline, and sync it through
+  `POST /v1/user-submitted-words` / `GET /v1/user-submitted-words` until it is
+  `queued`, `processing`, `ready`, or `failed`.
+- The drawer exposes a separate `Sentences` entry for workplace sentence study.
 
 ## Development
 
@@ -22,8 +27,27 @@ flutter test
 flutter run \
   --dart-define=BACKEND_BASE_URL=http://localhost:8787 \
   --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
-  --dart-define=APP_CREDENTIAL_SECRET=expat8-mobile-secret
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET>
 ```
+
+## Release Builds
+
+Android release builds use the same production `--dart-define` values for the signed APK and the signed bundle. Store these values in local env files or a secret manager and inject them at build time; never commit the real values:
+
+```bash
+cd mobile
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 flutter build apk --release \
+  --dart-define=BACKEND_BASE_URL=https://expat8.x51.vn \
+  --dart-define=APP_CREDENTIAL_APP_ID=expat8-mobile-app \
+  --dart-define=APP_CREDENTIAL_SECRET=<YOUR_APP_SECRET> \
+  --dart-define=NEW_WORD_TIMEOUT_SECONDS=5 \
+  --dart-define=APP_LOG_LEVEL=info
+```
+
+The APK is written to `build/app/outputs/flutter-apk/app-release.apk`; `flutter build appbundle --release` with the same values still writes `build/app/outputs/bundle/release/app-release.aab`. If `BACKEND_BASE_URL`, app credentials, or any other `--dart-define` changes, rebuild both artifacts.
+
+Keep the real build-time values in a local env file or secret store and inject them at build time. Never commit those values into the repo.
+For every package build, source the latest env/secret values first and then rebuild. If any compile-time value changes, redeploy with a fresh APK/AAB so the binary matches the target environment.
 
 ObjectBox native libraries are required for desktop/unit-test runs. In this
 repo, Linux test runs expect `mobile/lib/libobjectbox.so` to be present.

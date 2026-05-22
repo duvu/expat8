@@ -61,9 +61,11 @@ void main() {
 
     final words = await loader.loadForLanguage('en');
 
-    expect(words, isNotEmpty,
-        reason: 'mobile/assets/seed_vocab/en.json should bundle entries');
+    expect(words, hasLength(100),
+        reason: 'mobile/assets/seed_vocab/en.json should bundle 100 entries');
     expect(words.every((word) => word.language == 'en'), isTrue);
+    expect(words.map((word) => word.serverWordId).toSet(), hasLength(100));
+    expect(words.map((word) => word.term).toSet(), hasLength(100));
   });
 
   test('loads bundled Chinese seed asset for the running app', () async {

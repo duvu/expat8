@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import {
@@ -9,6 +11,10 @@ import {
   normalizeDifficultyLevel,
   requireStudyRating
 } from './proficiency.js';
+import { statusForRating, nextReviewForRating, normalizeWeekStart } from './store_utils.js';
+import { seedWords } from './seed_data.js';
+import { normalizeSuggestionType } from './vocabulary_validator.js';
+import { normalizeSentenceText } from './workplace_sentence_validator.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -27,13 +33,15 @@ export const SPEAKING_EVENT_TYPES = [
   'speaking_retried',
   'speaking_self_rated_clear',
   'speaking_self_rated_hesitated',
-  'speaking_self_rated_could_not_say'
+  'speaking_self_rated_could_not_say',
+  'speaking_drill_completed'
 ];
 
 export const SPEAKING_SELF_RATINGS = ['clear', 'hesitated', 'could_not_say'];
 
 export class WordStore {
-  constructor({ seed = true } = {}) {
+  constructor({ seed = true, strictAttemptId = false } = {}) {
+    this.strictAttemptId = strictAttemptId;
     this.words = new Map();
     this.studyEventsByClientId = new Map();
     this.userProficiencies = new Map();
@@ -41,6 +49,8 @@ export class WordStore {
     this.vocabularyReviewItemsById = new Map();
     this.contentPacksById = new Map();
     this.articleProcessingJobsById = new Map();
+    this.workplaceSentencesById = new Map();
+    this.articleWorkplaceSentenceLinksById = new Map();
     this.termsById = new Map();
     this.wordSensesById = new Map();
     this.articleTermsById = new Map();
@@ -53,6 +63,19 @@ export class WordStore {
     this.generationLocks = new Map();
     this.cachedWordIdsByOwner = new Map();
     this.wordStatesByOwnerWord = new Map();
+    this.userSubmittedWordsById = new Map();
+    this.userSubmittedWordJobsById = new Map();
+    // exam state
+    this.examSessionsById = new Map();
+    this.examQuestionsBySessionId = new Map();
+    this.examAttemptsById = new Map();
+    this.examAttemptsBySessionId = new Map();
+    this.examCertificatesById = new Map();
+    // memorization state
+    this.memorizationPassagesById = new Map();
+    this.memorizationSegmentsById = new Map();
+    this.memorizationSegmentProgressById = new Map();
+    this.memorizationSegmentTermsById = new Map();
     if (seed) {
       seedWords().forEach((word) => this.insertWord(word));
     }
@@ -74,12 +97,15 @@ export class WordStore {
       language: input.language,
       meaning_vi: input.meaning_vi,
       part_of_speech: input.part_of_speech ?? null,
-      ipa: input.ipa,
-      vietnamese_pronunciation: input.vietnamese_pronunciation,
-      example: input.example,
-      example_vi: input.example_vi,
+      ipa: input.ipa ?? '',
+      vietnamese_pronunciation: input.vietnamese_pronunciation ?? '',
+      example: input.example ?? '',
+      example_vi: input.example_vi ?? '',
       difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
       topics: input.topics ?? [],
+      entry_type: input.entry_type ?? 'word',
+      blank_word: input.blank_word ?? null,
+      explanation: input.explanation ?? '',
       generation_source: input.generation_source ?? 'seed',
       created_at: input.created_at ?? now,
       updated_at: input.updated_at ?? now
@@ -91,6 +117,32 @@ export class WordStore {
   recentWords({ targetLanguage = 'en', limit = 1000 }) {
     return [...this.words.values()]
       .filter((word) => word.language === targetLanguage)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, Math.min(limit, 1000));
+  }
+
+  recentWorkplaceSentences({ targetLanguage = 'en', limit = 1000 }) {
+    return [...this.workplaceSentencesById.values()]
+      .filter((sentence) => sentence.language === targetLanguage)
+      .map((sentence) => {
+        const sourceLink = [...this.articleWorkplaceSentenceLinksById.values()].find((link) => {
+          if (link.workplace_sentence_id !== sentence.id) {
+            return false;
+          }
+          const article = this.articlesById.get(link.article_id);
+          return article?.status === 'published' && article?.visibility === 'published';
+        });
+        if (!sourceLink) {
+          return null;
+        }
+        const article = this.articlesById.get(sourceLink.article_id);
+        return {
+          ...sentence,
+          source_article_id: article?.id ?? null,
+          source_title: article?.title ?? null
+        };
+      })
+      .filter(Boolean)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, Math.min(limit, 1000));
   }
@@ -211,6 +263,218 @@ export class WordStore {
     return new Set(this.cachedWordIdsByOwner.get(this.#ownerKey({ deviceId, userId }))?.wordIds ?? []);
   }
 
+  async createUserSubmittedWord({ deviceId, userId = null, term, language, generationService = null }) {
+    const submittedTerm = String(term ?? '').trim();
+    const normalizedTerm = normalizeTerm(submittedTerm);
+    const now = new Date().toISOString();
+    const ownerSubmissions = this.#submittedWordsForOwner({ deviceId, userId })
+      .filter((submission) => submission.language === language && submission.normalized_term === normalizedTerm)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+
+    const active = ownerSubmissions.find((submission) => ['queued', 'processing'].includes(submission.status));
+    if (active) {
+      return { submission: this.#hydrateUserSubmittedWord(active), created: false };
+    }
+
+    const ready = ownerSubmissions.find((submission) => submission.status === 'ready' && submission.resolved_word_id);
+    if (ready) {
+      return { submission: this.#hydrateUserSubmittedWord(ready), created: false };
+    }
+
+    const existingWord = [...this.words.values()].find(
+      (word) => word.language === language && word.normalized_term === normalizedTerm
+    );
+    if (existingWord) {
+      const submission = {
+        id: createId('submitted_word'),
+        user_id: userId,
+        device_id: deviceId,
+        submitted_term: submittedTerm,
+        normalized_term: normalizedTerm,
+        language,
+        status: 'ready',
+        failure_reason: null,
+        resolution_type: 'existing_word',
+        resolved_word_id: existingWord.id,
+        created_at: now,
+        updated_at: now,
+        resolved_at: now
+      };
+      this.userSubmittedWordsById.set(submission.id, submission);
+      return { submission: this.#hydrateUserSubmittedWord(submission), created: false };
+    }
+
+    if (generationService?.generateSubmittedWord) {
+      try {
+        const result = await generationService.generateSubmittedWord({
+          targetLanguage: language,
+          term: submittedTerm
+        });
+        const submission = {
+          id: createId('submitted_word'),
+          user_id: userId,
+          device_id: deviceId,
+          submitted_term: submittedTerm,
+          normalized_term: normalizedTerm,
+          language,
+          status: 'ready',
+          failure_reason: null,
+          resolution_type: result.resolutionType ?? 'generated_word',
+          resolved_word_id: result.word.id,
+          created_at: now,
+          updated_at: now,
+          resolved_at: now
+        };
+        this.userSubmittedWordsById.set(submission.id, submission);
+        return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+      } catch (error) {
+        const submission = {
+          id: createId('submitted_word'),
+          user_id: userId,
+          device_id: deviceId,
+          submitted_term: submittedTerm,
+          normalized_term: normalizedTerm,
+          language,
+          status: 'failed',
+          failure_reason: submittedWordFailureReason(error),
+          resolution_type: null,
+          resolved_word_id: null,
+          created_at: now,
+          updated_at: now,
+          resolved_at: null
+        };
+        this.userSubmittedWordsById.set(submission.id, submission);
+        return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+      }
+    }
+
+    const submission = {
+      id: createId('submitted_word'),
+      user_id: userId,
+      device_id: deviceId,
+      submitted_term: submittedTerm,
+      normalized_term: normalizedTerm,
+      language,
+      status: 'queued',
+      failure_reason: null,
+      resolution_type: null,
+      resolved_word_id: null,
+      created_at: now,
+      updated_at: now,
+      resolved_at: null
+    };
+    this.userSubmittedWordsById.set(submission.id, submission);
+
+    const job = {
+      id: createId('submitted_word_job'),
+      submission_id: submission.id,
+      status: 'queued',
+      attempt_count: 0,
+      queued_at: now,
+      started_at: null,
+      finished_at: null,
+      error_message: null,
+      created_at: now,
+      updated_at: now
+    };
+    this.userSubmittedWordJobsById.set(job.id, job);
+
+    return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+  }
+
+  listUserSubmittedWords({ deviceId, userId = null, limit = 50 }) {
+    return this.#submittedWordsForOwner({ deviceId, userId })
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+      .slice(0, Math.max(1, Math.min(limit, 100)))
+      .map((submission) => this.#hydrateUserSubmittedWord(submission));
+  }
+
+  getUserSubmittedWordById({ submissionId }) {
+    const submission = this.userSubmittedWordsById.get(submissionId);
+    return submission ? this.#hydrateUserSubmittedWord(submission) : null;
+  }
+
+  claimNextSubmittedWordJob() {
+    const job = [...this.userSubmittedWordJobsById.values()]
+      .filter((item) => item.status === 'queued')
+      .sort((left, right) => left.queued_at.localeCompare(right.queued_at))[0];
+    if (!job) {
+      return null;
+    }
+    const submission = this.userSubmittedWordsById.get(job.submission_id);
+    const now = new Date().toISOString();
+    job.status = 'processing';
+    job.attempt_count += 1;
+    job.started_at = now;
+    job.updated_at = now;
+    if (submission) {
+      submission.status = 'processing';
+      submission.updated_at = now;
+      submission.failure_reason = null;
+    }
+    return job;
+  }
+
+  completeSubmittedWordJob({ jobId, resolvedWordId, resolutionType = 'generated_word' }) {
+    const job = this.userSubmittedWordJobsById.get(jobId);
+    if (!job) {
+      return null;
+    }
+    const submission = this.userSubmittedWordsById.get(job.submission_id);
+    const now = new Date().toISOString();
+    job.status = 'completed';
+    job.error_message = null;
+    job.finished_at = now;
+    job.updated_at = now;
+    if (submission) {
+      submission.status = 'ready';
+      submission.failure_reason = null;
+      submission.resolution_type = resolutionType;
+      submission.resolved_word_id = resolvedWordId;
+      submission.resolved_at = now;
+      submission.updated_at = now;
+    }
+    return submission ? this.#hydrateUserSubmittedWord(submission) : null;
+  }
+
+  retrySubmittedWordJob({ jobId, errorMessage = null }) {
+    const job = this.userSubmittedWordJobsById.get(jobId);
+    if (!job) {
+      return null;
+    }
+    const submission = this.userSubmittedWordsById.get(job.submission_id);
+    const now = new Date().toISOString();
+    job.status = 'queued';
+    job.error_message = errorMessage;
+    job.finished_at = null;
+    job.updated_at = now;
+    if (submission) {
+      submission.status = 'queued';
+      submission.failure_reason = null;
+      submission.updated_at = now;
+    }
+    return submission ? this.#hydrateUserSubmittedWord(submission) : null;
+  }
+
+  failSubmittedWordJob({ jobId, errorMessage }) {
+    const job = this.userSubmittedWordJobsById.get(jobId);
+    if (!job) {
+      return null;
+    }
+    const submission = this.userSubmittedWordsById.get(job.submission_id);
+    const now = new Date().toISOString();
+    job.status = 'failed';
+    job.error_message = errorMessage;
+    job.finished_at = now;
+    job.updated_at = now;
+    if (submission) {
+      submission.status = 'failed';
+      submission.failure_reason = errorMessage;
+      submission.updated_at = now;
+    }
+    return submission ? this.#hydrateUserSubmittedWord(submission) : null;
+  }
+
   wordStateFor({ deviceId, userId = null, wordId }) {
     return this.wordStatesByOwnerWord.get(this.#wordStateKey({ deviceId, userId, wordId })) ?? null;
   }
@@ -219,32 +483,51 @@ export class WordStore {
     const cappedLimit = Math.max(1, Math.min(limit, 100));
     const ownerKeys = this.#selectionOwnerKeys({ deviceId, userId });
     const cachedWordIds = this.#cachedWordIdsForOwnerKeys(ownerKeys);
-    const stateWordIds = new Set(
-      [...this.wordStatesByOwnerWord.entries()]
-        .filter(([key, state]) => ownerKeys.has(this.#ownerKeyFromState(state)) && key.includes(':word:'))
-        .filter(([, state]) => state.language === targetLanguage)
-        .map(([, state]) => state.word_id)
-    );
+
+    // Collect all states for this owner+language
+    const allStates = [...this.wordStatesByOwnerWord.entries()]
+      .filter(([key, state]) => ownerKeys.has(this.#ownerKeyFromState(state)) && key.includes(':word:'))
+      .filter(([, state]) => state.language === targetLanguage);
+
+    const stateWordIds = new Set(allStates.map(([, state]) => state.word_id));
+
+    // Due review items: next_review_at is set and <= now
+    const targetReview = Math.floor(cappedLimit * 0.85);
+    const dueStates = allStates
+      .filter(([, state]) => state.next_review_at && state.next_review_at <= now)
+      .sort(([, a], [, b]) => a.next_review_at.localeCompare(b.next_review_at));
+
+    const reviewCards = dueStates
+      .slice(0, targetReview)
+      .map(([, state]) => {
+        const word = this.words.get(state.word_id);
+        return word ? { word, cardType: 'review', selectionReason: 'srs_due' } : null;
+      })
+      .filter(Boolean);
+
+    const newCount = cappedLimit - reviewCards.length;
     const newCandidates = [...this.words.values()]
       .filter((word) => word.language === targetLanguage)
       .filter((word) => !cachedWordIds.has(word.id))
       .filter((word) => !stateWordIds.has(word.id))
       .sort((left, right) => bCompareCreated(left, right));
 
-    const cards = newCandidates
-      .slice(0, cappedLimit)
+    const newCards = newCandidates
+      .slice(0, newCount)
       .map((word) => ({ word, cardType: 'new', selectionReason: 'new_available' }));
+
+    const cards = [...reviewCards, ...newCards];
     this.addCachedWordIds({
       deviceId,
       userId,
-      wordIds: cards.map((card) => card.word.id),
+      wordIds: newCards.map((card) => card.word.id),
       observedAt: now
     });
 
     return {
       items: cards,
-      target_mix: { new: cappedLimit, review: 0 },
-      actual_mix: { new: cards.length, review: 0 }
+      target_mix: { new: cappedLimit - targetReview, review: targetReview },
+      actual_mix: { new: newCards.length, review: reviewCards.length }
     };
   }
 
@@ -317,6 +600,13 @@ export class WordStore {
       }
     }
 
+    this.logger?.info?.('sync_study_events_completed', {
+      device_id: deviceId,
+      accepted_count: accepted.length,
+      duplicate_count: duplicates.length,
+      rejected_count: rejected.length
+    });
+
     return {
       accepted_event_ids: accepted,
       duplicates,
@@ -330,7 +620,7 @@ export class WordStore {
     if (!eventKey) {
       throw new Error('missing_event_id');
     }
-    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId });
+    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId, strict: this.strictAttemptId });
     const existing = this.speakingEventsByKey.get(eventKey);
     if (existing) {
       return { eventId: existing.id, idempotent: true };
@@ -348,11 +638,22 @@ export class WordStore {
 
   getSpeakingSummary({ deviceId, language = 'en', userId = null, weekStart = null }) {
     const start = normalizeWeekStart(weekStart);
-    const events = [...this.speakingEventsByKey.values()]
+    const allEvents = [...this.speakingEventsByKey.values()]
       .filter((event) => event.language === language)
-      .filter((event) => event.occurred_at >= start)
-      .filter((event) => userId ? event.user_id === userId : event.device_id === deviceId && !event.user_id);
-    return buildSpeakingSummary({ deviceId, userId, language, weekStart: start, events });
+      .filter((event) => (userId ? event.user_id === userId : event.device_id === deviceId && !event.user_id));
+    const weekEvents = allEvents.filter((event) => event.occurred_at >= start);
+    const firstRecordingEvent =
+      allEvents
+        .filter((e) => e.event_type === 'speaking_recorded')
+        .sort((a, b) => String(a.occurred_at).localeCompare(String(b.occurred_at)))[0] ?? null;
+    return buildSpeakingSummary({
+      deviceId,
+      userId,
+      language,
+      weekStart: start,
+      events: weekEvents,
+      firstRecordingAt: firstRecordingEvent?.occurred_at ?? null
+    });
   }
 
   recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
@@ -437,6 +738,9 @@ export class WordStore {
     };
     this.usersById.set(user.id, user);
     this.usersByIdentifier.set(user.identifier, user);
+    // Claim device-only word states and cached words for the new user
+    this.#claimDeviceWordStates({ userId: user.id, deviceId });
+    this.#claimDeviceCachedWords({ userId: user.id, deviceId });
     const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
@@ -444,9 +748,15 @@ export class WordStore {
   createUserSession({ identifier, password, deviceId = null }) {
     const normalizedIdentifier = normalizeUserIdentifier(identifier);
     const user = this.usersByIdentifier.get(normalizedIdentifier);
-    if (!user || !verifyPassword(password, user.password_hash)) {
+    if (!user) {
+      throw new InvalidCredentialsError({ reason: 'user_not_found' });
+    }
+    if (!verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
+    // Claim device-only word states and cached words for the signing-in user
+    this.#claimDeviceWordStates({ userId: user.id, deviceId });
+    this.#claimDeviceCachedWords({ userId: user.id, deviceId });
     const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
@@ -487,6 +797,90 @@ export class WordStore {
     return { session, sessionToken: token };
   }
 
+  #claimDeviceWordStates({ userId, deviceId }) {
+    if (!deviceId) return { claimed: 0, conflicts: 0 };
+
+    const deviceOwnerKey = `device:${deviceId}`;
+    const userOwnerKey = `user:${userId}`;
+    let claimed = 0;
+    let conflicts = 0;
+
+    // Find all device-only word states for this device
+    const deviceStateEntries = [];
+    for (const [key, state] of this.wordStatesByOwnerWord.entries()) {
+      if (key.startsWith(deviceOwnerKey + ':word:') && state.user_id === null) {
+        deviceStateEntries.push([key, state]);
+      }
+    }
+
+    for (const [deviceKey, deviceState] of deviceStateEntries) {
+      const wordId = deviceState.word_id;
+      const userKey = `${userOwnerKey}:word:${wordId}`;
+      const existingUserState = this.wordStatesByOwnerWord.get(userKey);
+
+      if (existingUserState) {
+        // Conflict: decide which state wins
+        conflicts++;
+        const deviceWins =
+          deviceState.review_count > existingUserState.review_count ||
+          (deviceState.review_count === existingUserState.review_count &&
+            (deviceState.last_studied_at ?? '') > (existingUserState.last_studied_at ?? ''));
+
+        if (deviceWins) {
+          // Device state wins: replace user state with claimed device state
+          this.wordStatesByOwnerWord.delete(deviceKey);
+          const claimedState = { ...deviceState, user_id: userId };
+          this.wordStatesByOwnerWord.set(userKey, claimedState);
+        } else {
+          // User state wins: just delete the device state
+          this.wordStatesByOwnerWord.delete(deviceKey);
+        }
+      } else {
+        // No conflict: claim the device state
+        this.wordStatesByOwnerWord.delete(deviceKey);
+        const claimedState = { ...deviceState, user_id: userId };
+        this.wordStatesByOwnerWord.set(userKey, claimedState);
+        claimed++;
+      }
+    }
+
+    return { claimed, conflicts };
+  }
+
+  #claimDeviceCachedWords({ userId, deviceId }) {
+    if (!deviceId) return { claimed: 0, duplicatesRemoved: 0 };
+
+    const deviceOwnerKey = `device:${deviceId}`;
+    const userOwnerKey = `user:${userId}`;
+
+    const deviceCache = this.cachedWordIdsByOwner.get(deviceOwnerKey);
+    if (!deviceCache || deviceCache.wordIds.size === 0) {
+      return { claimed: 0, duplicatesRemoved: 0 };
+    }
+
+    const userCache = this.cachedWordIdsByOwner.get(userOwnerKey) ?? {
+      wordIds: new Set(),
+      observed_at: deviceCache.observed_at
+    };
+
+    let claimed = 0;
+    let duplicatesRemoved = 0;
+
+    for (const wordId of deviceCache.wordIds) {
+      if (userCache.wordIds.has(wordId)) {
+        duplicatesRemoved++;
+      } else {
+        userCache.wordIds.add(wordId);
+        claimed++;
+      }
+    }
+
+    this.cachedWordIdsByOwner.set(userOwnerKey, userCache);
+    this.cachedWordIdsByOwner.delete(deviceOwnerKey);
+
+    return { claimed, duplicatesRemoved };
+  }
+
   #applyProficiencyChange({ deviceId, userId = null, language, rating }) {
     const proficiency = this.#getOrCreateProficiency({ deviceId, userId, language });
     const consecutiveCount = this.countConsecutiveRatings({ deviceId, userId, rating });
@@ -495,9 +889,8 @@ export class WordStore {
     }
 
     const previousLevel = proficiency.level;
-    const nextLevel = rating === 'too_easy'
-      ? incrementLevel(previousLevel, { language })
-      : decrementLevel(previousLevel, { language });
+    const nextLevel =
+      rating === 'too_easy' ? incrementLevel(previousLevel, { language }) : decrementLevel(previousLevel, { language });
 
     proficiency.level = nextLevel;
     proficiency.updated_at = new Date().toISOString();
@@ -508,7 +901,14 @@ export class WordStore {
     };
   }
 
-  #buildProficiencyResponse({ deviceId, userId = null, language = 'en', levelChanged = false, previousLevel = null, triggeredBy = null } = {}) {
+  #buildProficiencyResponse({
+    deviceId,
+    userId = null,
+    language = 'en',
+    levelChanged = false,
+    previousLevel = null,
+    triggeredBy = null
+  } = {}) {
     const proficiency = this.#getOrCreateProficiency({ deviceId, userId, language });
     const currentRatingType = this.getLastRatingType({ deviceId, userId });
     const consecutiveCount = currentRatingType
@@ -643,6 +1043,30 @@ export class WordStore {
     if (!article) {
       return null;
     }
+
+    // Delete existing vocabulary for this article to prevent duplicates on reprocess
+    const articleTermEntries = [...this.articleTermsById.entries()].filter(([, at]) => at.article_id === articleId);
+    const senseIds = new Set(articleTermEntries.map(([, at]) => at.word_sense_id));
+    for (const [id] of articleTermEntries) {
+      this.articleTermsById.delete(id);
+    }
+    for (const [id] of this.wordSensesById) {
+      if (senseIds.has(id)) {
+        this.wordSensesById.delete(id);
+      }
+    }
+    for (const [id, item] of this.vocabularyReviewItemsById) {
+      if (item.article_id === articleId) {
+        this.vocabularyReviewItemsById.delete(id);
+      }
+    }
+    for (const [id, link] of this.articleWorkplaceSentenceLinksById) {
+      if (link.article_id === articleId) {
+        this.articleWorkplaceSentenceLinksById.delete(id);
+      }
+    }
+    this.#pruneOrphanWorkplaceSentences();
+
     article.status = 'pending_processing';
     article.processing_error = null;
     article.updated_at = new Date().toISOString();
@@ -693,17 +1117,21 @@ export class WordStore {
           return [];
         }
         const speakingPrompt = this.#approvedSpeakingPromptForSense(sense.id);
-        return [{
-          term_id: term.id,
-          display_term: term.display_term,
-          word_sense_id: sense.id,
-          meaning_vi: sense.meaning_vi,
-          part_of_speech: sense.part_of_speech,
-          ipa: sense.ipa,
-          level: sense.level,
-          status: sense.status,
-          speaking_prompt: speakingPrompt ? toApiSpeakingPrompt(speakingPrompt) : null
-        }];
+        return [
+          {
+            term_id: term.id,
+            display_term: term.display_term,
+            word_sense_id: sense.id,
+            meaning_vi: sense.meaning_vi,
+            part_of_speech: sense.part_of_speech,
+            ipa: sense.ipa,
+            level: sense.level,
+            status: sense.status,
+            classification: articleTerm.classification ?? null,
+            suggestion_type: articleTerm.suggestion_type ?? null,
+            speaking_prompt: speakingPrompt ? toApiSpeakingPrompt(speakingPrompt) : null
+          }
+        ];
       });
 
     return {
@@ -713,9 +1141,11 @@ export class WordStore {
   }
 
   #approvedSpeakingPromptForSense(wordSenseId) {
-    return [...this.speakingPromptsById.values()]
-      .filter((prompt) => prompt.word_sense_id === wordSenseId && prompt.status === 'approved')
-      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0] ?? null;
+    return (
+      [...this.speakingPromptsById.values()]
+        .filter((prompt) => prompt.word_sense_id === wordSenseId && prompt.status === 'approved')
+        .sort((left, right) => right.updated_at.localeCompare(left.updated_at))[0] ?? null
+    );
   }
 
   softDeleteArticle({ articleId, userId }) {
@@ -765,13 +1195,21 @@ export class WordStore {
     item.reviewer_user_id = reviewerUserId;
     item.reviewed_at = new Date().toISOString();
     item.updated_at = item.reviewed_at;
+
+    // Sync the linked word sense status so getArticleVocabulary visibility filter works.
+    const sense = this.wordSensesById.get(item.word_sense_id);
+    if (sense) {
+      sense.status = status === 'approved' ? 'approved' : 'rejected';
+      sense.updated_at = item.updated_at;
+    }
+
     return item;
   }
 
   listSpeakingPrompts({ status = null, missingRequired = false, limit = 100 } = {}) {
     return [...this.speakingPromptsById.values()]
-      .filter((prompt) => status ? prompt.status === status : true)
-      .filter((prompt) => missingRequired ? isPromptMissingRequiredFields(prompt) : true)
+      .filter((prompt) => (status ? prompt.status === status : true))
+      .filter((prompt) => (missingRequired ? isPromptMissingRequiredFields(prompt) : true))
       .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
       .slice(0, Math.max(1, Math.min(limit, 200)));
   }
@@ -866,6 +1304,10 @@ export class WordStore {
     return job;
   }
 
+  countPendingArticleJobs() {
+    return [...this.articleProcessingJobsById.values()].filter((item) => item.status === 'pending_processing').length;
+  }
+
   completeArticleProcessingJob({ jobId, status = 'processed', errorMessage = null }) {
     const job = this.articleProcessingJobsById.get(jobId);
     if (!job) {
@@ -894,8 +1336,16 @@ export class WordStore {
       throw new Error('article_not_found');
     }
     const persisted = [];
+    const seen = new Set();
     for (const item of items) {
       const normalized = normalizeTerm(item.term);
+      const dedupeKey = `${item.language}:${normalized}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      // Stubs (fallback suggestions) are never auto-approved even for user articles
+      const requiresReview = Boolean(article.created_by_admin_id) || Boolean(item.isStub);
       let term = [...this.termsById.values()].find(
         (entry) => entry.language === item.language && entry.normalized_term === normalized
       );
@@ -921,13 +1371,30 @@ export class WordStore {
         ipa: item.ipa ?? null,
         pinyin: item.pinyin ?? null,
         level_scale: item.level_scale ?? 'cefr',
-        level: item.difficulty ?? 'A1',
+        level: item.level ?? item.difficulty ?? 'A1',
         quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
-        status: article.created_by_admin_id ? 'pending_review' : 'approved',
+        status: requiresReview ? 'pending_review' : 'approved',
         created_at: now,
         updated_at: now
       };
       this.wordSensesById.set(sense.id, sense);
+
+      // Bridge approved sense into the words pool so learningCards can serve it
+      if (!requiresReview) {
+        this.insertWord({
+          term: item.term,
+          language: item.language,
+          meaning_vi: item.meaning_vi ?? '',
+          part_of_speech: item.part_of_speech ?? null,
+          ipa: item.ipa ?? '',
+          vietnamese_pronunciation: item.vietnamese_pronunciation ?? '',
+          example: item.example ?? '',
+          example_vi: '',
+          difficulty: item.level ?? item.difficulty ?? 'A1',
+          topics: [],
+          generation_source: 'article_vocabulary'
+        });
+      }
 
       const articleTerm = {
         id: createId('article_term'),
@@ -940,6 +1407,8 @@ export class WordStore {
         end_offset: null,
         frequency: Number(item.frequency ?? 1),
         extraction_confidence: Number(item.confidence ?? 0.5),
+        classification: item.classification ?? null,
+        suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term),
         created_at: now
       };
       this.articleTermsById.set(articleTerm.id, articleTerm);
@@ -948,10 +1417,10 @@ export class WordStore {
         id: createId('review_item'),
         word_sense_id: sense.id,
         article_id: articleId,
-        status: article.created_by_admin_id ? 'pending' : 'approved',
+        status: requiresReview ? 'pending' : 'approved',
         reviewer_user_id: null,
         review_note: null,
-        reviewed_at: article.created_by_admin_id ? null : now,
+        reviewed_at: requiresReview ? null : now,
         created_at: now,
         updated_at: now
       };
@@ -959,6 +1428,372 @@ export class WordStore {
       persisted.push({ term, sense, articleTerm, reviewItem });
     }
     return { count: persisted.length, items: persisted };
+  }
+
+  persistArticleWorkplaceSentences({ articleId, items = [] }) {
+    const article = this.articlesById.get(articleId);
+    if (!article) {
+      throw new Error('article_not_found');
+    }
+
+    for (const [id, link] of this.articleWorkplaceSentenceLinksById) {
+      if (link.article_id === articleId) {
+        this.articleWorkplaceSentenceLinksById.delete(id);
+      }
+    }
+    this.#pruneOrphanWorkplaceSentences();
+
+    const now = new Date().toISOString();
+    const persisted = [];
+    const seen = new Set();
+    for (const item of items) {
+      const normalizedText = normalizeSentenceText(item.text);
+      const dedupeKey = `${item.language}:${normalizedText}`;
+      if (!normalizedText || seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+
+      let sentence = [...this.workplaceSentencesById.values()].find(
+        (sentence) => sentence.language === item.language && sentence.normalized_text === normalizedText
+      );
+      if (!sentence) {
+        sentence = {
+          id: createId('sentence'),
+          text: item.text,
+          normalized_text: normalizedText,
+          language: item.language,
+          meaning_vi: item.meaning_vi,
+          topic: item.topic ?? null,
+          generation_source: item.generation_source ?? 'article_workplace_sentence',
+          created_at: now,
+          updated_at: now
+        };
+        this.workplaceSentencesById.set(sentence.id, sentence);
+      }
+
+      const link = {
+        id: createId('article_sentence'),
+        article_id: articleId,
+        workplace_sentence_id: sentence.id,
+        created_at: now
+      };
+      this.articleWorkplaceSentenceLinksById.set(link.id, link);
+      persisted.push({
+        ...sentence,
+        source_article_id: article.id,
+        source_title: article.title ?? null
+      });
+    }
+
+    return { count: persisted.length, items: persisted };
+  }
+
+  #pruneOrphanWorkplaceSentences() {
+    const linkedSentenceIds = new Set(
+      [...this.articleWorkplaceSentenceLinksById.values()].map((link) => link.workplace_sentence_id)
+    );
+    for (const [id] of this.workplaceSentencesById) {
+      if (!linkedSentenceIds.has(id)) {
+        this.workplaceSentencesById.delete(id);
+      }
+    }
+  }
+
+  // ─── Exam methods ────────────────────────────────────────────────────────
+
+  /**
+   * Returns distinct, normalized topics for which the user has studied at
+   * least one word in the given language, sorted alphabetically.
+   */
+  examTopics({ userId, language = 'en' }) {
+    const topicsSet = new Set();
+    for (const state of this.wordStatesByOwnerWord.values()) {
+      if (state.user_id !== userId || state.language !== language) {
+        continue;
+      }
+      const word = this.words.get(state.word_id);
+      if (!word) {
+        continue;
+      }
+      for (const t of word.topics ?? []) {
+        const norm = String(t).trim().toLowerCase();
+        if (norm) {
+          topicsSet.add(norm);
+        }
+      }
+    }
+    return [...topicsSet].sort();
+  }
+
+  /**
+   * Generates a new exam session with MCQ questions.
+   * Returns { error: 'INSUFFICIENT_WORDS', found } when fewer than 5 source
+   * words exist for the requested language, otherwise returns the full session
+   * payload.
+   */
+  startExamSession({ userId, language = 'en', now = new Date().toISOString(), sessionTtlMs = 7200000 }) {
+    // Collect studied words for the active language.
+    const sourceWords = [];
+    const seenWordIds = new Set();
+    for (const state of this.wordStatesByOwnerWord.values()) {
+      if (state.user_id !== userId || state.language !== language) {
+        continue;
+      }
+      if (seenWordIds.has(state.word_id)) {
+        continue;
+      }
+      const word = this.words.get(state.word_id);
+      if (!word) {
+        continue;
+      }
+      sourceWords.push(word);
+      seenWordIds.add(word.id);
+    }
+
+    if (sourceWords.length < 5) {
+      return { error: 'INSUFFICIENT_WORDS', found: sourceWords.length };
+    }
+
+    // Cap at 20 questions (shuffle before slicing for variety)
+    const shuffled = shuffleArray([...sourceWords]);
+    const selected = shuffled.slice(0, 20);
+
+    // Build distractor pool: same language, not a source word in this session
+    const sourceIds = new Set(selected.map((w) => w.id));
+    const allSameLang = [...this.words.values()].filter((w) => w.language === language && !sourceIds.has(w.id));
+
+    const sessionId = createId('exam_sess');
+    const expiresAt = new Date(new Date(now).getTime() + sessionTtlMs).toISOString();
+    const session = {
+      id: sessionId,
+      user_id: userId,
+      topic: 'language',
+      language,
+      difficulty_level: null,
+      created_at: now,
+      expires_at: expiresAt,
+      submitted_at: null
+    };
+    this.examSessionsById.set(sessionId, session);
+
+    const questions = [];
+    for (let i = 0; i < selected.length; i++) {
+      const src = selected[i];
+      const distractors = selectDistractors({ source: src, pool: allSameLang, count: 3 });
+      // Build choices: correct answer + distractors, then shuffle
+      const correctMeaning = src.meaning_vi ?? src.term;
+      const choicesRaw = [correctMeaning, ...distractors.map((d) => d.meaning_vi ?? d.term)];
+      const { choices, correctIndex } = shuffleChoices(choicesRaw);
+
+      // Assign question_type: 50/50 sentence_context if example is non-empty
+      const hasExample = src.example && src.example.trim() !== '';
+      const questionType = hasExample && Math.random() < 0.5 ? 'sentence_context' : 'meaning_choice';
+
+      const question = {
+        id: createId('exam_q'),
+        session_id: sessionId,
+        word_id: src.id,
+        prompt_word: src.term,
+        choices_json: JSON.stringify(choices),
+        correct_index: correctIndex,
+        ordinal: i,
+        created_at: now,
+        question_type: questionType,
+        sentence: questionType === 'sentence_context' ? src.example : null,
+        highlight: questionType === 'sentence_context' ? src.term : null
+      };
+      questions.push(question);
+    }
+    this.examQuestionsBySessionId.set(sessionId, questions);
+
+    return {
+      session_id: sessionId,
+      topic: 'language',
+      language,
+      question_count: questions.length,
+      expires_at: expiresAt,
+      questions: questions.map((q) => {
+        const item = {
+          question_id: q.id,
+          ordinal: q.ordinal,
+          prompt_word: q.prompt_word,
+          choices: JSON.parse(q.choices_json),
+          question_type: q.question_type
+        };
+        if (q.question_type === 'sentence_context') {
+          item.sentence = q.sentence;
+          item.highlight = q.highlight;
+        }
+        return item;
+      })
+    };
+  }
+
+  /**
+   * Submits answers for an exam session.
+   * Returns error objects for known failure modes, or the full result payload.
+   *
+   * When [localAttemptId] is provided and the session has already been
+   * submitted with the same id, the call is treated as an idempotent retry
+   * and the existing attempt data is returned instead of ALREADY_SUBMITTED.
+   */
+  submitExamSession({
+    sessionId,
+    userId,
+    answers,
+    localAttemptId = null,
+    now = new Date().toISOString(),
+    passPct = 70,
+    disclaimer = ''
+  }) {
+    const session = this.examSessionsById.get(sessionId);
+    if (!session) {
+      return { error: 'NOT_FOUND' };
+    }
+    if (session.submitted_at) {
+      // Idempotent retry: if the caller provided the same local_attempt_id
+      // that was recorded on first submission, return the existing result.
+      if (localAttemptId !== null && session.local_attempt_id === localAttemptId) {
+        const existing = this.examAttemptsBySessionId.get(sessionId);
+        if (existing) {
+          const certId = existing.certificate_id ?? null;
+          return {
+            attempt_id: existing.id,
+            session_id: sessionId,
+            topic: existing.topic,
+            language: existing.language,
+            difficulty_level: existing.difficulty_level,
+            total_questions: existing.total_questions,
+            correct_count: existing.correct_count,
+            score_pct: existing.score_pct,
+            passed: existing.passed === 1,
+            certificate_id: certId,
+            created_at: existing.created_at
+          };
+        }
+      }
+      return { error: 'ALREADY_SUBMITTED' };
+    }
+    if (now > session.expires_at) {
+      return { error: 'SESSION_EXPIRED' };
+    }
+    const questions = this.examQuestionsBySessionId.get(sessionId) ?? [];
+    if (answers.length !== questions.length) {
+      return { error: 'ANSWER_COUNT_MISMATCH', expected: questions.length, received: answers.length };
+    }
+
+    // Score
+    let correctCount = 0;
+    for (let i = 0; i < questions.length; i++) {
+      if (Number(answers[i]) === questions[i].correct_index) {
+        correctCount += 1;
+      }
+    }
+    const totalQuestions = questions.length;
+    const scorePct = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
+    const passed = scorePct >= passPct;
+
+    // Mark submitted
+    session.submitted_at = now;
+    if (localAttemptId !== null) {
+      session.local_attempt_id = localAttemptId;
+    }
+
+    const attemptId = createId('exam_att');
+    const attempt = {
+      id: attemptId,
+      session_id: sessionId,
+      user_id: userId,
+      topic: session.topic,
+      language: session.language,
+      difficulty_level: session.difficulty_level,
+      total_questions: totalQuestions,
+      correct_count: correctCount,
+      score_pct: scorePct,
+      passed: passed ? 1 : 0,
+      created_at: now
+    };
+    this.examAttemptsById.set(attemptId, attempt);
+    this.examAttemptsBySessionId.set(sessionId, attempt);
+
+    let certificateId = null;
+    if (passed) {
+      certificateId = crypto.randomUUID();
+      const cert = {
+        id: certificateId,
+        attempt_id: attemptId,
+        user_id: userId,
+        topic: session.topic,
+        language: session.language,
+        difficulty_level: session.difficulty_level,
+        score_pct: scorePct,
+        issued_at: now,
+        disclaimer
+      };
+      this.examCertificatesById.set(certificateId, cert);
+    }
+
+    return {
+      attempt_id: attemptId,
+      session_id: sessionId,
+      topic: session.topic,
+      language: session.language,
+      difficulty_level: session.difficulty_level,
+      total_questions: totalQuestions,
+      correct_count: correctCount,
+      score_pct: scorePct,
+      passed,
+      certificate_id: certificateId,
+      created_at: now
+    };
+  }
+
+  /**
+   * Returns paginated exam attempt history for a user, newest first.
+   */
+  getExamResults({ userId, page = 1, limit = 20 }) {
+    const all = [...this.examAttemptsById.values()]
+      .filter((a) => a.user_id === userId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    const total = all.length;
+    const offset = (page - 1) * limit;
+    const items = all.slice(offset, offset + limit).map((a) => {
+      const cert = [...this.examCertificatesById.values()].find((c) => c.attempt_id === a.id);
+      return {
+        attempt_id: a.id,
+        topic: a.topic,
+        language: a.language,
+        difficulty_level: a.difficulty_level,
+        score_pct: a.score_pct,
+        passed: a.passed === 1,
+        created_at: a.created_at,
+        certificate_id: cert?.id ?? null
+      };
+    });
+
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Returns a certificate by ID without user PII.
+   * This is the public-facing endpoint response.
+   */
+  getExamCertificate({ id }) {
+    const cert = this.examCertificatesById.get(id);
+    if (!cert) {
+      return null;
+    }
+    return {
+      certificate_id: cert.id,
+      topic: cert.topic,
+      language: cert.language,
+      difficulty_level: cert.difficulty_level,
+      score_pct: cert.score_pct,
+      issued_at: cert.issued_at,
+      disclaimer: cert.disclaimer
+    };
   }
 
   #upsertWordState({ deviceId, userId = null, language, event }) {
@@ -1008,30 +1843,530 @@ export class WordStore {
     return wordIds;
   }
 
+  #submittedWordsForOwner({ deviceId, userId = null }) {
+    const ownerKey = this.#ownerKey({ deviceId, userId });
+    return [...this.userSubmittedWordsById.values()].filter(
+      (submission) => this.#ownerKey({ deviceId: submission.device_id, userId: submission.user_id }) === ownerKey
+    );
+  }
+
+  #hydrateUserSubmittedWord(submission) {
+    return {
+      ...submission,
+      resolved_word: submission.resolved_word_id ? this.words.get(submission.resolved_word_id) ?? null : null
+    };
+  }
+
   #wordStateKey({ deviceId, userId = null, wordId }) {
     return `${this.#ownerKey({ deviceId, userId })}:word:${wordId}`;
   }
+
+  // ─── Memorization Passages ───────────────────────────────────────────
+
+  createPassage({ title, language, rawText, ownerType = 'user', ownerUserId = null, visibility = 'private' }) {
+    const now = new Date().toISOString();
+    const passage = {
+      id: createId('passage'),
+      title,
+      language,
+      raw_text: rawText,
+      owner_type: ownerType,
+      owner_user_id: ownerUserId,
+      visibility,
+      status: 'pending_segmentation',
+      enrichment_status: 'none',
+      processing_error: null,
+      segment_count: 0,
+      attempt_count: 0,
+      enrichment_attempt_count: 0,
+      created_at: now,
+      updated_at: now
+    };
+    this.memorizationPassagesById.set(passage.id, passage);
+    return passage;
+  }
+
+  getPassage({ passageId }) {
+    return this.memorizationPassagesById.get(passageId) ?? null;
+  }
+
+  listPassages({ userId = null, status = null, ownerType = null } = {}) {
+    let passages = [...this.memorizationPassagesById.values()];
+    if (status) {
+      passages = passages.filter((p) => p.status === status);
+    }
+    if (ownerType) {
+      passages = passages.filter((p) => p.owner_type === ownerType);
+    }
+    if (userId) {
+      // User sees: own passages + published passages
+      passages = passages.filter(
+        (p) => p.owner_user_id === userId || p.visibility === 'published'
+      );
+    }
+    return passages.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  listPublishedPassages() {
+    return [...this.memorizationPassagesById.values()]
+      .filter((p) => p.visibility === 'published' && p.status === 'published')
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  listAdminPassages({ status = null } = {}) {
+    let passages = [...this.memorizationPassagesById.values()];
+    if (status) {
+      passages = passages.filter((p) => p.status === status);
+    }
+    return passages.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  updatePassage({ passageId, ...updates }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return null;
+    const allowed = ['title', 'language', 'visibility', 'status', 'enrichment_status', 'processing_error', 'segment_count', 'attempt_count', 'enrichment_attempt_count'];
+    for (const key of allowed) {
+      if (updates[key] !== undefined) {
+        passage[key] = updates[key];
+      }
+    }
+    passage.updated_at = new Date().toISOString();
+    return passage;
+  }
+
+  deletePassage({ passageId }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return false;
+    this.#deletePassageVocabularyLinks(passageId);
+    // Delete associated segments and progress
+    for (const [id, seg] of this.memorizationSegmentsById) {
+      if (seg.passage_id === passageId) {
+        // Delete progress for this segment
+        for (const [pid, prog] of this.memorizationSegmentProgressById) {
+          if (prog.segment_id === id) {
+            this.memorizationSegmentProgressById.delete(pid);
+          }
+        }
+        this.memorizationSegmentsById.delete(id);
+      }
+    }
+    this.memorizationPassagesById.delete(passageId);
+    return true;
+  }
+
+  persistPassageVocabulary({ passageId, items = [] }) {
+    const now = new Date().toISOString();
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) {
+      throw new Error('passage_not_found');
+    }
+
+    this.#deletePassageVocabularyLinks(passageId);
+
+    const persisted = [];
+    const seen = new Set();
+    const requiresReview = passage.owner_type !== 'user';
+    for (const item of items) {
+      const segment = this.memorizationSegmentsById.get(item.segment_id);
+      if (!segment || segment.passage_id !== passageId) {
+        continue;
+      }
+      const normalized = normalizeTerm(item.term);
+      if (!normalized) {
+        continue;
+      }
+      const dedupeKey = `${item.segment_id}:${item.language}:${normalized}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+
+      let term = [...this.termsById.values()].find(
+        (entry) => entry.language === item.language && entry.normalized_term === normalized
+      );
+      if (!term) {
+        term = {
+          id: createId('term'),
+          language: item.language,
+          display_term: item.term,
+          normalized_term: normalized,
+          lemma: null,
+          created_at: now
+        };
+        this.termsById.set(term.id, term);
+      }
+
+      const sense = {
+        id: createId('sense'),
+        term_id: term.id,
+        part_of_speech: item.part_of_speech ?? null,
+        meaning_vi: item.meaning_vi,
+        short_definition: item.short_definition ?? null,
+        pronunciation: item.vietnamese_pronunciation,
+        ipa: item.ipa ?? null,
+        pinyin: item.pinyin ?? null,
+        level_scale: item.level_scale ?? 'cefr',
+        level: item.level ?? item.difficulty ?? 'A1',
+        quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
+        status: requiresReview ? 'pending_review' : 'approved',
+        created_at: now,
+        updated_at: now
+      };
+      this.wordSensesById.set(sense.id, sense);
+
+      if (!requiresReview) {
+        this.insertWord({
+          term: item.term,
+          language: item.language,
+          meaning_vi: item.meaning_vi ?? '',
+          part_of_speech: item.part_of_speech ?? null,
+          ipa: item.ipa ?? '',
+          vietnamese_pronunciation: item.vietnamese_pronunciation ?? '',
+          example: item.example ?? segment.text,
+          example_vi: '',
+          difficulty: item.level ?? item.difficulty ?? 'A1',
+          topics: ['memorization'],
+          generation_source: 'memorization_passage_vocabulary'
+        });
+      }
+
+      const segmentTerm = {
+        id: createId('segment_term'),
+        passage_id: passageId,
+        segment_id: item.segment_id,
+        term_id: term.id,
+        word_sense_id: sense.id,
+        surface_text: item.term,
+        sentence_context: item.example ?? segment.text,
+        frequency: Number(item.frequency ?? 1),
+        extraction_confidence: Number(item.confidence ?? 0.5),
+        classification: item.classification ?? null,
+        suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term),
+        created_at: now
+      };
+      this.memorizationSegmentTermsById.set(segmentTerm.id, segmentTerm);
+
+      const reviewItem = {
+        id: createId('review_item'),
+        word_sense_id: sense.id,
+        article_id: null,
+        status: requiresReview ? 'pending' : 'approved',
+        reviewer_user_id: null,
+        review_note: null,
+        reviewed_at: requiresReview ? null : now,
+        created_at: now,
+        updated_at: now
+      };
+      this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
+      persisted.push({ term, sense, segmentTerm, reviewItem });
+    }
+
+    return { count: persisted.length, items: persisted };
+  }
+
+  // ─── Memorization Segments ──────────────────────────────────────────
+
+  createSegments({ passageId, segments }) {
+    const now = new Date().toISOString();
+    const created = [];
+    for (const seg of segments) {
+      const segment = {
+        id: createId('segment'),
+        passage_id: passageId,
+        position: seg.position,
+        text: seg.text,
+        word_count: seg.text.split(/\s+/).length,
+        ipa_text: null,
+        translation_text: null,
+        translation_language: null,
+        viet_reading_text: null,
+        created_at: now
+      };
+      this.memorizationSegmentsById.set(segment.id, segment);
+      created.push(segment);
+    }
+    // Update passage segment_count
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (passage) {
+      passage.segment_count = created.length;
+      passage.updated_at = now;
+    }
+    return created;
+  }
+
+  getSegmentsByPassage({ passageId }) {
+    return [...this.memorizationSegmentsById.values()]
+      .filter((s) => s.passage_id === passageId)
+      .sort((a, b) => a.position - b.position);
+  }
+
+  updateSegment({ segmentId, text, position }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    if (!segment) return null;
+    if (text !== undefined) {
+      segment.text = text;
+      segment.word_count = text.split(/\s+/).length;
+    }
+    if (position !== undefined) {
+      segment.position = position;
+    }
+    return segment;
+  }
+
+  splitSegment({ segmentId, splitAt }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    if (!segment) return null;
+    const index = Number(splitAt);
+    if (!Number.isInteger(index) || index <= 0 || index >= segment.text.length) {
+      return null;
+    }
+
+    const leftText = segment.text.slice(0, index).trim();
+    const rightText = segment.text.slice(index).trim();
+    if (!leftText || !rightText) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const originalPosition = segment.position;
+    for (const other of this.memorizationSegmentsById.values()) {
+      if (other.passage_id === segment.passage_id && other.position > originalPosition) {
+        other.position += 1;
+      }
+    }
+
+    segment.text = leftText;
+    segment.word_count = countWords(leftText);
+    const newSegment = {
+      id: createId('segment'),
+      passage_id: segment.passage_id,
+      position: originalPosition + 1,
+      text: rightText,
+      word_count: countWords(rightText),
+      created_at: now
+    };
+    this.memorizationSegmentsById.set(newSegment.id, newSegment);
+    this.#refreshPassageSegmentCount(segment.passage_id);
+    return this.getSegmentsByPassage({ passageId: segment.passage_id });
+  }
+
+  mergeSegments({ segmentId, nextSegmentId }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    const next = this.memorizationSegmentsById.get(nextSegmentId);
+    if (!segment || !next || segment.passage_id !== next.passage_id) {
+      return null;
+    }
+    if (next.position !== segment.position + 1) {
+      return null;
+    }
+
+    segment.text = `${segment.text.trim()} ${next.text.trim()}`.trim();
+    segment.word_count = countWords(segment.text);
+    this.memorizationSegmentsById.delete(next.id);
+    for (const progress of this.memorizationSegmentProgressById.values()) {
+      if (progress.segment_id === next.id) {
+        progress.segment_id = segment.id;
+      }
+    }
+    for (const link of this.memorizationSegmentTermsById.values()) {
+      if (link.segment_id === next.id) {
+        link.segment_id = segment.id;
+      }
+    }
+    for (const other of this.memorizationSegmentsById.values()) {
+      if (other.passage_id === segment.passage_id && other.position > next.position) {
+        other.position -= 1;
+      }
+    }
+    this.#refreshPassageSegmentCount(segment.passage_id);
+    return this.getSegmentsByPassage({ passageId: segment.passage_id });
+  }
+
+  deleteSegmentsByPassage({ passageId }) {
+    this.#deletePassageVocabularyLinks(passageId);
+    for (const [id, seg] of this.memorizationSegmentsById) {
+      if (seg.passage_id === passageId) {
+        // Delete progress for this segment
+        for (const [pid, prog] of this.memorizationSegmentProgressById) {
+          if (prog.segment_id === id) {
+            this.memorizationSegmentProgressById.delete(pid);
+          }
+        }
+        this.memorizationSegmentsById.delete(id);
+      }
+    }
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (passage) {
+      passage.segment_count = 0;
+      passage.updated_at = new Date().toISOString();
+    }
+  }
+
+  #refreshPassageSegmentCount(passageId) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (passage) {
+      passage.segment_count = this.getSegmentsByPassage({ passageId }).length;
+      passage.updated_at = new Date().toISOString();
+    }
+  }
+
+  #deletePassageVocabularyLinks(passageId) {
+    const oldSenseIds = [];
+    for (const [id, link] of this.memorizationSegmentTermsById) {
+      if (link.passage_id === passageId) {
+        if (link.word_sense_id) oldSenseIds.push(link.word_sense_id);
+        this.memorizationSegmentTermsById.delete(id);
+      }
+    }
+    if (oldSenseIds.length === 0) {
+      return;
+    }
+    const oldSenseIdSet = new Set(oldSenseIds);
+    for (const [id, item] of this.vocabularyReviewItemsById) {
+      if (oldSenseIdSet.has(item.word_sense_id)) {
+        this.vocabularyReviewItemsById.delete(id);
+      }
+    }
+    for (const id of oldSenseIdSet) {
+      this.wordSensesById.delete(id);
+    }
+  }
+
+  // ─── Memorization Segment Progress ──────────────────────────────────
+
+  upsertSegmentProgress({ userId, segmentId, status, reviewCount, easeFactor, lastReviewedAt, nextReviewAt }) {
+    // Find existing by user+segment
+    const existing = [...this.memorizationSegmentProgressById.values()].find(
+      (p) => p.user_id === userId && p.segment_id === segmentId
+    );
+    const now = new Date().toISOString();
+    if (existing) {
+      if (status !== undefined) existing.status = status;
+      if (reviewCount !== undefined) existing.review_count = reviewCount;
+      if (easeFactor !== undefined) existing.ease_factor = easeFactor;
+      if (lastReviewedAt !== undefined) existing.last_reviewed_at = lastReviewedAt;
+      if (nextReviewAt !== undefined) existing.next_review_at = nextReviewAt;
+      existing.updated_at = now;
+      return existing;
+    }
+    const progress = {
+      id: createId('segprog'),
+      user_id: userId,
+      segment_id: segmentId,
+      status: status ?? 'new',
+      review_count: reviewCount ?? 0,
+      ease_factor: easeFactor ?? 2.5,
+      last_reviewed_at: lastReviewedAt ?? null,
+      next_review_at: nextReviewAt ?? null,
+      created_at: now,
+      updated_at: now
+    };
+    this.memorizationSegmentProgressById.set(progress.id, progress);
+    return progress;
+  }
+
+  getSegmentProgress({ userId, passageId }) {
+    const segmentIds = new Set(
+      this.getSegmentsByPassage({ passageId }).map((s) => s.id)
+    );
+    return [...this.memorizationSegmentProgressById.values()].filter(
+      (p) => p.user_id === userId && segmentIds.has(p.segment_id)
+    );
+  }
+
+  getPassageProgress({ userId, passageId }) {
+    const segments = this.getSegmentsByPassage({ passageId });
+    if (segments.length === 0) return { total: 0, mastered: 0, reviewing: 0, learning: 0, newCount: 0, percentage: 0 };
+    const progress = this.getSegmentProgress({ userId, passageId });
+    const progressBySegment = new Map(progress.map((p) => [p.segment_id, p]));
+    let mastered = 0, reviewing = 0, learning = 0, newCount = 0;
+    for (const seg of segments) {
+      const p = progressBySegment.get(seg.id);
+      if (!p || p.status === 'new') newCount++;
+      else if (p.status === 'mastered') mastered++;
+      else if (p.status === 'review') reviewing++;
+      else learning++;
+    }
+    const percentage = Math.round(((mastered + reviewing) / segments.length) * 100);
+    return { total: segments.length, mastered, reviewing, learning, newCount, percentage };
+  }
+
+  claimNextPendingPassage() {
+    for (const passage of this.memorizationPassagesById.values()) {
+      if (passage.status === 'pending_segmentation') {
+        passage.status = 'segmenting';
+        passage.updated_at = new Date().toISOString();
+        return passage;
+      }
+    }
+    return null;
+  }
+
+  updateSegmentEnrichment({ segmentId, ipa_text, translation_text, translation_language, viet_reading_text }) {
+    const segment = this.memorizationSegmentsById.get(segmentId);
+    if (!segment) return null;
+    segment.ipa_text = ipa_text ?? null;
+    segment.translation_text = translation_text ?? null;
+    segment.translation_language = translation_language ?? null;
+    segment.viet_reading_text = viet_reading_text ?? null;
+    return segment;
+  }
+
+  updatePassageEnrichmentStatus({ passageId, enrichmentStatus, enrichment_attempt_count }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return null;
+    passage.enrichment_status = enrichmentStatus;
+    if (enrichment_attempt_count !== undefined) {
+      passage.enrichment_attempt_count = enrichment_attempt_count;
+    }
+    passage.updated_at = new Date().toISOString();
+    return passage;
+  }
+
+  claimNextPendingEnrichment() {
+    for (const passage of this.memorizationPassagesById.values()) {
+      if (passage.enrichment_status === 'pending') {
+        passage.enrichment_status = 'enriching';
+        passage.updated_at = new Date().toISOString();
+        return passage;
+      }
+    }
+    return null;
+  }
+
+  retryPassage({ passageId }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return { error: 'not_found' };
+    if (passage.status !== 'failed') return { error: 'passage_not_failed' };
+    passage.status = 'pending_segmentation';
+    passage.processing_error = null;
+    passage.attempt_count = 0;
+    passage.updated_at = new Date().toISOString();
+    return { passage };
+  }
+
+  retryPassageEnrichment({ passageId }) {
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) return { error: 'not_found' };
+    if (passage.enrichment_status !== 'failed') return { error: 'enrichment_not_failed' };
+    const segmentCount = [...this.memorizationSegmentsById.values()].filter(
+      (s) => s.passage_id === passageId
+    ).length;
+    if (segmentCount === 0) return { error: 'passage_has_no_segments' };
+    passage.enrichment_status = 'pending';
+    passage.enrichment_attempt_count = 0;
+    passage.updated_at = new Date().toISOString();
+    return { passage };
+  }
+}
+
+export function submittedWordFailureReason(error) {
+  const message = error?.message ?? error;
+  return String(message || 'generation_failed');
 }
 
 function bCompareCreated(left, right) {
   return right.created_at.localeCompare(left.created_at);
-}
-
-function statusForRating(rating) {
-  if (rating === 'easy' || rating === 'too_easy') {
-    return 'completed';
-  }
-  return rating === 'too_hard' ? 'learning' : 'review';
-}
-
-function nextReviewForRating(rating, occurredAt) {
-  if (rating === 'easy' || rating === 'too_easy') {
-    return null;
-  }
-  if (rating === 'too_hard') {
-    return new Date(occurredAt.getTime() + 5 * 60 * 1000);
-  }
-  return new Date(occurredAt.getTime() + 24 * 60 * 60 * 1000);
 }
 
 export function resolveEventKey(event) {
@@ -1064,7 +2399,7 @@ export function isUnknownSpeakingEvent(event) {
   return typeof event?.event_type === 'string' && event.event_type.startsWith('speaking_') && !isSpeakingEvent(event);
 }
 
-export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null }) {
+export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null, strict = false }) {
   if (!isSpeakingEvent(event)) {
     throw new Error('invalid_speaking_event_type');
   }
@@ -1072,8 +2407,8 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     throw new Error('forbidden_audio_field');
   }
   const speaking = event.speaking ?? {};
-  const attemptId = normalizeOptionalText(speaking.attempt_id ?? event.attempt_id);
-  if (!attemptId || !event.occurred_at) {
+  const attemptId = normalizeOptionalText(speaking.attempt_id ?? event.attempt_id) ?? null;
+  if ((strict && !attemptId) || !event.occurred_at) {
     throw new Error('missing_required_field');
   }
   const selfRating = normalizeOptionalText(speaking.self_rating ?? event.self_rating);
@@ -1085,6 +2420,23 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
   if ((durationMs !== null && durationMs < 0) || retryCount < 0) {
     throw new Error('invalid_speaking_event');
   }
+
+  // drill_completed-specific fields
+  let promptsAttempted = null;
+  let promptsCompleted = null;
+  let totalDurationMs = null;
+  if (event.event_type === 'speaking_drill_completed') {
+    promptsAttempted = normalizeOptionalInteger(speaking.prompts_attempted ?? event.prompts_attempted);
+    promptsCompleted = normalizeOptionalInteger(speaking.prompts_completed ?? event.prompts_completed);
+    totalDurationMs = normalizeOptionalInteger(speaking.total_duration_ms ?? event.total_duration_ms);
+    if (promptsAttempted === null || totalDurationMs === null) {
+      throw new Error('missing_required_field');
+    }
+    if (promptsAttempted < 0 || totalDurationMs < 0) {
+      throw new Error('invalid_speaking_event');
+    }
+  }
+
   return {
     device_id: deviceId,
     user_id: userId,
@@ -1095,6 +2447,9 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     server_word_id: normalizeOptionalText(speaking.server_word_id ?? event.server_word_id),
     duration_ms: durationMs,
     retry_count: retryCount,
+    prompts_attempted: promptsAttempted,
+    prompts_completed: promptsCompleted,
+    total_duration_ms: totalDurationMs,
     self_rating: selfRating,
     language: normalizeOptionalText(event.language) ?? language,
     occurred_at: event.occurred_at
@@ -1107,6 +2462,7 @@ export function toApiSpeakingPrompt(prompt) {
   }
   return {
     id: prompt.id,
+    word_sense_id: prompt.word_sense_id ?? null,
     target_text: prompt.target_text,
     vi_hint: prompt.vi_hint,
     target_phrase: prompt.target_phrase,
@@ -1114,6 +2470,20 @@ export function toApiSpeakingPrompt(prompt) {
     common_mistake_vi: prompt.common_mistake_vi,
     difficulty: prompt.difficulty,
     topic: prompt.topic
+  };
+}
+
+export function toApiWorkplaceSentence(sentence) {
+  return {
+    sentence_id: sentence.id,
+    text: sentence.text,
+    language: sentence.language,
+    meaning_vi: sentence.meaning_vi,
+    topic: sentence.topic ?? null,
+    source_article_id: sentence.source_article_id ?? null,
+    source_title: sentence.source_title ?? null,
+    generation_source: sentence.generation_source ?? 'article_workplace_sentence',
+    created_at: sentence.created_at
   };
 }
 
@@ -1130,6 +2500,9 @@ export function toApiWord(word) {
     example_vi: word.example_vi,
     difficulty: word.difficulty,
     topics: word.topics,
+    entry_type: word.entry_type ?? 'word',
+    blank_word: word.blank_word ?? null,
+    explanation: word.explanation ?? '',
     created_at: word.created_at
   };
   if (word.speaking_prompt) {
@@ -1138,12 +2511,13 @@ export function toApiWord(word) {
   return result;
 }
 
-function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, events }) {
+function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, events, firstRecordingAt = null }) {
   const selfRatingCounts = { clear: 0, hesitated: 0, could_not_say: 0 };
   let spokenSentenceCount = 0;
   let retryCount = 0;
   let approximateDurationMs = 0;
   let latestActivityAt = null;
+  let drillSessionsCompleted = 0;
   for (const event of events) {
     if (event.event_type === 'speaking_recorded') {
       spokenSentenceCount += 1;
@@ -1152,6 +2526,9 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
     if (event.event_type === 'speaking_retried') {
       retryCount += 1;
     }
+    if (event.event_type === 'speaking_drill_completed') {
+      drillSessionsCompleted += 1;
+    }
     if (event.self_rating && selfRatingCounts[event.self_rating] !== undefined) {
       selfRatingCounts[event.self_rating] += 1;
     }
@@ -1159,6 +2536,7 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
       latestActivityAt = event.occurred_at;
     }
   }
+  const retryRate = spokenSentenceCount > 0 ? retryCount / spokenSentenceCount : 0;
   return {
     device_id: deviceId,
     user_id: userId,
@@ -1167,8 +2545,11 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
     spoken_sentence_count: spokenSentenceCount,
     recording_count: spokenSentenceCount,
     retry_count: retryCount,
+    retry_rate: retryRate,
+    drill_sessions_completed: drillSessionsCompleted,
     approximate_duration_ms: approximateDurationMs,
     self_rating_counts: selfRatingCounts,
+    first_recording_at: firstRecordingAt ?? null,
     latest_activity_at: latestActivityAt
   };
 }
@@ -1179,15 +2560,17 @@ function containsForbiddenAudioField(value) {
   }
   for (const [key, nested] of Object.entries(value)) {
     const normalized = key.toLowerCase();
-    if ([
-      'audio',
-      'audio_bytes',
-      'audio_base64',
-      'audio_blob',
-      'local_audio_path',
-      'local_file_path',
-      'file_path'
-    ].includes(normalized)) {
+    if (
+      [
+        'audio',
+        'audio_bytes',
+        'audio_base64',
+        'audio_blob',
+        'local_audio_path',
+        'local_file_path',
+        'file_path'
+      ].includes(normalized)
+    ) {
       return true;
     }
     if (typeof nested === 'object' && containsForbiddenAudioField(nested)) {
@@ -1211,21 +2594,6 @@ function normalizeOptionalInteger(value) {
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isNaN(parsed) ? null : parsed;
-}
-
-function normalizeWeekStart(value) {
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString();
-    }
-  }
-  const now = new Date();
-  const day = now.getUTCDay();
-  const diff = day === 0 ? 6 : day - 1;
-  now.setUTCDate(now.getUTCDate() - diff);
-  now.setUTCHours(0, 0, 0, 0);
-  return now.toISOString();
 }
 
 export function isPromptMissingRequiredFields(prompt) {
@@ -1257,40 +2625,42 @@ export function normalizeSpeakingPromptInput(input) {
   };
 }
 
-function seedWords() {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: 'word_reliable',
-      term: 'reliable',
-      language: 'en',
-      meaning_vi: 'dang tin cay',
-      part_of_speech: 'adjective',
-      ipa: '/rɪˈlaɪəbl/',
-      vietnamese_pronunciation: 'ri-lai-uh-bol',
-      example: 'She is a reliable teammate.',
-      example_vi: 'Co ay la mot dong doi dang tin cay.',
-      difficulty: 'B1',
-      topics: ['work', 'people'],
-      generation_source: 'seed',
-      created_at: now,
-      updated_at: now
-    },
-    {
-      id: 'word_adjust',
-      term: 'adjust',
-      language: 'en',
-      meaning_vi: 'dieu chinh',
-      part_of_speech: 'verb',
-      ipa: '/əˈdʒʌst/',
-      vietnamese_pronunciation: 'uh-just',
-      example: 'Please adjust the schedule.',
-      example_vi: 'Vui long dieu chinh lich trinh.',
-      difficulty: 'B1',
-      topics: ['work', 'daily'],
-      generation_source: 'seed',
-      created_at: now,
-      updated_at: now
-    }
-  ];
+// ─── Exam helpers ───────────────────────────────────────────────────────────
+
+const DIFFICULTY_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'HSK1', 'HSK2', 'HSK3', 'HSK4', 'HSK5', 'HSK6', 'HSK7'];
+
+export function selectDistractors({ source, pool, count = 3 }) {
+  const srcIdx = DIFFICULTY_ORDER.indexOf(source.difficulty ?? '');
+  // Try same difficulty ±1 first
+  const nearPool =
+    srcIdx >= 0
+      ? pool.filter((w) => {
+          const idx = DIFFICULTY_ORDER.indexOf(w.difficulty ?? '');
+          return idx >= 0 && Math.abs(idx - srcIdx) <= 1;
+        })
+      : [];
+  const candidates = nearPool.length >= count ? nearPool : pool;
+  // Shuffle and take `count`
+  const shuffled = shuffleArray([...candidates]);
+  return shuffled.slice(0, count);
+}
+
+export function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+export function shuffleChoices(choices) {
+  const indexed = choices.map((c, i) => ({ c, i }));
+  const shuffled = shuffleArray(indexed);
+  const correctIndex = shuffled.findIndex((item) => item.i === 0); // original index 0 = correct
+  return { choices: shuffled.map((item) => item.c), correctIndex };
+}
+
+function countWords(text) {
+  return String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
 }

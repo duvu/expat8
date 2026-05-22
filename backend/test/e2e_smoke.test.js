@@ -33,12 +33,14 @@ test('smoke: new word retrieval, local save, rating queue, and backend sync', as
 
 test('e2e: english CEFR progression reaches A2 after five too_easy ratings', async (t) => {
   const backendStore = new WordStore({ seed: false });
-  backendStore.insertWord(wordInput({
-    id: 'word_en_1',
-    term: 'reliable',
-    language: 'en',
-    difficulty: 'A1'
-  }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_en_1',
+      term: 'reliable',
+      language: 'en',
+      difficulty: 'A1'
+    })
+  );
   const server = http.createServer(
     createApp({
       store: backendStore,
@@ -77,22 +79,26 @@ test('e2e: english CEFR progression reaches A2 after five too_easy ratings', asy
 
 test('e2e: chinese HSK progression reaches HSK2 and drives level-aware selection', async (t) => {
   const backendStore = new WordStore({ seed: false });
-  backendStore.insertWord(wordInput({
-    id: 'word_zh_1',
-    term: '你好',
-    language: 'zh',
-    difficulty: 'HSK1',
-    ipa: '',
-    vietnamese_pronunciation: 'ni hao'
-  }));
-  backendStore.insertWord(wordInput({
-    id: 'word_zh_2',
-    term: '学习',
-    language: 'zh',
-    difficulty: 'HSK2',
-    ipa: '',
-    vietnamese_pronunciation: 'xue xi'
-  }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_zh_1',
+      term: '你好',
+      language: 'zh',
+      difficulty: 'HSK1',
+      ipa: '',
+      vietnamese_pronunciation: 'ni hao'
+    })
+  );
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_zh_2',
+      term: '学习',
+      language: 'zh',
+      difficulty: 'HSK2',
+      ipa: '',
+      vietnamese_pronunciation: 'xue xi'
+    })
+  );
   const server = http.createServer(
     createApp({
       store: backendStore,
@@ -140,21 +146,25 @@ test('e2e: chinese HSK progression reaches HSK2 and drives level-aware selection
   });
   const cardLanguages = cards.items.map((item) => item.language);
   assert.ok(cardLanguages.length > 0, 'expected at least one Chinese card');
-  assert.ok(cardLanguages.every((language) => language === 'zh'),
-    `expected all cards to be Chinese, got ${cardLanguages.join(', ')}`);
+  assert.ok(
+    cardLanguages.every((language) => language === 'zh'),
+    `expected all cards to be Chinese, got ${cardLanguages.join(', ')}`
+  );
 });
 
 test('e2e: proficiency stays isolated by language for the same device', async (t) => {
   const backendStore = new WordStore({ seed: false });
   backendStore.insertWord(wordInput({ id: 'word_en_isolation', term: 'focus', language: 'en', difficulty: 'A1' }));
-  backendStore.insertWord(wordInput({
-    id: 'word_zh_isolation',
-    term: '专注',
-    language: 'zh',
-    difficulty: 'HSK1',
-    ipa: '',
-    vietnamese_pronunciation: 'zhuan zhu'
-  }));
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_zh_isolation',
+      term: '专注',
+      language: 'zh',
+      difficulty: 'HSK1',
+      ipa: '',
+      vietnamese_pronunciation: 'zhuan zhu'
+    })
+  );
   const server = http.createServer(
     createApp({
       store: backendStore,
@@ -191,6 +201,114 @@ test('e2e: proficiency stays isolated by language for the same device', async (t
   assert.equal(english.level, 'A2');
   assert.equal(chinese.scale, 'hsk');
   assert.equal(chinese.level, 'HSK1');
+});
+
+test('smoke: mixed rating and speaking event batch sync without audio payloads', async (t) => {
+  const backendStore = new WordStore({ seed: false });
+  backendStore.insertWord(
+    wordInput({
+      id: 'word_speaking_smoke',
+      term: 'hello',
+      language: 'en',
+      difficulty: 'A1'
+    })
+  );
+  const server = http.createServer(
+    createApp({
+      store: backendStore,
+      generationService: null,
+      config: loadTestConfig()
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const deviceId = 'device_smoke_speaking';
+
+  // Send mixed batch with 5 rating events and speaking events (need 5 to level up)
+  const url = `${baseUrl}/v1/study-events/sync`;
+  const options = {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: deviceId,
+      events: [
+        {
+          client_event_id: 'evt_rating_smoke_1',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_1',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:00.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_2',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_2',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:01.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_3',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_3',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:02.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_4',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_4',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:03.000Z'
+        },
+        {
+          client_event_id: 'evt_rating_smoke_5',
+          server_word_id: 'word_speaking_smoke',
+          local_word_id: 'local_5',
+          rating: 'too_easy',
+          occurred_at: '2026-05-06T11:00:04.000Z'
+        },
+        {
+          client_event_id: 'evt_speaking_1',
+          event_type: 'speaking_recorded',
+          language: 'en',
+          occurred_at: '2026-05-06T11:01:00.000Z',
+          speaking: {
+            attempt_id: 'attempt_1',
+            prompt_id: 'prompt_1',
+            word_sense_id: 'sense_1',
+            duration_ms: 3500,
+            retry_count: 0
+          }
+        },
+        {
+          client_event_id: 'evt_speaking_2',
+          event_type: 'speaking_self_rated_clear',
+          language: 'en',
+          occurred_at: '2026-05-06T11:01:05.000Z',
+          speaking: {
+            attempt_id: 'attempt_1',
+            prompt_id: 'prompt_1',
+            self_rating: 'clear'
+          }
+        }
+      ]
+    })
+  };
+  const response = await fetch(url, signedFetchOptions(url, options));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  // Verify all events were accepted
+  assert.equal(body.accepted_event_ids.length, 7, 'expected 7 accepted events');
+  assert.ok(body.accepted_event_ids.includes('evt_rating_smoke_1'), 'expected rating event to be accepted');
+  assert.ok(body.accepted_event_ids.includes('evt_speaking_1'), 'expected speaking_recorded to be accepted');
+  assert.ok(body.accepted_event_ids.includes('evt_speaking_2'), 'expected speaking_self_rated_clear to be accepted');
+
+  // Verify speaking events do not affect proficiency, only rating events do
+  const proficiency = await fetchJson(`${baseUrl}/v1/proficiency?device_id=${deviceId}&language=en`);
+  assert.equal(proficiency.level, 'A2', 'expected proficiency to progress only from rating events (5 easy ratings)');
 });
 
 class SmokeLocalClient {
@@ -251,9 +369,7 @@ class SmokeLocalClient {
     const response = await fetch(url, signedFetchOptions(url, options));
     assert.equal(response.status, 200);
     const body = await response.json();
-    this.syncQueue = this.syncQueue.filter(
-      (event) => !body.accepted_event_ids.includes(event.client_event_id)
-    );
+    this.syncQueue = this.syncQueue.filter((event) => !body.accepted_event_ids.includes(event.client_event_id));
   }
 }
 

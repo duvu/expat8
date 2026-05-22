@@ -1,9 +1,34 @@
 import { normalizeTerm } from './normalize.js';
 
 const DEFAULT_STOPWORDS = new Set([
-  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'have', 'has', 'had',
-  'are', 'was', 'were', 'will', 'would', 'about', 'into', 'your', 'their',
-  'them', 'then', 'than', 'when', 'where', 'which', 'while', 'after', 'before'
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'that',
+  'this',
+  'have',
+  'has',
+  'had',
+  'are',
+  'was',
+  'were',
+  'will',
+  'would',
+  'about',
+  'into',
+  'your',
+  'their',
+  'them',
+  'then',
+  'than',
+  'when',
+  'where',
+  'which',
+  'while',
+  'after',
+  'before'
 ]);
 
 export function extractCandidateTerms({ text, maxTerms = 20, language = 'en' }) {

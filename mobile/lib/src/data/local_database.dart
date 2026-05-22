@@ -7,33 +7,44 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../objectbox.g.dart';
 import '../logging/logger.dart';
+import '../models/learning_progress.dart';
+import '../models/submitted_word.dart';
 import '../models/study_event.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
+import '../models/workplace_sentence.dart';
 import 'local_database_entities.dart';
 
 class LocalDatabase {
   LocalDatabase(this._store, {Logger? logger})
       : _logger = logger ?? const NoopLogger(),
         _localWords = _store.box<LocalWordEntity>(),
+        _localWorkplaceSentences = _store.box<LocalWorkplaceSentenceEntity>(),
         _studyEvents = _store.box<StudyEventEntity>(),
         _syncQueue = _store.box<SyncQueueEntity>(),
+        _submittedWords = _store.box<SubmittedWordEntity>(),
+        _learningHistory = _store.box<LearningHistoryEntity>(),
         _settings = _store.box<AppSettingEntity>(),
         _logs = _store.box<AppLogEntity>(),
         _speakingPrompts = _store.box<SpeakingPromptEntity>(),
-        _speakingAttempts = _store.box<SpeakingAttemptEntity>();
+        _speakingAttempts = _store.box<SpeakingAttemptEntity>(),
+        _examAttempts = _store.box<ExamAttemptEntity>();
 
   final Store _store;
   Logger _logger;
 
   final Box<LocalWordEntity> _localWords;
+  final Box<LocalWorkplaceSentenceEntity> _localWorkplaceSentences;
   final Box<StudyEventEntity> _studyEvents;
   final Box<SyncQueueEntity> _syncQueue;
+  final Box<SubmittedWordEntity> _submittedWords;
+  final Box<LearningHistoryEntity> _learningHistory;
   final Box<AppSettingEntity> _settings;
   final Box<AppLogEntity> _logs;
   final Box<SpeakingPromptEntity> _speakingPrompts;
   final Box<SpeakingAttemptEntity> _speakingAttempts;
+  final Box<ExamAttemptEntity> _examAttempts;
 
   void attachLogger(Logger logger) {
     _logger = logger;
@@ -47,7 +58,9 @@ class LocalDatabase {
       dbDir.createSync(recursive: true);
     }
     final store = await openStore(directory: dbDir.path);
-    return LocalDatabase(store);
+    final database = LocalDatabase(store);
+    await database._backfillLearningStateFields();
+    return database;
   }
 
   static Future<Directory> _resolveStorageDirectory() async {
@@ -187,6 +200,10 @@ class LocalDatabase {
       nextReviewAtMs: word.nextReviewAt?.toUtc().millisecondsSinceEpoch,
       createdAtMs: word.createdAt.toUtc().millisecondsSinceEpoch,
       updatedAtMs: word.updatedAt.toUtc().millisecondsSinceEpoch,
+      entryType: word.entryType,
+      explanation: word.explanation,
+      learningState: existing?.learningState ?? '',
+      learningStateAtMs: existing?.learningStateAtMs,
     );
     _localWords.put(entity);
 
@@ -198,6 +215,147 @@ class LocalDatabase {
         'local_id': word.localId,
         'server_word_id': word.serverWordId,
       },
+    );
+  }
+
+  Future<void> upsertWorkplaceSentence(WorkplaceSentence sentence) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    _localWorkplaceSentences.put(
+      LocalWorkplaceSentenceEntity(
+        id: existing?.id ?? 0,
+        localId: sentence.localId,
+        serverSentenceId: sentence.serverSentenceId,
+        text: sentence.text,
+        language: sentence.language,
+        meaningVi: sentence.meaningVi,
+        topic: sentence.topic,
+        sourceTitle: sentence.sourceTitle,
+        generationSource: sentence.generationSource,
+        isBundled: sentence.isBundled ? 1 : 0,
+        status: sentence.status.name,
+        lastSeenAtMs: sentence.lastSeenAt?.toUtc().millisecondsSinceEpoch,
+        createdAtMs: sentence.createdAt.toUtc().millisecondsSinceEpoch,
+        updatedAtMs: sentence.updatedAt.toUtc().millisecondsSinceEpoch,
+        learningState: existing?.learningState ?? '',
+        learningStateAtMs: existing?.learningStateAtMs,
+      ),
+    );
+
+    await _logger.debug(
+      category: AppLogCategory.database,
+      event: 'local_workplace_sentences.upsert',
+      message: 'Workplace sentence upserted in local cache.',
+      context: {
+        'local_id': sentence.localId,
+        'server_sentence_id': sentence.serverSentenceId,
+        'is_bundled': sentence.isBundled,
+      },
+    );
+  }
+
+  Future<WorkplaceSentence?> nextUnseenWorkplaceSentence({
+    String language = 'en',
+    Random? random,
+  }) async {
+    final rows = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.status
+                  .equals(WorkplaceSentenceStatus.unseen.name) &
+              LocalWorkplaceSentenceEntity_.language.equals(language),
+        )
+        .order(
+          LocalWorkplaceSentenceEntity_.createdAtMs,
+          flags: Order.descending,
+        )
+        .build()
+        .find();
+    if (rows.isEmpty) {
+      return null;
+    }
+    final rng = random ?? Random();
+    return _workplaceSentenceFromEntity(rows[rng.nextInt(rows.length)]);
+  }
+
+  Future<WorkplaceSentence?> randomWorkplaceSentence({
+    String language = 'en',
+    Random? random,
+  }) async {
+    final rows = _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.language.equals(language))
+        .build()
+        .find();
+    if (rows.isEmpty) {
+      return null;
+    }
+    final rng = random ?? Random();
+    return _workplaceSentenceFromEntity(rows[rng.nextInt(rows.length)]);
+  }
+
+  Future<void> markWorkplaceSentenceSeen({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.lastSeenAtMs = now.toUtc().millisecondsSinceEpoch;
+    existing.updatedAtMs = now.toUtc().millisecondsSinceEpoch;
+    _localWorkplaceSentences.put(existing);
+  }
+
+  Future<void> markWordLearned({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(word.localId))
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.learningState = LearningItemState.learned.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    // Advance nextReviewAtMs by at least 30 minutes so this word is not
+    // immediately re-selected as a review candidate by recentlyLearnedReviewWord.
+    // Takes max(existing, now + 30 min) so a longer SRS interval is never shortened.
+    final minNextReview = nowMs + 30 * 60 * 1000;
+    final existingNextReview = existing.nextReviewAtMs ?? 0;
+    existing.nextReviewAtMs =
+        existingNextReview > minNextReview ? existingNextReview : minNextReview;
+    _localWords.put(existing);
+    await _appendLearningHistory(
+      snapshot: LearningItemSnapshot.fromVocabularyWord(word),
+      state: LearningItemState.learned,
+      occurredAt: now,
+    );
+  }
+
+  Future<void> appendWordLearnedHistory({
+    required VocabularyWord word,
+    required DateTime now,
+  }) async {
+    await _appendLearningHistory(
+      snapshot: LearningItemSnapshot.fromVocabularyWord(word),
+      state: LearningItemState.learned,
+      occurredAt: now,
     );
   }
 
@@ -246,12 +404,17 @@ class LocalDatabase {
   }
 
   Future<VocabularyWord?> recentlyLearnedReviewWord(
-      {String language = 'en'}) async {
+      DateTime now, {
+    String language = 'en',
+  }) async {
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
     final rows = _localWords
         .query(
           LocalWordEntity_.language.equals(language) &
               LocalWordEntity_.status.oneOf(_activeReviewStatuses) &
-              LocalWordEntity_.lastSeenAtMs.notNull(),
+              LocalWordEntity_.lastSeenAtMs.notNull() &
+              (LocalWordEntity_.nextReviewAtMs.isNull() |
+                  LocalWordEntity_.nextReviewAtMs.lessOrEqual(nowMs)),
         )
         .build()
         .find();
@@ -413,6 +576,138 @@ class LocalDatabase {
     }
   }
 
+  Future<void> upsertSubmittedWord(SubmittedWord submission) async {
+    final existing = _submittedWords
+        .query(
+          SubmittedWordEntity_.localSubmissionId
+              .equals(submission.localSubmissionId),
+        )
+        .build()
+        .findFirst();
+    _submittedWords.put(
+      SubmittedWordEntity(
+        id: existing?.id ?? 0,
+        localSubmissionId: submission.localSubmissionId,
+        serverSubmissionId: submission.serverSubmissionId,
+        submittedTerm: submission.submittedTerm,
+        targetLanguage: submission.targetLanguage,
+        status: submission.status.name,
+        failureReason: submission.failureReason,
+        resolutionType: switch (submission.resolutionType) {
+          SubmittedWordResolutionType.existingWord => 'existing_word',
+          SubmittedWordResolutionType.generatedWord => 'generated_word',
+          null => null,
+        },
+        resolvedWordServerId:
+            submission.resolvedWord?.serverWordId ?? existing?.resolvedWordServerId,
+        createdAtMs: submission.createdAt.toUtc().millisecondsSinceEpoch,
+        updatedAtMs: submission.updatedAt.toUtc().millisecondsSinceEpoch,
+        resolvedAtMs: submission.resolvedAt?.toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<SubmittedWord?> getSubmittedWord(String localSubmissionId) async {
+    final row = _submittedWords
+        .query(
+          SubmittedWordEntity_.localSubmissionId.equals(localSubmissionId),
+        )
+        .build()
+        .findFirst();
+    return row == null ? null : _submittedWordFromEntity(row);
+  }
+
+  Future<VocabularyWord?> getWordByServerId(String serverWordId) async {
+    final row = _localWords
+        .query(LocalWordEntity_.serverWordId.equals(serverWordId))
+        .build()
+        .findFirst();
+    return row == null ? null : _wordFromEntity(row);
+  }
+
+  Future<List<SubmittedWord>> listSubmittedWords({int limit = 200}) async {
+    final rows = _submittedWords
+        .query()
+        .order(SubmittedWordEntity_.updatedAtMs, flags: Order.descending)
+        .build()
+        .find();
+    final items = rows.map(_submittedWordFromEntity).toList(growable: false);
+    return items.take(limit).toList(growable: false);
+  }
+
+  Future<void> enqueueSubmittedWordCreate(
+    String localSubmissionId, {
+    DateTime? nextRetryAt,
+  }) async {
+    final existing = _findSubmittedWordQueueEntry(
+      type: 'submitted_word_create',
+      localSubmissionId: localSubmissionId,
+    );
+    final nextRetryAtMs =
+        (nextRetryAt ?? DateTime.now().toUtc()).toUtc().millisecondsSinceEpoch;
+    if (existing != null) {
+      existing.nextRetryAtMs = nextRetryAtMs;
+      existing.retryCount = 0;
+      _syncQueue.put(existing);
+      return;
+    }
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'submitted_word_create',
+        payload: jsonEncode({'local_submission_id': localSubmissionId}),
+        retryCount: 0,
+        nextRetryAtMs: nextRetryAtMs,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<void> enqueueSubmittedWordStatus(
+    String localSubmissionId, {
+    required String serverSubmissionId,
+    DateTime? nextRetryAt,
+  }) async {
+    final existing = _findSubmittedWordQueueEntry(
+      type: 'submitted_word_status',
+      localSubmissionId: localSubmissionId,
+    );
+    final payload = jsonEncode({
+      'local_submission_id': localSubmissionId,
+      'server_submission_id': serverSubmissionId,
+    });
+    final nextRetryAtMs =
+        (nextRetryAt ?? DateTime.now().toUtc()).toUtc().millisecondsSinceEpoch;
+    if (existing != null) {
+      existing.payload = payload;
+      existing.nextRetryAtMs = nextRetryAtMs;
+      existing.retryCount = 0;
+      _syncQueue.put(existing);
+      return;
+    }
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'submitted_word_status',
+        payload: payload,
+        retryCount: 0,
+        nextRetryAtMs: nextRetryAtMs,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<void> removeSyncQueueEntry(int id) async {
+    _syncQueue.remove(id);
+  }
+
+  Future<void> removeSubmittedWordQueueEntries(String localSubmissionId) async {
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (_queuePayloadContainsLocalSubmissionId(item, localSubmissionId)) {
+        _syncQueue.remove(item.id);
+      }
+    }
+  }
+
   Future<void> updateWordAfterRating({
     required VocabularyWord word,
     required StudyRating rating,
@@ -460,6 +755,8 @@ class LocalDatabase {
 
     final nowMs = now.toUtc().millisecondsSinceEpoch;
     existing.status = WordStatus.mastered.name;
+    existing.learningState = LearningItemState.remembered.name;
+    existing.learningStateAtMs = nowMs;
     existing.lastSeenAtMs = nowMs;
     // Product rule: remembered swipe reduces relearn frequency to 10%.
     // We model this by scheduling a farther review interval.
@@ -483,6 +780,8 @@ class LocalDatabase {
 
     final nowMs = now.toUtc().millisecondsSinceEpoch;
     existing.status = WordStatus.learning.name;
+    existing.learningState = LearningItemState.difficult.name;
+    existing.learningStateAtMs = nowMs;
     existing.lastSeenAtMs = nowMs;
     existing.nextReviewAtMs =
         now.toUtc().add(const Duration(minutes: 10)).millisecondsSinceEpoch;
@@ -511,6 +810,191 @@ class LocalDatabase {
         now.toUtc().add(const Duration(hours: 24)).millisecondsSinceEpoch;
     existing.updatedAtMs = nowMs;
     _localWords.put(existing);
+  }
+
+  Future<void> markSentenceLearned({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.learningState = LearningItemState.learned.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    _localWorkplaceSentences.put(existing);
+    await _appendLearningHistory(
+      snapshot: LearningItemSnapshot.fromWorkplaceSentence(sentence),
+      state: LearningItemState.learned,
+      occurredAt: now,
+    );
+  }
+
+  Future<void> markSentenceRemembered({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.learningState = LearningItemState.remembered.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    _localWorkplaceSentences.put(existing);
+  }
+
+  Future<void> markSentenceDifficult({
+    required WorkplaceSentence sentence,
+    required DateTime now,
+  }) async {
+    final existing = _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+        )
+        .build()
+        .findFirst();
+    if (existing == null) {
+      return;
+    }
+
+    final nowMs = now.toUtc().millisecondsSinceEpoch;
+    existing.status = WorkplaceSentenceStatus.seen.name;
+    existing.learningState = LearningItemState.difficult.name;
+    existing.learningStateAtMs = nowMs;
+    existing.lastSeenAtMs = nowMs;
+    existing.updatedAtMs = nowMs;
+    _localWorkplaceSentences.put(existing);
+  }
+
+  Future<void> _appendLearningHistory({
+    required LearningItemSnapshot snapshot,
+    required LearningItemState state,
+    required DateTime occurredAt,
+  }) async {
+    _learningHistory.put(
+      LearningHistoryEntity(
+        snapshotJson: jsonEncode(snapshot.toJson()),
+        learningState: state.name,
+        occurredAtMs: occurredAt.toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  Future<List<LearningHistoryEntry>> getLearningHistory({
+    int limit = -1,
+  }) async {
+    final rows = _learningHistory
+        .query()
+        .order(LearningHistoryEntity_.occurredAtMs)
+        .build()
+        .find();
+    final entries = rows
+        .map(
+          (row) => LearningHistoryEntry.fromJson(
+            {
+              'snapshot': jsonDecode(row.snapshotJson) as Map<String, dynamic>,
+              'state': row.learningState,
+              'occurred_at_ms': row.occurredAtMs,
+            },
+          ),
+        )
+        .toList(growable: false);
+    if (limit >= 0) {
+      return entries.take(limit).toList(growable: false);
+    }
+    return entries;
+  }
+
+  Future<LearningProgressTotals> getLearningProgressTotals() async {
+    final learned =
+        await _countLearningState(LearningItemState.learned.name);
+    final remembered =
+        await _countLearningState(LearningItemState.remembered.name);
+    final difficult =
+        await _countLearningState(LearningItemState.difficult.name);
+    return LearningProgressTotals(
+      learned: learned,
+      remembered: remembered,
+      difficult: difficult,
+    );
+  }
+
+  Future<int> _countLearningState(String state) async {
+    final wordCount = _localWords
+        .query(LocalWordEntity_.learningState.equals(state))
+        .build()
+        .count();
+    final sentenceCount = _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.learningState.equals(state))
+        .build()
+        .count();
+    return wordCount + sentenceCount;
+  }
+
+  Future<void> _backfillLearningStateFields() async {
+    final wordRows = _localWords.getAll();
+    for (final row in wordRows) {
+      if (row.learningState.isNotEmpty) {
+        continue;
+      }
+      final backfilled = _learningStateFromWordStatus(row.status);
+      if (backfilled == null) {
+        continue;
+      }
+      row.learningState = backfilled.name;
+      row.learningStateAtMs = row.lastSeenAtMs ?? row.updatedAtMs;
+      _localWords.put(row);
+    }
+
+    final sentenceRows = _localWorkplaceSentences.getAll();
+    for (final row in sentenceRows) {
+      if (row.learningState.isNotEmpty) {
+        continue;
+      }
+      final backfilled = _learningStateFromSentenceStatus(row.status);
+      if (backfilled == null) {
+        continue;
+      }
+      row.learningState = backfilled.name;
+      row.learningStateAtMs = row.lastSeenAtMs ?? row.updatedAtMs;
+      _localWorkplaceSentences.put(row);
+    }
+  }
+
+  LearningItemState? _learningStateFromWordStatus(String status) {
+    return switch (status) {
+      'mastered' => LearningItemState.remembered,
+      'learning' => LearningItemState.learned,
+      'review' => LearningItemState.learned,
+      _ => null,
+    };
+  }
+
+  LearningItemState? _learningStateFromSentenceStatus(String status) {
+    return switch (status) {
+      'seen' => LearningItemState.learned,
+      _ => null,
+    };
   }
 
   Future<void> insertStudyEvent(StudyEvent event) async {
@@ -643,6 +1127,24 @@ class LocalDatabase {
         .count();
   }
 
+  Future<int> countUnseenWorkplaceSentences({String language = 'en'}) async {
+    return _localWorkplaceSentences
+        .query(
+          LocalWorkplaceSentenceEntity_.status
+                  .equals(WorkplaceSentenceStatus.unseen.name) &
+              LocalWorkplaceSentenceEntity_.language.equals(language),
+        )
+        .build()
+        .count();
+  }
+
+  Future<int> countWorkplaceSentences({String language = 'en'}) async {
+    return _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.language.equals(language))
+        .build()
+        .count();
+  }
+
   /// Picks a random word for [language] whose status is not [mastered]
   /// (i.e., not yet marked as remembered). Used as the fallback when no
   /// new-word card is available so the learner always has something to study.
@@ -732,6 +1234,57 @@ class LocalDatabase {
     for (final language in affectedLanguages) {
       await pruneToCapSmartly(maxWords: 1000, language: language);
     }
+  }
+
+  Future<int> addWorkplaceSentenceBatch(List<WorkplaceSentence> sentences) async {
+    if (sentences.isEmpty) return 0;
+    var inserted = 0;
+    final affectedLanguages = <String>{};
+    for (final sentence in sentences) {
+      final alreadyExists = _localWorkplaceSentences
+          .query(
+            LocalWorkplaceSentenceEntity_.localId.equals(sentence.localId),
+          )
+          .build()
+          .findFirst();
+      if (alreadyExists == null) {
+        inserted += 1;
+      }
+      await upsertWorkplaceSentence(sentence);
+      affectedLanguages.add(sentence.language);
+    }
+    for (final language in affectedLanguages) {
+      await pruneWorkplaceSentencesToCap(maxSentences: 1000, language: language);
+    }
+    return inserted;
+  }
+
+  Future<int> pruneWorkplaceSentencesToCap({
+    int maxSentences = 1000,
+    required String language,
+  }) async {
+    final rows = _localWorkplaceSentences
+        .query(LocalWorkplaceSentenceEntity_.language.equals(language))
+        .build()
+        .find();
+    if (rows.length <= maxSentences) {
+      return 0;
+    }
+
+    final removable = rows.where((row) => row.isBundled == 0).toList()
+      ..sort((a, b) {
+        final aTs = a.lastSeenAtMs ?? a.createdAtMs;
+        final bTs = b.lastSeenAtMs ?? b.createdAtMs;
+        return aTs.compareTo(bTs);
+      });
+
+    var removed = 0;
+    final targetRemovals = rows.length - maxSentences;
+    for (final row in removable.take(targetRemovals)) {
+      _localWorkplaceSentences.remove(row.id);
+      removed += 1;
+    }
+    return removed;
   }
 
   /// Prunes the local word store for [language] (or globally when null) to
@@ -867,6 +1420,28 @@ class LocalDatabase {
           DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
       updatedAt:
           DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
+      entryType: row.entryType.isEmpty ? 'word' : row.entryType,
+      explanation: row.explanation,
+    );
+  }
+
+  WorkplaceSentence _workplaceSentenceFromEntity(
+    LocalWorkplaceSentenceEntity row,
+  ) {
+    return WorkplaceSentence(
+      localId: row.localId,
+      serverSentenceId: row.serverSentenceId,
+      text: row.text,
+      language: row.language,
+      meaningVi: row.meaningVi,
+      topic: row.topic,
+      sourceTitle: row.sourceTitle,
+      generationSource: row.generationSource,
+      isBundled: row.isBundled == 1,
+      status: WorkplaceSentenceStatus.values.byName(row.status),
+      lastSeenAt: _parseDateMs(row.lastSeenAtMs),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
     );
   }
 
@@ -880,6 +1455,37 @@ class LocalDatabase {
           DateTime.fromMillisecondsSinceEpoch(row.nextRetryAtMs, isUtc: true),
       createdAt:
           DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+    );
+  }
+
+  SubmittedWord _submittedWordFromEntity(SubmittedWordEntity row) {
+    final resolvedWordRow = row.resolvedWordServerId == null
+        ? null
+        : _localWords
+            .query(
+              LocalWordEntity_.serverWordId.equals(row.resolvedWordServerId!),
+            )
+            .build()
+            .findFirst();
+    return SubmittedWord(
+      localSubmissionId: row.localSubmissionId,
+      serverSubmissionId: row.serverSubmissionId,
+      submittedTerm: row.submittedTerm,
+      targetLanguage: row.targetLanguage,
+      status: SubmittedWordStatus.values.byName(row.status),
+      failureReason: row.failureReason,
+      resolutionType: switch (row.resolutionType) {
+        'existing_word' => SubmittedWordResolutionType.existingWord,
+        'generated_word' => SubmittedWordResolutionType.generatedWord,
+        _ => null,
+      },
+      resolvedWord:
+          resolvedWordRow == null ? null : _wordFromEntity(resolvedWordRow),
+      createdAt:
+          DateTime.fromMillisecondsSinceEpoch(row.createdAtMs, isUtc: true),
+      updatedAt:
+          DateTime.fromMillisecondsSinceEpoch(row.updatedAtMs, isUtc: true),
+      resolvedAt: _parseDateMs(row.resolvedAtMs),
     );
   }
 
@@ -904,6 +1510,27 @@ class LocalDatabase {
       return null;
     }
     return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+  }
+
+  SyncQueueEntity? _findSubmittedWordQueueEntry({
+    required String type,
+    required String localSubmissionId,
+  }) {
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.type == type &&
+          _queuePayloadContainsLocalSubmissionId(item, localSubmissionId)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  bool _queuePayloadContainsLocalSubmissionId(
+    SyncQueueEntity item,
+    String localSubmissionId,
+  ) {
+    return item.payload.contains('"local_submission_id":"$localSubmissionId"');
   }
 
   // ---- Speaking prompt cache ----
@@ -1010,4 +1637,141 @@ class LocalDatabase {
 
   /// Returns the total number of speaking attempts stored locally.
   int countSpeakingAttempts() => _speakingAttempts.count();
+
+  /// Returns all cached prompts linked to [wordSenseId].
+  List<SpeakingPromptEntity> getPromptsByWordSenseId(String wordSenseId) {
+    return _speakingPrompts
+        .query(SpeakingPromptEntity_.wordSenseId.equals(wordSenseId))
+        .build()
+        .find();
+  }
+
+  /// Upserts a batch of speaking prompts from the server sync endpoint.
+  ///
+  /// Existing entries are updated in-place (preserving their ObjectBox id);
+  /// new entries are inserted. Any prompts not present in [prompts] are
+  /// deleted from local storage (they have been removed on the server).
+  void upsertAllSpeakingPrompts(List<SpeakingPromptEntity> prompts) {
+    for (final prompt in prompts) {
+      final existing = _speakingPrompts
+          .query(SpeakingPromptEntity_.promptId.equals(prompt.promptId))
+          .build()
+          .findFirst();
+      _speakingPrompts.put(
+        SpeakingPromptEntity(
+          id: existing?.id ?? 0,
+          promptId: prompt.promptId,
+          wordSenseId: prompt.wordSenseId,
+          serverWordId: prompt.serverWordId,
+          targetText: prompt.targetText,
+          viHint: prompt.viHint,
+          targetPhrase: prompt.targetPhrase,
+          pronunciationTip: prompt.pronunciationTip,
+          commonMistake: prompt.commonMistake,
+          difficulty: prompt.difficulty,
+          topic: prompt.topic,
+          cachedAtMs: prompt.cachedAtMs,
+        ),
+      );
+    }
+    // Delete any locally-cached prompts that were not in the server response.
+    final receivedIds = prompts.map((p) => p.promptId).toSet();
+    final allLocal = _speakingPrompts.getAll();
+    final staleObjectIds = allLocal
+        .where((p) => !receivedIds.contains(p.promptId))
+        .map((p) => p.id)
+        .toList();
+    if (staleObjectIds.isNotEmpty) {
+      _speakingPrompts.removeMany(staleObjectIds);
+    }
+  }
+
+  // ─── Exam Attempts ──────────────────────────────────────────────────────────
+
+  /// Persists a new exam attempt. Returns the ObjectBox id.
+  int saveExamAttempt(ExamAttemptEntity entity) {
+    return _examAttempts.put(entity);
+  }
+
+  /// Returns an exam attempt by its [attemptId] (local or server-assigned), or null.
+  ExamAttemptEntity? getExamAttempt(String attemptId) {
+    return _examAttempts
+        .query(ExamAttemptEntity_.attemptId.equals(attemptId))
+        .build()
+        .findFirst();
+  }
+
+  /// Returns all locally cached exam attempts, newest first.
+  List<ExamAttemptEntity> getAllExamAttempts() {
+    return _examAttempts
+        .query()
+        .order(ExamAttemptEntity_.createdAtMs, flags: Order.descending)
+        .build()
+        .find();
+  }
+
+  /// Returns the total number of exam attempts stored locally.
+  int countExamAttempts() => _examAttempts.count();
+
+  /// Deletes all locally cached exam attempts.
+  void deleteAllExamAttempts() => _examAttempts.removeAll();
+
+  /// Queues a completed exam result for background sync to the backend.
+  ///
+  /// [localAttemptId] is a stable client-generated UUID used as the
+  /// idempotency key so retries do not create duplicate backend records.
+  void enqueueExamResult({
+    required String localAttemptId,
+    required String sessionId,
+    required List<int> answers,
+    required String language,
+  }) {
+    final payload = jsonEncode({
+      'local_attempt_id': localAttemptId,
+      'session_id': sessionId,
+      'answers': answers,
+      'language': language,
+    });
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'exam_result',
+        payload: payload,
+        retryCount: 0,
+        nextRetryAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  /// Updates the locally stored exam attempt with the confirmed backend result
+  /// and marks its sync status as 'synced'. Also removes the corresponding
+  /// sync queue entry identified by [localAttemptId].
+  void markExamAttemptSynced({
+    required String localAttemptId,
+    required String serverAttemptId,
+    required int correctCount,
+    required double scorePct,
+    required bool passed,
+    String? certificateId,
+  }) {
+    final entity = getExamAttempt(localAttemptId);
+    if (entity != null) {
+      entity.attemptId = serverAttemptId;
+      entity.correctCount = correctCount;
+      entity.scorePct = scorePct;
+      entity.passed = passed ? 1 : 0;
+      entity.certificateId = certificateId;
+      entity.syncStatus = 'synced';
+      _examAttempts.put(entity);
+    }
+
+    // Remove from sync queue (payload contains the local_attempt_id).
+    final allQueue = _syncQueue.getAll();
+    for (final item in allQueue) {
+      if (item.type == 'exam_result' &&
+          item.payload.contains('"local_attempt_id":"$localAttemptId"')) {
+        _syncQueue.remove(item.id);
+      }
+    }
+  }
 }

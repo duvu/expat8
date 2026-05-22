@@ -26,6 +26,64 @@ export type VocabularyReviewItem = {
   ipa?: string | null;
 };
 
+export type ExamResult = {
+  id: string;
+  user_id: string;
+  topic: string;
+  language: string;
+  difficulty_level: string | null;
+  total_questions: number;
+  correct_count: number;
+  score_pct: number;
+  passed: number;
+  created_at: string;
+  certificate_id: string | null;
+};
+
+export type UserRow = {
+  id: string;
+  identifier: string;
+  display_name: string | null;
+  created_at: string;
+  last_activity: string | null;
+  study_event_count: number;
+};
+
+export type UserDetail = {
+  id: string;
+  identifier: string;
+  display_name: string | null;
+  created_at: string;
+  session_count: number;
+  cached_word_count: number;
+};
+
+export type UserProficiency = {
+  language: string;
+  level: string;
+  updated_at: string;
+};
+
+export type StudyEventSummary = {
+  rating: string;
+  count: number;
+};
+
+export type RecentStudyEvent = {
+  id: string;
+  word_id: string | null;
+  local_word_id: string | null;
+  rating: string;
+  occurred_at: string;
+};
+
+export type DashboardSummaryStats = {
+  total_users: number;
+  total_study_events: number;
+  active_last_7_days: number;
+  total_words: number;
+};
+
 export type SpeakingPrompt = {
   id: string;
   word_sense_id: string;
@@ -46,3 +104,33 @@ export type SpeakingPrompt = {
   meaning_vi?: string | null;
 };
 
+export type MemorizationSegment = {
+  id: string;
+  passage_id: string;
+  position: number;
+  text: string;
+  word_count: number;
+  ipa_text: string | null;
+  translation_text: string | null;
+  translation_language: string | null;
+  created_at: string;
+};
+
+export type MemorizationPassage = {
+  id: string;
+  title: string;
+  language: string;
+  raw_text: string;
+  owner_type: string;
+  owner_user_id: string | null;
+  visibility: string;
+  status: string;
+  enrichment_status: string;
+  processing_error: string | null;
+  segment_count: number;
+  attempt_count: number;
+  enrichment_attempt_count: number;
+  created_at: string;
+  updated_at: string;
+  segments: MemorizationSegment[];
+};

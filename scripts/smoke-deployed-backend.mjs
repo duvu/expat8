@@ -6,10 +6,10 @@ import {
 } from '../backend/src/app_credentials.js';
 
 const baseUrl = withoutTrailingSlash(
-  process.env.BACKEND_BASE_URL ?? 'https://expat8.x51.vn'
+  process.env.BACKEND_BASE_URL ?? '<YOUR_BACKEND_URL>'
 );
 const appId = process.env.APP_CREDENTIAL_APP_ID ?? 'expat8-mobile-app';
-const appSecret = process.env.APP_CREDENTIAL_SECRET ?? 'expat8-mobile-secret';
+const appSecret = process.env.APP_CREDENTIAL_SECRET ?? '<YOUR_APP_SECRET>';
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? '5000');
 
 const checks = [];
