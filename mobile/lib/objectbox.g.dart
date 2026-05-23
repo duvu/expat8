@@ -855,6 +855,239 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(12, 9153330279337494008),
+    name: 'LocalPassageEntity',
+    lastPropertyId: const obx_int.IdUid(11, 977806937227253729),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 3347447730451110862),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 1997176012022448387),
+        name: 'passageId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(49, 6597980320885862947),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 3737891656804096274),
+        name: 'title',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 637587396018555929),
+        name: 'language',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 2347279457489197637),
+        name: 'status',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(50, 807248647441462297),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 1258379105813941939),
+        name: 'visibility',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 2923707209116817282),
+        name: 'segmentCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 6248032997716592667),
+        name: 'createdAt',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 2356079396805684266),
+        name: 'enrichmentStatus',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 2377068660975214815),
+        name: 'ownerUserId',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 977806937227253729),
+        name: 'syncedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(51, 7898279921923273479),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(13, 3588204482816069691),
+    name: 'LocalSegmentEntity',
+    lastPropertyId: const obx_int.IdUid(11, 4242623873390579833),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 588176567697237655),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 3934708142928940618),
+        name: 'segmentId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(52, 2753168069173838048),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 6813659507576951779),
+        name: 'passageId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(53, 3555657087750146587),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 8205300448781203882),
+        name: 'position',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(54, 202862820418679591),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 5090327613570176185),
+        name: 'text',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 2642135342047401822),
+        name: 'wordCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 8764573318185715572),
+        name: 'ipaText',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 3968869262078391031),
+        name: 'translationText',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 7795134101473911454),
+        name: 'translationLanguage',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 1673310384012185642),
+        name: 'vietReadingText',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 4242623873390579833),
+        name: 'syncedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(55, 6519116907239888808),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(14, 3159056310794874801),
+    name: 'LocalSegmentProgressEntity',
+    lastPropertyId: const obx_int.IdUid(10, 4648465670599139151),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 4841823111307701785),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 412180106684845470),
+        name: 'segmentId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(56, 5474568379640707507),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 3243868764124977039),
+        name: 'passageId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(57, 3627949612530727753),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 1091796826721449816),
+        name: 'status',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(58, 1517693153473068715),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 6907975591886592864),
+        name: 'reviewCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 8090931854585979228),
+        name: 'easeFactor',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 4351830858259712617),
+        name: 'intervalDays',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 4718479433186477027),
+        name: 'lastReviewedAtMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 7265710790855486050),
+        name: 'nextReviewAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(59, 8625421853851595165),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 4648465670599139151),
+        name: 'isDirty',
+        type: 6,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -895,8 +1128,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(11, 391133553608201731),
-    lastIndexId: const obx_int.IdUid(48, 4623037698306536221),
+    lastEntityId: const obx_int.IdUid(14, 3159056310794874801),
+    lastIndexId: const obx_int.IdUid(59, 8625421853851595165),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -1956,6 +2189,297 @@ obx_int.ModelDefinition getObjectBoxModel() {
         return object;
       },
     ),
+    LocalPassageEntity: obx_int.EntityDefinition<LocalPassageEntity>(
+      model: _entities[11],
+      toOneRelations: (LocalPassageEntity object) => [],
+      toManyRelations: (LocalPassageEntity object) => {},
+      getId: (LocalPassageEntity object) => object.id,
+      setId: (LocalPassageEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LocalPassageEntity object, fb.Builder fbb) {
+        final passageIdOffset = fbb.writeString(object.passageId);
+        final titleOffset = fbb.writeString(object.title);
+        final languageOffset = fbb.writeString(object.language);
+        final statusOffset = fbb.writeString(object.status);
+        final visibilityOffset = fbb.writeString(object.visibility);
+        final createdAtOffset = fbb.writeString(object.createdAt);
+        final enrichmentStatusOffset = object.enrichmentStatus == null
+            ? null
+            : fbb.writeString(object.enrichmentStatus!);
+        final ownerUserIdOffset = object.ownerUserId == null
+            ? null
+            : fbb.writeString(object.ownerUserId!);
+        fbb.startTable(12);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, passageIdOffset);
+        fbb.addOffset(2, titleOffset);
+        fbb.addOffset(3, languageOffset);
+        fbb.addOffset(4, statusOffset);
+        fbb.addOffset(5, visibilityOffset);
+        fbb.addInt64(6, object.segmentCount);
+        fbb.addOffset(7, createdAtOffset);
+        fbb.addOffset(8, enrichmentStatusOffset);
+        fbb.addOffset(9, ownerUserIdOffset);
+        fbb.addInt64(10, object.syncedAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final passageIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final titleParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final languageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final statusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final visibilityParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 14, '');
+        final segmentCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          16,
+          0,
+        );
+        final createdAtParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 18, '');
+        final enrichmentStatusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 20);
+        final ownerUserIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 22);
+        final syncedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          24,
+          0,
+        );
+        final object = LocalPassageEntity(
+          id: idParam,
+          passageId: passageIdParam,
+          title: titleParam,
+          language: languageParam,
+          status: statusParam,
+          visibility: visibilityParam,
+          segmentCount: segmentCountParam,
+          createdAt: createdAtParam,
+          enrichmentStatus: enrichmentStatusParam,
+          ownerUserId: ownerUserIdParam,
+          syncedAtMs: syncedAtMsParam,
+        );
+
+        return object;
+      },
+    ),
+    LocalSegmentEntity: obx_int.EntityDefinition<LocalSegmentEntity>(
+      model: _entities[12],
+      toOneRelations: (LocalSegmentEntity object) => [],
+      toManyRelations: (LocalSegmentEntity object) => {},
+      getId: (LocalSegmentEntity object) => object.id,
+      setId: (LocalSegmentEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LocalSegmentEntity object, fb.Builder fbb) {
+        final segmentIdOffset = fbb.writeString(object.segmentId);
+        final passageIdOffset = fbb.writeString(object.passageId);
+        final textOffset = fbb.writeString(object.text);
+        final ipaTextOffset = object.ipaText == null
+            ? null
+            : fbb.writeString(object.ipaText!);
+        final translationTextOffset = object.translationText == null
+            ? null
+            : fbb.writeString(object.translationText!);
+        final translationLanguageOffset = object.translationLanguage == null
+            ? null
+            : fbb.writeString(object.translationLanguage!);
+        final vietReadingTextOffset = object.vietReadingText == null
+            ? null
+            : fbb.writeString(object.vietReadingText!);
+        fbb.startTable(12);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, segmentIdOffset);
+        fbb.addOffset(2, passageIdOffset);
+        fbb.addInt64(3, object.position);
+        fbb.addOffset(4, textOffset);
+        fbb.addInt64(5, object.wordCount);
+        fbb.addOffset(6, ipaTextOffset);
+        fbb.addOffset(7, translationTextOffset);
+        fbb.addOffset(8, translationLanguageOffset);
+        fbb.addOffset(9, vietReadingTextOffset);
+        fbb.addInt64(10, object.syncedAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final segmentIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final passageIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final positionParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          10,
+          0,
+        );
+        final textParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final wordCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          14,
+          0,
+        );
+        final ipaTextParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 16);
+        final translationTextParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 18);
+        final translationLanguageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 20);
+        final vietReadingTextParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 22);
+        final syncedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          24,
+          0,
+        );
+        final object = LocalSegmentEntity(
+          id: idParam,
+          segmentId: segmentIdParam,
+          passageId: passageIdParam,
+          position: positionParam,
+          text: textParam,
+          wordCount: wordCountParam,
+          ipaText: ipaTextParam,
+          translationText: translationTextParam,
+          translationLanguage: translationLanguageParam,
+          vietReadingText: vietReadingTextParam,
+          syncedAtMs: syncedAtMsParam,
+        );
+
+        return object;
+      },
+    ),
+    LocalSegmentProgressEntity:
+        obx_int.EntityDefinition<LocalSegmentProgressEntity>(
+          model: _entities[13],
+          toOneRelations: (LocalSegmentProgressEntity object) => [],
+          toManyRelations: (LocalSegmentProgressEntity object) => {},
+          getId: (LocalSegmentProgressEntity object) => object.id,
+          setId: (LocalSegmentProgressEntity object, int id) {
+            object.id = id;
+          },
+          objectToFB: (LocalSegmentProgressEntity object, fb.Builder fbb) {
+            final segmentIdOffset = fbb.writeString(object.segmentId);
+            final passageIdOffset = fbb.writeString(object.passageId);
+            final statusOffset = fbb.writeString(object.status);
+            fbb.startTable(11);
+            fbb.addInt64(0, object.id);
+            fbb.addOffset(1, segmentIdOffset);
+            fbb.addOffset(2, passageIdOffset);
+            fbb.addOffset(3, statusOffset);
+            fbb.addInt64(4, object.reviewCount);
+            fbb.addFloat64(5, object.easeFactor);
+            fbb.addFloat64(6, object.intervalDays);
+            fbb.addInt64(7, object.lastReviewedAtMs);
+            fbb.addInt64(8, object.nextReviewAtMs);
+            fbb.addInt64(9, object.isDirty);
+            fbb.finish(fbb.endTable());
+            return object.id;
+          },
+          objectFromFB: (obx.Store store, ByteData fbData) {
+            final buffer = fb.BufferContext(fbData);
+            final rootOffset = buffer.derefObject(0);
+            final idParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              4,
+              0,
+            );
+            final segmentIdParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 6, '');
+            final passageIdParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 8, '');
+            final statusParam = const fb.StringReader(
+              asciiOptimization: true,
+            ).vTableGet(buffer, rootOffset, 10, '');
+            final reviewCountParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              12,
+              0,
+            );
+            final easeFactorParam = const fb.Float64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              14,
+              0,
+            );
+            final intervalDaysParam = const fb.Float64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              16,
+              0,
+            );
+            final lastReviewedAtMsParam = const fb.Int64Reader()
+                .vTableGetNullable(buffer, rootOffset, 18);
+            final nextReviewAtMsParam = const fb.Int64Reader()
+                .vTableGetNullable(buffer, rootOffset, 20);
+            final isDirtyParam = const fb.Int64Reader().vTableGet(
+              buffer,
+              rootOffset,
+              22,
+              0,
+            );
+            final object = LocalSegmentProgressEntity(
+              id: idParam,
+              segmentId: segmentIdParam,
+              passageId: passageIdParam,
+              status: statusParam,
+              reviewCount: reviewCountParam,
+              easeFactor: easeFactorParam,
+              intervalDays: intervalDaysParam,
+              lastReviewedAtMs: lastReviewedAtMsParam,
+              nextReviewAtMs: nextReviewAtMsParam,
+              isDirty: isDirtyParam,
+            );
+
+            return object;
+          },
+        ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -2563,5 +3087,177 @@ class SubmittedWordEntity_ {
   /// See [SubmittedWordEntity.resolvedAtMs].
   static final resolvedAtMs = obx.QueryIntegerProperty<SubmittedWordEntity>(
     _entities[10].properties[11],
+  );
+}
+
+/// [LocalPassageEntity] entity fields to define ObjectBox queries.
+class LocalPassageEntity_ {
+  /// See [LocalPassageEntity.id].
+  static final id = obx.QueryIntegerProperty<LocalPassageEntity>(
+    _entities[11].properties[0],
+  );
+
+  /// See [LocalPassageEntity.passageId].
+  static final passageId = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[1],
+  );
+
+  /// See [LocalPassageEntity.title].
+  static final title = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[2],
+  );
+
+  /// See [LocalPassageEntity.language].
+  static final language = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[3],
+  );
+
+  /// See [LocalPassageEntity.status].
+  static final status = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[4],
+  );
+
+  /// See [LocalPassageEntity.visibility].
+  static final visibility = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[5],
+  );
+
+  /// See [LocalPassageEntity.segmentCount].
+  static final segmentCount = obx.QueryIntegerProperty<LocalPassageEntity>(
+    _entities[11].properties[6],
+  );
+
+  /// See [LocalPassageEntity.createdAt].
+  static final createdAt = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[7],
+  );
+
+  /// See [LocalPassageEntity.enrichmentStatus].
+  static final enrichmentStatus = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[8],
+  );
+
+  /// See [LocalPassageEntity.ownerUserId].
+  static final ownerUserId = obx.QueryStringProperty<LocalPassageEntity>(
+    _entities[11].properties[9],
+  );
+
+  /// See [LocalPassageEntity.syncedAtMs].
+  static final syncedAtMs = obx.QueryIntegerProperty<LocalPassageEntity>(
+    _entities[11].properties[10],
+  );
+}
+
+/// [LocalSegmentEntity] entity fields to define ObjectBox queries.
+class LocalSegmentEntity_ {
+  /// See [LocalSegmentEntity.id].
+  static final id = obx.QueryIntegerProperty<LocalSegmentEntity>(
+    _entities[12].properties[0],
+  );
+
+  /// See [LocalSegmentEntity.segmentId].
+  static final segmentId = obx.QueryStringProperty<LocalSegmentEntity>(
+    _entities[12].properties[1],
+  );
+
+  /// See [LocalSegmentEntity.passageId].
+  static final passageId = obx.QueryStringProperty<LocalSegmentEntity>(
+    _entities[12].properties[2],
+  );
+
+  /// See [LocalSegmentEntity.position].
+  static final position = obx.QueryIntegerProperty<LocalSegmentEntity>(
+    _entities[12].properties[3],
+  );
+
+  /// See [LocalSegmentEntity.text].
+  static final text = obx.QueryStringProperty<LocalSegmentEntity>(
+    _entities[12].properties[4],
+  );
+
+  /// See [LocalSegmentEntity.wordCount].
+  static final wordCount = obx.QueryIntegerProperty<LocalSegmentEntity>(
+    _entities[12].properties[5],
+  );
+
+  /// See [LocalSegmentEntity.ipaText].
+  static final ipaText = obx.QueryStringProperty<LocalSegmentEntity>(
+    _entities[12].properties[6],
+  );
+
+  /// See [LocalSegmentEntity.translationText].
+  static final translationText = obx.QueryStringProperty<LocalSegmentEntity>(
+    _entities[12].properties[7],
+  );
+
+  /// See [LocalSegmentEntity.translationLanguage].
+  static final translationLanguage =
+      obx.QueryStringProperty<LocalSegmentEntity>(_entities[12].properties[8]);
+
+  /// See [LocalSegmentEntity.vietReadingText].
+  static final vietReadingText = obx.QueryStringProperty<LocalSegmentEntity>(
+    _entities[12].properties[9],
+  );
+
+  /// See [LocalSegmentEntity.syncedAtMs].
+  static final syncedAtMs = obx.QueryIntegerProperty<LocalSegmentEntity>(
+    _entities[12].properties[10],
+  );
+}
+
+/// [LocalSegmentProgressEntity] entity fields to define ObjectBox queries.
+class LocalSegmentProgressEntity_ {
+  /// See [LocalSegmentProgressEntity.id].
+  static final id = obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
+    _entities[13].properties[0],
+  );
+
+  /// See [LocalSegmentProgressEntity.segmentId].
+  static final segmentId = obx.QueryStringProperty<LocalSegmentProgressEntity>(
+    _entities[13].properties[1],
+  );
+
+  /// See [LocalSegmentProgressEntity.passageId].
+  static final passageId = obx.QueryStringProperty<LocalSegmentProgressEntity>(
+    _entities[13].properties[2],
+  );
+
+  /// See [LocalSegmentProgressEntity.status].
+  static final status = obx.QueryStringProperty<LocalSegmentProgressEntity>(
+    _entities[13].properties[3],
+  );
+
+  /// See [LocalSegmentProgressEntity.reviewCount].
+  static final reviewCount =
+      obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
+        _entities[13].properties[4],
+      );
+
+  /// See [LocalSegmentProgressEntity.easeFactor].
+  static final easeFactor = obx.QueryDoubleProperty<LocalSegmentProgressEntity>(
+    _entities[13].properties[5],
+  );
+
+  /// See [LocalSegmentProgressEntity.intervalDays].
+  static final intervalDays =
+      obx.QueryDoubleProperty<LocalSegmentProgressEntity>(
+        _entities[13].properties[6],
+      );
+
+  /// See [LocalSegmentProgressEntity.lastReviewedAtMs].
+  static final lastReviewedAtMs =
+      obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
+        _entities[13].properties[7],
+      );
+
+  /// See [LocalSegmentProgressEntity.nextReviewAtMs].
+  static final nextReviewAtMs =
+      obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
+        _entities[13].properties[8],
+      );
+
+  /// See [LocalSegmentProgressEntity.isDirty].
+  static final isDirty = obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
+    _entities[13].properties[9],
   );
 }

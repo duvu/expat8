@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/memorization_repository.dart';
 import '../models/memorization_passage.dart';
 import '../models/user_session.dart';
+import 'memorization_drill_screen.dart';
 
 /// Main memorization passages list screen.
 class MemorizationScreen extends StatefulWidget {
@@ -541,6 +542,23 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
     }
   }
 
+  Future<void> _startDrill() async {
+    final passage = _passage;
+    if (passage == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MemorizationDrillScreen(
+          passage: passage,
+          repository: widget.repository,
+          userSession: widget.userSession,
+        ),
+      ),
+    );
+    // Refresh progress after drill
+    _loadPassage();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -560,6 +578,14 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
                   child: Text(_errorMessage!,
                       style: const TextStyle(color: Colors.red)))
               : _buildContent(),
+      floatingActionButton: _passage != null &&
+              (_passage!.segments?.isNotEmpty ?? false)
+          ? FloatingActionButton.extended(
+              onPressed: _startDrill,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start Drill'),
+            )
+          : null,
     );
   }
 

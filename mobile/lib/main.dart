@@ -17,6 +17,7 @@ import 'src/speaking/speaking_audio_service.dart';
 import 'src/speaking/speaking_prompt_sync_service.dart';
 import 'src/speaking/speaking_repository.dart';
 import 'src/ui/learning_screen.dart';
+import 'src/update/update_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +54,7 @@ Future<void> main() async {
     logger: logger,
   );
   final articleRepository = ArticleRepository(apiClient: apiClient);
-  final memorizationRepository = MemorizationRepository(apiClient: apiClient);
+  final memorizationRepository = MemorizationRepository(apiClient: apiClient, localDb: database);
   final repository = WordRepository(
     database: database,
     apiClient: apiClient,
@@ -215,12 +216,14 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF256D5A)),
         useMaterial3: true,
       ),
-      home: LearningScreen(
-        controller: widget.controller,
-        articleRepository: widget.articleRepository,
-        memorizationRepository: widget.memorizationRepository,
-        workplaceSentenceRepository: widget.workplaceSentenceRepository,
-        speakingRepository: widget.speakingRepository,
+      home: UpdateBannerWrapper(
+        child: LearningScreen(
+          controller: widget.controller,
+          articleRepository: widget.articleRepository,
+          memorizationRepository: widget.memorizationRepository,
+          workplaceSentenceRepository: widget.workplaceSentenceRepository,
+          speakingRepository: widget.speakingRepository,
+        ),
       ),
     );
   }

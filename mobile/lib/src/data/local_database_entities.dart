@@ -434,3 +434,128 @@ class ExamAttemptEntity {
   @Index()
   String syncStatus;
 }
+
+/// Local cache of a memorization passage fetched from the backend.
+/// Keyed by [passageId] (server UUID).
+@Entity()
+class LocalPassageEntity {
+  LocalPassageEntity({
+    this.id = 0,
+    required this.passageId,
+    required this.title,
+    required this.language,
+    required this.status,
+    required this.visibility,
+    required this.segmentCount,
+    required this.createdAt,
+    this.enrichmentStatus,
+    this.ownerUserId,
+    required this.syncedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String passageId;
+
+  String title;
+  String language;
+
+  @Index()
+  String status;
+
+  String visibility;
+  int segmentCount;
+  String createdAt;
+  String? enrichmentStatus;
+  String? ownerUserId;
+
+  @Index()
+  int syncedAtMs;
+}
+
+/// Local cache of a single memorization segment, belonging to a passage.
+/// Keyed by [segmentId] (server UUID).
+@Entity()
+class LocalSegmentEntity {
+  LocalSegmentEntity({
+    this.id = 0,
+    required this.segmentId,
+    required this.passageId,
+    required this.position,
+    required this.text,
+    required this.wordCount,
+    this.ipaText,
+    this.translationText,
+    this.translationLanguage,
+    this.vietReadingText,
+    required this.syncedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String segmentId;
+
+  @Index()
+  String passageId;
+
+  @Index()
+  int position;
+
+  String text;
+  int wordCount;
+  String? ipaText;
+  String? translationText;
+  String? translationLanguage;
+  String? vietReadingText;
+
+  @Index()
+  int syncedAtMs;
+}
+
+/// Local drill progress for a single segment.
+/// Keyed by [segmentId].
+@Entity()
+class LocalSegmentProgressEntity {
+  LocalSegmentProgressEntity({
+    this.id = 0,
+    required this.segmentId,
+    required this.passageId,
+    required this.status,
+    required this.reviewCount,
+    required this.easeFactor,
+    required this.intervalDays,
+    this.lastReviewedAtMs,
+    this.nextReviewAtMs,
+    this.isDirty = 1,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String segmentId;
+
+  @Index()
+  String passageId;
+
+  /// Status: new / learning / review / mastered
+  @Index()
+  String status;
+
+  int reviewCount;
+
+  /// SM-2 ease factor (starts at 2.5).
+  double easeFactor;
+
+  /// Current review interval in (fractional) days.
+  double intervalDays;
+
+  int? lastReviewedAtMs;
+
+  @Index()
+  int? nextReviewAtMs;
+
+  /// Whether this record needs to be synced to the backend.
+  int isDirty;
+}
