@@ -762,10 +762,219 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "12:9153330279337494008",
+      "lastPropertyId": "11:977806937227253729",
+      "name": "LocalPassageEntity",
+      "properties": [
+        {
+          "id": "1:3347447730451110862",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1997176012022448387",
+          "name": "passageId",
+          "indexId": "49:6597980320885862947",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:3737891656804096274",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "4:637587396018555929",
+          "name": "language",
+          "type": 9
+        },
+        {
+          "id": "5:2347279457489197637",
+          "name": "status",
+          "indexId": "50:807248647441462297",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:1258379105813941939",
+          "name": "visibility",
+          "type": 9
+        },
+        {
+          "id": "7:2923707209116817282",
+          "name": "segmentCount",
+          "type": 6
+        },
+        {
+          "id": "8:6248032997716592667",
+          "name": "createdAt",
+          "type": 9
+        },
+        {
+          "id": "9:2356079396805684266",
+          "name": "enrichmentStatus",
+          "type": 9
+        },
+        {
+          "id": "10:2377068660975214815",
+          "name": "ownerUserId",
+          "type": 9
+        },
+        {
+          "id": "11:977806937227253729",
+          "name": "syncedAtMs",
+          "indexId": "51:7898279921923273479",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "13:3588204482816069691",
+      "lastPropertyId": "11:4242623873390579833",
+      "name": "LocalSegmentEntity",
+      "properties": [
+        {
+          "id": "1:588176567697237655",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3934708142928940618",
+          "name": "segmentId",
+          "indexId": "52:2753168069173838048",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:6813659507576951779",
+          "name": "passageId",
+          "indexId": "53:3555657087750146587",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:8205300448781203882",
+          "name": "position",
+          "indexId": "54:202862820418679591",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "5:5090327613570176185",
+          "name": "text",
+          "type": 9
+        },
+        {
+          "id": "6:2642135342047401822",
+          "name": "wordCount",
+          "type": 6
+        },
+        {
+          "id": "7:8764573318185715572",
+          "name": "ipaText",
+          "type": 9
+        },
+        {
+          "id": "8:3968869262078391031",
+          "name": "translationText",
+          "type": 9
+        },
+        {
+          "id": "9:7795134101473911454",
+          "name": "translationLanguage",
+          "type": 9
+        },
+        {
+          "id": "10:1673310384012185642",
+          "name": "vietReadingText",
+          "type": 9
+        },
+        {
+          "id": "11:4242623873390579833",
+          "name": "syncedAtMs",
+          "indexId": "55:6519116907239888808",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "14:3159056310794874801",
+      "lastPropertyId": "10:4648465670599139151",
+      "name": "LocalSegmentProgressEntity",
+      "properties": [
+        {
+          "id": "1:4841823111307701785",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:412180106684845470",
+          "name": "segmentId",
+          "indexId": "56:5474568379640707507",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:3243868764124977039",
+          "name": "passageId",
+          "indexId": "57:3627949612530727753",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:1091796826721449816",
+          "name": "status",
+          "indexId": "58:1517693153473068715",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:6907975591886592864",
+          "name": "reviewCount",
+          "type": 6
+        },
+        {
+          "id": "6:8090931854585979228",
+          "name": "easeFactor",
+          "type": 8
+        },
+        {
+          "id": "7:4351830858259712617",
+          "name": "intervalDays",
+          "type": 8
+        },
+        {
+          "id": "8:4718479433186477027",
+          "name": "lastReviewedAtMs",
+          "type": 6
+        },
+        {
+          "id": "9:7265710790855486050",
+          "name": "nextReviewAtMs",
+          "indexId": "59:8625421853851595165",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "10:4648465670599139151",
+          "name": "isDirty",
+          "type": 6
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "11:391133553608201731",
-  "lastIndexId": "48:4623037698306536221",
+  "lastEntityId": "14:3159056310794874801",
+  "lastIndexId": "59:8625421853851595165",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

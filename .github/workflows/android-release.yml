@@ -1,0 +1,96 @@
+# Android Release Workflow
+#
+# Triggered by pushing a version tag matching v<major>.<minor>.<patch>
+# (e.g., git tag v1.0.0 && git push origin v1.0.0)
+#
+# Required GitHub Actions secrets (set in repo Settings → Secrets → Actions):
+#
+#   KEYSTORE_BASE64          Base64-encoded release keystore (.jks/.keystore)
+#                            Encode locally: base64 -w0 ~/keystores/release.jks
+#   STORE_PASSWORD           Keystore store password
+#   KEY_ALIAS                Key alias inside the keystore
+#   KEY_PASSWORD             Key password
+#   APP_CREDENTIAL_APP_ID    Value for --dart-define=APP_CREDENTIAL_APP_ID
+#   APP_CREDENTIAL_SECRET    Value for --dart-define=APP_CREDENTIAL_SECRET
+#   BACKEND_BASE_URL         Value for --dart-define=BACKEND_BASE_URL
+#                            (e.g., https://expat8.x51.vn)
+
+name: Android Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate tag version matches pubspec.yaml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PUBSPEC_VERSION=$(grep '^version:' mobile/pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+          echo "Tag version:     $TAG_VERSION"
+          echo "pubspec version: $PUBSPEC_VERSION"
+          if [ "$TAG_VERSION" != "$PUBSPEC_VERSION" ]; then
+            echo "ERROR: Tag version ($TAG_VERSION) does not match pubspec.yaml version ($PUBSPEC_VERSION)."
+            echo "Bump mobile/pubspec.yaml version to $TAG_VERSION before tagging."
+            exit 1
+          fi
+          echo "Version validated: $TAG_VERSION"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Decode keystore and write key.properties
+        run: |
+          KEYSTORE_DIR=$(mktemp -d)
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_DIR/release.jks"
+          cat > "$KEYSTORE_DIR/key.properties" <<EOF
+          storeFile=$KEYSTORE_DIR/release.jks
+          storePassword=${{ secrets.STORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+          echo "KEYSTORE_DIR=$KEYSTORE_DIR" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PROPERTIES_PATH=$KEYSTORE_DIR/key.properties" >> "$GITHUB_ENV"
+
+      - name: Build signed release APK
+        working-directory: mobile
+        env:
+          KEYSTORE_PROPERTIES_PATH: ${{ env.KEYSTORE_PROPERTIES_PATH }}
+        run: |
+          flutter build apk --release \
+            --dart-define=BACKEND_BASE_URL="${{ secrets.BACKEND_BASE_URL }}" \
+            --dart-define=APP_CREDENTIAL_APP_ID="${{ secrets.APP_CREDENTIAL_APP_ID }}" \
+            --dart-define=APP_CREDENTIAL_SECRET="${{ secrets.APP_CREDENTIAL_SECRET }}" \
+            --dart-define=APP_LOG_LEVEL=info
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -rf "$KEYSTORE_DIR"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mobile/build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true

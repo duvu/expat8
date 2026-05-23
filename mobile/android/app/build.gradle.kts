@@ -9,7 +9,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val keystorePropertiesFile = File(System.getProperty("user.home"), "keystores/key.properties")
+// Support CI environments via KEYSTORE_PROPERTIES_PATH env var; fall back to the
+// conventional local path used for manual operator builds.
+val keystorePropertiesFile: File =
+    System.getenv("KEYSTORE_PROPERTIES_PATH")
+        ?.let { File(it) }
+        ?.takeIf { it.exists() }
+        ?: File(System.getProperty("user.home"), "keystores/key.properties")
 val keystoreProperties = Properties().apply {
     keystorePropertiesFile.inputStream().use { load(it) }
 }
