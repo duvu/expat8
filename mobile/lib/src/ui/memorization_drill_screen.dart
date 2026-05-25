@@ -7,6 +7,7 @@ import '../data/memorization_drill_controller.dart';
 import '../data/memorization_repository.dart';
 import '../models/memorization_passage.dart';
 import '../models/user_session.dart';
+import '../theme/app_theme.dart';
 
 /// Entry point for a memorization drill session.
 ///
@@ -96,10 +97,6 @@ class _MemorizationDrillScreenState extends State<MemorizationDrillScreen> {
     _scheduleSyncDirty();
   }
 
-  void _onNextExercise() {
-    setState(() => _controller!.nextExercise());
-  }
-
   void _scheduleSyncDirty() {
     // Fire-and-forget background sync. Errors are silently ignored here;
     // data remains local until next successful sync.
@@ -132,7 +129,8 @@ class _MemorizationDrillScreenState extends State<MemorizationDrillScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(_errorMessage!,
-                        style: const TextStyle(color: Colors.red),
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error),
                         textAlign: TextAlign.center),
                   ),
                 )
@@ -209,9 +207,9 @@ class _ReadingPhaseView extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statusColor.withOpacity(0.4)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
                   progress?.status ?? 'new',
@@ -224,7 +222,9 @@ class _ReadingPhaseView extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 'Segment ${segment.position + 1}',
-                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                style: TextStyle(
+                    color: Theme.of(context).extension<AppColors>()!.subtleText,
+                    fontSize: 13),
               ),
             ],
           ),
@@ -256,11 +256,12 @@ class _ReadingPhaseView extends StatelessWidget {
   }
 
   Color _statusColor(BuildContext context, String status) {
+    final appColors = Theme.of(context).extension<AppColors>()!;
     return switch (status) {
-      'learning' => Colors.orange,
-      'review' => Colors.blue,
-      'mastered' => Colors.green,
-      _ => Colors.grey,
+      'learning' => appColors.statusWarning,
+      'review' => Theme.of(context).colorScheme.primary,
+      'mastered' => appColors.statusSuccess,
+      _ => appColors.statusNeutral,
     };
   }
 }
@@ -303,7 +304,7 @@ class _FullRecallExerciseState extends State<_FullRecallExercise> {
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: Colors.grey)),
+                  ?.copyWith(color: Theme.of(context).extension<AppColors>()!.subtleText)),
           const SizedBox(height: 8),
           Text('Complete the segment:', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
@@ -445,7 +446,7 @@ class _ClozeExerciseState extends State<_ClozeExercise> {
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: Colors.grey)),
+                  ?.copyWith(color: Theme.of(context).extension<AppColors>()!.subtleText)),
           const SizedBox(height: 8),
           Text('Tap the blanks to reveal:',
               style: Theme.of(context).textTheme.titleMedium),
@@ -478,6 +479,7 @@ class _ClozeExerciseState extends State<_ClozeExercise> {
 }
 
 class _ClozeItem {
+  // ignore: unused_element_parameter
   _ClozeItem({required this.text, this.isCloze = false, this.revealed = false});
   final String text;
   final bool isCloze;
@@ -500,7 +502,7 @@ class _ClozeChip extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(item.text,
@@ -575,7 +577,7 @@ class _NextSegmentPredictionExerciseState
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: Colors.grey)),
+                  ?.copyWith(color: Theme.of(context).extension<AppColors>()!.subtleText)),
           const SizedBox(height: 8),
           Text('What comes after?',
               style: Theme.of(context).textTheme.titleMedium),
@@ -589,7 +591,7 @@ class _NextSegmentPredictionExerciseState
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '…${_previousEnding}',
+                '…$_previousEnding',
                 style: Theme.of(context)
                     .textTheme
                     .bodyLarge
@@ -639,13 +641,14 @@ class _RatingButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = Theme.of(context).extension<AppColors>()!;
     return Row(
       children: [
         Expanded(
           child: FilledButton(
             onPressed: () => onRate(DrillRating.again),
             style: FilledButton.styleFrom(
-                backgroundColor: Colors.red.shade400),
+                backgroundColor: appColors.ratingAgain),
             child: const Text('Again'),
           ),
         ),
@@ -661,7 +664,7 @@ class _RatingButtons extends StatelessWidget {
           child: FilledButton(
             onPressed: () => onRate(DrillRating.easy),
             style: FilledButton.styleFrom(
-                backgroundColor: Colors.green.shade600),
+                backgroundColor: appColors.ratingEasy),
             child: const Text('Easy'),
           ),
         ),
@@ -688,6 +691,8 @@ class _DrillCompleteView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allMastered = masteredCount >= totalSegments;
+    final appColors = Theme.of(context).extension<AppColors>()!;
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -697,7 +702,7 @@ class _DrillCompleteView extends StatelessWidget {
             Icon(
               allMastered ? Icons.emoji_events : Icons.check_circle_outline,
               size: 72,
-              color: allMastered ? Colors.amber : Colors.green,
+              color: allMastered ? colorScheme.tertiary : appColors.statusSuccess,
             ),
             const SizedBox(height: 24),
             Text(
@@ -711,7 +716,7 @@ class _DrillCompleteView extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
-                  ?.copyWith(color: Colors.grey),
+                  ?.copyWith(color: appColors.subtleText),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),

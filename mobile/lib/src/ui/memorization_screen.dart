@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/memorization_repository.dart';
 import '../models/memorization_passage.dart';
 import '../models/user_session.dart';
+import '../theme/app_theme.dart';
+import '../widgets/empty_state_view.dart';
 import 'memorization_drill_screen.dart';
 
 /// Main memorization passages list screen.
@@ -123,22 +125,12 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(color: Colors.red),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadPassages,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
+              ? EmptyStateView(
+                  icon: Icons.error_outline,
+                  title: 'Could not load passages',
+                  body: _errorMessage,
+                  actionLabel: 'Retry',
+                  onAction: _loadPassages,
                 )
               : RefreshIndicator(
                   onRefresh: _loadPassages,
@@ -146,13 +138,10 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
                       ? ListView(
                           children: const [
                             SizedBox(height: 100),
-                            Center(
-                              child: Text(
-                                'No passages yet.\nTap + to create one.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    fontSize: 16, color: Colors.grey),
-                              ),
+                            EmptyStateView(
+                              icon: Icons.menu_book_outlined,
+                              title: 'No passages yet',
+                              body: 'Tap + to create your first passage.',
                             ),
                           ],
                         )
@@ -179,17 +168,18 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
   }
 
   Widget _statusIcon(String status) {
+    final appColors = Theme.of(context).extension<AppColors>()!;
     switch (status) {
       case 'published':
       case 'segmented':
-        return const Icon(Icons.check_circle, color: Colors.green);
+        return Icon(Icons.check_circle, color: appColors.statusSuccess);
       case 'segmenting':
       case 'pending_segmentation':
-        return const Icon(Icons.hourglass_empty, color: Colors.orange);
+        return Icon(Icons.hourglass_empty, color: appColors.statusWarning);
       case 'failed':
-        return const Icon(Icons.error, color: Colors.red);
+        return Icon(Icons.error, color: appColors.statusError);
       default:
-        return const Icon(Icons.circle_outlined, color: Colors.grey);
+        return Icon(Icons.circle_outlined, color: appColors.statusNeutral);
     }
   }
 }
@@ -429,7 +419,7 @@ class _PassageCreateScreenState extends State<PassageCreateScreen> {
                 },
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
+              FilledButton(
                 onPressed: _isSubmitting ? null : _submit,
                 child: _isSubmitting
                     ? const SizedBox(
@@ -574,9 +564,13 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
-              ? Center(
-                  child: Text(_errorMessage!,
-                      style: const TextStyle(color: Colors.red)))
+              ? EmptyStateView(
+                  icon: Icons.error_outline,
+                  title: 'Could not load passage',
+                  body: _errorMessage,
+                  actionLabel: 'Retry',
+                  onAction: _loadPassage,
+                )
               : _buildContent(),
       floatingActionButton: _passage != null &&
               (_passage!.segments?.isNotEmpty ?? false)
@@ -610,7 +604,8 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
                 Text(
                   '${passage.language.toUpperCase()} · ${passage.status} · '
                   '${passage.segmentCount} segments',
-                  style: const TextStyle(color: Colors.grey),
+                  style: TextStyle(
+                      color: Theme.of(context).extension<AppColors>()!.subtleText),
                 ),
               ],
             ),
@@ -620,12 +615,15 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
 
         // Segments
         if (segments.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'No segments yet. The passage is being processed...',
-                style: TextStyle(color: Colors.grey),
+          Builder(
+            builder: (context) => Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'No segments yet. The passage is being processed...',
+                  style: TextStyle(
+                      color: Theme.of(context).extension<AppColors>()!.subtleText),
+                ),
               ),
             ),
           )
@@ -678,14 +676,16 @@ class _SegmentCardState extends State<_SegmentCard> {
                   radius: 14,
                   child: Text(
                     '${segment.position + 1}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                  style: const TextStyle(fontSize: 12),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '${segment.wordCount} words',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${segment.wordCount} words',
+                style: TextStyle(
+                    color: Theme.of(context).extension<AppColors>()!.subtleText,
+                    fontSize: 12),
+              ),
                 const Spacer(),
                 if (segment.ipaText != null)
                   _ToggleButton(
@@ -732,7 +732,7 @@ class _SegmentCardState extends State<_SegmentCard> {
                 padding:
                     const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withOpacity(0.35),
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -754,7 +754,7 @@ class _SegmentCardState extends State<_SegmentCard> {
                 padding:
                     const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer.withOpacity(0.4),
+                  color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -774,7 +774,7 @@ class _SegmentCardState extends State<_SegmentCard> {
                 padding:
                     const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.tertiaryContainer.withOpacity(0.4),
+                  color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(

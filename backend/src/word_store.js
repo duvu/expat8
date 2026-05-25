@@ -25,6 +25,7 @@ import {
   requireRegistrationInput,
   verifyPassword
 } from './user_identity.js';
+import { normalizeResolvedShadowingVideo } from './shadowing_videos.js';
 
 export const SPEAKING_EVENT_TYPES = [
   'speaking_prompt_viewed',
@@ -65,6 +66,10 @@ export class WordStore {
     this.wordStatesByOwnerWord = new Map();
     this.userSubmittedWordsById = new Map();
     this.userSubmittedWordJobsById = new Map();
+    this.shadowingVideosById = new Map();
+    this.shadowingVideoIdByProviderKey = new Map();
+    this.shadowingVideoSegmentsByVideoId = new Map();
+    this.shadowingVideoEntriesById = new Map();
     // exam state
     this.examSessionsById = new Map();
     this.examQuestionsBySessionId = new Map();
@@ -596,7 +601,6 @@ export class WordStore {
           event_id: event.event_id ?? null,
           reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
         });
-        continue;
       }
     }
 
@@ -1796,6 +1800,84 @@ export class WordStore {
     };
   }
 
+  createShadowingVideoEntry({ deviceId = null, userId = null, resolvedVideo, entryType = 'saved', visibility = 'private' }) {
+    const normalized = normalizeResolvedShadowingVideo(resolvedVideo);
+    const now = new Date().toISOString();
+    const providerKey = `${normalized.sourceType}:${normalized.providerVideoId}`;
+    let video = this.shadowingVideosById.get(this.shadowingVideoIdByProviderKey.get(providerKey));
+
+    if (!video) {
+      video = {
+        id: createId('shadow_video'),
+        source_type: normalized.sourceType,
+        provider_video_id: normalized.providerVideoId,
+        source_url: normalized.sourceUrl,
+        title: normalized.title,
+        channel_title: normalized.channelTitle,
+        thumbnail_url: normalized.thumbnailUrl,
+        duration_seconds: normalized.durationSeconds,
+        transcript_language: normalized.transcriptLanguage,
+        transcript_source: normalized.transcriptSource,
+        default_playback_rate: normalized.defaultPlaybackRate,
+        default_seek_back_ms: normalized.defaultSeekBackMs,
+        created_at: now,
+        updated_at: now
+      };
+      this.shadowingVideosById.set(video.id, video);
+      this.shadowingVideoIdByProviderKey.set(providerKey, video.id);
+      this.shadowingVideoSegmentsByVideoId.set(
+        video.id,
+        normalized.segments.map((segment) => ({
+          id: createId('shadow_seg'),
+          video_id: video.id,
+          position: segment.position,
+          start_ms: segment.start_ms,
+          end_ms: segment.end_ms,
+          text: segment.text,
+          created_at: now
+        }))
+      );
+    }
+
+    const existing = this.#findShadowingVideoEntry({ videoId: video.id, deviceId, userId, entryType });
+    if (existing) {
+      return { entry: this.#hydrateShadowingVideoEntry(existing), created: false };
+    }
+
+    const entry = {
+      id: createId('shadow_entry'),
+      video_id: video.id,
+      entry_type: entryType,
+      visibility: visibility ?? (entryType === 'curated' ? 'published' : 'private'),
+      owner_user_id: entryType === 'saved' ? userId : null,
+      owner_device_id: entryType === 'saved' && !userId ? deviceId : null,
+      created_at: now,
+      updated_at: now
+    };
+    this.shadowingVideoEntriesById.set(entry.id, entry);
+    return { entry: this.#hydrateShadowingVideoEntry(entry), created: true };
+  }
+
+  listShadowingVideoEntries({ deviceId, userId = null, limit = 50 }) {
+    return [...this.shadowingVideoEntriesById.values()]
+      .filter((entry) => this.#isShadowingEntryVisibleToOwner(entry, { deviceId, userId }))
+      .sort(compareShadowingEntries)
+      .slice(0, Math.max(1, Math.min(limit, 100)))
+      .map((entry) => this.#hydrateShadowingVideoEntry(entry));
+  }
+
+  getShadowingVideoEntryDetail({ entryId }) {
+    const entry = this.shadowingVideoEntriesById.get(entryId);
+    if (!entry) {
+      return null;
+    }
+    const hydrated = this.#hydrateShadowingVideoEntry(entry);
+    return {
+      ...hydrated,
+      segments: (this.shadowingVideoSegmentsByVideoId.get(entry.video_id) ?? []).map((segment) => ({ ...segment }))
+    };
+  }
+
   #upsertWordState({ deviceId, userId = null, language, event }) {
     if (!event.word_id) {
       return;
@@ -1854,6 +1936,53 @@ export class WordStore {
     return {
       ...submission,
       resolved_word: submission.resolved_word_id ? this.words.get(submission.resolved_word_id) ?? null : null
+    };
+  }
+
+  #findShadowingVideoEntry({ videoId, deviceId = null, userId = null, entryType = 'saved' }) {
+    return [...this.shadowingVideoEntriesById.values()].find((entry) => {
+      if (entry.video_id !== videoId || entry.entry_type !== entryType) {
+        return false;
+      }
+      if (entryType === 'curated') {
+        return true;
+      }
+      if (userId) {
+        return entry.owner_user_id === userId;
+      }
+      return !entry.owner_user_id && entry.owner_device_id === deviceId;
+    });
+  }
+
+  #isShadowingEntryVisibleToOwner(entry, { deviceId, userId = null }) {
+    if (entry.entry_type === 'curated') {
+      return entry.visibility === 'published';
+    }
+    if (userId) {
+      return entry.owner_user_id === userId;
+    }
+    return !entry.owner_user_id && entry.owner_device_id === deviceId;
+  }
+
+  #hydrateShadowingVideoEntry(entry) {
+    const video = this.shadowingVideosById.get(entry.video_id);
+    if (!video) {
+      return null;
+    }
+    return {
+      ...entry,
+      source_type: video.source_type,
+      provider_video_id: video.provider_video_id,
+      source_url: video.source_url,
+      title: video.title,
+      channel_title: video.channel_title,
+      thumbnail_url: video.thumbnail_url,
+      duration_seconds: video.duration_seconds,
+      transcript_language: video.transcript_language,
+      transcript_source: video.transcript_source,
+      default_playback_rate: video.default_playback_rate,
+      default_seek_back_ms: video.default_seek_back_ms,
+      segment_count: (this.shadowingVideoSegmentsByVideoId.get(entry.video_id) ?? []).length
     };
   }
 
@@ -2399,6 +2528,87 @@ export function isUnknownSpeakingEvent(event) {
   return typeof event?.event_type === 'string' && event.event_type.startsWith('speaking_') && !isSpeakingEvent(event);
 }
 
+/**
+ * Shared event-routing loop used by both WordStore and PostgresWordStore.
+ *
+ * @param {object} opts
+ * @param {Array}    opts.events
+ * @param {Function} opts.recordSpeakingEvent - async (event) => { idempotent: bool }
+ * @param {Function} opts.recordStudyEvent    - async (event) => { idempotent: bool, proficiency }
+ * @param {*}        opts.initialProficiency
+ * @returns {Promise<{ accepted, duplicates, rejected, latestProficiency }>}
+ */
+export async function routeStudyEvents({ events, recordSpeakingEvent, recordStudyEvent, initialProficiency }) {
+  const accepted = [];
+  const duplicates = [];
+  const rejected = [];
+  let latestProficiency = initialProficiency;
+
+  const orderedEvents = [...events].sort(compareEventsForProjection);
+
+  for (const event of orderedEvents) {
+    const eventKey = resolveEventKey(event);
+    if (isSpeakingEvent(event)) {
+      if (!eventKey || !event.occurred_at) {
+        rejected.push({
+          client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
+          reason: 'missing_required_field'
+        });
+        continue;
+      }
+      try {
+        const result = await recordSpeakingEvent(event);
+        if (result.idempotent) {
+          duplicates.push(eventKey);
+        } else {
+          accepted.push(eventKey);
+        }
+      } catch (error) {
+        rejected.push({
+          client_event_id: event.client_event_id ?? null,
+          event_id: event.event_id ?? null,
+          reason: error.message === 'forbidden_audio_field' ? 'forbidden_audio_field' : 'invalid_speaking_event'
+        });
+      }
+      continue;
+    }
+    if (isUnknownSpeakingEvent(event)) {
+      rejected.push({
+        client_event_id: event.client_event_id ?? null,
+        event_id: event.event_id ?? null,
+        reason: 'invalid_speaking_event_type'
+      });
+      continue;
+    }
+    if (!eventKey || !event.rating || !event.occurred_at) {
+      rejected.push({
+        client_event_id: event.client_event_id ?? null,
+        event_id: event.event_id ?? null,
+        reason: 'missing_required_field'
+      });
+      continue;
+    }
+    try {
+      const result = await recordStudyEvent(event);
+      latestProficiency = result.proficiency;
+      if (result.idempotent) {
+        duplicates.push(eventKey);
+      } else {
+        accepted.push(eventKey);
+      }
+    } catch (error) {
+      rejected.push({
+        client_event_id: event.client_event_id ?? null,
+        event_id: event.event_id ?? null,
+        reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
+      });
+    }
+  }
+
+  return { accepted, duplicates, rejected, latestProficiency };
+}
+
 export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null, strict = false }) {
   if (!isSpeakingEvent(event)) {
     throw new Error('invalid_speaking_event_type');
@@ -2663,4 +2873,11 @@ export function shuffleChoices(choices) {
 
 function countWords(text) {
   return String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+function compareShadowingEntries(left, right) {
+  if (left.entry_type !== right.entry_type) {
+    return left.entry_type === 'curated' ? -1 : 1;
+  }
+  return right.updated_at.localeCompare(left.updated_at);
 }

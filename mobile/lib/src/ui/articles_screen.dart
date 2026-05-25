@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/article_repository.dart';
 import '../models/article.dart';
+import '../widgets/empty_state_view.dart';
 
 const Map<String, String> kArticleLanguageLabels = {
   'en': 'English',
@@ -514,7 +515,11 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                   ),
                 )
               : _article == null
-                  ? const Center(child: Text('Article not found.'))
+                  ? const EmptyStateView(
+                      icon: Icons.article_outlined,
+                      title: 'Article not found',
+                      body: 'This article may have been deleted.',
+                    )
                   : RefreshIndicator(
                       onRefresh: _loadArticle,
                       child: ListView(

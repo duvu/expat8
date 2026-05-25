@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/backend_api_client.dart';
-import '../data/local_database.dart';
 
 /// Public certificate view screen.
 ///
@@ -76,11 +75,11 @@ class _ExamCertificateScreenState extends State<ExamCertificateScreen> {
   }
 
   void _copyLink() {
-    Clipboard.setData(ClipboardData(
-      text: 'Certificate ID: ${widget.certificateId}',
-    ));
+    final url =
+        'https://expat8.x51.vn/v1/exam/certificate/${widget.certificateId}';
+    Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Certificate ID copied.')),
+      const SnackBar(content: Text('Certificate link copied.')),
     );
   }
 
@@ -182,9 +181,6 @@ class _CertificateBody extends StatelessWidget {
       ),
     );
   }
-
-  String _capitalise(String s) =>
-      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 }
 
 class _Row extends StatelessWidget {

@@ -971,10 +971,210 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "15:2242503872109526395",
+      "lastPropertyId": "5:802775345192736459",
+      "name": "ShadowingProgressEntity",
+      "properties": [
+        {
+          "id": "1:4112332169755428255",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7585685016020510976",
+          "name": "entryId",
+          "indexId": "60:412430111273216091",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:88512967517038624",
+          "name": "lastPositionMs",
+          "type": 6
+        },
+        {
+          "id": "4:5526485605518136907",
+          "name": "playbackRate",
+          "type": 8
+        },
+        {
+          "id": "5:802775345192736459",
+          "name": "lastOpenedAtMs",
+          "indexId": "61:1233163205751583793",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "16:4481917487776737009",
+      "lastPropertyId": "7:1906271451583077240",
+      "name": "ShadowingSegmentEntity",
+      "properties": [
+        {
+          "id": "1:1892567877177546985",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:8203608945576468767",
+          "name": "segmentId",
+          "indexId": "62:497608127084619791",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:7348418054869837582",
+          "name": "entryId",
+          "indexId": "63:725280509928296730",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:5628703416035440453",
+          "name": "position",
+          "indexId": "64:2014020096113813333",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "5:1454574701833006111",
+          "name": "startMs",
+          "type": 6
+        },
+        {
+          "id": "6:538356193385429607",
+          "name": "endMs",
+          "type": 6
+        },
+        {
+          "id": "7:1906271451583077240",
+          "name": "text",
+          "type": 9
+        }
+      ],
+      "relations": []
+    },
+    {
+      "id": "17:6807144932603146302",
+      "lastPropertyId": "19:2819861664503534136",
+      "name": "ShadowingVideoEntity",
+      "properties": [
+        {
+          "id": "1:7419091973036143611",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:3973579957267370753",
+          "name": "entryId",
+          "indexId": "65:4408244031566938331",
+          "type": 9,
+          "flags": 34848
+        },
+        {
+          "id": "3:2483615371376077918",
+          "name": "entryType",
+          "indexId": "66:4335610121702614278",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:2313057268635169600",
+          "name": "visibility",
+          "type": 9
+        },
+        {
+          "id": "5:6097876050789982773",
+          "name": "sourceType",
+          "type": 9
+        },
+        {
+          "id": "6:6559960849187236949",
+          "name": "providerVideoId",
+          "type": 9
+        },
+        {
+          "id": "7:4284257838694463273",
+          "name": "sourceUrl",
+          "type": 9
+        },
+        {
+          "id": "8:4808946260715436538",
+          "name": "title",
+          "type": 9
+        },
+        {
+          "id": "9:8228774776273400591",
+          "name": "channelTitle",
+          "type": 9
+        },
+        {
+          "id": "10:4650016861329813208",
+          "name": "thumbnailUrl",
+          "type": 9
+        },
+        {
+          "id": "11:5373611386006555169",
+          "name": "durationSeconds",
+          "type": 6
+        },
+        {
+          "id": "12:8682864544675651327",
+          "name": "transcriptLanguage",
+          "type": 9
+        },
+        {
+          "id": "13:8891602338285943343",
+          "name": "transcriptSource",
+          "type": 9
+        },
+        {
+          "id": "14:8781646699538489272",
+          "name": "segmentCount",
+          "type": 6
+        },
+        {
+          "id": "15:5171153768103963728",
+          "name": "initialPlaybackRate",
+          "type": 8
+        },
+        {
+          "id": "16:6490461312217034701",
+          "name": "seekBackMs",
+          "type": 6
+        },
+        {
+          "id": "17:4732721011757033910",
+          "name": "createdAtMs",
+          "type": 6
+        },
+        {
+          "id": "18:1453201034992915192",
+          "name": "updatedAtMs",
+          "indexId": "67:1405827580767502530",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "19:2819861664503534136",
+          "name": "cachedAtMs",
+          "indexId": "68:2861126091142590988",
+          "type": 6,
+          "flags": 8
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "14:3159056310794874801",
-  "lastIndexId": "59:8625421853851595165",
+  "lastEntityId": "17:6807144932603146302",
+  "lastIndexId": "68:2861126091142590988",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

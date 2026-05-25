@@ -913,6 +913,7 @@ class _ControllerApiClient extends BackendApiClient {
   _ControllerApiClient({
     this.registerError,
     this.signInError,
+    // ignore: unused_element_parameter
     this.signOutError,
     this.fetchLearningCardsError,
     this.submitStudyEventError,

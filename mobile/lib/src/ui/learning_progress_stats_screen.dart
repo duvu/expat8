@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/local_database.dart';
 import '../models/learning_progress.dart';
+import '../widgets/empty_state_view.dart';
 
 class LearningProgressStatsScreen extends StatefulWidget {
   const LearningProgressStatsScreen({required this.database, super.key});
@@ -42,17 +43,36 @@ class _LearningProgressStatsScreenState
               totals == null) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snapshot.hasError) {
+            return EmptyStateView(
+              icon: Icons.error_outline,
+              title: 'Could not load stats',
+              body: 'Pull down to try again.',
+              actionLabel: 'Retry',
+              onAction: _refresh,
+            );
+          }
           final value = totals ?? const LearningProgressTotals(
             learned: 0,
             remembered: 0,
             difficult: 0,
           );
+          final isEmpty = value.learned == 0 && value.remembered == 0 && value.difficult == 0;
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
+                if (isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 80, bottom: 32),
+                    child: EmptyStateView(
+                      icon: Icons.bar_chart_outlined,
+                      title: 'No stats yet',
+                      body: 'Start studying to see your progress here.',
+                    ),
+                  ),
                 _StatCard(label: 'Learned', value: value.learned),
                 const SizedBox(height: 12),
                 _StatCard(label: 'Remembered', value: value.remembered),

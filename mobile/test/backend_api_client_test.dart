@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
-import 'package:expat8_language_app/src/models/article.dart';
 import 'package:expat8_language_app/src/models/submitted_word.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';

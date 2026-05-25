@@ -122,12 +122,12 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                     Text(
+                  children: [
+                    Text(
                       'Add a word instantly',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       'If you find an unfamiliar word while reading, type it here. '
                       'If the word already exists, the app returns it immediately. '
