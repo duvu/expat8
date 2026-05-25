@@ -153,15 +153,18 @@ export function createMemorizationRouter({ store }) {
 export function createMemorizationAdminRouter({ store, config }) {
   const router = express.Router();
 
+  router.use((request, response, next) => {
+    if (!hasAdminAccess({ request, config })) {
+      return response.status(403).json({ error: 'forbidden' });
+    }
+    return next();
+  });
+
   // ─── Admin endpoints ────────────────────────────────────────────────
 
   router.post(
     '/passages',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const body = request.body ?? {};
       const error = validatePassageInput(body);
       if (error) {
@@ -189,10 +192,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.get(
     '/passages',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const status = typeof request.query.status === 'string' ? request.query.status : null;
       const passages = await store.listAdminPassages({ status });
       return response.json({ items: passages });
@@ -202,10 +201,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.get(
     '/passages/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const passage = await store.getPassage({ passageId: request.params.id });
       if (!passage) {
         return response.status(404).json({ error: 'not_found' });
@@ -218,10 +213,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.patch(
     '/passages/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const body = request.body ?? {};
       const updates = {};
       if (typeof body.title === 'string') updates.title = body.title.trim();
@@ -253,10 +244,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.post(
     '/passages/:id/resegment',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const passage = await store.getPassage({ passageId: request.params.id });
       if (!passage) {
         return response.status(404).json({ error: 'not_found' });
@@ -279,10 +266,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.patch(
     '/segments/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const body = request.body ?? {};
       const segment = await store.updateSegment({
         segmentId: request.params.id,
@@ -299,10 +282,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.post(
     '/segments/:id/split',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const splitAt = Number.parseInt(String(request.body?.split_at ?? ''), 10);
       if (Number.isNaN(splitAt)) {
         return response.status(400).json({ error: 'bad_request' });
@@ -318,10 +297,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.post(
     '/segments/:id/merge',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const nextSegmentId = request.body?.next_segment_id;
       if (typeof nextSegmentId !== 'string' || nextSegmentId.trim().length === 0) {
         return response.status(400).json({ error: 'bad_request' });
@@ -340,10 +315,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.patch(
     '/passages/:id/enrich',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const passage = await store.getPassage({ passageId: request.params.id });
       if (!passage) {
         return response.status(404).json({ error: 'not_found' });
@@ -367,10 +338,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.post(
     '/passages/:id/retry',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const result = await store.retryPassage({ passageId: request.params.id });
       if (result.error === 'not_found') {
         return response.status(404).json({ error: 'not_found' });
@@ -390,10 +357,6 @@ export function createMemorizationAdminRouter({ store, config }) {
   router.patch(
     '/passages/:id/retry-enrichment',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
-
       const result = await store.retryPassageEnrichment({ passageId: request.params.id });
       if (result.error === 'not_found') {
         return response.status(404).json({ error: 'not_found' });

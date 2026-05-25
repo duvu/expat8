@@ -30,7 +30,6 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
   bool _playing = false;
   String? _currentAttemptId;
   String? _localAudioPath;
-  SpeakingRating? _selfRating;
   int _retryCount = 0;
   bool _permDenied = false;
 
@@ -69,8 +68,11 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
   }
 
   Future<void> _onStopRecording() async {
-    await widget.repository.stopRecording(widget.word);
-    setState(() => _phase = _PanelPhase.recorded);
+    final path = await widget.repository.stopRecording(widget.word);
+    setState(() {
+      _phase = _PanelPhase.recorded;
+      _localAudioPath = path;
+    });
   }
 
   Future<void> _onPlayBack() async {
@@ -89,7 +91,6 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
     }
     setState(() {
       _phase = _PanelPhase.idle;
-      _selfRating = null;
       _localAudioPath = null;
     });
     await _onRecord();
@@ -100,7 +101,6 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
     if (id == null) return;
     widget.repository.onSelfRated(widget.word, id, rating);
     setState(() {
-      _selfRating = rating;
       _phase = _PanelPhase.rated;
     });
   }

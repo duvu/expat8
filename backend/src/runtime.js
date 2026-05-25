@@ -12,6 +12,7 @@ import { PostgresWordStore } from './postgres_word_store.js';
 import { FileLogArchiveStore } from './log_archive_store.js';
 import { ReleaseStore } from './release_store.js';
 import { PostgresReleaseStore } from './postgres_release_store.js';
+import { YouTubeShadowingVideoResolver } from './shadowing_video_resolver.js';
 import { VocabularyPoolScheduler } from './vocabulary_pool_scheduler.js';
 import { WordStore } from './word_store.js';
 
@@ -82,6 +83,9 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     config,
     logger: runtimeLogger.child({ component: 'vocabulary_scheduler' })
   });
+  const shadowingVideoResolver = new YouTubeShadowingVideoResolver({
+    logger: runtimeLogger.child({ component: 'shadowing_video_resolver' })
+  });
 
   // Use Postgres-backed nonce cache when a database is configured so replay
   // protection survives process restarts and works across multiple instances.
@@ -96,6 +100,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
       logger: runtimeLogger.child({ component: 'api' }),
       logArchiveStore,
       releaseStore,
+      shadowingVideoResolver,
       ...(nonceCache ? { nonceCache } : {})
     })
   );
@@ -106,6 +111,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     generationService,
     logArchiveStore,
     releaseStore,
+    shadowingVideoResolver,
     vocabularyPoolScheduler,
     server,
     logger: runtimeLogger

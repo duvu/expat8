@@ -19,6 +19,11 @@ import { createContentPacksRouter } from './routes/content_packs.js';
 import { createUserRouter } from './routes/user.js';
 import { createMemorizationAdminRouter, createMemorizationRouter } from './routes/memorization.js';
 import { createReleasesRouter } from './routes/releases.js';
+import { createShadowingRouter } from './routes/shadowing.js';
+
+// Paths that carry binary (non-JSON) bodies. Used by captureRawBody and
+// parseJsonFromCapturedBody. Add entries here when introducing new upload routes.
+const BINARY_UPLOAD_PATHS = new Set(['/v1/mobile/log-archives', '/v1/admin/releases']);
 
 export function createApp({
   store,
@@ -31,7 +36,8 @@ export function createApp({
   }),
   nonceCache = new InMemoryNonceCache(),
   logArchiveStore = null,
-  releaseStore = null
+  releaseStore = null,
+  shadowingVideoResolver = null
 }) {
   const app = express();
   const resolvedLogArchiveStore =
@@ -87,7 +93,15 @@ export function createApp({
     captureRawBody({ config }),
     appCredentialGuard({ config, nonceCache }),
     parseJsonFromCapturedBody,
-    createV1Router({ store, generationService, config, logArchiveStore: resolvedLogArchiveStore, releaseStore, rateLimiters })
+    createV1Router({
+      store,
+      generationService,
+      config,
+      logArchiveStore: resolvedLogArchiveStore,
+      releaseStore,
+      rateLimiters,
+      shadowingVideoResolver
+    })
   );
 
   app.use((request, response) => {
@@ -138,7 +152,15 @@ function createRateLimiters({
 
 // ─── V1 Router (mounts all domain routers) ──────────────────────────────────
 
-function createV1Router({ store, generationService, config, logArchiveStore, releaseStore, rateLimiters = {} }) {
+function createV1Router({
+  store,
+  generationService,
+  config,
+  logArchiveStore,
+  releaseStore,
+  rateLimiters = {},
+  shadowingVideoResolver = null
+}) {
   const router = express.Router();
 
   router.use('/exam', createExamRouter({ store }));
@@ -153,6 +175,7 @@ function createV1Router({ store, generationService, config, logArchiveStore, rel
   router.use('/study-events', createStudyEventsRouter({ store, config, rateLimiters }));
   router.use('/content-packs', createContentPacksRouter({ store, config }));
   router.use('/memorization', createMemorizationRouter({ store, config }));
+  router.use('/shadowing', createShadowingRouter({ store, shadowingVideoResolver }));
   router.use('/', createUserRouter({ store, generationService, config, logArchiveStore }));
 
   return router;
@@ -254,6 +277,7 @@ function corsMiddleware({ config }) {
 
 function captureRawBody({ config }) {
   return (request, response, next) => {
+    request.parsedPathname = new URL(request.originalUrl, 'http://localhost').pathname;
     const limit = resolveBodyLimit({ request, config });
     const contentLength = Number.parseInt(request.get('content-length') ?? '0', 10);
     if (contentLength > limit) {
@@ -316,8 +340,7 @@ function parseJsonFromCapturedBody(request, response, next) {
   const contentType = String(request.get('content-type') ?? '').toLowerCase();
   const isJsonContentType = contentType.includes('application/json') || contentType.endsWith('+json');
   if (!isJsonContentType) {
-    const pathName = new URL(request.originalUrl, 'http://localhost').pathname;
-    if (pathName === '/v1/mobile/log-archives' || pathName === '/v1/admin/releases') {
+    if (BINARY_UPLOAD_PATHS.has(request.parsedPathname)) {
       request.body = {};
       return next();
     }
@@ -339,7 +362,7 @@ function badRequest(response) {
 }
 
 function resolveBodyLimit({ request, config }) {
-  const pathName = new URL(request.originalUrl, 'http://localhost').pathname;
+  const pathName = request.parsedPathname ?? new URL(request.originalUrl, 'http://localhost').pathname;
   if (request.method === 'POST' && pathName === '/v1/mobile/log-archives') {
     return config.logArchiveUploadBodyLimitBytes;
   }

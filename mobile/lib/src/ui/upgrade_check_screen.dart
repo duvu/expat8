@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/backend_api_client.dart';
 import '../models/release_info.dart';
+import '../theme/app_theme.dart';
 
 /// Compile-time version code from --dart-define=APP_VERSION_CODE=<int>.
 const int kAppVersionCode = int.fromEnvironment('APP_VERSION_CODE', defaultValue: 1);
@@ -133,20 +134,23 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
   }
 
   Widget _buildUpToDate() {
+    final theme = Theme.of(context);
+    final appColors = theme.extension<AppColors>()!;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.check_circle_outline, size: 64, color: Colors.green),
+        Icon(Icons.check_circle_outline, size: 64,
+            color: appColors.statusSuccess),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'App is up to date',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 12),
         Text(
           'Current version: $kAppVersionName ($kAppVersionCode)',
-          style: const TextStyle(color: Colors.grey),
+          style: TextStyle(color: appColors.subtleText),
         ),
       ],
     );
@@ -155,15 +159,18 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
   Widget _buildUpdateAvailable() {
     final release = _latestRelease!;
     final sizeMB = (release.fileSizeBytes / (1024 * 1024)).toStringAsFixed(1);
+    final theme = Theme.of(context);
+    final appColors = theme.extension<AppColors>()!;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.system_update_outlined, size: 64, color: Colors.blue),
+        Icon(Icons.system_update_outlined, size: 64,
+            color: theme.colorScheme.primary),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           'Update available',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 12),
         Text('Current version: $kAppVersionName ($kAppVersionCode)'),
@@ -173,7 +180,8 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
           style: const TextStyle(fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 4),
-        Text('Size: $sizeMB MB', style: const TextStyle(color: Colors.grey)),
+        Text('Size: $sizeMB MB',
+            style: TextStyle(color: appColors.subtleText)),
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: _downloadAndInstall,
@@ -203,11 +211,12 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
   }
 
   Widget _buildError() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.error_outline, size: 64, color: Colors.red),
+        Icon(Icons.error_outline, size: 64, color: colorScheme.error),
         const SizedBox(height: 16),
         Text(
           _errorMessage ?? 'An error occurred.',

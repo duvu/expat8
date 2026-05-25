@@ -12,6 +12,7 @@ import '../models/article.dart';
 import '../models/memorization_passage.dart';
 import '../models/proficiency_state.dart';
 import '../models/release_info.dart';
+import '../models/shadowing_video.dart';
 import '../models/submitted_word.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
@@ -480,6 +481,90 @@ class BackendApiClient {
               localSubmissionId: (item['id'] as String?) ?? '',
             ))
         .toList(growable: false);
+  }
+
+  Future<List<ShadowingVideo>> fetchShadowingVideos({
+    required String deviceId,
+    int limit = 50,
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/shadowing/videos').replace(
+      queryParameters: {
+        'device_id': deviceId,
+        'limit': '$limit',
+      },
+    );
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    _throwIfFailed(response, 'Shadowing video fetch failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = body['items'] as List? ?? const [];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(ShadowingVideo.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<ShadowingVideo> importShadowingVideo({
+    required String deviceId,
+    required String sourceUrl,
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/shadowing/videos');
+    final payload = jsonEncode({
+      'device_id': deviceId,
+      'source_url': sourceUrl,
+    });
+    final bodyBytes = Uint8List.fromList(utf8.encode(payload));
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: {
+            'content-type': 'application/json',
+            ..._signedHeaders(
+              method: 'POST',
+              uri: uri,
+              body: bodyBytes,
+              sessionToken: sessionToken,
+            ),
+          },
+          body: bodyBytes,
+        )
+        .timeout(timeout);
+    _throwIfFailed(response, 'Shadowing video import failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return ShadowingVideo.fromJson(body);
+  }
+
+  Future<ShadowingVideo> fetchShadowingVideoDetail({
+    required String entryId,
+    required String deviceId,
+    String? sessionToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/v1/shadowing/videos/$entryId').replace(
+      queryParameters: {'device_id': deviceId},
+    );
+    final response = await _httpClient
+        .get(
+          uri,
+          headers: _signedHeaders(
+            method: 'GET',
+            uri: uri,
+            sessionToken: sessionToken,
+          ),
+        )
+        .timeout(timeout);
+    _throwIfFailed(response, 'Shadowing video detail failed');
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return ShadowingVideo.fromJson(body);
   }
 
   Future<SyncResult> syncStudyEvents({

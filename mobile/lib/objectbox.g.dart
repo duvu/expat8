@@ -1088,6 +1088,231 @@ final _entities = <obx_int.ModelEntity>[
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
   ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(15, 2242503872109526395),
+    name: 'ShadowingProgressEntity',
+    lastPropertyId: const obx_int.IdUid(5, 802775345192736459),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 4112332169755428255),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 7585685016020510976),
+        name: 'entryId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(60, 412430111273216091),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 88512967517038624),
+        name: 'lastPositionMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 5526485605518136907),
+        name: 'playbackRate',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 802775345192736459),
+        name: 'lastOpenedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(61, 1233163205751583793),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(16, 4481917487776737009),
+    name: 'ShadowingSegmentEntity',
+    lastPropertyId: const obx_int.IdUid(7, 1906271451583077240),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 1892567877177546985),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 8203608945576468767),
+        name: 'segmentId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(62, 497608127084619791),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 7348418054869837582),
+        name: 'entryId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(63, 725280509928296730),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 5628703416035440453),
+        name: 'position',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(64, 2014020096113813333),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 1454574701833006111),
+        name: 'startMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 538356193385429607),
+        name: 'endMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 1906271451583077240),
+        name: 'text',
+        type: 9,
+        flags: 0,
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
+  obx_int.ModelEntity(
+    id: const obx_int.IdUid(17, 6807144932603146302),
+    name: 'ShadowingVideoEntity',
+    lastPropertyId: const obx_int.IdUid(19, 2819861664503534136),
+    flags: 0,
+    properties: <obx_int.ModelProperty>[
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(1, 7419091973036143611),
+        name: 'id',
+        type: 6,
+        flags: 1,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(2, 3973579957267370753),
+        name: 'entryId',
+        type: 9,
+        flags: 34848,
+        indexId: const obx_int.IdUid(65, 4408244031566938331),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(3, 2483615371376077918),
+        name: 'entryType',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(66, 4335610121702614278),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(4, 2313057268635169600),
+        name: 'visibility',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(5, 6097876050789982773),
+        name: 'sourceType',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(6, 6559960849187236949),
+        name: 'providerVideoId',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(7, 4284257838694463273),
+        name: 'sourceUrl',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 4808946260715436538),
+        name: 'title',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(9, 8228774776273400591),
+        name: 'channelTitle',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(10, 4650016861329813208),
+        name: 'thumbnailUrl',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(11, 5373611386006555169),
+        name: 'durationSeconds',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(12, 8682864544675651327),
+        name: 'transcriptLanguage',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(13, 8891602338285943343),
+        name: 'transcriptSource',
+        type: 9,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(14, 8781646699538489272),
+        name: 'segmentCount',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(15, 5171153768103963728),
+        name: 'initialPlaybackRate',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(16, 6490461312217034701),
+        name: 'seekBackMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(17, 4732721011757033910),
+        name: 'createdAtMs',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(18, 1453201034992915192),
+        name: 'updatedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(67, 1405827580767502530),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(19, 2819861664503534136),
+        name: 'cachedAtMs',
+        type: 6,
+        flags: 8,
+        indexId: const obx_int.IdUid(68, 2861126091142590988),
+      ),
+    ],
+    relations: <obx_int.ModelRelation>[],
+    backlinks: <obx_int.ModelBacklink>[],
+  ),
 ];
 
 /// Shortcut for [obx.Store.new] that passes [getObjectBoxModel] and for Flutter
@@ -1128,8 +1353,8 @@ Future<obx.Store> openStore({
 obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
-    lastEntityId: const obx_int.IdUid(14, 3159056310794874801),
-    lastIndexId: const obx_int.IdUid(59, 8625421853851595165),
+    lastEntityId: const obx_int.IdUid(17, 6807144932603146302),
+    lastIndexId: const obx_int.IdUid(68, 2861126091142590988),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -2480,6 +2705,296 @@ obx_int.ModelDefinition getObjectBoxModel() {
             return object;
           },
         ),
+    ShadowingProgressEntity: obx_int.EntityDefinition<ShadowingProgressEntity>(
+      model: _entities[14],
+      toOneRelations: (ShadowingProgressEntity object) => [],
+      toManyRelations: (ShadowingProgressEntity object) => {},
+      getId: (ShadowingProgressEntity object) => object.id,
+      setId: (ShadowingProgressEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (ShadowingProgressEntity object, fb.Builder fbb) {
+        final entryIdOffset = fbb.writeString(object.entryId);
+        fbb.startTable(6);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, entryIdOffset);
+        fbb.addInt64(2, object.lastPositionMs);
+        fbb.addFloat64(3, object.playbackRate);
+        fbb.addInt64(4, object.lastOpenedAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final entryIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final lastPositionMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          8,
+          0,
+        );
+        final playbackRateParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          10,
+          0,
+        );
+        final lastOpenedAtMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          12,
+        );
+        final object = ShadowingProgressEntity(
+          id: idParam,
+          entryId: entryIdParam,
+          lastPositionMs: lastPositionMsParam,
+          playbackRate: playbackRateParam,
+          lastOpenedAtMs: lastOpenedAtMsParam,
+        );
+
+        return object;
+      },
+    ),
+    ShadowingSegmentEntity: obx_int.EntityDefinition<ShadowingSegmentEntity>(
+      model: _entities[15],
+      toOneRelations: (ShadowingSegmentEntity object) => [],
+      toManyRelations: (ShadowingSegmentEntity object) => {},
+      getId: (ShadowingSegmentEntity object) => object.id,
+      setId: (ShadowingSegmentEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (ShadowingSegmentEntity object, fb.Builder fbb) {
+        final segmentIdOffset = fbb.writeString(object.segmentId);
+        final entryIdOffset = fbb.writeString(object.entryId);
+        final textOffset = fbb.writeString(object.text);
+        fbb.startTable(8);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, segmentIdOffset);
+        fbb.addOffset(2, entryIdOffset);
+        fbb.addInt64(3, object.position);
+        fbb.addInt64(4, object.startMs);
+        fbb.addInt64(5, object.endMs);
+        fbb.addOffset(6, textOffset);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final segmentIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final entryIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final positionParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          10,
+          0,
+        );
+        final startMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          12,
+          0,
+        );
+        final endMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          14,
+          0,
+        );
+        final textParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 16, '');
+        final object = ShadowingSegmentEntity(
+          id: idParam,
+          segmentId: segmentIdParam,
+          entryId: entryIdParam,
+          position: positionParam,
+          startMs: startMsParam,
+          endMs: endMsParam,
+          text: textParam,
+        );
+
+        return object;
+      },
+    ),
+    ShadowingVideoEntity: obx_int.EntityDefinition<ShadowingVideoEntity>(
+      model: _entities[16],
+      toOneRelations: (ShadowingVideoEntity object) => [],
+      toManyRelations: (ShadowingVideoEntity object) => {},
+      getId: (ShadowingVideoEntity object) => object.id,
+      setId: (ShadowingVideoEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (ShadowingVideoEntity object, fb.Builder fbb) {
+        final entryIdOffset = fbb.writeString(object.entryId);
+        final entryTypeOffset = fbb.writeString(object.entryType);
+        final visibilityOffset = fbb.writeString(object.visibility);
+        final sourceTypeOffset = fbb.writeString(object.sourceType);
+        final providerVideoIdOffset = fbb.writeString(object.providerVideoId);
+        final sourceUrlOffset = fbb.writeString(object.sourceUrl);
+        final titleOffset = fbb.writeString(object.title);
+        final channelTitleOffset = object.channelTitle == null
+            ? null
+            : fbb.writeString(object.channelTitle!);
+        final thumbnailUrlOffset = object.thumbnailUrl == null
+            ? null
+            : fbb.writeString(object.thumbnailUrl!);
+        final transcriptLanguageOffset = object.transcriptLanguage == null
+            ? null
+            : fbb.writeString(object.transcriptLanguage!);
+        final transcriptSourceOffset = object.transcriptSource == null
+            ? null
+            : fbb.writeString(object.transcriptSource!);
+        fbb.startTable(20);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, entryIdOffset);
+        fbb.addOffset(2, entryTypeOffset);
+        fbb.addOffset(3, visibilityOffset);
+        fbb.addOffset(4, sourceTypeOffset);
+        fbb.addOffset(5, providerVideoIdOffset);
+        fbb.addOffset(6, sourceUrlOffset);
+        fbb.addOffset(7, titleOffset);
+        fbb.addOffset(8, channelTitleOffset);
+        fbb.addOffset(9, thumbnailUrlOffset);
+        fbb.addInt64(10, object.durationSeconds);
+        fbb.addOffset(11, transcriptLanguageOffset);
+        fbb.addOffset(12, transcriptSourceOffset);
+        fbb.addInt64(13, object.segmentCount);
+        fbb.addFloat64(14, object.initialPlaybackRate);
+        fbb.addInt64(15, object.seekBackMs);
+        fbb.addInt64(16, object.createdAtMs);
+        fbb.addInt64(17, object.updatedAtMs);
+        fbb.addInt64(18, object.cachedAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final entryIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final entryTypeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final visibilityParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final sourceTypeParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final providerVideoIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 14, '');
+        final sourceUrlParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 16, '');
+        final titleParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 18, '');
+        final channelTitleParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 20);
+        final thumbnailUrlParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 22);
+        final durationSecondsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          24,
+        );
+        final transcriptLanguageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 26);
+        final transcriptSourceParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 28);
+        final segmentCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          30,
+          0,
+        );
+        final initialPlaybackRateParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          32,
+          0,
+        );
+        final seekBackMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          34,
+          0,
+        );
+        final createdAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          36,
+          0,
+        );
+        final updatedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          38,
+          0,
+        );
+        final cachedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          40,
+          0,
+        );
+        final object = ShadowingVideoEntity(
+          id: idParam,
+          entryId: entryIdParam,
+          entryType: entryTypeParam,
+          visibility: visibilityParam,
+          sourceType: sourceTypeParam,
+          providerVideoId: providerVideoIdParam,
+          sourceUrl: sourceUrlParam,
+          title: titleParam,
+          channelTitle: channelTitleParam,
+          thumbnailUrl: thumbnailUrlParam,
+          durationSeconds: durationSecondsParam,
+          transcriptLanguage: transcriptLanguageParam,
+          transcriptSource: transcriptSourceParam,
+          segmentCount: segmentCountParam,
+          initialPlaybackRate: initialPlaybackRateParam,
+          seekBackMs: seekBackMsParam,
+          createdAtMs: createdAtMsParam,
+          updatedAtMs: updatedAtMsParam,
+          cachedAtMs: cachedAtMsParam,
+        );
+
+        return object;
+      },
+    ),
   };
 
   return obx_int.ModelDefinition(model, bindings);
@@ -3259,5 +3774,173 @@ class LocalSegmentProgressEntity_ {
   /// See [LocalSegmentProgressEntity.isDirty].
   static final isDirty = obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
     _entities[13].properties[9],
+  );
+}
+
+/// [ShadowingProgressEntity] entity fields to define ObjectBox queries.
+class ShadowingProgressEntity_ {
+  /// See [ShadowingProgressEntity.id].
+  static final id = obx.QueryIntegerProperty<ShadowingProgressEntity>(
+    _entities[14].properties[0],
+  );
+
+  /// See [ShadowingProgressEntity.entryId].
+  static final entryId = obx.QueryStringProperty<ShadowingProgressEntity>(
+    _entities[14].properties[1],
+  );
+
+  /// See [ShadowingProgressEntity.lastPositionMs].
+  static final lastPositionMs =
+      obx.QueryIntegerProperty<ShadowingProgressEntity>(
+        _entities[14].properties[2],
+      );
+
+  /// See [ShadowingProgressEntity.playbackRate].
+  static final playbackRate = obx.QueryDoubleProperty<ShadowingProgressEntity>(
+    _entities[14].properties[3],
+  );
+
+  /// See [ShadowingProgressEntity.lastOpenedAtMs].
+  static final lastOpenedAtMs =
+      obx.QueryIntegerProperty<ShadowingProgressEntity>(
+        _entities[14].properties[4],
+      );
+}
+
+/// [ShadowingSegmentEntity] entity fields to define ObjectBox queries.
+class ShadowingSegmentEntity_ {
+  /// See [ShadowingSegmentEntity.id].
+  static final id = obx.QueryIntegerProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[0],
+  );
+
+  /// See [ShadowingSegmentEntity.segmentId].
+  static final segmentId = obx.QueryStringProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[1],
+  );
+
+  /// See [ShadowingSegmentEntity.entryId].
+  static final entryId = obx.QueryStringProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[2],
+  );
+
+  /// See [ShadowingSegmentEntity.position].
+  static final position = obx.QueryIntegerProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[3],
+  );
+
+  /// See [ShadowingSegmentEntity.startMs].
+  static final startMs = obx.QueryIntegerProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[4],
+  );
+
+  /// See [ShadowingSegmentEntity.endMs].
+  static final endMs = obx.QueryIntegerProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[5],
+  );
+
+  /// See [ShadowingSegmentEntity.text].
+  static final text = obx.QueryStringProperty<ShadowingSegmentEntity>(
+    _entities[15].properties[6],
+  );
+}
+
+/// [ShadowingVideoEntity] entity fields to define ObjectBox queries.
+class ShadowingVideoEntity_ {
+  /// See [ShadowingVideoEntity.id].
+  static final id = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[0],
+  );
+
+  /// See [ShadowingVideoEntity.entryId].
+  static final entryId = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[1],
+  );
+
+  /// See [ShadowingVideoEntity.entryType].
+  static final entryType = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[2],
+  );
+
+  /// See [ShadowingVideoEntity.visibility].
+  static final visibility = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[3],
+  );
+
+  /// See [ShadowingVideoEntity.sourceType].
+  static final sourceType = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[4],
+  );
+
+  /// See [ShadowingVideoEntity.providerVideoId].
+  static final providerVideoId = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[5],
+  );
+
+  /// See [ShadowingVideoEntity.sourceUrl].
+  static final sourceUrl = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[6],
+  );
+
+  /// See [ShadowingVideoEntity.title].
+  static final title = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[7],
+  );
+
+  /// See [ShadowingVideoEntity.channelTitle].
+  static final channelTitle = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[8],
+  );
+
+  /// See [ShadowingVideoEntity.thumbnailUrl].
+  static final thumbnailUrl = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[9],
+  );
+
+  /// See [ShadowingVideoEntity.durationSeconds].
+  static final durationSeconds = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[10],
+  );
+
+  /// See [ShadowingVideoEntity.transcriptLanguage].
+  static final transcriptLanguage =
+      obx.QueryStringProperty<ShadowingVideoEntity>(
+        _entities[16].properties[11],
+      );
+
+  /// See [ShadowingVideoEntity.transcriptSource].
+  static final transcriptSource = obx.QueryStringProperty<ShadowingVideoEntity>(
+    _entities[16].properties[12],
+  );
+
+  /// See [ShadowingVideoEntity.segmentCount].
+  static final segmentCount = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[13],
+  );
+
+  /// See [ShadowingVideoEntity.initialPlaybackRate].
+  static final initialPlaybackRate =
+      obx.QueryDoubleProperty<ShadowingVideoEntity>(
+        _entities[16].properties[14],
+      );
+
+  /// See [ShadowingVideoEntity.seekBackMs].
+  static final seekBackMs = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[15],
+  );
+
+  /// See [ShadowingVideoEntity.createdAtMs].
+  static final createdAtMs = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[16],
+  );
+
+  /// See [ShadowingVideoEntity.updatedAtMs].
+  static final updatedAtMs = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[17],
+  );
+
+  /// See [ShadowingVideoEntity.cachedAtMs].
+  static final cachedAtMs = obx.QueryIntegerProperty<ShadowingVideoEntity>(
+    _entities[16].properties[18],
   );
 }

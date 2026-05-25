@@ -13,6 +13,8 @@ import '../session/learning_session_controller.dart';
 import '../session/workplace_sentence_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
+import '../data/shadowing_repository.dart';
+import '../shadowing/shadowing_library_screen.dart';
 import 'articles_screen.dart';
 import 'memorization_screen.dart';
 import 'learning_gesture_surface.dart';
@@ -24,6 +26,7 @@ import 'vocabulary_card.dart';
 import 'workplace_sentence_screen.dart';
 import 'learning_history_screen.dart';
 import 'learning_progress_stats_screen.dart';
+import '../widgets/empty_state_view.dart';
 
 const Map<String, String> kLearningLanguageLabels = {
   'en': 'English',
@@ -38,6 +41,7 @@ class LearningScreen extends StatefulWidget {
     required this.memorizationRepository,
     required this.workplaceSentenceRepository,
     this.speakingRepository,
+    this.shadowingRepository,
     super.key,
   });
 
@@ -46,6 +50,7 @@ class LearningScreen extends StatefulWidget {
   final MemorizationRepository memorizationRepository;
   final WorkplaceSentenceRepository workplaceSentenceRepository;
   final SpeakingRepository? speakingRepository;
+  final ShadowingRepository? shadowingRepository;
 
   @override
   State<LearningScreen> createState() => _LearningScreenState();
@@ -91,19 +96,23 @@ class _LearningScreenState extends State<LearningScreen> {
     final controller = widget.controller;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vocabulary'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Vocabulary'),
+            ProficiencyLevelLabel(
+              scale: controller.proficiency.scale,
+              level: controller.proficiency.level,
+            ),
+          ],
+        ),
         bottom: controller.isAuthInProgress
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(4),
                 child: AuthProgressIndicator(isVisible: true),
               )
             : null,
-        actions: [
-          ProficiencyLevelLabel(
-            scale: controller.proficiency.scale,
-            level: controller.proficiency.level,
-          ),
-        ],
       ),
       drawer: LearningDrawer(
         isSignedIn: controller.userSession != null,
@@ -127,6 +136,7 @@ class _LearningScreenState extends State<LearningScreen> {
           );
         },
         onExam: controller.userSession == null ? null : _openExam,
+        onShadowing: widget.shadowingRepository != null ? _openShadowing : null,
         onCheckUpdates: () {
           Navigator.of(context).maybePop();
           Navigator.of(context).push(
@@ -181,9 +191,13 @@ class _LearningScreenState extends State<LearningScreen> {
                       speakingRepository: widget.speakingRepository,
                     )
             else
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(controller.statusMessage ?? 'No card loaded.'),
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: EmptyStateView(
+                  icon: Icons.school_outlined,
+                  title: 'No card loaded',
+                  body: 'Loading your next vocabulary card...',
+                ),
               ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -253,6 +267,18 @@ class _LearningScreenState extends State<LearningScreen> {
           sessionToken: session.sessionToken,
           initialLanguage: widget.controller.activeLearningLanguage,
           supportedLanguages: widget.controller.supportedLearningLanguages,
+        ),
+      ),
+    );
+  }
+
+  void _openShadowing() {
+    if (widget.shadowingRepository == null) return;
+    Navigator.of(context).maybePop();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ShadowingLibraryScreen(
+          repository: widget.shadowingRepository!,
         ),
       ),
     );
@@ -477,6 +503,7 @@ class LearningDrawer extends StatelessWidget {
     this.userSession,
     this.isAuthInProgress = false,
     this.onExam,
+    this.onShadowing,
     this.onCheckUpdates,
     super.key,
   });
@@ -501,6 +528,9 @@ class LearningDrawer extends StatelessWidget {
   /// Called when the user taps "Take Exam". Only shown when signed in.
   final VoidCallback? onExam;
 
+  /// Called when the user taps "Video Shadowing".
+  final VoidCallback? onShadowing;
+
   /// Called when the user taps "Check for updates".
   final VoidCallback? onCheckUpdates;
 
@@ -524,6 +554,12 @@ class LearningDrawer extends StatelessWidget {
                     title: const Text('Sentences'),
                     onTap: onWorkplaceSentences,
                   ),
+                  if (onShadowing != null)
+                    ListTile(
+                      leading: const Icon(Icons.play_lesson_outlined),
+                      title: const Text('Video Shadowing'),
+                      onTap: onShadowing,
+                    ),
                   if (isSignedIn)
                     ListTile(
                       leading: const Icon(Icons.auto_stories),

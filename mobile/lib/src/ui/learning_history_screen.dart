@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/local_database.dart';
 import '../models/learning_progress.dart';
+import '../widgets/empty_state_view.dart';
 
 class LearningHistoryScreen extends StatefulWidget {
   const LearningHistoryScreen({required this.database, super.key});
@@ -40,6 +41,15 @@ class _LearningHistoryScreenState extends State<LearningHistoryScreen> {
               entries.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snapshot.hasError) {
+            return EmptyStateView(
+              icon: Icons.error_outline,
+              title: 'Could not load history',
+              body: 'Pull down to try again.',
+              actionLabel: 'Retry',
+              onAction: _refresh,
+            );
+          }
           if (entries.isEmpty) {
             return RefreshIndicator(
               onRefresh: _refresh,
@@ -48,7 +58,11 @@ class _LearningHistoryScreenState extends State<LearningHistoryScreen> {
                 padding: const EdgeInsets.all(24),
                 children: const [
                   SizedBox(height: 120),
-                  Center(child: Text('No learned items yet.')),
+                  EmptyStateView(
+                    icon: Icons.history,
+                    title: 'No history yet',
+                    body: 'Words you study will appear here.',
+                  ),
                 ],
               ),
             );
@@ -80,7 +94,12 @@ class _HistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final snapshot = entry.snapshot;
+    // Use theme-driven colors to distinguish vocabulary vs sentence cards.
+    final isVocab = snapshot.kind == LearningItemKind.vocabulary;
+    final avatarBg = isVocab ? colorScheme.primaryContainer : colorScheme.tertiaryContainer;
+    final avatarFg = isVocab ? colorScheme.onPrimaryContainer : colorScheme.onTertiaryContainer;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -92,6 +111,8 @@ class _HistoryCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 18,
+                  backgroundColor: avatarBg,
+                  foregroundColor: avatarFg,
                   child: Text(snapshot.kindLabel.substring(0, 1)),
                 ),
                 const SizedBox(width: 12),

@@ -5,6 +5,7 @@ import '../session/workplace_sentence_session_controller.dart';
 import 'learning_gesture_surface.dart';
 import 'learning_history_screen.dart';
 import 'learning_progress_stats_screen.dart';
+import '../widgets/empty_state_view.dart';
 
 class WorkplaceSentenceScreen extends StatefulWidget {
   const WorkplaceSentenceScreen({
@@ -78,11 +79,10 @@ class _WorkplaceSentenceScreenState extends State<WorkplaceSentenceScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: controller.currentSentence == null
-                    ? Center(
-                        child: Text(
-                          controller.statusMessage ?? 'No sentence loaded.',
-                          textAlign: TextAlign.center,
-                        ),
+                    ? EmptyStateView(
+                        icon: Icons.work_outline,
+                        title: controller.statusMessage ?? 'No sentence loaded',
+                        body: 'Swipe to load your next workplace sentence.',
                       )
                     : _WorkplaceSentenceCard(sentence: controller.currentSentence!),
               ),

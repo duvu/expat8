@@ -228,17 +228,18 @@ class _ChoiceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final Color? bgColor = isSelected ? cs.primaryContainer : null;
-    final Color? borderColor = isSelected ? cs.primary : cs.outline;
+    final Color borderColor = isSelected ? cs.primary : cs.outline;
 
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: bgColor,
           border: Border.all(
-            color: borderColor ?? cs.outline,
+            color: borderColor,
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(12),

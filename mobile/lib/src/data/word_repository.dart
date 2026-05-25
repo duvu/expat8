@@ -28,14 +28,12 @@ class WordRepository {
     SeedVocabularyLoader? seedLoader,
   })  : _uuid = uuid ?? const Uuid(),
         _logger = logger ?? const NoopLogger(),
-        _config = config ?? AppConfig.fromEnvironment(),
         _seedLoader = seedLoader ?? const SeedVocabularyLoader();
 
   final LocalDatabase database;
   final BackendApiClient apiClient;
   final Logger _logger;
   final Uuid _uuid;
-  final AppConfig _config;
   final SeedVocabularyLoader _seedLoader;
   String? _refillDeviceId;
   String _activeLanguage = 'en';

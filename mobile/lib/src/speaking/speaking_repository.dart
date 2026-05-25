@@ -235,9 +235,10 @@ class SpeakingRepository {
 
   /// Stops the active recording. Updates local attempt with duration and
   /// enqueues a `speaking_recorded` event.
-  Future<void> stopRecording(VocabularyWord word) async {
+  /// Returns the local audio file path, or null if no recording was active.
+  Future<String?> stopRecording(VocabularyWord word) async {
     final id = _activeAttemptId;
-    if (id == null) return;
+    if (id == null) return null;
 
     final startMs = _database.getSpeakingAttempt(id)?.occurredAtMs;
     final localPath = await _audioService.stopRecording();
@@ -263,6 +264,7 @@ class SpeakingRepository {
       'occurred_at': DateTime.now().toUtc().toIso8601String(),
       // localAudioPath intentionally excluded
     });
+    return localPath;
   }
 
   /// Records a retry — increments retry count and enqueues a `speaking_retried`

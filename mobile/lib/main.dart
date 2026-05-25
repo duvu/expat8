@@ -16,6 +16,8 @@ import 'src/speaking/audio_file_manager.dart';
 import 'src/speaking/speaking_audio_service.dart';
 import 'src/speaking/speaking_prompt_sync_service.dart';
 import 'src/speaking/speaking_repository.dart';
+import 'src/data/shadowing_repository.dart';
+import 'src/theme/app_theme.dart';
 import 'src/ui/learning_screen.dart';
 import 'src/update/update_banner.dart';
 
@@ -135,6 +137,12 @@ Future<void> main() async {
     unawaited(speakingPromptSyncService.sync());
   }
 
+  // Build shadowing repository (always enabled — uses anonymous device scope).
+  final shadowingRepository = ShadowingRepository(
+    apiClient: apiClient,
+    database: database,
+  );
+
   await logger.info(
     category: AppLogCategory.app,
     event: 'app.start',
@@ -148,6 +156,7 @@ Future<void> main() async {
       workplaceSentenceRepository: workplaceSentenceRepository,
       contentPackSyncService: contentPackSyncService,
       speakingRepository: speakingRepository,
+      shadowingRepository: shadowingRepository,
     speakingPromptSyncService: speakingPromptSyncService,
     onResumeSyncEvents: onAppResumeSyncEvents,
   ));
@@ -161,6 +170,7 @@ class LanguageLearningApp extends StatefulWidget {
     required this.workplaceSentenceRepository,
     required this.contentPackSyncService,
     this.speakingRepository,
+    this.shadowingRepository,
     this.speakingPromptSyncService,
     this.onResumeSyncEvents,
     super.key,
@@ -172,6 +182,7 @@ class LanguageLearningApp extends StatefulWidget {
   final WorkplaceSentenceRepository workplaceSentenceRepository;
   final ContentPackSyncService contentPackSyncService;
   final SpeakingRepository? speakingRepository;
+  final ShadowingRepository? shadowingRepository;
   final SpeakingPromptSyncService? speakingPromptSyncService;
   final VoidCallback? onResumeSyncEvents;
 
@@ -212,10 +223,8 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Expat8 Vocabulary',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF256D5A)),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       home: UpdateBannerWrapper(
         child: LearningScreen(
           controller: widget.controller,
@@ -223,6 +232,7 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
           memorizationRepository: widget.memorizationRepository,
           workplaceSentenceRepository: widget.workplaceSentenceRepository,
           speakingRepository: widget.speakingRepository,
+          shadowingRepository: widget.shadowingRepository,
         ),
       ),
     );

@@ -32,9 +32,7 @@ class _FitbCardState extends State<FitbCard> {
     final lowerTarget = target.toLowerCase();
     final idx = lower.indexOf(lowerTarget);
     if (idx == -1) return example; // guard: target not found, show original
-    return example.substring(0, idx) +
-        '___' +
-        example.substring(idx + target.length);
+    return '${example.substring(0, idx)}___${example.substring(idx + target.length)}';
   }
 
   @override
@@ -42,8 +40,8 @@ class _FitbCardState extends State<FitbCard> {
     final textTheme = Theme.of(context).textTheme;
     final word = widget.word;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
       onTap: _revealed ? null : () => setState(() => _revealed = true),
       child: Card(
         margin: const EdgeInsets.all(16),
@@ -66,26 +64,43 @@ class _FitbCardState extends State<FitbCard> {
                 ],
               ),
               const SizedBox(height: 12),
-              // Meaning — visible only after reveal
-              if (_revealed) ...[
-                Text(word.meaningVi, style: textTheme.titleMedium),
-                const Divider(height: 32),
-              ] else ...[
-                const Divider(height: 32),
-              ],
-              // Blanked example sentence (always visible)
-              _BlankedSentence(
-                blankedText: _blankedSentence,
-                blankTarget: _blankTarget,
-                revealed: _revealed,
-                textTheme: textTheme,
+              // Meaning — visible only after reveal, fades in
+              AnimatedOpacity(
+                opacity: _revealed ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: _revealed
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(word.meaningVi, style: textTheme.titleMedium),
+                          const Divider(height: 32),
+                        ],
+                      )
+                    : const Divider(height: 32),
+              ),
+              // Blanked example sentence — scales up slightly on reveal
+              AnimatedScale(
+                scale: _revealed ? 1.0 : 0.97,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: _BlankedSentence(
+                  blankedText: _blankedSentence,
+                  blankTarget: _blankTarget,
+                  revealed: _revealed,
+                  textTheme: textTheme,
+                ),
               ),
               const SizedBox(height: 8),
-              // Vietnamese example — visible only after reveal
-              if (_revealed)
-                Text(word.exampleVi, style: textTheme.bodyMedium)
-              else
-                _TapToRevealHint(textTheme: textTheme),
+              // Vietnamese example fades in; hint fades out simultaneously
+              AnimatedCrossFade(
+                firstChild: _TapToRevealHint(textTheme: textTheme),
+                secondChild: Text(word.exampleVi, style: textTheme.bodyMedium),
+                crossFadeState: _revealed
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: const Duration(milliseconds: 200),
+              ),
             ],
           ),
         ),

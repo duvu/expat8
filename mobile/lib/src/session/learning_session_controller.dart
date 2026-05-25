@@ -165,7 +165,7 @@ class LearningSessionController extends ChangeNotifier {
     // _showSelectedCard has committed before we call nextCard(). This closes a
     // race where the fire-and-forget markWordAsLearning hasn't finished and
     // nextNewWord would otherwise re-select the same card.
-    if (currentCardKind == CardKind.newWord && word != null) {
+    if (currentCardKind == CardKind.newWord) {
       await repository.markWordAsLearning(
           word: word, now: DateTime.now().toUtc());
     }

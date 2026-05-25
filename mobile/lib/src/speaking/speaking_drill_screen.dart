@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/local_database_entities.dart';
 import '../speaking/speaking_audio_service.dart';
-import '../speaking/speaking_panel.dart';
 import '../speaking/speaking_repository.dart';
 
 /// 3-minute speaking drill.
@@ -283,9 +283,23 @@ class _DrillPromptCardState extends State<_DrillPromptCard> {
             ],
             const SizedBox(height: 16),
             if (_permDenied)
-              Text('Microphone access required.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error))
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Microphone access required.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        launchUrl(Uri.parse('app-settings:')),
+                    icon: const Icon(Icons.settings_outlined),
+                    label: const Text('Open Settings'),
+                  ),
+                ],
+              )
             else
               _controls(theme),
           ],

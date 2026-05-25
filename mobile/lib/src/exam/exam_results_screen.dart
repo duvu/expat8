@@ -237,29 +237,15 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
 
             const Spacer(),
 
-            // Actions
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () {
-                  widget.controller.reset();
-                  // Pop back to the learning screen.
-                  Navigator.of(context).pop();
-                },
-                child: const Text('Take Again'),
-              ),
-            ),
-            const SizedBox(height: 12),
+            // Single primary action: "Try Again" if failed, "Done" if passed
             SizedBox(
               width: double.infinity,
               child: FilledButton(
                 onPressed: () {
                   widget.controller.reset();
-                  // Single pop — the question route was replaced by results,
-                  // so only one pop is needed to return to the learning screen.
                   Navigator.of(context).pop();
                 },
-                child: const Text('Done'),
+                child: Text(passed ? 'Done' : 'Try Again'),
               ),
             ),
           ],

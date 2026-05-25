@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../data/word_repository.dart';
 import '../logging/logger.dart';
+import '../theme/app_theme.dart';
+import '../widgets/empty_state_view.dart';
 import 'log_share_service.dart';
 
 class LogsScreen extends StatefulWidget {
@@ -231,7 +233,11 @@ class _LogsScreenState extends State<LogsScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _entries.isEmpty
-                    ? const Center(child: Text('No logs for selected filters.'))
+                    ? const EmptyStateView(
+                        icon: Icons.notes,
+                        title: 'No logs',
+                        body: 'No log entries match the selected filters.',
+                      )
                     : ListView.separated(
                         itemCount: _entries.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -265,11 +271,12 @@ class _SeverityDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = Theme.of(context).extension<AppColors>()!;
     final color = switch (level) {
-      AppLogLevel.debug => Colors.blueGrey,
-      AppLogLevel.info => Colors.blue,
-      AppLogLevel.warning => Colors.orange,
-      AppLogLevel.error => Colors.red,
+      AppLogLevel.debug => appColors.severityDebug,
+      AppLogLevel.info => appColors.severityInfo,
+      AppLogLevel.warning => appColors.severityWarn,
+      AppLogLevel.error => appColors.severityError,
     };
     return Icon(Icons.circle, size: 10, color: color);
   }

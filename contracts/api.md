@@ -666,6 +666,228 @@ Historical records may still include `queued` or `processing` from older app
 versions, but new learner-facing add-word submissions are expected to be
 terminal (`ready` or `failed`) immediately.
 
+## GET /v1/shadowing/videos
+
+Lists transcript-backed shadowing videos visible to the current learner
+context.
+
+Query parameters:
+
+- `device_id`: required stable anonymous or device identifier.
+- `limit`: optional max `100`, default `50`.
+
+When signed in, the catalog includes all published curated videos plus only the
+signed-in learner's saved videos. Without a bearer session, the catalog
+includes published curated videos plus only the anonymous/device-scoped saved
+videos for that `device_id`.
+
+Response `200`:
+
+```json
+{
+  "items": [
+    {
+      "id": "shadow_entry_123",
+      "entry_type": "curated",
+      "visibility": "published",
+      "source_type": "youtube",
+      "source_url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+      "youtube_video_id": "M7lc1UVf-VE",
+      "title": "Embedded Web Player API Demo",
+      "channel_title": "YouTube Developers",
+      "thumbnail_url": "https://i.ytimg.com/vi/M7lc1UVf-VE/hqdefault.jpg",
+      "duration_seconds": 125,
+      "transcript_language": "en",
+      "transcript_source": "youtube_caption_track",
+      "segment_count": 42,
+      "playback_defaults": {
+        "initial_playback_rate": 1,
+        "seek_back_ms": 5000
+      },
+      "created_at": "2026-05-25T10:00:00.000Z",
+      "updated_at": "2026-05-25T10:00:00.000Z"
+    },
+    {
+      "id": "shadow_entry_124",
+      "entry_type": "saved",
+      "visibility": "private",
+      "source_type": "youtube",
+      "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "youtube_video_id": "dQw4w9WgXcQ",
+      "title": "Saved learner clip",
+      "channel_title": "Example Channel",
+      "thumbnail_url": null,
+      "duration_seconds": 212,
+      "transcript_language": "en",
+      "transcript_source": "youtube_auto_caption",
+      "segment_count": 67,
+      "playback_defaults": {
+        "initial_playback_rate": 1,
+        "seek_back_ms": 5000
+      },
+      "created_at": "2026-05-25T10:02:00.000Z",
+      "updated_at": "2026-05-25T10:02:00.000Z"
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                                                 |
+|--------|-------------------|---------------------------------------------------------|
+| 400    | `bad_request`     | Missing or invalid `device_id`                          |
+| 401    | `invalid_session` | Optional bearer token is present but not valid          |
+
+## POST /v1/shadowing/videos
+
+Imports a learner-saved YouTube video, resolves transcript-backed metadata, and
+reuses the same saved entry when the learner re-adds the normalized video.
+
+Request:
+
+```json
+{
+  "device_id": "anonymous_550e8400-e29b-41d4-a716-446655440000",
+  "source_url": "https://youtu.be/M7lc1UVf-VE"
+}
+```
+
+Fields:
+
+- `device_id`: required stable anonymous or device identifier. Signed-in mobile
+  clients still send the current device identifier.
+- `source_url`: required YouTube watch, short, embed, or shorts URL.
+
+When signed in, include `Authorization: Bearer <session_token>`; the backend
+stores the saved entry under the signed-in learner while retaining `device_id`
+for device context.
+
+Response `201` (new saved entry):
+
+```json
+{
+  "id": "shadow_entry_124",
+  "entry_type": "saved",
+  "visibility": "private",
+  "source_type": "youtube",
+  "source_url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+  "youtube_video_id": "M7lc1UVf-VE",
+  "title": "Embedded Web Player API Demo",
+  "channel_title": "YouTube Developers",
+  "thumbnail_url": "https://i.ytimg.com/vi/M7lc1UVf-VE/hqdefault.jpg",
+  "duration_seconds": 125,
+  "transcript_language": "en",
+  "transcript_source": "youtube_caption_track",
+  "segment_count": 42,
+  "playback_defaults": {
+    "initial_playback_rate": 1,
+    "seek_back_ms": 5000
+  },
+  "created_at": "2026-05-25T10:02:00.000Z",
+  "updated_at": "2026-05-25T10:02:00.000Z"
+}
+```
+
+Response `200` (existing saved entry for the same learner scope):
+
+```json
+{
+  "id": "shadow_entry_124",
+  "entry_type": "saved",
+  "visibility": "private",
+  "source_type": "youtube",
+  "source_url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+  "youtube_video_id": "M7lc1UVf-VE",
+  "title": "Embedded Web Player API Demo",
+  "channel_title": "YouTube Developers",
+  "thumbnail_url": "https://i.ytimg.com/vi/M7lc1UVf-VE/hqdefault.jpg",
+  "duration_seconds": 125,
+  "transcript_language": "en",
+  "transcript_source": "youtube_caption_track",
+  "segment_count": 42,
+  "playback_defaults": {
+    "initial_playback_rate": 1,
+    "seek_back_ms": 5000
+  },
+  "created_at": "2026-05-25T10:02:00.000Z",
+  "updated_at": "2026-05-25T10:02:00.000Z"
+}
+```
+
+Error responses:
+
+| Status | `error` field                 | Meaning                                                    |
+|--------|-------------------------------|------------------------------------------------------------|
+| 400    | `bad_request`                 | Missing or invalid `device_id` or `source_url`             |
+| 400    | `invalid_source_url`          | URL is not a supported YouTube video URL                   |
+| 401    | `invalid_session`             | Optional bearer token is present but not valid             |
+| 422    | `transcript_unavailable`      | Video could not be imported with usable transcript segments |
+| 502    | `shadowing_import_failed`     | Upstream metadata/transcript fetch or parse failed         |
+| 503    | `shadowing_import_unavailable`| Import resolver is disabled or unavailable                 |
+
+## GET /v1/shadowing/videos/:entryId
+
+Returns a playback-ready shadowing video with ordered transcript segments.
+
+Query parameters:
+
+- `device_id`: required stable anonymous or device identifier.
+
+When signed in, private saved entries are resolved only for the signed-in user.
+Anonymous/device-owned saved entries are not exposed to other devices or other
+users. Inaccessible private entries return `404`.
+
+Response `200`:
+
+```json
+{
+  "id": "shadow_entry_124",
+  "entry_type": "saved",
+  "visibility": "private",
+  "source_type": "youtube",
+  "source_url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+  "youtube_video_id": "M7lc1UVf-VE",
+  "title": "Embedded Web Player API Demo",
+  "channel_title": "YouTube Developers",
+  "thumbnail_url": "https://i.ytimg.com/vi/M7lc1UVf-VE/hqdefault.jpg",
+  "duration_seconds": 125,
+  "transcript_language": "en",
+  "transcript_source": "youtube_caption_track",
+  "segment_count": 42,
+  "playback_defaults": {
+    "initial_playback_rate": 1,
+    "seek_back_ms": 5000
+  },
+  "created_at": "2026-05-25T10:02:00.000Z",
+  "updated_at": "2026-05-25T10:02:00.000Z",
+  "segments": [
+    {
+      "id": "shadow_seg_001",
+      "position": 0,
+      "start_ms": 1200,
+      "end_ms": 3100,
+      "text": "Welcome to the shadowing demo."
+    },
+    {
+      "id": "shadow_seg_002",
+      "position": 1,
+      "start_ms": 3100,
+      "end_ms": 5400,
+      "text": "Tap any line to jump playback."
+    }
+  ]
+}
+```
+
+Error responses:
+
+| Status | `error` field     | Meaning                                                 |
+|--------|-------------------|---------------------------------------------------------|
+| 400    | `bad_request`     | Missing or invalid `device_id`                          |
+| 401    | `invalid_session` | Optional bearer token is present but not valid          |
+| 404    | `not_found`       | Entry does not exist or is private to another learner   |
+
 ## POST /v1/study-events/sync
 
 Request:

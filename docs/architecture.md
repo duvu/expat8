@@ -15,52 +15,50 @@ Backend sẽ:
 1. Lưu bài viết gốc.
 2. Bóc tách từ/cụm từ xuất hiện trong bài.
 3. Chuẩn hóa, deduplicate và gắn ngữ cảnh.
-4. Gọi LLM để giải nghĩa, hướng dẫn phát âm, ví dụ, cách dùng.
-5. Lưu kết quả đã xử lý vào PostgreSQL.
+4. Enrich bằng LLM cho nội dung thật khi cần.
+5. Lưu kết quả đã xử lý vào PostgreSQL và lưu file hỗ trợ khi cần.
 6. Serve vocabulary/content pack lại cho người học.
 7. Đồng bộ study events và SRS state dựa trên event log.
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                              Expat8 System v2                                │
-│                                                                              │
-│  ┌──────────────────────┐        ┌──────────────────────────────┐            │
-│  │ Mobile App Flutter   │        │ Web Admin Next.js             │            │
-│  │                      │        │                              │            │
-│  │ - Learn offline      │        │ - Post articles               │            │
-│  │ - Upload articles    │        │ - Review extracted vocab      │            │
-│  │ - ObjectBox local DB │        │ - Manage content quality      │            │
-│  └──────────┬───────────┘        └──────────────┬───────────────┘            │
-│             │ REST API + Bearer Token            │ REST API + Admin Auth      │
-│             └────────────────────┬───────────────┘                           │
-│                                  ▼                                           │
-│                     ┌──────────────────────────────┐                         │
-│                     │ Backend API                   │                         │
-│                     │ Node.js + Express             │                         │
-│                     │                              │                         │
-│                     │ - Auth/session/device token   │                         │
-│                     │ - Content ingestion API       │                         │
-│                     │ - Learning cards API          │                         │
-│                     │ - Study event sync API        │                         │
-│                     │ - Rate limit / replay guard   │                         │
-│                     └──────────────┬───────────────┘                         │
-│                                    │                                         │
-│                     ┌──────────────▼───────────────┐                         │
-│                     │ Processing Worker             │                         │
-│                     │                              │                         │
-│                     │ - Extract terms/phrases       │                         │
-│                     │ - Normalize/deduplicate       │                         │
-│                     │ - Call LLM for enrichment     │                         │
-│                     │ - Quality validation          │                         │
-│                     │ - Promote approved vocabulary │                         │
-│                     └──────────────┬───────────────┘                         │
-│                                    │                                         │
-│              ┌─────────────────────▼─────────────────────┐                   │
-│              │ PostgreSQL                                 │                   │
-│              │ Redis optional for nonce/rate-limit/cache  │                   │
-│              └───────────────────────────────────────────┘                   │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph Clients["Clients"]
+    Mobile["Mobile App Flutter\n- Offline learning\n- ObjectBox local cache\n- Signed /v1/* requests"]
+    Admin["Web Admin Next.js\n- Content upload\n- Vocabulary review\n- Publishing"]
+  end
+
+  subgraph Backend["Backend API (Node.js + Express)"]
+    Gateway["HTTP API layer\nHealth, auth, CORS, request context"]
+    Auth["App credential HMAC\nBearer sessions\nNonce replay protection"]
+    Learning["Learning, proficiency, study sync"]
+    Content["Article ingestion\nVocabulary enrichment\nContent packs"]
+    Jobs["Background workers & scheduler\nArticle/term processing\nSubmitted-word enrichment\nVocabulary pool scheduler"]
+  end
+
+  subgraph Storage["Storage"]
+    Postgres["PostgreSQL\nUsers, content, study events,\nproficiency, vocab data"]
+    ObjectBox["ObjectBox on device\nWords, events, outbox, logs"]
+    Files["File storage\nLogs, releases, assets"]
+  end
+
+  Mobile -->|HTTPS + x-expat8-* + optional Bearer| Gateway
+  Admin -->|HTTPS + admin auth| Gateway
+  Gateway --> Auth
+  Gateway --> Learning
+  Gateway --> Content
+  Learning --> Postgres
+  Content --> Postgres
+  Jobs --> Postgres
+  Gateway --> Files
+  Jobs --> Files
+  Mobile <-->|sync/cache| ObjectBox
 ```
+
+Điểm nhấn:
+
+* Mobile là offline-first, backend là source of truth cho dữ liệu học.
+* Request nặng được đẩy sang worker/scheduler, không nằm trong request path.
+* Rate limit và replay protection được xử lý trong backend, không phụ thuộc Redis.
 
 ---
 
@@ -258,44 +256,42 @@ return fewer cards
 or return fallback seed/general cards
 ```
 
-Không auto-generate. Không auto-call LLM.
+Request path không gọi LLM. Phần generate/enrich chạy ở worker hoặc scheduler nền.
 
 ---
 
 ## 3. Backend modules
 
-All modules are flat inside `backend/src/` — no subdirectories.
+Backend code lives in `backend/src/`. Core runtime files are top-level, and domain routers live under `backend/src/routes/`.
 
 ```text
 backend/src/
-├─ server.js                      — HTTP server entry point, binds port
-├─ runtime.js                     — createStore + createBackendRuntime factory
-├─ app.js                         — Express app factory, all route handlers
-├─ config.js                      — Loads and validates env vars
-│
-├─ app_credentials.js             — HMAC signing/verification, InMemoryNonceCache
-├─ user_identity.js               — Password hashing, session token management
-│
-├─ word_store.js                  — In-memory store (tests/dev); exports resolveEventKey, compareEventsForProjection
-├─ postgres_word_store.js         — Production store (PostgreSQL)
-│
-├─ proficiency.js                 — CEFR/HSK ladder: upgrades on 5× too_easy, downgrades on 5× hard
-│
-├─ article_processing_pipeline.js — Article ingestion: extract → normalize → LLM enrich → store
-├─ article_processing_worker.js   — Worker loop polling for pending article jobs
-├─ article_term_extractor.js      — Term/phrase extraction from raw article text
-├─ vocabulary_enrichment_adapter.js — Adapter between pipeline and LiteLLM enrichment
-├─ vocabulary_pool_scheduler.js   — Background scheduler that keeps vocab pool topped up
-├─ vocabulary_validator.js        — Validates enriched vocabulary item shape
-├─ generation_service.js          — LLM vocabulary generation (legacy, not in hot path)
-│
+├─ server.js                      — HTTP server entry point
+├─ worker.js                      — Background worker entry point
+├─ runtime.js                     — Builds store, scheduler, and server runtime
+├─ app.js                         — Express app factory and middleware stack
+├─ config.js                      — Env parsing and validation
+├─ app_credentials.js             — HMAC signing/verification + nonce cache
+├─ rate_limit.js                  — In-process sliding-window rate limiter
+├─ user_identity.js               — Password hashing and session token management
+├─ word_store.js                  — In-memory store for tests/dev
+├─ postgres_word_store.js         — PostgreSQL store for production
+├─ article_processing_pipeline.js — Article extraction/enrichment pipeline
+├─ article_processing_worker.js   — Claim/process article jobs
+├─ submitted_word_worker.js       — Process user-submitted words
+├─ passage_segmentation_worker.js — Passage segmentation jobs
+├─ passage_enrichment_worker.js   — Passage enrichment jobs
+├─ vocabulary_pool_scheduler.js   — Background vocabulary top-up scheduler
+├─ vocabulary_enrichment_adapter.js — LiteLLM adapter for enrichment
+├─ generation_service.js          — Vocabulary generation service used by workers
 ├─ litellm_client.js              — LiteLLM API client
-├─ logger.js                      — Structured JSON logger with child support
-├─ database.js                    — readSchemaSql, initializeDatabaseSchema
-├─ normalize.js                   — normalizeTerm helper
-├─ ids.js                         — createId (UUID-based prefixed IDs)
-├─ http_utils.js                  — readJson, sendJson helpers
-└─ worker.js                      — Worker process entry point
+├─ log_archive_store.js           — Sanitized mobile log archive storage
+├─ release_store.js               — Release storage abstraction
+├─ postgres_release_store.js      — PostgreSQL release store
+├─ database.js, logger.js, ids.js, normalize.js, store_utils.js
+└─ routes/                        — auth, articles, admin, learning, study-events,
+                                   proficiency, content-packs, speaking, exam,
+                                   user, releases, memorization
 ```
 
 ---
@@ -377,35 +373,20 @@ Nonce store = replay protection
 
 ### 5.2 Nonce store
 
-Không lưu nonce trong RAM process.
+Không giữ nonce trong RAM nếu cần replay protection qua nhiều instance.
 
-Dùng Redis hoặc PostgreSQL để shared across instances.
-
-Recommended Redis implementation:
-
-```text
-key: nonce:{app_id}:{nonce}
-value: timestamp/request_hash
-TTL: 5 minutes
-operation: SET NX EX 300
-```
-
-Nếu `SET NX` fail → reject replay.
-
-PostgreSQL fallback:
+Backend dùng `InMemoryNonceCache` cho local/test. Khi có PostgreSQL, runtime sẽ dùng `PostgresNonceCache` để claim nonce bằng bảng `nonces`.
 
 ```sql
-CREATE TABLE request_nonces (
+CREATE TABLE nonces (
   app_id TEXT NOT NULL,
   nonce TEXT NOT NULL,
-  request_hash TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (app_id, nonce)
 );
 ```
 
-Có scheduled cleanup hoặc partition theo ngày.
+`PostgresNonceCache` prune expired rows lazily và fail-open khi DB lỗi để không khóa người dùng hợp lệ.
 
 ### 5.3 Rate limit
 
@@ -686,7 +667,7 @@ Web Admin dùng cho admin/teacher/content editor để:
 ### 8.2 Module frontend
 
 ```text
-web-admin/
+expat8-dashboard/
 ├─ app/
 │  ├─ login/
 │  ├─ articles/
@@ -818,7 +799,7 @@ permissions
 ### 10.2 Security and abuse prevention
 
 ```text
-request_nonces
+nonces
 rate_limit_events optional
 api_audit_logs
 ```
@@ -913,21 +894,18 @@ CI/CD
 ```yaml
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
 
-  redis:
-    image: redis:7
-
-  backend-api:
+  backend:
     build: ./backend
     command: npm start
 
-  backend-worker:
+  article-worker:
     build: ./backend
     command: npm run start:worker
 
-  web-admin:
-    build: ./web-admin
+  expat8-dashboard:
+    build: ./expat8-dashboard
     command: npm run start
 ```
 
@@ -935,17 +913,27 @@ services:
 
 ```text
 DATABASE_URL
-REDIS_URL
-SESSION_SECRET
+PORT
 APP_CREDENTIALS_JSON
+APP_CREDENTIAL_TIMESTAMP_SKEW_SECONDS
+APP_CREDENTIAL_NONCE_TTL_SECONDS
+APP_CREDENTIAL_GET_BODY_LIMIT_BYTES
+APP_CREDENTIAL_POST_BODY_LIMIT_BYTES
 LITELLM_BASE_URL
 LITELLM_API_KEY
 LITELLM_MODEL
-ARTICLE_MAX_CHARS
-ARTICLE_UPLOAD_DAILY_LIMIT
-RATE_LIMIT_ENABLED
-NODE_ENV
+DEFAULT_SOURCE_LANGUAGE
+DEFAULT_TARGET_LANGUAGE
+NEW_WORD_TIMEOUT_SECONDS
+LOG_ARCHIVE_DIR
+LOG_ARCHIVE_RETENTION_DAYS
+LOG_ARCHIVE_MAX_TOTAL_BYTES
+LOG_ARCHIVE_UPLOAD_BODY_LIMIT_BYTES
+ADMIN_API_TOKENS
+ARTICLE_WORKER_INTERVAL_MS
+ARTICLE_WORKER_MAX_ATTEMPTS
 LOG_LEVEL
+LOG_REDACTION_ENABLED
 ```
 
 ---
@@ -996,13 +984,13 @@ watchdog_fire_count
 * Mobile offline learning from seed bundle.
 * User upload article via Mobile App.
 * Admin post article via Next.js Web Admin.
-* Backend article processing worker.
+* Background workers for article processing, submitted-word enrichment, and passage processing.
 * Term/phrase extraction.
 * LLM vocabulary enrichment from real content.
 * Study event idempotency.
 * Backend-owned SRS state.
 * Rate limiting.
-* Shared nonce store using Redis/Postgres.
+* App credential nonce cache (in-memory/Postgres).
 * DB migrations.
 
 ### Excluded from MVP v2

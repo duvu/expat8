@@ -238,8 +238,8 @@ class ExamSessionController extends ChangeNotifier {
     _database.saveExamAttempt(ExamAttemptEntity(
       attemptId: localAttemptId,
       sessionId: s.sessionId,
-      topic: s.topic ?? 'language',
-      language: s.language ?? 'en',
+      topic: s.topic,
+      language: s.language,
       difficultyLevel: null,
       totalQuestions: s.questionCount,
       correctCount: 0,
@@ -255,7 +255,7 @@ class ExamSessionController extends ChangeNotifier {
       localAttemptId: localAttemptId,
       sessionId: s.sessionId,
       answers: answerList,
-      language: s.language ?? 'en',
+      language: s.language,
     );
 
     // Step 4: Transition to results immediately — user is not blocked.

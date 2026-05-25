@@ -559,3 +559,112 @@ class LocalSegmentProgressEntity {
   /// Whether this record needs to be synced to the backend.
   int isDirty;
 }
+
+/// Local cache of a shadowing video summary/detail row.
+/// Keyed by [entryId] (server entry UUID).
+@Entity()
+class ShadowingVideoEntity {
+  ShadowingVideoEntity({
+    this.id = 0,
+    required this.entryId,
+    required this.entryType,
+    required this.visibility,
+    required this.sourceType,
+    required this.providerVideoId,
+    required this.sourceUrl,
+    required this.title,
+    this.channelTitle,
+    this.thumbnailUrl,
+    this.durationSeconds,
+    this.transcriptLanguage,
+    this.transcriptSource,
+    required this.segmentCount,
+    required this.initialPlaybackRate,
+    required this.seekBackMs,
+    required this.createdAtMs,
+    required this.updatedAtMs,
+    required this.cachedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String entryId;
+
+  @Index()
+  String entryType;
+
+  String visibility;
+  String sourceType;
+  String providerVideoId;
+  String sourceUrl;
+  String title;
+  String? channelTitle;
+  String? thumbnailUrl;
+  int? durationSeconds;
+  String? transcriptLanguage;
+  String? transcriptSource;
+  int segmentCount;
+  double initialPlaybackRate;
+  int seekBackMs;
+  int createdAtMs;
+
+  @Index()
+  int updatedAtMs;
+
+  @Index()
+  int cachedAtMs;
+}
+
+/// Local cache of transcript segments for a shadowing entry.
+/// Keyed by [segmentId] (server segment UUID).
+@Entity()
+class ShadowingSegmentEntity {
+  ShadowingSegmentEntity({
+    this.id = 0,
+    required this.segmentId,
+    required this.entryId,
+    required this.position,
+    required this.startMs,
+    required this.endMs,
+    required this.text,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String segmentId;
+
+  @Index()
+  String entryId;
+
+  @Index()
+  int position;
+
+  int startMs;
+  int endMs;
+  String text;
+}
+
+/// Lightweight playback progress for a cached shadowing entry.
+@Entity()
+class ShadowingProgressEntity {
+  ShadowingProgressEntity({
+    this.id = 0,
+    required this.entryId,
+    required this.lastPositionMs,
+    required this.playbackRate,
+    this.lastOpenedAtMs,
+  });
+
+  int id;
+
+  @Unique(onConflict: ConflictStrategy.replace)
+  String entryId;
+
+  int lastPositionMs;
+  double playbackRate;
+
+  @Index()
+  int? lastOpenedAtMs;
+}

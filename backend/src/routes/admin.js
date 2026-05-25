@@ -5,12 +5,16 @@ import { asyncHandler, clampLimit, hasAdminAccess } from './helpers.js';
 export function createAdminRouter({ store, config, logArchiveStore }) {
   const router = express.Router();
 
+  router.use((request, response, next) => {
+    if (!hasAdminAccess({ request, config })) {
+      return response.status(403).json({ error: 'forbidden' });
+    }
+    return next();
+  });
+
   router.post(
     '/articles',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const body = request.body ?? {};
       if (!validateArticleBody(body)) {
         return response.status(400).json({ error: 'bad_request' });
@@ -29,9 +33,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/articles',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const limit = clampLimit(request.query.limit, 1, 100);
       const status = typeof request.query.status === 'string' ? request.query.status : null;
       const items = await store.listAdminArticles({ limit, status });
@@ -42,9 +43,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.post(
     '/articles/:id/reprocess',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const article = await store.reprocessArticle({ articleId: request.params.id });
       if (!article) {
         return response.status(404).json({ error: 'not_found' });
@@ -56,9 +54,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.post(
     '/articles/:id/publish',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const article = await store.publishArticle({ articleId: request.params.id });
       if (!article) {
         return response.status(404).json({ error: 'not_found' });
@@ -70,9 +65,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.patch(
     '/articles/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const body = request.body ?? {};
       const patch = {};
       if (typeof body.title === 'string') patch.title = body.title;
@@ -99,9 +91,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/review/vocabulary',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const limit = clampLimit(request.query.limit, 1, 200);
       const status = typeof request.query.status === 'string' ? request.query.status : 'pending';
       const items = await store.listVocabularyReviewItems({ status, limit });
@@ -112,9 +101,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.patch(
     '/vocabulary/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const body = request.body ?? {};
       const nextStatus = String(body.status ?? '').trim();
       if (!['approved', 'rejected', 'pending'].includes(nextStatus)) {
@@ -135,9 +121,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/speaking-prompts',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const limit = clampLimit(request.query.limit ?? 100, 1, 200);
       const status = typeof request.query.status === 'string' ? request.query.status : null;
       const missingRequired = request.query.missing_required === 'true';
@@ -149,9 +132,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.post(
     '/speaking-prompts',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const body = request.body ?? {};
       if (!body.word_sense_id || typeof body.word_sense_id !== 'string') {
         return response.status(400).json({ error: 'bad_request', message: 'word_sense_id required' });
@@ -175,9 +155,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.patch(
     '/speaking-prompts/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const body = request.body ?? {};
       const patch = {};
       const textFields = [
@@ -216,9 +193,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/log-archives',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const limit = clampLimit(request.query.limit ?? 100, 1, 200);
       const archives = await logArchiveStore.listArchives({ limit });
       return response.json({ items: archives.map(toApiLogArchive) });
@@ -228,9 +202,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/log-archives/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const archive = await logArchiveStore.getArchiveById({ id: request.params.id });
       if (!archive) {
         return response.status(404).json({ error: 'not_found' });
@@ -242,9 +213,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/log-archives/:id/content',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const archive = await logArchiveStore.getArchiveById({ id: request.params.id });
       if (!archive) {
         return response.status(404).json({ error: 'not_found' });
@@ -264,9 +232,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/log-archives/:id/download',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const archive = await logArchiveStore.getArchiveById({ id: request.params.id });
       if (!archive) {
         return response.status(404).json({ error: 'not_found' });
@@ -287,9 +252,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.delete(
     '/log-archives/:id',
     asyncHandler(async (request, response) => {
-      if (!hasAdminAccess({ request, config })) {
-        return response.status(403).json({ error: 'forbidden' });
-      }
       const deleted = await logArchiveStore.deleteArchiveById({ id: request.params.id });
       if (!deleted) {
         return response.status(404).json({ error: 'not_found' });

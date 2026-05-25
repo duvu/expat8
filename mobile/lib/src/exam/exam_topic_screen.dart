@@ -107,12 +107,35 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Exam description card
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('How it works',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Answer up to 20 multiple-choice questions drawn from '
+                      'words you have studied. You need at least 5 studied '
+                      'words to start. A score of 70% or higher earns a '
+                      'certificate.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Language picker
-            Text('Language', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 8),
-            DropdownButton<String>(
+            DropdownButtonFormField<String>(
               value: _language,
-              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Language',
+                border: OutlineInputBorder(),
+              ),
               items: _languages.entries
                   .map((e) => DropdownMenuItem(
                         value: e.key,

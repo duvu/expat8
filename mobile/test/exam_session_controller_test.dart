@@ -322,6 +322,7 @@ void main() {
   // ─── advance + submitSession ──────────────────────────────────────────────
 
   test('advance moves to next question when not on last', () async {
+    // ignore: unused_local_variable
     int callCount = 0;
     final client = MockClient((req) async {
       callCount++;
@@ -341,6 +342,7 @@ void main() {
   });
 
   test('advance on last question triggers submitSession', () async {
+    // ignore: unused_local_variable
     int callCount = 0;
     final client = MockClient((req) async {
       callCount++;

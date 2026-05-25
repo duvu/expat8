@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
+import { normalizeResolvedShadowingVideo } from './shadowing_videos.js';
 import {
   compareEventsForProjection,
   isPromptMissingRequiredFields,
@@ -10,6 +11,7 @@ import {
   normalizeSpeakingEvent,
   normalizeSpeakingPromptInput,
   resolveEventKey,
+  routeStudyEvents,
   selectDistractors,
   submittedWordFailureReason,
   shuffleArray,
@@ -787,73 +789,14 @@ export class PostgresWordStore {
 
   async syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
     const startedAt = Date.now();
-    const accepted = [];
-    const duplicates = [];
-    const rejected = [];
-    let latestProficiency = await this.getProficiency({ deviceId, userId, language });
+    const initialProficiency = await this.getProficiency({ deviceId, userId, language });
 
-    const orderedEvents = [...events].sort(compareEventsForProjection);
-
-    for (const event of orderedEvents) {
-      const eventKey = resolveEventKey(event);
-      if (isSpeakingEvent(event)) {
-        if (!eventKey || !event.occurred_at) {
-          rejected.push({
-            client_event_id: event.client_event_id ?? null,
-            event_id: event.event_id ?? null,
-            reason: 'missing_required_field'
-          });
-          continue;
-        }
-        try {
-          const result = await this.recordSpeakingEvent({ deviceId, userId, event, language });
-          if (result.idempotent) {
-            duplicates.push(eventKey);
-          } else {
-            accepted.push(eventKey);
-          }
-        } catch (error) {
-          rejected.push({
-            client_event_id: event.client_event_id ?? null,
-            event_id: event.event_id ?? null,
-            reason: error.message === 'forbidden_audio_field' ? 'forbidden_audio_field' : 'invalid_speaking_event'
-          });
-        }
-        continue;
-      }
-      if (isUnknownSpeakingEvent(event)) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: 'invalid_speaking_event_type'
-        });
-        continue;
-      }
-      if (!eventKey || !event.rating || !event.occurred_at) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: 'missing_required_field'
-        });
-        continue;
-      }
-      try {
-        const result = await this.recordStudyEvent({ deviceId, userId, event, language });
-        latestProficiency = result.proficiency;
-        if (result.idempotent) {
-          duplicates.push(eventKey);
-        } else {
-          accepted.push(eventKey);
-        }
-      } catch (error) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
-        });
-        continue;
-      }
-    }
+    const { accepted, duplicates, rejected, latestProficiency } = await routeStudyEvents({
+      events,
+      initialProficiency,
+      recordSpeakingEvent: (event) => this.recordSpeakingEvent({ deviceId, userId, event, language }),
+      recordStudyEvent: (event) => this.recordStudyEvent({ deviceId, userId, event, language })
+    });
 
     this.logger.info?.('db_sync_study_events_completed', {
       device_id: deviceId,
@@ -1840,6 +1783,98 @@ export class PostgresWordStore {
     return Number(result.rows[0]?.count ?? 0);
   }
 
+
+  async #persistVocabularyItem({
+    client,
+    item,
+    normalized,
+    senseStatus,
+    reviewStatus,
+    reviewedAt,
+    requiresReview,
+    suggestionType,
+    now,
+    insertLinkRow,
+    reviewArticleId,
+    wordsExample,
+    wordsTopicsJson,
+    wordsGenSource,
+  }) {
+    const termResult = await client.query(
+      `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
+      VALUES ($1, $2, $3, $4, NULL, $5)
+      ON CONFLICT (language, normalized_term) DO UPDATE SET display_term = EXCLUDED.display_term
+      RETURNING *`,
+      [createId('term'), item.language, item.term, normalized, now]
+    );
+    const term = termResult.rows[0];
+
+    const senseResult = await client.query(
+      `INSERT INTO word_senses (
+        id, term_id, part_of_speech, meaning_vi, short_definition,
+        pronunciation, ipa, pinyin, level_scale, level,
+        quality_score, status, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+      RETURNING *`,
+      [
+        createId('sense'),
+        term.id,
+        item.part_of_speech ?? null,
+        item.meaning_vi,
+        item.short_definition ?? null,
+        item.vietnamese_pronunciation ?? null,
+        item.ipa ?? null,
+        item.pinyin ?? null,
+        item.level_scale ?? 'cefr',
+        item.level ?? item.difficulty ?? 'A1',
+        Number(item.quality_score ?? item.confidence ?? 0.5),
+        senseStatus,
+        now,
+      ]
+    );
+    const sense = senseResult.rows[0];
+
+    await insertLinkRow(client, term.id, sense.id);
+
+    await client.query(
+      `INSERT INTO vocabulary_review_items (
+        id, word_sense_id, article_id, status,
+        reviewer_user_id, review_note, reviewed_at, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $6)`,
+      [createId('review_item'), sense.id, reviewArticleId ?? null, reviewStatus, reviewedAt, now]
+    );
+
+    if (!requiresReview) {
+      await client.query(
+        `INSERT INTO words (
+          id, term, normalized_term, language, meaning_vi,
+          part_of_speech, ipa, vietnamese_pronunciation,
+          example, example_vi, difficulty, topics_json,
+          generation_source, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', $10, $11, $12, $13, $13)
+        ON CONFLICT (language, normalized_term) DO NOTHING`,
+        [
+          createId('word'),
+          item.term,
+          normalized,
+          item.language,
+          item.meaning_vi ?? '',
+          item.part_of_speech ?? null,
+          item.ipa ?? '',
+          item.vietnamese_pronunciation ?? '',
+          wordsExample,
+          item.level ?? item.difficulty ?? 'A1',
+          wordsTopicsJson,
+          wordsGenSource,
+          now,
+        ]
+      );
+    }
+  }
+
   async persistArticleVocabulary({ articleId, items = [] }) {
     return this.#withOptionalTransaction(async (client) => {
       const articleResult = await client.query(`SELECT * FROM articles WHERE id = $1 LIMIT 1 FOR UPDATE`, [articleId]);
@@ -1881,98 +1916,37 @@ export class PostgresWordStore {
         const reviewStatus = requiresReview ? 'pending' : 'approved';
         const reviewedAt = requiresReview ? null : now;
         const suggestionType = normalizeSuggestionType(item.suggestion_type, item.term);
-        const termResult = await client.query(
-          `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
-          VALUES ($1, $2, $3, $4, NULL, $5)
-          ON CONFLICT (language, normalized_term) DO UPDATE SET display_term = EXCLUDED.display_term
-          RETURNING *`,
-          [createId('term'), item.language, item.term, normalized, now]
-        );
-        const term = termResult.rows[0];
-
-        const sense = await client.query(
-          `INSERT INTO word_senses (
-            id, term_id, part_of_speech, meaning_vi, short_definition,
-            pronunciation, ipa, pinyin, level_scale, level,
-            quality_score, status, created_at, updated_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
-          RETURNING *`,
-          [
-            createId('sense'),
-            term.id,
-            item.part_of_speech ?? null,
-            item.meaning_vi,
-            item.short_definition ?? null,
-            item.vietnamese_pronunciation ?? null,
-            item.ipa ?? null,
-            item.pinyin ?? null,
-            item.level_scale ?? 'cefr',
-            item.level ?? item.difficulty ?? 'A1',
-            Number(item.quality_score ?? item.confidence ?? 0.5),
-            senseStatus,
-            now
-          ]
-        );
-
-        await client.query(
-          `INSERT INTO article_terms (
-            id, article_id, term_id, word_sense_id, surface_text,
-            sentence_context, start_offset, end_offset, frequency, extraction_confidence,
-            classification, suggestion_type, created_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, $8, $9, $10, $11)`,
-          [
-            createId('article_term'),
-            articleId,
-            term.id,
-            sense.rows[0].id,
-            item.term,
-            item.example ?? null,
-            Number(item.frequency ?? 1),
-            Number(item.confidence ?? 0.5),
-            item.classification ?? null,
-            suggestionType,
-            now
-          ]
-        );
-
-        await client.query(
-          `INSERT INTO vocabulary_review_items (
-            id, word_sense_id, article_id, status,
-            reviewer_user_id, review_note, reviewed_at, created_at, updated_at
-          )
-          VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $6)`,
-          [createId('review_item'), sense.rows[0].id, articleId, reviewStatus, reviewedAt, now]
-        );
-
-        // Bridge approved sense into the words pool so learningCards can serve it
-        if (!requiresReview) {
-          await client.query(
-            `INSERT INTO words (
-              id, term, normalized_term, language, meaning_vi,
-              part_of_speech, ipa, vietnamese_pronunciation,
-              example, example_vi, difficulty, topics_json,
-              generation_source, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', $10, '[]', 'article_vocabulary', $11, $11)
-            ON CONFLICT (language, normalized_term) DO NOTHING`,
-            [
-              createId('word'),
-              item.term,
-              normalized,
-              item.language,
-              item.meaning_vi ?? '',
-              item.part_of_speech ?? null,
-              item.ipa ?? '',
-              item.vietnamese_pronunciation ?? '',
-              item.example ?? '',
-              item.level ?? item.difficulty ?? 'A1',
-              now
-            ]
-          );
-        }
-
+        await this.#persistVocabularyItem({
+          client, item, normalized, senseStatus, reviewStatus, reviewedAt,
+          requiresReview, suggestionType, now,
+          insertLinkRow: async (c, termId, senseId) => {
+            await c.query(
+              `INSERT INTO article_terms (
+                id, article_id, term_id, word_sense_id, surface_text,
+                sentence_context, start_offset, end_offset, frequency, extraction_confidence,
+                classification, suggestion_type, created_at
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL, $7, $8, $9, $10, $11)`,
+              [
+                createId('article_term'),
+                articleId,
+                termId,
+                senseId,
+                item.term,
+                item.example ?? null,
+                Number(item.frequency ?? 1),
+                Number(item.confidence ?? 0.5),
+                item.classification ?? null,
+                suggestionType,
+                now,
+              ]
+            );
+          },
+          reviewArticleId: articleId,
+          wordsExample: item.example ?? '',
+          wordsTopicsJson: '[]',
+          wordsGenSource: 'article_vocabulary',
+        });
         persistedCount += 1;
       }
 
@@ -2563,6 +2537,152 @@ export class PostgresWordStore {
     };
   }
 
+  async createShadowingVideoEntry({ deviceId = null, userId = null, resolvedVideo, entryType = 'saved', visibility = 'private' }) {
+    const normalized = normalizeResolvedShadowingVideo(resolvedVideo);
+    return this.#withOptionalTransaction(async (client) => {
+      const now = new Date().toISOString();
+      let videoResult = await client.query(
+        shadowingEntryVideoSql('sv.source_type = $1 AND sv.provider_video_id = $2 LIMIT 1'),
+        [normalized.sourceType, normalized.providerVideoId]
+      );
+
+      if (!videoResult.rows[0]) {
+        const insertedVideo = await client.query(
+          `INSERT INTO shadowing_videos (
+            id,
+            source_type,
+            provider_video_id,
+            source_url,
+            title,
+            channel_title,
+            thumbnail_url,
+            duration_seconds,
+            transcript_language,
+            transcript_source,
+            default_playback_rate,
+            default_seek_back_ms,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+          RETURNING *`,
+          [
+            createId('shadow_video'),
+            normalized.sourceType,
+            normalized.providerVideoId,
+            normalized.sourceUrl,
+            normalized.title,
+            normalized.channelTitle,
+            normalized.thumbnailUrl,
+            normalized.durationSeconds,
+            normalized.transcriptLanguage,
+            normalized.transcriptSource,
+            normalized.defaultPlaybackRate,
+            normalized.defaultSeekBackMs,
+            now
+          ]
+        );
+
+        const videoId = insertedVideo.rows[0].id;
+        for (const segment of normalized.segments) {
+          await client.query(
+            `INSERT INTO shadowing_video_segments (
+              id,
+              video_id,
+              position,
+              start_ms,
+              end_ms,
+              text,
+              created_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [createId('shadow_seg'), videoId, segment.position, segment.start_ms, segment.end_ms, segment.text, now]
+          );
+        }
+
+        videoResult = await client.query(shadowingEntryVideoSql('sv.id = $1 LIMIT 1'), [videoId]);
+      }
+
+      const video = rowToShadowingVideo(videoResult.rows[0]);
+      const ownerWhere = buildShadowingEntryOwnerWhere({ entryType, userId });
+      const ownerParams = buildShadowingEntryOwnerParams({ videoId: video.id, deviceId, userId, entryType });
+      const existingEntryResult = await client.query(
+        `${shadowingEntrySelectSql(`sve.video_id = $1 AND sve.entry_type = $2 AND ${ownerWhere}`)} LIMIT 1`,
+        ownerParams
+      );
+      if (existingEntryResult.rows[0]) {
+        return {
+          entry: rowToShadowingEntry(existingEntryResult.rows[0]),
+          created: false
+        };
+      }
+
+      const insertedEntry = await client.query(
+        `INSERT INTO shadowing_video_entries (
+          id,
+          video_id,
+          entry_type,
+          visibility,
+          owner_user_id,
+          owner_device_id,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+        RETURNING id`,
+        [
+          createId('shadow_entry'),
+          video.id,
+          entryType,
+          visibility ?? (entryType === 'curated' ? 'published' : 'private'),
+          entryType === 'saved' ? userId : null,
+          entryType === 'saved' && !userId ? deviceId : null,
+          now
+        ]
+      );
+
+      const hydratedEntryResult = await client.query(
+        `${shadowingEntrySelectSql('sve.id = $1')} LIMIT 1`,
+        [insertedEntry.rows[0].id]
+      );
+      return {
+        entry: rowToShadowingEntry(hydratedEntryResult.rows[0]),
+        created: true
+      };
+    });
+  }
+
+  async listShadowingVideoEntries({ deviceId, userId = null, limit = 50 }) {
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const whereSql = userId
+      ? `(sve.entry_type = 'curated' AND sve.visibility = 'published') OR (sve.entry_type = 'saved' AND sve.owner_user_id = $1)`
+      : `(sve.entry_type = 'curated' AND sve.visibility = 'published') OR (sve.entry_type = 'saved' AND sve.owner_user_id IS NULL AND sve.owner_device_id = $1)`;
+    const params = [userId ?? deviceId, boundedLimit];
+    const result = await this.pool.query(
+      `${shadowingEntrySelectSql(whereSql)}
+       ORDER BY CASE WHEN sve.entry_type = 'curated' THEN 0 ELSE 1 END, sve.updated_at DESC
+       LIMIT $2`,
+      params
+    );
+    return result.rows.map(rowToShadowingEntry);
+  }
+
+  async getShadowingVideoEntryDetail({ entryId }) {
+    const entryResult = await this.pool.query(`${shadowingEntrySelectSql('sve.id = $1')} LIMIT 1`, [entryId]);
+    if (!entryResult.rows[0]) {
+      return null;
+    }
+
+    const segmentsResult = await this.pool.query(
+      `SELECT * FROM shadowing_video_segments WHERE video_id = $1 ORDER BY position ASC`,
+      [entryResult.rows[0].video_id]
+    );
+    return {
+      ...rowToShadowingEntry(entryResult.rows[0]),
+      segments: segmentsResult.rows.map(rowToShadowingSegment)
+    };
+  }
+
   // ─── Memorization Passages ───────────────────────────────────────────
 
   async createPassage({ title, language, rawText, ownerType = 'user', ownerUserId = null, visibility = 'private' }) {
@@ -2708,99 +2828,38 @@ export class PostgresWordStore {
         seen.add(dedupeKey);
 
         const suggestionType = normalizeSuggestionType(item.suggestion_type, item.term);
-        const termResult = await client.query(
-          `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
-           VALUES ($1, $2, $3, $4, NULL, $5)
-           ON CONFLICT (language, normalized_term) DO UPDATE SET display_term = EXCLUDED.display_term
-           RETURNING *`,
-          [createId('term'), item.language, item.term, normalized, now]
-        );
-        const term = termResult.rows[0];
-
-        const senseResult = await client.query(
-          `INSERT INTO word_senses (
-            id, term_id, part_of_speech, meaning_vi, short_definition,
-            pronunciation, ipa, pinyin, level_scale, level,
-            quality_score, status, created_at, updated_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
-          RETURNING *`,
-          [
-            createId('sense'),
-            term.id,
-            item.part_of_speech ?? null,
-            item.meaning_vi,
-            item.short_definition ?? null,
-            item.vietnamese_pronunciation ?? null,
-            item.ipa ?? null,
-            item.pinyin ?? null,
-            item.level_scale ?? 'cefr',
-            item.level ?? item.difficulty ?? 'A1',
-            Number(item.quality_score ?? item.confidence ?? 0.5),
-            senseStatus,
-            now
-          ]
-        );
-        const sense = senseResult.rows[0];
-
-        await client.query(
-          `INSERT INTO memorization_segment_terms (
-            id, passage_id, segment_id, term_id, word_sense_id, surface_text,
-            sentence_context, frequency, extraction_confidence, classification,
-            suggestion_type, created_at
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-          [
-            createId('segment_term'),
-            passageId,
-            item.segment_id,
-            term.id,
-            sense.id,
-            item.term,
-            item.example ?? segment.text,
-            Number(item.frequency ?? 1),
-            Number(item.confidence ?? 0.5),
-            item.classification ?? null,
-            suggestionType,
-            now
-          ]
-        );
-
-        await client.query(
-          `INSERT INTO vocabulary_review_items (
-            id, word_sense_id, article_id, status,
-            reviewer_user_id, review_note, reviewed_at, created_at, updated_at
-          )
-          VALUES ($1, $2, NULL, $3, NULL, NULL, $4, $5, $5)`,
-          [createId('review_item'), sense.id, reviewStatus, reviewedAt, now]
-        );
-
-        if (!requiresReview) {
-          await client.query(
-            `INSERT INTO words (
-              id, term, normalized_term, language, meaning_vi,
-              part_of_speech, ipa, vietnamese_pronunciation,
-              example, example_vi, difficulty, topics_json,
-              generation_source, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '', $10, '["memorization"]', 'memorization_passage_vocabulary', $11, $11)
-            ON CONFLICT (language, normalized_term) DO NOTHING`,
-            [
-              createId('word'),
-              item.term,
-              normalized,
-              item.language,
-              item.meaning_vi ?? '',
-              item.part_of_speech ?? null,
-              item.ipa ?? '',
-              item.vietnamese_pronunciation ?? '',
-              item.example ?? segment.text,
-              item.level ?? item.difficulty ?? 'A1',
-              now
-            ]
-          );
-        }
-
+        await this.#persistVocabularyItem({
+          client, item, normalized, senseStatus, reviewStatus, reviewedAt,
+          requiresReview, suggestionType, now,
+          insertLinkRow: async (c, termId, senseId) => {
+            await c.query(
+              `INSERT INTO memorization_segment_terms (
+                id, passage_id, segment_id, term_id, word_sense_id, surface_text,
+                sentence_context, frequency, extraction_confidence, classification,
+                suggestion_type, created_at
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              [
+                createId('segment_term'),
+                passageId,
+                item.segment_id,
+                termId,
+                senseId,
+                item.term,
+                item.example ?? segment.text,
+                Number(item.frequency ?? 1),
+                Number(item.confidence ?? 0.5),
+                item.classification ?? null,
+                suggestionType,
+                now,
+              ]
+            );
+          },
+          reviewArticleId: null,
+          wordsExample: item.example ?? segment.text,
+          wordsTopicsJson: '["memorization"]',
+          wordsGenSource: 'memorization_passage_vocabulary',
+        });
         persistedCount += 1;
       }
 
@@ -3184,6 +3243,135 @@ function rowToSubmittedWord(row) {
     updated_at: row.updated_at,
     resolved_at: row.resolved_at
   };
+}
+
+function rowToShadowingVideo(row) {
+  return {
+    id: row.id,
+    source_type: row.source_type,
+    provider_video_id: row.provider_video_id,
+    source_url: row.source_url,
+    title: row.title,
+    channel_title: row.channel_title,
+    thumbnail_url: row.thumbnail_url,
+    duration_seconds: row.duration_seconds,
+    transcript_language: row.transcript_language,
+    transcript_source: row.transcript_source,
+    default_playback_rate: Number(row.default_playback_rate ?? 1),
+    default_seek_back_ms: Number(row.default_seek_back_ms ?? 5000),
+    segment_count: Number(row.segment_count ?? 0),
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function rowToShadowingEntry(row) {
+  return {
+    id: row.id,
+    video_id: row.video_id,
+    entry_type: row.entry_type,
+    visibility: row.visibility,
+    owner_user_id: row.owner_user_id,
+    owner_device_id: row.owner_device_id,
+    source_type: row.source_type,
+    provider_video_id: row.provider_video_id,
+    source_url: row.source_url,
+    title: row.title,
+    channel_title: row.channel_title,
+    thumbnail_url: row.thumbnail_url,
+    duration_seconds: row.duration_seconds,
+    transcript_language: row.transcript_language,
+    transcript_source: row.transcript_source,
+    default_playback_rate: Number(row.default_playback_rate ?? 1),
+    default_seek_back_ms: Number(row.default_seek_back_ms ?? 5000),
+    segment_count: Number(row.segment_count ?? 0),
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function rowToShadowingSegment(row) {
+  return {
+    id: row.id,
+    video_id: row.video_id,
+    position: row.position,
+    start_ms: row.start_ms,
+    end_ms: row.end_ms,
+    text: row.text,
+    created_at: row.created_at
+  };
+}
+
+function shadowingEntrySelectSql(whereSql) {
+  return `SELECT
+    sve.id,
+    sve.video_id,
+    sve.entry_type,
+    sve.visibility,
+    sve.owner_user_id,
+    sve.owner_device_id,
+    sve.created_at,
+    sve.updated_at,
+    sv.source_type,
+    sv.provider_video_id,
+    sv.source_url,
+    sv.title,
+    sv.channel_title,
+    sv.thumbnail_url,
+    sv.duration_seconds,
+    sv.transcript_language,
+    sv.transcript_source,
+    sv.default_playback_rate,
+    sv.default_seek_back_ms,
+    COALESCE(segment_counts.segment_count, 0)::int AS segment_count
+  FROM shadowing_video_entries sve
+  JOIN shadowing_videos sv ON sv.id = sve.video_id
+  LEFT JOIN (
+    SELECT video_id, COUNT(*)::int AS segment_count
+    FROM shadowing_video_segments
+    GROUP BY video_id
+  ) segment_counts ON segment_counts.video_id = sv.id
+  WHERE ${whereSql}`;
+}
+
+function shadowingEntryVideoSql(whereSql) {
+  return `SELECT
+    sv.id,
+    sv.source_type,
+    sv.provider_video_id,
+    sv.source_url,
+    sv.title,
+    sv.channel_title,
+    sv.thumbnail_url,
+    sv.duration_seconds,
+    sv.transcript_language,
+    sv.transcript_source,
+    sv.default_playback_rate,
+    sv.default_seek_back_ms,
+    sv.created_at,
+    sv.updated_at,
+    COALESCE(segment_counts.segment_count, 0)::int AS segment_count
+  FROM shadowing_videos sv
+  LEFT JOIN (
+    SELECT video_id, COUNT(*)::int AS segment_count
+    FROM shadowing_video_segments
+    GROUP BY video_id
+  ) segment_counts ON segment_counts.video_id = sv.id
+  WHERE ${whereSql}`;
+}
+
+function buildShadowingEntryOwnerWhere({ entryType, userId }) {
+  if (entryType === 'curated') {
+    return '1 = 1';
+  }
+  if (userId) {
+    return 'sve.owner_user_id = $3';
+  }
+  return 'sve.owner_user_id IS NULL AND sve.owner_device_id = $3';
+}
+
+function buildShadowingEntryOwnerParams({ videoId, deviceId, userId, entryType }) {
+  return [videoId, entryType, userId ?? deviceId];
 }
 
 function countWords(text) {
