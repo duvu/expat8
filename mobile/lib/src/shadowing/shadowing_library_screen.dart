@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../data/shadowing_repository.dart';
@@ -22,7 +23,7 @@ class _ShadowingLibraryScreenState extends State<ShadowingLibraryScreen> {
   List<ShadowingVideo> _videos = [];
   bool _isLoading = false;
   bool _isImporting = false;
-  String? _error;
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -46,14 +47,15 @@ class _ShadowingLibraryScreenState extends State<ShadowingLibraryScreen> {
         setState(() {
           _videos = refreshed;
           _isLoading = false;
-          _error = null;
+          _loadFailed = false;
         });
       }
     } catch (e) {
+      debugPrint('[ShadowingLibraryScreen] refreshLibrary failed: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
-          if (_videos.isEmpty) _error = 'Failed to load library.';
+          if (_videos.isEmpty) _loadFailed = true;
         });
       }
     }
@@ -171,16 +173,22 @@ class _ShadowingLibraryScreenState extends State<ShadowingLibraryScreen> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null && _videos.isEmpty) {
+    if (_loadFailed && _videos.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(_error!, textAlign: TextAlign.center),
+            const Icon(Icons.cloud_off_outlined, size: 48, color: Colors.grey),
             const SizedBox(height: 12),
-            ElevatedButton(
+            const Text(
+              "Couldn't load videos.\nCheck your connection and try again.",
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
               onPressed: _loadLibrary,
-              child: const Text('Retry'),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
             ),
           ],
         ),
