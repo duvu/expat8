@@ -6,9 +6,17 @@ import { loadOpsOverview } from '@/lib/ops-data';
 
 export const dynamic = 'force-dynamic';
 
+const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isStale(isoDate: string | null): boolean {
+  if (!isoDate) return true;
+  return Date.now() - new Date(isoDate).getTime() > STALE_THRESHOLD_MS;
+}
+
 export default async function OpsPage() {
   const overview = await loadOpsOverview();
   const summary = summarizeLogArchives(overview.archives);
+  const lh = overview.loopHealth;
 
   return (
     <PageShell
@@ -63,6 +71,64 @@ export default async function OpsPage() {
       <section className="table-panel">
         <div className="panel-heading">
           <div>
+            <h3>Loop health (this week)</h3>
+            <p className="muted">Aggregate speaking loop signals for the current week.</p>
+          </div>
+        </div>
+
+        {overview.loopHealthError ? (
+          <div className="empty-state error-state">{overview.loopHealthError}</div>
+        ) : !lh ? (
+          <div className="empty-state">Loop health data unavailable.</div>
+        ) : (
+          <dl className="stats-panel" style={{ marginTop: 0 }}>
+            <div>
+              <dt>Loop completions</dt>
+              <dd>{lh.loop_completion_count.toLocaleString()}</dd>
+              <small className="muted">Week of {lh.week_start}</small>
+            </div>
+            <div>
+              <dt>Drill sessions</dt>
+              <dd>{lh.drill_session_count.toLocaleString()}</dd>
+              <small className="muted">speaking_drill_completed events</small>
+            </div>
+            <div>
+              <dt>Latest approved prompt</dt>
+              <dd>
+                {lh.latest_approved_prompt_at ? (
+                  <span className="badge" data-status={isStale(lh.latest_approved_prompt_at) ? 'failed' : 'published'}>
+                    {isStale(lh.latest_approved_prompt_at) ? 'Stale' : 'Recent'}
+                  </span>
+                ) : (
+                  <span className="badge" data-status="failed">None</span>
+                )}
+              </dd>
+              <small className="muted">
+                {lh.latest_approved_prompt_at ? formatDateTime(lh.latest_approved_prompt_at) : 'No approved prompts'}
+              </small>
+            </div>
+            <div>
+              <dt>Latest published passage</dt>
+              <dd>
+                {lh.latest_published_passage_at ? (
+                  <span className="badge" data-status={isStale(lh.latest_published_passage_at) ? 'failed' : 'published'}>
+                    {isStale(lh.latest_published_passage_at) ? 'Stale' : 'Recent'}
+                  </span>
+                ) : (
+                  <span className="badge" data-status="failed">None</span>
+                )}
+              </dd>
+              <small className="muted">
+                {lh.latest_published_passage_at ? formatDateTime(lh.latest_published_passage_at) : 'No published passages'}
+              </small>
+            </div>
+          </dl>
+        )}
+      </section>
+
+      <section className="table-panel">
+        <div className="panel-heading">
+          <div>
             <h3>Recent uploads</h3>
             <p className="muted">Latest sanitized bundles sent from mobile devices.</p>
           </div>
@@ -98,3 +164,4 @@ export default async function OpsPage() {
     </PageShell>
   );
 }
+

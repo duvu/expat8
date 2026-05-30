@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
-import '../api/backend_api_client.dart';
 import '../data/article_repository.dart';
 import '../data/memorization_repository.dart';
 import '../data/workplace_sentence_repository.dart';
@@ -13,6 +12,7 @@ import '../session/learning_session_controller.dart';
 import '../session/workplace_sentence_session_controller.dart';
 import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
+import '../speaking/speaking_summary_screen.dart';
 import '../data/shadowing_repository.dart';
 import '../shadowing/shadowing_library_screen.dart';
 import 'articles_screen.dart';
@@ -621,7 +621,13 @@ class LearningDrawer extends StatelessWidget {
                       title: const Text('Speaking stats'),
                       onTap: () {
                         Navigator.of(context).maybePop();
-                        _showSpeakingStats(context);
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SpeakingSummaryScreen(
+                              repository: speakingRepository!,
+                            ),
+                          ),
+                        );
                       },
                     ),
                     ListTile(
@@ -670,30 +676,6 @@ class LearningDrawer extends StatelessWidget {
     );
   }
 
-  Future<void> _showSpeakingStats(BuildContext context) async {
-    // Try fetching weekly summary from backend; fall back to a local-only message.
-    SpeakingWeeklySummary? summary;
-    String? errorMessage;
-    try {
-      if (wordRepository != null) {
-        final deviceId = await wordRepository!.getOrCreateDeviceId();
-        summary = await wordRepository!.fetchSpeakingSummary(
-          deviceId: deviceId,
-        );
-      }
-    } catch (_) {
-      errorMessage = 'Could not load speaking stats. Check your connection.';
-    }
-    if (!context.mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) => _SpeakingStatsSheet(
-        summary: summary,
-        errorMessage: errorMessage,
-      ),
-    );
-  }
-
   Future<void> _confirmDeleteAll(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -723,81 +705,6 @@ class LearningDrawer extends StatelessWidget {
         );
       }
     }
-  }
-}
-
-class _SpeakingStatsSheet extends StatelessWidget {
-  const _SpeakingStatsSheet({this.summary, this.errorMessage});
-
-  final SpeakingWeeklySummary? summary;
-  final String? errorMessage;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('This week\'s speaking', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(
-            'Your recordings are private and stored on this device only.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline),
-          ),
-          const SizedBox(height: 16),
-          if (errorMessage != null)
-            Text(errorMessage!, style: theme.textTheme.bodyMedium)
-          else if (summary == null)
-            const CircularProgressIndicator()
-          else ...[
-            _stat(theme, 'Sentences spoken',
-                '${summary!.spokenSentenceCount}'),
-            _stat(theme, 'Retries', '${summary!.retryCount}'),
-            if (summary!.approximateDurationMs > 0)
-              _stat(
-                theme,
-                'Approx. speaking time',
-                _formatDuration(summary!.approximateDurationMs),
-              ),
-            if (summary!.selfRatingCounts.isNotEmpty)
-              _stat(
-                theme,
-                'Self-ratings',
-                summary!.selfRatingCounts.entries
-                    .map((e) => '${e.key}: ${e.value}')
-                    .join(', '),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _stat(ThemeData theme, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: theme.textTheme.bodyMedium),
-          Text(value,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  String _formatDuration(int ms) {
-    final seconds = ms ~/ 1000;
-    if (seconds < 60) return '${seconds}s';
-    final minutes = seconds ~/ 60;
-    final rem = seconds % 60;
-    return rem == 0 ? '${minutes}m' : '${minutes}m ${rem}s';
   }
 }
 

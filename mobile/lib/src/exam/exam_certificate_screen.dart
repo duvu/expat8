@@ -76,7 +76,7 @@ class _ExamCertificateScreenState extends State<ExamCertificateScreen> {
 
   void _copyLink() {
     final url =
-        'https://expat8.x51.vn/v1/exam/certificate/${widget.certificateId}';
+        'https://expat8.x51.vn/exam/certificate/${widget.certificateId}';
     Clipboard.setData(ClipboardData(text: url));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Certificate link copied.')),

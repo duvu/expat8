@@ -143,7 +143,8 @@ function pickCaptionTrack(playerResponse) {
 }
 
 async function fetchCaptionTrack({ fetchImpl, baseUrl }) {
-  const url = new URL(baseUrl);
+  const absoluteUrl = baseUrl.startsWith('/') ? `https://www.youtube.com${baseUrl}` : baseUrl;
+  const url = new URL(absoluteUrl);
   url.searchParams.set('fmt', 'json3');
   const response = await fetchImpl(url, {
     headers: {

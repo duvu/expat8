@@ -235,7 +235,7 @@ export default async function UserDetailPage({
                   <td data-label="Date">{new Date(e.created_at).toLocaleDateString()}</td>
                   <td data-label="Certificate">
                     {e.certificate_id
-                      ? <a href={`/v1/exam/certificate/${e.certificate_id}`} target="_blank" rel="noreferrer">View</a>
+                      ? <a href={`/api/certificate/${e.certificate_id}`} target="_blank" rel="noreferrer">View</a>
                       : <span className="muted">—</span>}
                   </td>
                 </tr>

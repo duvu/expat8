@@ -191,6 +191,15 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   );
 
   router.get(
+    '/speaking/weekly-health',
+    asyncHandler(async (request, response) => {
+      const weekStart = typeof request.query.week_start === 'string' ? request.query.week_start : null;
+      const summary = await store.getSpeakingLoopHealthSummary({ weekStart });
+      return response.json(summary);
+    })
+  );
+
+  router.get(
     '/log-archives',
     asyncHandler(async (request, response) => {
       const limit = clampLimit(request.query.limit ?? 100, 1, 200);

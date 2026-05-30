@@ -442,4 +442,18 @@ CREATE UNIQUE INDEX idx_memorization_segments_passage_position ON memorization_s
 CREATE UNIQUE INDEX idx_memorization_segment_progress_user_segment ON memorization_segment_progress(user_id, segment_id);
 CREATE INDEX idx_memorization_segment_progress_user ON memorization_segment_progress(user_id, next_review_at);
 CREATE INDEX idx_memorization_segment_terms_passage ON memorization_segment_terms(passage_id);
+
+-- Nonce replay cache for distributed replay protection.
+-- Replaces the in-memory InMemoryNonceCache when DATABASE_URL is configured.
+-- Nonces are claimed atomically via INSERT … ON CONFLICT DO NOTHING.
+-- Expired rows are pruned lazily by PostgresNonceCache (at most once per minute).
+CREATE TABLE IF NOT EXISTS nonces (
+  id         BIGSERIAL    PRIMARY KEY,
+  app_id     TEXT         NOT NULL,
+  nonce      TEXT         NOT NULL,
+  expires_at TIMESTAMPTZ  NOT NULL,
+  UNIQUE (app_id, nonce)
+);
+
+CREATE INDEX IF NOT EXISTS nonces_expires_at_idx ON nonces (expires_at);
 CREATE INDEX idx_memorization_segment_terms_segment ON memorization_segment_terms(segment_id);

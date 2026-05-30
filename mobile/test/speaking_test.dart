@@ -347,4 +347,73 @@ void main() {
       }
     });
   });
+
+  group('postLoopCompletedEvent', () {
+    late LocalDatabase db;
+    late SpeakingRepository repo;
+
+    setUp(() async {
+      db = await LocalDatabase.open(
+          databaseName: 'loop_completed_test.db');
+      repo = SpeakingRepository(
+        database: db,
+        audioService: FakeAudioService(),
+        fileManager: FakeFileManager(),
+      );
+    });
+
+    tearDown(() async => db.close());
+
+    test('enqueues loop_completed event with duration and prompts_count',
+        () async {
+      repo.postLoopCompletedEvent(durationMs: 90000, promptsCount: 5);
+
+      final queue = await db.dueSyncEntries(
+        DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      );
+      final loopEvents = queue
+          .where((e) =>
+              e.type == 'speaking_event' &&
+              e.payload.contains('loop_completed'))
+          .toList();
+      expect(loopEvents, hasLength(1));
+      expect(loopEvents.first.payload, contains('"duration_ms":90000'));
+      expect(loopEvents.first.payload, contains('"prompts_count":5'));
+    });
+
+    test('does not include local_audio_path in loop_completed payload', () async {
+      repo.postLoopCompletedEvent(durationMs: 60000, promptsCount: 3);
+
+      final queue = await db.dueSyncEntries(
+        DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      );
+      final loopEvent = queue.firstWhere(
+        (e) => e.payload.contains('loop_completed'),
+      );
+      expect(loopEvent.payload, isNot(contains('local_audio_path')));
+    });
+  });
+
+  group('getWeeklySummary', () {
+    late LocalDatabase db;
+    late SpeakingRepository repo;
+
+    setUp(() async {
+      db = await LocalDatabase.open(
+          databaseName: 'get_weekly_summary_test.db');
+      repo = SpeakingRepository(
+        database: db,
+        audioService: FakeAudioService(),
+        fileManager: FakeFileManager(),
+        // No apiClient — tests the offline/null fallback path
+      );
+    });
+
+    tearDown(() async => db.close());
+
+    test('returns null when no apiClient is configured', () async {
+      final result = await repo.getWeeklySummary();
+      expect(result, isNull);
+    });
+  });
 }

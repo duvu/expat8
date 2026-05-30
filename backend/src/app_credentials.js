@@ -2,6 +2,13 @@ import crypto from 'node:crypto';
 
 const SIGNATURE_VERSION = 'v1';
 
+export class NonceStorageUnavailableError extends Error {
+  constructor() {
+    super('REPLAY_PROTECTION_UNAVAILABLE');
+    this.name = 'NonceStorageUnavailableError';
+  }
+}
+
 export class InMemoryNonceCache {
   constructor() {
     this.entries = new Map();
@@ -65,8 +72,10 @@ export class PostgresNonceCache {
         this.#maybePrune(nowMs);
       }
       return claimed;
-    } catch {
-      // Fail-open: a DB error should not block authenticated clients.
+    } catch (err) {
+      if (err?.code === '42P01') {
+        throw new NonceStorageUnavailableError();
+      }
       return true;
     }
   }

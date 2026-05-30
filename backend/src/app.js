@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 
-import { InMemoryNonceCache, verifyAppCredentialRequest } from './app_credentials.js';
+import { InMemoryNonceCache, NonceStorageUnavailableError, verifyAppCredentialRequest } from './app_credentials.js';
 import { InvalidStudyRatingError } from './proficiency.js';
 import { FileLogArchiveStore } from './log_archive_store.js';
 import { createLogger } from './logger.js';
@@ -312,15 +312,27 @@ function captureRawBody({ config }) {
 function appCredentialGuard({ config, nonceCache }) {
   return async (request, response, next) => {
     const url = new URL(request.originalUrl, 'http://localhost');
-    const result = await verifyAppCredentialRequest({
-      method: request.method,
-      url,
-      headers: request.headers,
-      rawBody: request.rawBody ?? Buffer.alloc(0),
-      config,
-      nonceCache,
-      now: new Date()
-    });
+    let result;
+    try {
+      result = await verifyAppCredentialRequest({
+        method: request.method,
+        url,
+        headers: request.headers,
+        rawBody: request.rawBody ?? Buffer.alloc(0),
+        config,
+        nonceCache,
+        now: new Date()
+      });
+    } catch (err) {
+      if (err instanceof NonceStorageUnavailableError) {
+        const writeMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method.toUpperCase());
+        if (writeMethod) {
+          return response.status(503).json({ error: 'REPLAY_PROTECTION_UNAVAILABLE' });
+        }
+        return next();
+      }
+      return badRequest(response);
+    }
 
     if (!result.ok) {
       return badRequest(response);

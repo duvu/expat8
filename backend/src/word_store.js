@@ -35,7 +35,8 @@ export const SPEAKING_EVENT_TYPES = [
   'speaking_self_rated_clear',
   'speaking_self_rated_hesitated',
   'speaking_self_rated_could_not_say',
-  'speaking_drill_completed'
+  'speaking_drill_completed',
+  'loop_completed'
 ];
 
 export const SPEAKING_SELF_RATINGS = ['clear', 'hesitated', 'could_not_say'];
@@ -658,6 +659,26 @@ export class WordStore {
       events: weekEvents,
       firstRecordingAt: firstRecordingEvent?.occurred_at ?? null
     });
+  }
+
+  getSpeakingLoopHealthSummary({ weekStart = null } = {}) {
+    const start = normalizeWeekStart(weekStart);
+    const allEvents = [...this.speakingEventsByKey.values()];
+    const weekEvents = allEvents.filter((e) => e.occurred_at >= start);
+    const loopCompletionCount = weekEvents.filter((e) => e.event_type === 'loop_completed').length;
+    const drillSessionCount = weekEvents.filter((e) => e.event_type === 'speaking_drill_completed').length;
+
+    const latestPrompt = [...this.speakingPromptsById.values()].filter((p) => p.status === 'approved')
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0] ?? null;
+    const latestPassage = this.listPublishedPassages()[0] ?? null;
+
+    return {
+      week_start: start.slice(0, 10),
+      loop_completion_count: loopCompletionCount,
+      drill_session_count: drillSessionCount,
+      latest_approved_prompt_at: latestPrompt?.updated_at ?? null,
+      latest_published_passage_at: latestPassage?.created_at ?? null,
+    };
   }
 
   recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
@@ -2647,6 +2668,17 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     }
   }
 
+  let promptsCount = null;
+  if (event.event_type === 'loop_completed') {
+    promptsCount = normalizeOptionalInteger(speaking.prompts_count ?? event.prompts_count);
+    if (durationMs === null || promptsCount === null) {
+      throw new Error('missing_required_field');
+    }
+    if (durationMs < 0 || promptsCount < 0) {
+      throw new Error('invalid_speaking_event');
+    }
+  }
+
   return {
     device_id: deviceId,
     user_id: userId,
@@ -2660,6 +2692,7 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     prompts_attempted: promptsAttempted,
     prompts_completed: promptsCompleted,
     total_duration_ms: totalDurationMs,
+    prompts_count: promptsCount,
     self_rating: selfRating,
     language: normalizeOptionalText(event.language) ?? language,
     occurred_at: event.occurred_at
@@ -2728,6 +2761,7 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
   let approximateDurationMs = 0;
   let latestActivityAt = null;
   let drillSessionsCompleted = 0;
+  let loopCompletionCount = 0;
   for (const event of events) {
     if (event.event_type === 'speaking_recorded') {
       spokenSentenceCount += 1;
@@ -2738,6 +2772,9 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
     }
     if (event.event_type === 'speaking_drill_completed') {
       drillSessionsCompleted += 1;
+    }
+    if (event.event_type === 'loop_completed') {
+      loopCompletionCount += 1;
     }
     if (event.self_rating && selfRatingCounts[event.self_rating] !== undefined) {
       selfRatingCounts[event.self_rating] += 1;
@@ -2757,6 +2794,7 @@ function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, ev
     retry_count: retryCount,
     retry_rate: retryRate,
     drill_sessions_completed: drillSessionsCompleted,
+    loop_completion_count: loopCompletionCount,
     approximate_duration_ms: approximateDurationMs,
     self_rating_counts: selfRatingCounts,
     first_recording_at: firstRecordingAt ?? null,
