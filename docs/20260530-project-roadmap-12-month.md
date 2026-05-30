@@ -8,7 +8,7 @@ This roadmap is the durable planning baseline from OpenSpec change `create-proje
 |---|---|---|
 | Phase 0 — Trust and Release Readiness | **Implementation complete** — all code/contract gates Closed; mobile device verification Pending | 2026-05-30 |
 | Phase 1 — Cohesive Daily Speaking Loop | **Implementation complete** — all code gates Closed; device smoke test Pending | 2026-05-30 |
-| Phase 2 — Content Depth and Operational Coverage | **Active** — Phase 1 loop evidence gate required first | — |
+| Phase 2 — Content Depth and Operational Coverage | **Implementation complete** — code gates Closed; manual content/device verification Pending | 2026-05-30 |
 | Phase 3 — Lightweight AI Feedback | Blocked on Phase 2 exit | — |
 | Phase 4 — Assessment, Retention, Business Signals | Blocked on Phase 3 exit | — |
 
@@ -18,9 +18,10 @@ This roadmap is the durable planning baseline from OpenSpec change `create-proje
 |---|---|---|
 | `phase-0-trust-and-release-readiness` | Phase 0 | 37/46 tasks — 9 blocked on device/stakeholder |
 | `phase-1-cohesive-daily-speaking-loop` | Phase 1 | 41/43 tasks — 2 blocked on device |
-| `memorization-passages` | Phase 2 | Artifacts ready, implementation not started |
-| `memorization-segment-ipa-translation` | Phase 2 | Artifacts ready, implementation not started |
-| `add-video-shadowing` | Phase 2 | Artifacts ready, implementation not started |
+| `phase-2-content-depth-and-operational-coverage` | Phase 2 | 19/23 tasks — code gates Closed; 4 manual verification gates pending |
+| `memorization-passages` | Phase 2 | 71/75 tasks — 4 manual/worker E2E gates pending |
+| `memorization-segment-ipa-translation` | Phase 2 | 50/50 tasks — complete |
+| `add-video-shadowing` | Phase 2 | 21/24 tasks — 3 physical Android/manual video gates pending |
 
 **Pending before Phase 1 is fully closed:**
 1. Physical Android device smoke test for `SpeakingSummaryScreen` + exam screens (task 8.4-8.5 in `phase-1-cohesive-daily-speaking-loop`).
@@ -177,10 +178,26 @@ Keep dashboard scope operational, not a broad analytics platform:
 | `mobile-self-upgrade` | Phase 0 | User update discovery | ✅ Artifacts ready — device verification pending |
 | `fix-shadowing-library-load-error` | Phase 0 | Existing feature correctness | ✅ Artifacts ready — device verification pending |
 | `mobile-ui-improvements` | Phase 1 | Clarifies the daily learner loop | ✅ Complete — section 6 items verified in Phase 1 apply |
-| `instant-add-word-learning` | Phase 1 | Shortens vocabulary input to SRS loop | ✅ Artifacts ready — implementation not started |
-| `memorization-passages` | Phase 2 | Adds contextual practice depth | Requires admin/operator visibility and progress tests |
-| `memorization-segment-ipa-translation` | Phase 2 | Improves passage practice quality | Requires enrichment failure/retry visibility |
-| `add-video-shadowing` | Phase 2 | Adds low-pressure speaking bridge | Requires transcript/import reliability and speaking-loop metrics |
+| `instant-add-word-learning` | Phase 1 | Shortens vocabulary input to SRS loop | ✅ Complete — 17/17 tasks |
+| `memorization-passages` | Phase 2 | Adds contextual practice depth | 71/75 tasks — Docker worker, dashboard→worker→mobile, user passage, and exam integration manual gates pending |
+| `memorization-segment-ipa-translation` | Phase 2 | Improves passage practice quality | ✅ Complete — 50/50 tasks |
+| `add-video-shadowing` | Phase 2 | Adds low-pressure speaking bridge | 21/24 tasks — curated playback, learner import, and transcript-unavailable manual gates pending |
+| `phase-2-content-depth-and-operational-coverage` | Phase 2 | Adds operational coverage and exit gate | 19/23 tasks — code gates Closed; 4 manual verification gates pending |
+
+### Implementation status (as of 2026-05-30)
+
+| Gate | Status | Evidence |
+|---|---|---|
+| Backend content pipeline health endpoint | **Closed** | `GET /v1/admin/content-pipeline/health`, in-memory and Postgres store methods |
+| API contract for content pipeline health | **Closed** | `contracts/api.md` documents response shape and admin-only behavior |
+| Backend tests for content pipeline health | **Closed** | `word_store.test.js` and `api.test.js` cover store shape and admin 403/200 behavior |
+| Memorization contract tests | **Closed** | `api.test.js` covers missing session 401, valid session list/create, and `items` response shape |
+| Shadowing catalog contract tests | **Closed** | `api.test.js` covers missing device 400, invalid bearer 401, and anonymous device catalog shape |
+| Dashboard Content Pipeline card | **Closed** | `ops-data.ts` loader and `ops/page.tsx` card using signed `backendFetch` |
+| Docker worker seed passage verification | **Pending** | Requires live Docker Compose worker run |
+| Shadowing Android E2E | **Pending** | Requires physical Android device and transcript-backed YouTube samples |
+| Memorization dashboard→worker→mobile E2E | **Pending** | Requires dashboard, worker, backend, and mobile surface run together |
+| Exam passage-sourced question integration | **Pending** | Requires studied passage segments and exam pool verification |
 
 ### Worker/content track
 

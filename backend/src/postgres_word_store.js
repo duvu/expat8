@@ -4,10 +4,7 @@ import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
 import { normalizeResolvedShadowingVideo } from './shadowing_videos.js';
 import {
-  compareEventsForProjection,
   isPromptMissingRequiredFields,
-  isSpeakingEvent,
-  isUnknownSpeakingEvent,
   normalizeSpeakingEvent,
   normalizeSpeakingPromptInput,
   resolveEventKey,
@@ -1056,6 +1053,38 @@ export class PostgresWordStore {
     };
   }
 
+  async getContentPipelineHealth() {
+    const [articlesResult, memorizationResult, shadowingResult] = await Promise.all([
+      this.pool.query(
+        `SELECT
+          COUNT(*) FILTER (WHERE status = 'pending_processing')::int AS pending_count,
+          COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_count,
+          MAX(COALESCE(finished_at, updated_at)) AS last_processed_at
+         FROM article_processing_jobs`
+      ),
+      this.pool.query(
+        `SELECT
+          COUNT(*) FILTER (WHERE status IN ('pending_segmentation', 'segmenting'))::int AS pending_count,
+          COUNT(*) FILTER (WHERE status = 'failed' OR enrichment_status = 'failed')::int AS failed_count,
+          MAX(updated_at) AS last_processed_at
+         FROM memorization_passages`
+      ),
+      this.pool.query(
+        `SELECT
+          0::int AS pending_count,
+          0::int AS failed_count,
+          MAX(updated_at) AS last_processed_at
+         FROM shadowing_videos`
+      )
+    ]);
+
+    return {
+      articles: rowToPipelineHealthSection(articlesResult.rows[0]),
+      memorization: rowToPipelineHealthSection(memorizationResult.rows[0]),
+      shadowing: rowToPipelineHealthSection(shadowingResult.rows[0]),
+    };
+  }
+
   async countConsecutiveRatings({ deviceId, rating, userId = null, client = this.pool }) {
     const events = await this.#recentEvents({ deviceId, userId, client });
     let count = 0;
@@ -1823,7 +1852,6 @@ export class PostgresWordStore {
     reviewStatus,
     reviewedAt,
     requiresReview,
-    suggestionType,
     now,
     insertLinkRow,
     reviewArticleId,
@@ -3218,6 +3246,14 @@ export class PostgresWordStore {
     );
     return result.rows[0] ?? null;
   }
+}
+
+function rowToPipelineHealthSection(row = {}) {
+  return {
+    pending_count: Number(row?.pending_count ?? 0),
+    failed_count: Number(row?.failed_count ?? 0),
+    last_processed_at: row?.last_processed_at ?? null
+  };
 }
 
 function rowToWord(row) {

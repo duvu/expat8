@@ -351,10 +351,11 @@ void main() {
   group('postLoopCompletedEvent', () {
     late LocalDatabase db;
     late SpeakingRepository repo;
+    var databaseCounter = 0;
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'loop_completed_test.db');
+          databaseName: 'loop_completed_test_${databaseCounter++}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),

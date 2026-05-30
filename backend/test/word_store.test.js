@@ -21,6 +21,56 @@ test('prevents duplicate words by language and normalized term', () => {
   assert.equal(first.word.id, second.word.id);
 });
 
+test('reports content pipeline health from queued jobs, passages, and shadowing videos', () => {
+  const store = new WordStore({ seed: false });
+  const article = store.createAdminArticle({
+    adminUserId: 'admin_pipeline',
+    title: 'Pipeline article',
+    language: 'en',
+    rawText: 'Article content for pipeline health.'
+  });
+  const failedArticleJob = store.enqueueArticleProcessingJob({ articleId: article.id });
+  store.completeArticleProcessingJob({ jobId: failedArticleJob.id, status: 'failed', errorMessage: 'boom' });
+  store.createPassage({
+    title: 'Pending passage',
+    language: 'en',
+    rawText: 'A'.repeat(80),
+    ownerType: 'user',
+    ownerUserId: 'user_pipeline'
+  });
+  const failedPassage = store.createPassage({
+    title: 'Failed passage',
+    language: 'en',
+    rawText: 'B'.repeat(80),
+    ownerType: 'admin',
+    visibility: 'published'
+  });
+  store.updatePassage({ passageId: failedPassage.id, status: 'failed', processing_error: 'segmentation failed' });
+  store.createShadowingVideoEntry({
+    deviceId: 'device_pipeline',
+    resolvedVideo: {
+      sourceType: 'youtube',
+      providerVideoId: 'pipeline_video',
+      sourceUrl: 'https://youtu.be/pipeline_video',
+      title: 'Pipeline video',
+      transcriptSource: 'manual',
+      segments: [{ position: 0, start_ms: 0, end_ms: 1000, text: 'Hello.' }]
+    }
+  });
+
+  const health = store.getContentPipelineHealth();
+
+  assert.equal(health.articles.pending_count, 1);
+  assert.equal(health.articles.failed_count, 1);
+  assert.equal(typeof health.articles.last_processed_at, 'string');
+  assert.equal(health.memorization.pending_count, 1);
+  assert.equal(health.memorization.failed_count, 1);
+  assert.equal(typeof health.memorization.last_processed_at, 'string');
+  assert.equal(health.shadowing.pending_count, 0);
+  assert.equal(health.shadowing.failed_count, 0);
+  assert.equal(typeof health.shadowing.last_processed_at, 'string');
+});
+
 test('syncs study events idempotently', () => {
   const store = new WordStore({ seed: false });
 

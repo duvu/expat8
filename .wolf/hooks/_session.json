@@ -13,8 +13,8 @@
       "first_read": "2026-05-30T01:16:35.783Z"
     },
     "/home/beou/IdeaProjects/expat8/contracts/api.md": {
-      "count": 20,
-      "tokens": 18601,
+      "count": 26,
+      "tokens": 18844,
       "first_read": "2026-05-30T01:16:35.822Z"
     },
     "/home/beou/IdeaProjects/expat8/docker-compose.yml": {
@@ -128,8 +128,8 @@
       "first_read": "2026-05-30T01:33:58.616Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/app.js": {
-      "count": 5,
-      "tokens": 9731,
+      "count": 7,
+      "tokens": 3621,
       "first_read": "2026-05-30T01:34:20.079Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/runtime.js": {
@@ -178,8 +178,8 @@
       "first_read": "2026-05-30T01:34:43.422Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/routes/admin.js": {
-      "count": 7,
-      "tokens": 0,
+      "count": 12,
+      "tokens": 3312,
       "first_read": "2026-05-30T01:34:43.450Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/routes/articles.js": {
@@ -208,7 +208,7 @@
       "first_read": "2026-05-30T01:34:52.226Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/routes/memorization.js": {
-      "count": 1,
+      "count": 4,
       "tokens": 0,
       "first_read": "2026-05-30T01:34:52.324Z"
     },
@@ -218,7 +218,7 @@
       "first_read": "2026-05-30T01:34:52.385Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/routes/shadowing.js": {
-      "count": 1,
+      "count": 4,
       "tokens": 0,
       "first_read": "2026-05-30T01:34:52.392Z"
     },
@@ -248,12 +248,12 @@
       "first_read": "2026-05-30T01:35:08.564Z"
     },
     "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/config.ts": {
-      "count": 1,
+      "count": 2,
       "tokens": 119,
       "first_read": "2026-05-30T01:35:08.570Z"
     },
     "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/backend.ts": {
-      "count": 2,
+      "count": 3,
       "tokens": 695,
       "first_read": "2026-05-30T01:35:08.584Z"
     },
@@ -268,12 +268,12 @@
       "first_read": "2026-05-30T01:35:18.476Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/test/api.test.js": {
-      "count": 3,
-      "tokens": 15722,
+      "count": 18,
+      "tokens": 18694,
       "first_read": "2026-05-30T01:35:21.463Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/test/postgres_integration.test.js": {
-      "count": 1,
+      "count": 2,
       "tokens": 1270,
       "first_read": "2026-05-30T01:35:21.478Z"
     },
@@ -423,7 +423,7 @@
       "first_read": "2026-05-30T01:41:35.560Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/test/memorization.test.js": {
-      "count": 1,
+      "count": 6,
       "tokens": 0,
       "first_read": "2026-05-30T01:41:35.584Z"
     },
@@ -448,8 +448,8 @@
       "first_read": "2026-05-30T01:42:33.660Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/db/schema.sql": {
-      "count": 4,
-      "tokens": 1965,
+      "count": 7,
+      "tokens": 4244,
       "first_read": "2026-05-30T01:42:33.681Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/article_processing_worker.js": {
@@ -613,7 +613,7 @@
       "first_read": "2026-05-30T02:01:33.796Z"
     },
     "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md": {
-      "count": 10,
+      "count": 11,
       "tokens": 5192,
       "first_read": "2026-05-30T02:16:04.330Z"
     },
@@ -678,18 +678,18 @@
       "first_read": "2026-05-30T03:17:04.889Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/word_store.js": {
-      "count": 8,
-      "tokens": 28276,
+      "count": 17,
+      "tokens": 28565,
       "first_read": "2026-05-30T03:39:01.168Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js": {
-      "count": 2,
-      "tokens": 32915,
+      "count": 16,
+      "tokens": 33256,
       "first_read": "2026-05-30T03:40:44.895Z"
     },
     "/home/beou/IdeaProjects/expat8/backend/test/word_store.test.js": {
-      "count": 1,
-      "tokens": 8006,
+      "count": 6,
+      "tokens": 8595,
       "first_read": "2026-05-30T03:50:05.188Z"
     },
     "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart": {
@@ -713,18 +713,18 @@
       "first_read": "2026-05-30T04:07:37.452Z"
     },
     "/home/beou/IdeaProjects/expat8/mobile/test/speaking_test.dart": {
-      "count": 6,
-      "tokens": 0,
+      "count": 8,
+      "tokens": 3613,
       "first_read": "2026-05-30T04:09:56.609Z"
     },
     "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/ops/page.tsx": {
-      "count": 1,
-      "tokens": 0,
+      "count": 4,
+      "tokens": 1846,
       "first_read": "2026-05-30T04:12:30.961Z"
     },
     "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/ops-data.ts": {
-      "count": 3,
-      "tokens": 1742,
+      "count": 6,
+      "tokens": 1920,
       "first_read": "2026-05-30T04:12:37.701Z"
     },
     "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/analytics": {
@@ -736,6 +736,31 @@
       "count": 1,
       "tokens": 0,
       "first_read": "2026-05-30T05:45:32.422Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/phase-2-content-depth-and-operational-coverage/tasks.md": {
+      "count": 3,
+      "tokens": 1101,
+      "first_read": "2026-05-30T06:49:31.657Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/support/app_credential_helpers.js": {
+      "count": 3,
+      "tokens": 466,
+      "first_read": "2026-05-30T06:49:47.392Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/shadowing_videos.test.js": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T06:49:54.113Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/article_processing_worker.test.js": {
+      "count": 1,
+      "tokens": 1621,
+      "first_read": "2026-05-30T06:51:00.910Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/admin-config.ts": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T07:03:16.798Z"
     }
   },
   "files_written": [
@@ -1362,6 +1387,84 @@
       "action": "create",
       "tokens": 3102,
       "at": "2026-05-30T05:57:13.644Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-2-content-depth-and-operational-coverage/proposal.md",
+      "action": "create",
+      "tokens": 920,
+      "at": "2026-05-30T06:39:23.797Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-2-content-depth-and-operational-coverage/design.md",
+      "action": "create",
+      "tokens": 1153,
+      "at": "2026-05-30T06:41:56.222Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-2-content-depth-and-operational-coverage/specs/content-pipeline-observability/spec.md",
+      "action": "create",
+      "tokens": 432,
+      "at": "2026-05-30T06:42:55.407Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-2-content-depth-and-operational-coverage/specs/phase-2-exit-gate/spec.md",
+      "action": "create",
+      "tokens": 453,
+      "at": "2026-05-30T06:43:14.932Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-2-content-depth-and-operational-coverage/tasks.md",
+      "action": "create",
+      "tokens": 1259,
+      "at": "2026-05-30T06:45:16.320Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/proposal.md",
+      "action": "create",
+      "tokens": 1098,
+      "at": "2026-05-30T10:05:07.924Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/design.md",
+      "action": "create",
+      "tokens": 1897,
+      "at": "2026-05-30T10:06:47.629Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/specs/drill-feedback-jobs/spec.md",
+      "action": "create",
+      "tokens": 753,
+      "at": "2026-05-30T10:07:34.857Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/specs/next-practice-recommendation/spec.md",
+      "action": "create",
+      "tokens": 637,
+      "at": "2026-05-30T10:07:44.369Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/specs/content-pipeline-observability/spec.md",
+      "action": "create",
+      "tokens": 449,
+      "at": "2026-05-30T10:07:50.510Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/specs/speaking-study-events/spec.md",
+      "action": "create",
+      "tokens": 328,
+      "at": "2026-05-30T10:08:04.077Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-3-lightweight-ai-feedback/tasks.md",
+      "action": "create",
+      "tokens": 3236,
+      "at": "2026-05-30T10:09:39.105Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/COMMIT_REPORT_20260530_172604.md",
+      "action": "create",
+      "tokens": 2106,
+      "at": "2026-05-30T10:27:10.237Z"
     }
   ],
   "edit_counts": {
@@ -1416,11 +1519,24 @@
     "expat8-dashboard/src/lib/ops-data.ts": 4,
     "expat8-dashboard/src/app/ops/page.tsx": 1,
     "mobile/lib/src/exam/exam_certificate_screen.dart": 1,
-    "docs/COMMIT_REPORT_20260530_125603.md": 1
+    "docs/COMMIT_REPORT_20260530_125603.md": 1,
+    "openspec/changes/phase-2-content-depth-and-operational-coverage/proposal.md": 1,
+    "openspec/changes/phase-2-content-depth-and-operational-coverage/design.md": 1,
+    "openspec/changes/phase-2-content-depth-and-operational-coverage/specs/content-pipeline-observability/spec.md": 1,
+    "openspec/changes/phase-2-content-depth-and-operational-coverage/specs/phase-2-exit-gate/spec.md": 1,
+    "openspec/changes/phase-2-content-depth-and-operational-coverage/tasks.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/proposal.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/design.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/specs/drill-feedback-jobs/spec.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/specs/next-practice-recommendation/spec.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/specs/content-pipeline-observability/spec.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/specs/speaking-study-events/spec.md": 1,
+    "openspec/changes/phase-3-lightweight-ai-feedback/tasks.md": 1,
+    "docs/COMMIT_REPORT_20260530_172604.md": 1
   },
-  "anatomy_hits": 46,
-  "anatomy_misses": 88,
-  "repeated_reads_warned": 140,
+  "anatomy_hits": 49,
+  "anatomy_misses": 90,
+  "repeated_reads_warned": 227,
   "cerebrum_warnings": 0,
-  "stop_count": 21
+  "stop_count": 32
 }

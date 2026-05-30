@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-30T05:57:13.627Z
-> Files: 560 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-30T10:27:10.221Z
+> Files: 573 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -278,6 +278,7 @@
 - `COMMIT_REPORT_20260510_131500.md` — Commit Report (~1331 tok)
 - `COMMIT_REPORT_20260510_202545.md` — Commit Report (~1374 tok)
 - `COMMIT_REPORT_20260530_125603.md` — Commit Report (~2714 tok)
+- `COMMIT_REPORT_20260530_172604.md` — Commit Report (~1843 tok)
 - `dashboard-guide.md` — Next.js admin dashboard setup, environment, and admin workflow guide (~560 tok)
 - `deployment-guide.md` — Local Compose and Z440 deployment guide (~760 tok)
 - `developer-setup.md` — Full workspace local development setup guide (~980 tok)
@@ -886,3 +887,39 @@
 ## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/worker-graceful-shutdown/
 
 - `spec.md` — ADDED Requirements (~230 tok)
+
+## openspec/changes/phase-2-content-depth-and-operational-coverage/
+
+- `design.md` — Context (~1009 tok)
+- `proposal.md` — Why (~805 tok)
+- `tasks.md` — 1. Backend — Content Pipeline Health Endpoint (~1101 tok)
+
+## openspec/changes/phase-2-content-depth-and-operational-coverage/specs/content-pipeline-observability/
+
+- `spec.md` — ADDED Requirements (~378 tok)
+
+## openspec/changes/phase-2-content-depth-and-operational-coverage/specs/phase-2-exit-gate/
+
+- `spec.md` — ADDED Requirements (~397 tok)
+
+## openspec/changes/phase-3-lightweight-ai-feedback/
+
+- `design.md` — Context (~1660 tok)
+- `proposal.md` — Why (~960 tok)
+- `tasks.md` — Tasks: phase-3-lightweight-ai-feedback (~2832 tok)
+
+## openspec/changes/phase-3-lightweight-ai-feedback/specs/content-pipeline-observability/
+
+- `spec.md` — MODIFIED Requirements (~393 tok)
+
+## openspec/changes/phase-3-lightweight-ai-feedback/specs/drill-feedback-jobs/
+
+- `spec.md` — ADDED Requirements (~659 tok)
+
+## openspec/changes/phase-3-lightweight-ai-feedback/specs/next-practice-recommendation/
+
+- `spec.md` — ADDED Requirements (~557 tok)
+
+## openspec/changes/phase-3-lightweight-ai-feedback/specs/speaking-study-events/
+
+- `spec.md` — MODIFIED Requirements (~287 tok)

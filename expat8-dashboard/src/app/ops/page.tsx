@@ -13,10 +13,21 @@ function isStale(isoDate: string | null): boolean {
   return Date.now() - new Date(isoDate).getTime() > STALE_THRESHOLD_MS;
 }
 
+function pipelineStatus(pendingCount: number, failedCount: number): 'published' | 'failed' {
+  return failedCount > 0 || pendingCount > 10 ? 'failed' : 'published';
+}
+
+function pipelineLabel(pendingCount: number, failedCount: number): string {
+  if (failedCount > 0) return 'Failing';
+  if (pendingCount > 10) return 'Backlogged';
+  return 'Healthy';
+}
+
 export default async function OpsPage() {
   const overview = await loadOpsOverview();
   const summary = summarizeLogArchives(overview.archives);
   const lh = overview.loopHealth;
+  const pipeline = overview.pipelineHealth;
 
   return (
     <PageShell
@@ -122,6 +133,46 @@ export default async function OpsPage() {
                 {lh.latest_published_passage_at ? formatDateTime(lh.latest_published_passage_at) : 'No published passages'}
               </small>
             </div>
+          </dl>
+        )}
+      </section>
+
+      <section className="table-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Content Pipeline</h3>
+            <p className="muted">Article, memorization, and shadowing processing backlogs.</p>
+          </div>
+        </div>
+
+        {overview.pipelineHealthError ? (
+          <div className="empty-state error-state">{overview.pipelineHealthError}</div>
+        ) : !pipeline ? (
+          <div className="empty-state">Content pipeline data unavailable.</div>
+        ) : (
+          <dl className="stats-panel" style={{ marginTop: 0 }}>
+            {[
+              { label: 'Articles', section: pipeline.articles },
+              { label: 'Memorization', section: pipeline.memorization },
+              { label: 'Shadowing', section: pipeline.shadowing },
+            ].map(({ label, section }) => {
+              const status = pipelineStatus(section.pending_count, section.failed_count);
+              return (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    <span className="badge" data-status={status}>
+                      {pipelineLabel(section.pending_count, section.failed_count)}
+                    </span>
+                  </dd>
+                  <small className="muted">
+                    {section.pending_count.toLocaleString()} pending · {section.failed_count.toLocaleString()} failed
+                    {' · '}
+                    {section.last_processed_at ? formatDateTime(section.last_processed_at) : 'No processed items'}
+                  </small>
+                </div>
+              );
+            })}
           </dl>
         )}
       </section>

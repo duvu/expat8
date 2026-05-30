@@ -200,6 +200,14 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   );
 
   router.get(
+    '/content-pipeline/health',
+    asyncHandler(async (_request, response) => {
+      const summary = await store.getContentPipelineHealth();
+      return response.json(summary);
+    })
+  );
+
+  router.get(
     '/log-archives',
     asyncHandler(async (request, response) => {
       const limit = clampLimit(request.query.limit ?? 100, 1, 200);
