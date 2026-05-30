@@ -1,12 +1,1426 @@
 {
   "session_id": "session-2026-05-10-0400",
   "started": "2026-05-10T21:00:01.221Z",
-  "files_read": {},
-  "files_written": [],
-  "edit_counts": {},
-  "anatomy_hits": 0,
-  "anatomy_misses": 0,
-  "repeated_reads_warned": 0,
+  "files_read": {
+    "/home/beou/IdeaProjects/expat8": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:16:35.673Z"
+    },
+    "/home/beou/IdeaProjects/expat8/README.md": {
+      "count": 5,
+      "tokens": 779,
+      "first_read": "2026-05-30T01:16:35.783Z"
+    },
+    "/home/beou/IdeaProjects/expat8/contracts/api.md": {
+      "count": 20,
+      "tokens": 18601,
+      "first_read": "2026-05-30T01:16:35.822Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docker-compose.yml": {
+      "count": 1,
+      "tokens": 986,
+      "first_read": "2026-05-30T01:16:35.908Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:16:44.399Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/package.json": {
+      "count": 2,
+      "tokens": 129,
+      "first_read": "2026-05-30T01:16:44.405Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/package.json": {
+      "count": 2,
+      "tokens": 159,
+      "first_read": "2026-05-30T01:16:44.420Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/pubspec.yaml": {
+      "count": 1,
+      "tokens": 211,
+      "first_read": "2026-05-30T01:16:44.431Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/mvp-setup.md": {
+      "count": 1,
+      "tokens": 2300,
+      "first_read": "2026-05-30T01:17:01.456Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/architecture.md": {
+      "count": 1,
+      "tokens": 7138,
+      "first_read": "2026-05-30T01:17:01.461Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/app-credential-security.md": {
+      "count": 1,
+      "tokens": 3196,
+      "first_read": "2026-05-30T01:17:01.549Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/20260510-article-processing-worker-deployment.md": {
+      "count": 1,
+      "tokens": 1063,
+      "first_read": "2026-05-30T01:17:01.605Z"
+    },
+    "/home/beou/IdeaProjects/expat8/CLAUDE.md": {
+      "count": 1,
+      "tokens": 1609,
+      "first_read": "2026-05-30T01:17:01.609Z"
+    },
+    "/home/beou/IdeaProjects/expat8/.gitignore": {
+      "count": 1,
+      "tokens": 27,
+      "first_read": "2026-05-30T01:17:01.617Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/index.md": {
+      "count": 5,
+      "tokens": 280,
+      "first_read": "2026-05-30T01:21:31.968Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/project-overview.md": {
+      "count": 4,
+      "tokens": 590,
+      "first_read": "2026-05-30T01:21:31.980Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/developer-setup.md": {
+      "count": 2,
+      "tokens": 980,
+      "first_read": "2026-05-30T01:21:31.996Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/architecture-guide.md": {
+      "count": 3,
+      "tokens": 790,
+      "first_read": "2026-05-30T01:21:32.003Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/backend-guide.md": {
+      "count": 2,
+      "tokens": 780,
+      "first_read": "2026-05-30T01:21:42.625Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/mobile-guide.md": {
+      "count": 2,
+      "tokens": 800,
+      "first_read": "2026-05-30T01:21:42.640Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/dashboard-guide.md": {
+      "count": 2,
+      "tokens": 560,
+      "first_read": "2026-05-30T01:21:42.649Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/deployment-guide.md": {
+      "count": 2,
+      "tokens": 760,
+      "first_read": "2026-05-30T01:21:42.674Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/testing-guide.md": {
+      "count": 4,
+      "tokens": 560,
+      "first_read": "2026-05-30T01:21:42.693Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/api-guide.md": {
+      "count": 2,
+      "tokens": 620,
+      "first_read": "2026-05-30T01:21:42.891Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec": {
+      "count": 3,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:33:58.616Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/app.js": {
+      "count": 5,
+      "tokens": 9731,
+      "first_read": "2026-05-30T01:34:20.079Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/runtime.js": {
+      "count": 1,
+      "tokens": 820,
+      "first_read": "2026-05-30T01:34:20.085Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/README.md": {
+      "count": 1,
+      "tokens": 779,
+      "first_read": "2026-05-30T01:34:20.114Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/server.js": {
+      "count": 1,
+      "tokens": 148,
+      "first_read": "2026-05-30T01:34:20.227Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/config.js": {
+      "count": 1,
+      "tokens": 1080,
+      "first_read": "2026-05-30T01:34:33.050Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/auth.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:43.383Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/learning.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:43.389Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/study_events.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:43.402Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/user.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:43.417Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/exam.js": {
+      "count": 1,
+      "tokens": 1602,
+      "first_read": "2026-05-30T01:34:43.422Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/admin.js": {
+      "count": 7,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:43.450Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/articles.js": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.112Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/speaking.js": {
+      "count": 3,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.155Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/content_packs.js": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.170Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/proficiency.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.211Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/helpers.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.226Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/memorization.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.324Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/releases.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.385Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/routes/shadowing.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:52.392Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/20260509-expat8-product-roadmap-2026-2028.md": {
+      "count": 3,
+      "tokens": 3223,
+      "first_read": "2026-05-30T01:34:59.145Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:34:59.196Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/main.dart": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:35:08.447Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/config.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:35:08.481Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/api/backend_api_client.dart": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:35:08.564Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/config.ts": {
+      "count": 1,
+      "tokens": 119,
+      "first_read": "2026-05-30T01:35:08.570Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/backend.ts": {
+      "count": 2,
+      "tokens": 695,
+      "first_read": "2026-05-30T01:35:08.584Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:35:18.369Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes": {
+      "count": 3,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:35:18.476Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/api.test.js": {
+      "count": 3,
+      "tokens": 15722,
+      "first_read": "2026-05-30T01:35:21.463Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/postgres_integration.test.js": {
+      "count": 1,
+      "tokens": 1270,
+      "first_read": "2026-05-30T01:35:21.478Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/e2e_prod_test.mjs": {
+      "count": 1,
+      "tokens": 4252,
+      "first_read": "2026-05-30T01:35:21.495Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/components/SidebarNav.tsx": {
+      "count": 1,
+      "tokens": 249,
+      "first_read": "2026-05-30T01:35:24.704Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/page.tsx": {
+      "count": 1,
+      "tokens": 919,
+      "first_read": "2026-05-30T01:35:24.716Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/app_credentials.js": {
+      "count": 4,
+      "tokens": 1622,
+      "first_read": "2026-05-30T01:35:36.752Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/ui/learning_screen.dart": {
+      "count": 11,
+      "tokens": 7682,
+      "first_read": "2026-05-30T01:35:37.790Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/review/page.tsx": {
+      "count": 1,
+      "tokens": 804,
+      "first_read": "2026-05-30T01:35:37.803Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/speaking-prompts/page.tsx": {
+      "count": 1,
+      "tokens": 1227,
+      "first_read": "2026-05-30T01:35:37.843Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/users/[id]/page.tsx": {
+      "count": 1,
+      "tokens": 1209,
+      "first_read": "2026-05-30T01:35:37.866Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/articles/[id]/page.tsx": {
+      "count": 2,
+      "tokens": 938,
+      "first_read": "2026-05-30T01:35:37.961Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/.openspec.yaml": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:01.077Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/instant-add-word-learning/proposal.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:01.107Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-build-release-consistency/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:01.139Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-self-upgrade/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:01.162Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-github-releases/proposal.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:01.185Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/add-video-shadowing/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:01.327Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/test/ops.test.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:14.967Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/memorization-passages/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:15.656Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/memorization-segment-ipa-translation/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:15.692Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-ui-improvements/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:15.699Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-shadowing-library-load-error/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:15.711Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/analytics.ts": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:58.983Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/test/learning_screen_test.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:58.990Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/db.ts": {
+      "count": 1,
+      "tokens": 3783,
+      "first_read": "2026-05-30T01:36:59.184Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/articles/new/page.tsx": {
+      "count": 2,
+      "tokens": 467,
+      "first_read": "2026-05-30T01:36:59.193Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/test/backend_api_client_test.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:36:59.197Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/next.config.cjs": {
+      "count": 1,
+      "tokens": 47,
+      "first_read": "2026-05-30T01:40:50.751Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/exam/page.tsx": {
+      "count": 1,
+      "tokens": 840,
+      "first_read": "2026-05-30T01:40:50.767Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/article_ingest_integration.test.js": {
+      "count": 1,
+      "tokens": 2219,
+      "first_read": "2026-05-30T01:41:35.531Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/log_archives_api.test.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:41:35.560Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/memorization.test.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:41:35.584Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/exam.test.js": {
+      "count": 1,
+      "tokens": 7291,
+      "first_read": "2026-05-30T01:41:35.593Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/worker.js": {
+      "count": 2,
+      "tokens": 478,
+      "first_read": "2026-05-30T01:42:33.627Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/vocabulary_pool_scheduler.js": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:42:33.655Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/database.js": {
+      "count": 1,
+      "tokens": 142,
+      "first_read": "2026-05-30T01:42:33.660Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/db/schema.sql": {
+      "count": 4,
+      "tokens": 1965,
+      "first_read": "2026-05-30T01:42:33.681Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/article_processing_worker.js": {
+      "count": 1,
+      "tokens": 691,
+      "first_read": "2026-05-30T01:42:33.841Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/db/migrations/20260510_postgres_nonce_cache.sql": {
+      "count": 1,
+      "tokens": 167,
+      "first_read": "2026-05-30T01:43:40.272Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/scripts/verify_content_ingestion_migration.mjs": {
+      "count": 1,
+      "tokens": 687,
+      "first_read": "2026-05-30T01:43:40.306Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/app_credentials.test.js": {
+      "count": 1,
+      "tokens": 1798,
+      "first_read": "2026-05-30T01:43:45.965Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/specs": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T01:47:40.952Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/proposal.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:13.092Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/design.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:13.110Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/tasks.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:13.126Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/add-video-shadowing/tasks.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.676Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-build-release-consistency/tasks.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.723Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-shadowing-library-load-error/tasks.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.757Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/instant-add-word-learning/tasks.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.778Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/memorization-passages/tasks.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.804Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/memorization-segment-ipa-translation/tasks.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.859Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-github-releases/tasks.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.869Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-self-upgrade/tasks.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.905Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-ui-improvements/tasks.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:17.930Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/project-consistency-governance": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:18.193Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/project-documentation-hygiene": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:18.251Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/project-consistency-governance/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:25.608Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/project-documentation-hygiene/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:25.700Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/specs/project-roadmap-governance/spec.md": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:26.967Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/create-project-roadmap/specs/project-roadmap-governance": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:29.799Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/add-video-shadowing/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.671Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-build-release-consistency/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.694Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-shadowing-library-load-error/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.706Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/instant-add-word-learning/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.720Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/memorization-passages/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.741Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/memorization-segment-ipa-translation/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.749Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-github-releases/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.765Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-self-upgrade/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.787Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-ui-improvements/.openspec.yaml": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:01:33.796Z"
+    },
+    "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md": {
+      "count": 10,
+      "tokens": 5192,
+      "first_read": "2026-05-30T02:16:04.330Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-release-android": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:11.219Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-exam-navigation": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:11.319Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-release-android/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:17.916Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-exam-navigation/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:18.310Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/mobile-word-prefetch/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:18.766Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/learning-cards-api/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:19.226Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/specs/admin-api-documentation/spec.md": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:19:19.824Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/fix-build-release-consistency": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:26:06.781Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-github-releases": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:26:07.150Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/mobile-self-upgrade": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T02:26:07.606Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md": {
+      "count": 1,
+      "tokens": 1536,
+      "first_read": "2026-05-30T02:37:06.262Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_drill_screen.dart": {
+      "count": 4,
+      "tokens": 0,
+      "first_read": "2026-05-30T03:17:04.889Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/word_store.js": {
+      "count": 8,
+      "tokens": 28276,
+      "first_read": "2026-05-30T03:39:01.168Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js": {
+      "count": 2,
+      "tokens": 32915,
+      "first_read": "2026-05-30T03:40:44.895Z"
+    },
+    "/home/beou/IdeaProjects/expat8/backend/test/word_store.test.js": {
+      "count": 1,
+      "tokens": 8006,
+      "first_read": "2026-05-30T03:50:05.188Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart": {
+      "count": 2,
+      "tokens": 4526,
+      "first_read": "2026-05-30T03:51:54.090Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/api/models/speaking_models.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T03:52:18.836Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/data/word_repository.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T03:54:17.460Z"
+    },
+    "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md": {
+      "count": 4,
+      "tokens": 1729,
+      "first_read": "2026-05-30T04:07:37.452Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/test/speaking_test.dart": {
+      "count": 6,
+      "tokens": 0,
+      "first_read": "2026-05-30T04:09:56.609Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/ops/page.tsx": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T04:12:30.961Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/ops-data.ts": {
+      "count": 3,
+      "tokens": 1742,
+      "first_read": "2026-05-30T04:12:37.701Z"
+    },
+    "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/analytics": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T04:13:40.670Z"
+    },
+    "/home/beou/IdeaProjects/expat8/mobile/lib/src/exam/exam_certificate_screen.dart": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-05-30T05:45:32.422Z"
+    }
+  },
+  "files_written": [
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/proposal.md",
+      "action": "create",
+      "tokens": 1247,
+      "at": "2026-05-30T02:17:46.963Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/design.md",
+      "action": "create",
+      "tokens": 2289,
+      "at": "2026-05-30T02:18:49.954Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-release-path/spec.md",
+      "action": "create",
+      "tokens": 736,
+      "at": "2026-05-30T02:19:49.184Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-contract-parity/spec.md",
+      "action": "create",
+      "tokens": 628,
+      "at": "2026-05-30T02:19:49.686Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-schema-migration-parity/spec.md",
+      "action": "create",
+      "tokens": 507,
+      "at": "2026-05-30T02:20:05.403Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-replay-protection-health/spec.md",
+      "action": "create",
+      "tokens": 473,
+      "at": "2026-05-30T02:20:16.774Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-dashboard-correctness/spec.md",
+      "action": "create",
+      "tokens": 634,
+      "at": "2026-05-30T02:20:17.469Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-release-android/spec.md",
+      "action": "create",
+      "tokens": 766,
+      "at": "2026-05-30T02:20:37.082Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-exam-navigation/spec.md",
+      "action": "create",
+      "tokens": 662,
+      "at": "2026-05-30T02:20:59.775Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-word-prefetch/spec.md",
+      "action": "create",
+      "tokens": 871,
+      "at": "2026-05-30T02:21:12.418Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/learning-cards-api/spec.md",
+      "action": "create",
+      "tokens": 776,
+      "at": "2026-05-30T02:21:25.014Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/specs/admin-api-documentation/spec.md",
+      "action": "create",
+      "tokens": 1039,
+      "at": "2026-05-30T02:21:25.972Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "create",
+      "tokens": 1755,
+      "at": "2026-05-30T02:24:12.992Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/canonical-release-path.md",
+      "action": "create",
+      "tokens": 926,
+      "at": "2026-05-30T02:29:47.058Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/db/schema.sql",
+      "action": "edit",
+      "tokens": 191,
+      "at": "2026-05-30T02:30:03.024Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/app_credentials.js",
+      "action": "edit",
+      "tokens": 174,
+      "at": "2026-05-30T02:30:33.010Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/app_credentials.js",
+      "action": "edit",
+      "tokens": 70,
+      "at": "2026-05-30T02:30:55.326Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+      "action": "edit",
+      "tokens": 34,
+      "at": "2026-05-30T02:31:14.366Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/app.js",
+      "action": "edit",
+      "tokens": 276,
+      "at": "2026-05-30T02:31:30.453Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/articles/[id]/page.tsx",
+      "action": "edit",
+      "tokens": 32,
+      "at": "2026-05-30T02:31:41.100Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/articles/new/page.tsx",
+      "action": "edit",
+      "tokens": 54,
+      "at": "2026-05-30T02:31:44.612Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/api/certificate/[id]/route.ts",
+      "action": "create",
+      "tokens": 128,
+      "at": "2026-05-30T02:32:03.539Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/users/[id]/page.tsx",
+      "action": "edit",
+      "tokens": 33,
+      "at": "2026-05-30T02:32:13.105Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 20,
+      "at": "2026-05-30T02:34:15.374Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 388,
+      "at": "2026-05-30T02:34:28.916Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 234,
+      "at": "2026-05-30T02:35:46.470Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 255,
+      "at": "2026-05-30T02:36:57.207Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "create",
+      "tokens": 1755,
+      "at": "2026-05-30T02:37:28.042Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 447,
+      "at": "2026-05-30T02:37:53.454Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 340,
+      "at": "2026-05-30T02:38:13.718Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 234,
+      "at": "2026-05-30T02:38:28.975Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 216,
+      "at": "2026-05-30T02:38:45.973Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/README.md",
+      "action": "edit",
+      "tokens": 99,
+      "at": "2026-05-30T02:43:37.524Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/index.md",
+      "action": "edit",
+      "tokens": 87,
+      "at": "2026-05-30T02:44:02.301Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "edit",
+      "tokens": 32,
+      "at": "2026-05-30T02:44:16.591Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "edit",
+      "tokens": 32,
+      "at": "2026-05-30T02:44:18.137Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "edit",
+      "tokens": 32,
+      "at": "2026-05-30T02:44:19.494Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "edit",
+      "tokens": 32,
+      "at": "2026-05-30T02:44:22.954Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "edit",
+      "tokens": 32,
+      "at": "2026-05-30T02:44:22.965Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-0-trust-and-release-readiness/tasks.md",
+      "action": "edit",
+      "tokens": 60,
+      "at": "2026-05-30T02:44:35.563Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/proposal.md",
+      "action": "create",
+      "tokens": 996,
+      "at": "2026-05-30T03:24:01.371Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/design.md",
+      "action": "create",
+      "tokens": 1799,
+      "at": "2026-05-30T03:25:21.223Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-weekly-speaking-summary/spec.md",
+      "action": "create",
+      "tokens": 416,
+      "at": "2026-05-30T03:25:44.470Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/learner-loop-completion-signal/spec.md",
+      "action": "create",
+      "tokens": 501,
+      "at": "2026-05-30T03:25:50.790Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/worker-graceful-shutdown/spec.md",
+      "action": "create",
+      "tokens": 263,
+      "at": "2026-05-30T03:25:54.564Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/dashboard-loop-health/spec.md",
+      "action": "create",
+      "tokens": 366,
+      "at": "2026-05-30T03:25:59.910Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-speaking-drill/spec.md",
+      "action": "create",
+      "tokens": 383,
+      "at": "2026-05-30T03:26:06.843Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/speaking-study-events/spec.md",
+      "action": "create",
+      "tokens": 340,
+      "at": "2026-05-30T03:26:09.861Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-speaking-session/spec.md",
+      "action": "create",
+      "tokens": 237,
+      "at": "2026-05-30T03:26:13.988Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md",
+      "action": "create",
+      "tokens": 1976,
+      "at": "2026-05-30T03:32:01.465Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 85,
+      "at": "2026-05-30T03:41:10.445Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 329,
+      "at": "2026-05-30T03:41:32.005Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 21,
+      "at": "2026-05-30T03:41:40.757Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 69,
+      "at": "2026-05-30T03:46:08.897Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 457,
+      "at": "2026-05-30T03:46:31.883Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+      "action": "edit",
+      "tokens": 523,
+      "at": "2026-05-30T03:47:00.895Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+      "action": "edit",
+      "tokens": 196,
+      "at": "2026-05-30T03:47:21.072Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 127,
+      "at": "2026-05-30T03:48:01.433Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 56,
+      "at": "2026-05-30T03:48:11.799Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 105,
+      "at": "2026-05-30T03:48:21.194Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/test/api.test.js",
+      "action": "edit",
+      "tokens": 1065,
+      "at": "2026-05-30T03:49:44.757Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/test/word_store.test.js",
+      "action": "edit",
+      "tokens": 361,
+      "at": "2026-05-30T03:50:20.340Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/worker.js",
+      "action": "edit",
+      "tokens": 420,
+      "at": "2026-05-30T03:51:20.615Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart",
+      "action": "edit",
+      "tokens": 156,
+      "at": "2026-05-30T03:52:32.968Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart",
+      "action": "edit",
+      "tokens": 310,
+      "at": "2026-05-30T03:52:46.097Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/api/models/speaking_models.dart",
+      "action": "edit",
+      "tokens": 334,
+      "at": "2026-05-30T03:53:00.907Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart",
+      "action": "edit",
+      "tokens": 108,
+      "at": "2026-05-30T03:55:24.876Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart",
+      "action": "edit",
+      "tokens": 165,
+      "at": "2026-05-30T03:55:33.811Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart",
+      "action": "edit",
+      "tokens": 321,
+      "at": "2026-05-30T03:55:46.573Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/main.dart",
+      "action": "edit",
+      "tokens": 49,
+      "at": "2026-05-30T03:55:54.025Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_summary_screen.dart",
+      "action": "create",
+      "tokens": 1571,
+      "at": "2026-05-30T03:56:47.340Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_drill_screen.dart",
+      "action": "edit",
+      "tokens": 82,
+      "at": "2026-05-30T03:56:58.491Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_drill_screen.dart",
+      "action": "edit",
+      "tokens": 407,
+      "at": "2026-05-30T03:57:14.422Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_drill_screen.dart",
+      "action": "edit",
+      "tokens": 528,
+      "at": "2026-05-30T03:57:29.556Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_drill_screen.dart",
+      "action": "edit",
+      "tokens": 71,
+      "at": "2026-05-30T03:57:41.757Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_drill_screen.dart",
+      "action": "edit",
+      "tokens": 127,
+      "at": "2026-05-30T03:57:51.352Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/ui/learning_screen.dart",
+      "action": "edit",
+      "tokens": 42,
+      "at": "2026-05-30T03:58:34.036Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/ui/learning_screen.dart",
+      "action": "edit",
+      "tokens": 175,
+      "at": "2026-05-30T03:58:50.719Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/speaking/speaking_repository.dart",
+      "action": "edit",
+      "tokens": 96,
+      "at": "2026-05-30T03:59:23.979Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/ui/learning_screen.dart",
+      "action": "edit",
+      "tokens": 18,
+      "at": "2026-05-30T04:03:19.625Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/ui/learning_screen.dart",
+      "action": "edit",
+      "tokens": 15,
+      "at": "2026-05-30T04:03:57.773Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/ui/learning_screen.dart",
+      "action": "edit",
+      "tokens": 37,
+      "at": "2026-05-30T04:05:04.364Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md",
+      "action": "create",
+      "tokens": 1976,
+      "at": "2026-05-30T04:08:05.635Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/test/speaking_test.dart",
+      "action": "edit",
+      "tokens": 807,
+      "at": "2026-05-30T04:11:12.668Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 312,
+      "at": "2026-05-30T04:15:32.297Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/word_store.js",
+      "action": "edit",
+      "tokens": 56,
+      "at": "2026-05-30T04:15:47.466Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+      "action": "edit",
+      "tokens": 388,
+      "at": "2026-05-30T04:16:13.204Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/postgres_word_store.js",
+      "action": "edit",
+      "tokens": 33,
+      "at": "2026-05-30T04:16:27.480Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/backend/src/routes/admin.js",
+      "action": "edit",
+      "tokens": 103,
+      "at": "2026-05-30T04:16:50.496Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/ops-data.ts",
+      "action": "edit",
+      "tokens": 71,
+      "at": "2026-05-30T04:16:59.016Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/ops-data.ts",
+      "action": "edit",
+      "tokens": 67,
+      "at": "2026-05-30T04:17:07.060Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/ops-data.ts",
+      "action": "edit",
+      "tokens": 174,
+      "at": "2026-05-30T04:17:18.178Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/lib/ops-data.ts",
+      "action": "edit",
+      "tokens": 195,
+      "at": "2026-05-30T04:17:40.136Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/expat8-dashboard/src/app/ops/page.tsx",
+      "action": "edit",
+      "tokens": 1845,
+      "at": "2026-05-30T04:18:30.925Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/contracts/api.md",
+      "action": "edit",
+      "tokens": 291,
+      "at": "2026-05-30T04:19:27.812Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md",
+      "action": "edit",
+      "tokens": 240,
+      "at": "2026-05-30T04:20:57.320Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 454,
+      "at": "2026-05-30T04:21:30.110Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md",
+      "action": "edit",
+      "tokens": 92,
+      "at": "2026-05-30T04:21:50.757Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/exam/exam_certificate_screen.dart",
+      "action": "edit",
+      "tokens": 21,
+      "at": "2026-05-30T05:45:40.196Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md",
+      "action": "edit",
+      "tokens": 471,
+      "at": "2026-05-30T05:46:54.894Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 514,
+      "at": "2026-05-30T05:47:17.574Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 329,
+      "at": "2026-05-30T05:47:43.634Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/20260530-project-roadmap-12-month.md",
+      "action": "edit",
+      "tokens": 90,
+      "at": "2026-05-30T05:48:07.008Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/COMMIT_REPORT_20260530_125603.md",
+      "action": "create",
+      "tokens": 3102,
+      "at": "2026-05-30T05:57:13.644Z"
+    }
+  ],
+  "edit_counts": {
+    "openspec/changes/phase-0-trust-and-release-readiness/proposal.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/design.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-release-path/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-contract-parity/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-schema-migration-parity/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-replay-protection-health/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-dashboard-correctness/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-release-android/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-exam-navigation/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-word-prefetch/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/learning-cards-api/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/specs/admin-api-documentation/spec.md": 1,
+    "openspec/changes/phase-0-trust-and-release-readiness/tasks.md": 8,
+    "docs/canonical-release-path.md": 1,
+    "backend/db/schema.sql": 1,
+    "backend/src/app_credentials.js": 2,
+    "backend/src/app.js": 2,
+    "expat8-dashboard/src/app/articles/[id]/page.tsx": 1,
+    "expat8-dashboard/src/app/articles/new/page.tsx": 1,
+    "expat8-dashboard/src/app/api/certificate/[id]/route.ts": 1,
+    "expat8-dashboard/src/app/users/[id]/page.tsx": 1,
+    "contracts/api.md": 8,
+    "docs/20260530-project-roadmap-12-month.md": 8,
+    "README.md": 1,
+    "docs/index.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/proposal.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/design.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-weekly-speaking-summary/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/learner-loop-completion-signal/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/worker-graceful-shutdown/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/dashboard-loop-health/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-speaking-drill/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/speaking-study-events/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-speaking-session/spec.md": 1,
+    "openspec/changes/phase-1-cohesive-daily-speaking-loop/tasks.md": 5,
+    "backend/src/word_store.js": 7,
+    "backend/src/postgres_word_store.js": 4,
+    "backend/test/api.test.js": 1,
+    "backend/test/word_store.test.js": 1,
+    "backend/src/worker.js": 1,
+    "mobile/lib/src/speaking/speaking_repository.dart": 6,
+    "mobile/lib/src/api/models/speaking_models.dart": 1,
+    "mobile/lib/main.dart": 1,
+    "mobile/lib/src/speaking/speaking_summary_screen.dart": 1,
+    "mobile/lib/src/speaking/speaking_drill_screen.dart": 5,
+    "mobile/lib/src/ui/learning_screen.dart": 5,
+    "mobile/test/speaking_test.dart": 1,
+    "backend/src/routes/admin.js": 1,
+    "expat8-dashboard/src/lib/ops-data.ts": 4,
+    "expat8-dashboard/src/app/ops/page.tsx": 1,
+    "mobile/lib/src/exam/exam_certificate_screen.dart": 1,
+    "docs/COMMIT_REPORT_20260530_125603.md": 1
+  },
+  "anatomy_hits": 46,
+  "anatomy_misses": 88,
+  "repeated_reads_warned": 140,
   "cerebrum_warnings": 0,
-  "stop_count": 0
+  "stop_count": 21
 }

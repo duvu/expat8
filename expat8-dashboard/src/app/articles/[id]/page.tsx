@@ -37,7 +37,7 @@ async function patchArticle(formData: FormData) {
   if (Object.keys(patch).length > 0) {
     await backendFetch(`/v1/admin/articles/${articleId}`, {
       method: 'PATCH',
-      body: JSON.stringify(patch),
+      body: patch,
     });
     revalidatePath(`/articles/${articleId}`);
   }

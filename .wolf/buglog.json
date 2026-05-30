@@ -209,6 +209,358 @@
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-05-09T08:34:34.356Z"
+    },
+    {
+      "id": "bug-014",
+      "timestamp": "2026-05-30T02:30:33.012Z",
+      "error_message": "Null/undefined access in ",
+      "file": "backend/src/app_credentials.js",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:30:33.012Z"
+    },
+    {
+      "id": "bug-015",
+      "timestamp": "2026-05-30T02:31:30.454Z",
+      "error_message": "Missing error handling in appCredentialGuard",
+      "file": "backend/src/app.js",
+      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "fix": "Added try/catch block",
+      "tags": [
+        "auto-detected",
+        "error-handling",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:31:30.454Z"
+    },
+    {
+      "id": "bug-016",
+      "timestamp": "2026-05-30T02:31:41.102Z",
+      "error_message": "CSS fix: body",
+      "file": "expat8-dashboard/src/app/articles/[id]/page.tsx",
+      "root_cause": "body: JSON.stringify(patch), → patch,",
+      "fix": "Changed body: JSON.stringify(patch), → patch,",
+      "tags": [
+        "auto-detected",
+        "style-fix",
+        "tsx"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:31:41.102Z"
+    },
+    {
+      "id": "bug-017",
+      "timestamp": "2026-05-30T02:32:13.106Z",
+      "error_message": "Incorrect value in code",
+      "file": "expat8-dashboard/src/app/users/[id]/page.tsx",
+      "root_cause": "Had `/v1/exam/certificate/${e.certificate_id}`",
+      "fix": "Changed to `/api/certificate/${e.certificate_id}`",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "tsx"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:32:13.106Z"
+    },
+    {
+      "id": "bug-018",
+      "timestamp": "2026-05-30T02:34:15.376Z",
+      "error_message": "Wrong reference: OPTIONS should be PATCH",
+      "file": "contracts/api.md",
+      "root_cause": "Used \"OPTIONS\" instead of \"PATCH\"",
+      "fix": "Changed OPTIONS → PATCH",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:34:15.376Z"
+    },
+    {
+      "id": "bug-019",
+      "timestamp": "2026-05-30T02:37:53.456Z",
+      "error_message": "Significant refactor of ",
+      "file": "docs/20260530-project-roadmap-12-month.md",
+      "root_cause": "6 lines replaced/restructured",
+      "fix": "Rewrote 8→8 lines (6 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:37:53.456Z"
+    },
+    {
+      "id": "bug-020",
+      "timestamp": "2026-05-30T02:38:28.977Z",
+      "error_message": "Missing error handling in unknown",
+      "file": "docs/20260530-project-roadmap-12-month.md",
+      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "fix": "Added try/catch block",
+      "tags": [
+        "auto-detected",
+        "error-handling",
+        "md"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T02:38:28.977Z"
+    },
+    {
+      "id": "bug-021",
+      "timestamp": "2026-05-30T03:49:44.759Z",
+      "error_message": "Missing await",
+      "file": "backend/test/api.test.js",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T03:49:44.759Z"
+    },
+    {
+      "id": "bug-022",
+      "timestamp": "2026-05-30T03:51:20.617Z",
+      "error_message": "Missing guard clause",
+      "file": "backend/src/worker.js",
+      "root_cause": "No early return/throw for edge case: isShuttingDown",
+      "fix": "Added guard clause: if (isShuttingDown)",
+      "tags": [
+        "auto-detected",
+        "guard-clause",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T03:51:20.617Z"
+    },
+    {
+      "id": "bug-023",
+      "timestamp": "2026-05-30T03:55:24.879Z",
+      "error_message": "Missing import: ../api/models/speaking_models.dart",
+      "file": "mobile/lib/src/speaking/speaking_repository.dart",
+      "root_cause": "Module(s) not imported: ../api/models/speaking_models.dart",
+      "fix": "Added import(s) for ../api/models/speaking_models.dart",
+      "tags": [
+        "auto-detected",
+        "missing-import",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T03:55:24.879Z"
+    },
+    {
+      "id": "bug-024",
+      "timestamp": "2026-05-30T03:55:46.575Z",
+      "error_message": "Missing error handling in unknown",
+      "file": "mobile/lib/src/speaking/speaking_repository.dart",
+      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "fix": "Added try/catch block",
+      "tags": [
+        "auto-detected",
+        "error-handling",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T03:55:46.575Z"
+    },
+    {
+      "id": "bug-025",
+      "timestamp": "2026-05-30T03:56:58.493Z",
+      "error_message": "Missing import: ../speaking/speaking_summary_screen.dart",
+      "file": "mobile/lib/src/speaking/speaking_drill_screen.dart",
+      "root_cause": "Module(s) not imported: ../speaking/speaking_summary_screen.dart",
+      "fix": "Added import(s) for ../speaking/speaking_summary_screen.dart",
+      "tags": [
+        "auto-detected",
+        "missing-import",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T03:56:58.493Z"
+    },
+    {
+      "id": "bug-026",
+      "timestamp": "2026-05-30T03:58:34.038Z",
+      "error_message": "Missing import: ../speaking/speaking_summary_screen.dart",
+      "file": "mobile/lib/src/ui/learning_screen.dart",
+      "root_cause": "Module(s) not imported: ../speaking/speaking_summary_screen.dart",
+      "fix": "Added import(s) for ../speaking/speaking_summary_screen.dart",
+      "tags": [
+        "auto-detected",
+        "missing-import",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T03:58:34.038Z"
+    },
+    {
+      "id": "bug-027",
+      "timestamp": "2026-05-30T04:03:57.776Z",
+      "error_message": "Significant refactor of ",
+      "file": "mobile/lib/src/ui/learning_screen.dart",
+      "root_cause": "66 lines replaced/restructured",
+      "fix": "Rewrote 78→3 lines (66 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:03:57.776Z"
+    },
+    {
+      "id": "bug-028",
+      "timestamp": "2026-05-30T04:15:32.299Z",
+      "error_message": "Null/undefined access in ",
+      "file": "backend/src/word_store.js",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:15:32.299Z"
+    },
+    {
+      "id": "bug-029",
+      "timestamp": "2026-05-30T04:15:47.469Z",
+      "error_message": "Wrong reference: speakingPromptsByKey should be speakingPromptsById",
+      "file": "backend/src/word_store.js",
+      "root_cause": "Used \"speakingPromptsByKey\" instead of \"speakingPromptsById\"",
+      "fix": "Changed speakingPromptsByKey → speakingPromptsById",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:15:47.469Z"
+    },
+    {
+      "id": "bug-030",
+      "timestamp": "2026-05-30T04:16:13.207Z",
+      "error_message": "Null/undefined access in ",
+      "file": "backend/src/postgres_word_store.js",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:16:13.207Z"
+    },
+    {
+      "id": "bug-031",
+      "timestamp": "2026-05-30T04:16:50.498Z",
+      "error_message": "Missing await",
+      "file": "backend/src/routes/admin.js",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:16:50.498Z"
+    },
+    {
+      "id": "bug-032",
+      "timestamp": "2026-05-30T04:16:59.018Z",
+      "error_message": "Type error",
+      "file": "expat8-dashboard/src/lib/ops-data.ts",
+      "root_cause": "Missing or incorrect type annotation",
+      "fix": "Added type assertion/annotation",
+      "tags": [
+        "auto-detected",
+        "type-fix",
+        "ts"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:16:59.018Z"
+    },
+    {
+      "id": "bug-033",
+      "timestamp": "2026-05-30T04:17:40.139Z",
+      "error_message": "Missing error handling in function",
+      "file": "expat8-dashboard/src/lib/ops-data.ts",
+      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "fix": "Added try/catch block",
+      "tags": [
+        "auto-detected",
+        "error-handling",
+        "ts"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:17:40.139Z"
+    },
+    {
+      "id": "bug-034",
+      "timestamp": "2026-05-30T04:18:30.927Z",
+      "error_message": "Missing guard clause",
+      "file": "expat8-dashboard/src/app/ops/page.tsx",
+      "root_cause": "No early return/throw for edge case: !isoDate",
+      "fix": "Added guard clause: if (!isoDate)",
+      "tags": [
+        "auto-detected",
+        "guard-clause",
+        "tsx"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T04:18:30.927Z"
+    },
+    {
+      "id": "bug-035",
+      "timestamp": "2026-05-30T05:45:40.197Z",
+      "error_message": "Incorrect value in code",
+      "file": "mobile/lib/src/exam/exam_certificate_screen.dart",
+      "root_cause": "Had 'https://expat8.x51.vn/v1/exam/certificate/${widge",
+      "fix": "Changed to 'https://expat8.x51.vn/exam/certificate/${widget.c",
+      "tags": [
+        "auto-detected",
+        "wrong-value",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-05-30T05:45:40.197Z"
     }
   ]
 }

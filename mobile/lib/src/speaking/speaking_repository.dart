@@ -20,6 +20,7 @@ class SpeakingEventType {
   static const selfRatedHesitated = 'speaking_self_rated_hesitated';
   static const selfRatedCouldNotSay = 'speaking_self_rated_could_not_say';
   static const drillCompleted = 'speaking_drill_completed';
+  static const loopCompleted = 'loop_completed';
 }
 
 /// Self-rating values for the vocabulary card speaking panel.
@@ -75,15 +76,18 @@ class SpeakingRepository {
     required LocalDatabase database,
     required ISpeakingAudioService audioService,
     required AudioFileManager fileManager,
+    BackendApiClient? apiClient,
     Uuid? uuid,
   })  : _database = database,
         _audioService = audioService,
         _fileManager = fileManager,
+        _apiClient = apiClient,
         _uuid = uuid ?? const Uuid();
 
   final LocalDatabase _database;
   final ISpeakingAudioService _audioService;
   final AudioFileManager _fileManager;
+  final BackendApiClient? _apiClient;
   final Uuid _uuid;
 
   String? _activeAttemptId;
@@ -448,6 +452,42 @@ class SpeakingRepository {
       'occurred_at': DateTime.now().toUtc().toIso8601String(),
     });
     _currentDrillSessionId = null;
+  }
+
+  /// Emits `loop_completed` after a full drill loop.
+  /// Fire-and-forget; network errors are swallowed by the sync queue.
+  void postLoopCompletedEvent({
+    required int durationMs,
+    required int promptsCount,
+  }) {
+    _enqueueEvent({
+      'event_type': SpeakingEventType.loopCompleted,
+      'client_event_id': _uuid.v4(),
+      'duration_ms': durationMs,
+      'prompts_count': promptsCount,
+      'occurred_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  /// Fetches the weekly speaking summary from the backend.
+  ///
+  /// Returns `null` when offline or when [_apiClient] is not available.
+  Future<SpeakingWeeklySummary?> getWeeklySummary({
+    String language = 'en',
+  }) async {
+    final client = _apiClient;
+    if (client == null) return null;
+    try {
+      final deviceId = await _database.getOrCreateDeviceId(_uuid.v4);
+      final session = await _database.loadUserSession();
+      return await client.fetchSpeakingSummary(
+        deviceId: deviceId,
+        language: language,
+        sessionToken: session?.sessionToken,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---- TTS playback ----

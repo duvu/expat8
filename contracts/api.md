@@ -52,7 +52,7 @@ Expected response:
 ```http
 204 No Content
 Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, PUT, OPTIONS
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
 Access-Control-Allow-Headers: content-type, authorization, x-expat8-app-id, x-expat8-timestamp, x-expat8-nonce, x-expat8-content-sha256, x-expat8-signature
 Access-Control-Max-Age: 86400
 ```
@@ -216,6 +216,78 @@ Response:
   "display_name": "Learner"
 }
 ```
+
+## POST /v1/articles
+
+Creates a user-owned article. Requires a valid bearer session.
+
+Request:
+
+```json
+{
+  "title": "My Article",
+  "language": "en",
+  "raw_text": "Full article text...",
+  "source_url": "https://example.com/article",
+  "visibility": "private"
+}
+```
+
+Fields:
+
+- `title`: string, required.
+- `language`: string, required.
+- `raw_text`: string, required.
+- `source_url`: string, optional.
+- `visibility`: `"private"` or `"published"`. Defaults to `"private"`.
+
+Response `201`:
+
+```json
+{
+  "id": "article_123",
+  "title": "My Article",
+  "language": "en",
+  "source_url": "https://example.com/article",
+  "visibility": "private",
+  "status": "pending",
+  "processing_error": null,
+  "created_at": "2026-05-04T00:00:00.000Z",
+  "updated_at": "2026-05-04T00:00:00.000Z"
+}
+```
+
+---
+
+## GET /v1/articles
+
+Lists user-owned articles. Requires a valid bearer session.
+
+Query parameters:
+
+- `limit`: optional, max `100`, default `100`.
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "article_123",
+      "title": "My Article",
+      "language": "en",
+      "source_url": "https://example.com/article",
+      "visibility": "private",
+      "status": "pending",
+      "processing_error": null,
+      "created_at": "2026-05-04T00:00:00.000Z",
+      "updated_at": "2026-05-04T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+---
 
 ## GET /v1/articles/:id/vocabulary
 
@@ -950,6 +1022,9 @@ Supported speaking event types:
 - `speaking_self_rated_hesitated`
 - `speaking_self_rated_could_not_say`
 - `speaking_drill_completed`
+- `loop_completed`
+
+`loop_completed` required fields: `device_id`, `language`, `occurred_at`, and in the `speaking` object: `duration_ms` (total drill duration in ms), `prompts_count` (number of prompts in the loop).
 
 Speaking event example:
 
@@ -1043,6 +1118,7 @@ Response:
   "retry_count": 3,
   "retry_rate": 0.25,
   "drill_sessions_completed": 2,
+  "loop_completion_count": 1,
   "approximate_duration_ms": 52200,
   "self_rating_counts": {
     "clear": 7,
@@ -1056,6 +1132,7 @@ Response:
 
 `retry_rate` is `retry_count / recording_count` (0 when no recordings).
 `drill_sessions_completed` counts `speaking_drill_completed` events in the
+requested week. `loop_completion_count` counts `loop_completed` events in the
 requested week. `first_recording_at` is the ISO timestamp of the earliest
 `speaking_recorded` event for the device across all time, or `null`.
 
@@ -1125,6 +1202,45 @@ Response:
 }
 ```
 
+## POST /v1/admin/speaking-prompts
+
+Admin-only. Creates a speaking prompt for a word sense.
+
+Request:
+
+```json
+{
+  "word_sense_id": "sense_123",
+  "target_text": "She is a reliable teammate.",
+  "vi_hint": "Co ay la mot dong doi dang tin cay.",
+  "target_phrase": "reliable teammate",
+  "difficulty": "B1",
+  "topic": "work",
+  "status": "pending_review"
+}
+```
+
+Fields:
+
+- `word_sense_id`: string, required.
+- `target_text`, `vi_hint`, `target_phrase`, `pronunciation_tip_vi`, `common_mistake_vi`, `difficulty`, `topic`: optional strings.
+- `status`: optional, defaults to `"pending_review"`.
+
+Response `201`:
+
+```json
+{
+  "id": "speaking_prompt_123",
+  "word_sense_id": "sense_123",
+  "status": "pending_review",
+  "created_at": "2026-05-04T00:00:00.000Z"
+}
+```
+
+Requires app credentials and admin token. Missing admin token returns `403`.
+
+---
+
 ## PATCH /v1/admin/speaking-prompts/:id
 
 Admin-only. Updates speaking prompt fields.
@@ -1146,6 +1262,33 @@ Response:
   "updated_at": "2026-05-09T10:00:00.000Z"
 }
 ```
+
+## GET /v1/admin/speaking/weekly-health
+
+Admin-only. Returns aggregate speaking loop signals for the current week.
+
+Query parameters:
+
+- `week_start`: optional ISO date (e.g. `2026-05-26`). Defaults to the current week start.
+
+Response:
+
+```json
+{
+  "week_start": "2026-05-26",
+  "loop_completion_count": 4,
+  "drill_session_count": 7,
+  "latest_approved_prompt_at": "2026-05-28T14:00:00.000Z",
+  "latest_published_passage_at": "2026-05-27T09:30:00.000Z"
+}
+```
+
+`loop_completion_count` — count of `loop_completed` events in the requested week across all devices.
+`drill_session_count` — count of `speaking_drill_completed` events in the requested week across all devices.
+`latest_approved_prompt_at` — `updated_at` of the most recently approved speaking prompt, or `null`.
+`latest_published_passage_at` — `created_at` of the most recently published memorization passage, or `null`.
+
+Dashboard: display a staleness warning if either content timestamp is older than 7 days.
 
 ## GET /v1/proficiency
 
@@ -1770,6 +1913,32 @@ Error responses:
 | 403    | `forbidden`      | Missing or invalid admin token |
 | 404    | `not_found`      | Archive ID not found           |
 | 500    | `internal_error` | Stream read failure            |
+
+---
+
+## Content Packs
+
+> **Note:** The `/v1/content-packs` endpoints are an internal bootstrap mechanism for pre-seeding the mobile app's local vocabulary store. They are not part of the public or partner API surface and may change without notice.
+
+### GET /v1/content-packs
+
+Returns a list of content packs for the requested language. Accepts optional `app-credential` auth; user session is optional.
+
+Query parameters:
+
+- `language` (or `target_language`): target language code, defaults to backend `defaultTargetLanguage`.
+- `after_version`: optional integer; returns only packs with a version number greater than this value.
+- `limit`: maximum items, max `200`, default `200`.
+
+Response:
+
+```json
+{ "items": [] }
+```
+
+### GET /v1/content-packs/:id
+
+Returns a single content pack by ID.
 
 ---
 

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/local_database_entities.dart';
 import '../speaking/speaking_audio_service.dart';
 import '../speaking/speaking_repository.dart';
+import '../speaking/speaking_summary_screen.dart';
 
 /// 3-minute speaking drill.
 ///
@@ -57,6 +58,10 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
           promptsAttempted: _totalAttempts,
           promptsCompleted: _totalAttempts,
           totalDurationMs: durationMs,
+        );
+        widget.repository.postLoopCompletedEvent(
+          durationMs: durationMs,
+          promptsCount: _totalAttempts,
         );
       }
     });
@@ -170,7 +175,21 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            FilledButton(
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (_) => SpeakingSummaryScreen(
+                      repository: widget.repository,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.bar_chart_outlined),
+              label: const Text('See weekly summary'),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Done'),
             ),

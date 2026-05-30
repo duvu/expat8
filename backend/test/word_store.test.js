@@ -571,7 +571,8 @@ test('additive cache claims are idempotent and filter unknown words', () => {
 
 test('SPEAKING_EVENT_TYPES includes speaking_drill_completed', () => {
   assert.ok(SPEAKING_EVENT_TYPES.includes('speaking_drill_completed'));
-  assert.equal(SPEAKING_EVENT_TYPES.length, 8);
+  assert.ok(SPEAKING_EVENT_TYPES.includes('loop_completed'));
+  assert.equal(SPEAKING_EVENT_TYPES.length, 9);
 });
 
 test('isSpeakingEvent returns true for all speaking event types', () => {
@@ -582,7 +583,7 @@ test('isSpeakingEvent returns true for all speaking event types', () => {
   assert.equal(isSpeakingEvent({ event_type: 'speaking_magic_score' }), false);
 });
 
-test('normalizeSpeakingEvent accepts all 8 speaking event types', () => {
+test('normalizeSpeakingEvent accepts all 9 speaking event types', () => {
   const base = {
     attempt_id: 'attempt_x',
     occurred_at: '2026-05-10T10:00:00.000Z'
@@ -591,6 +592,9 @@ test('normalizeSpeakingEvent accepts all 8 speaking event types', () => {
     let event = { event_type: type, ...base };
     if (type === 'speaking_drill_completed') {
       event = { ...event, prompts_attempted: 5, total_duration_ms: 180000 };
+    }
+    if (type === 'loop_completed') {
+      event = { ...event, duration_ms: 60000, prompts_count: 5 };
     }
     const normalized = normalizeSpeakingEvent({ deviceId: 'device_test', event });
     assert.equal(normalized.event_type, type);

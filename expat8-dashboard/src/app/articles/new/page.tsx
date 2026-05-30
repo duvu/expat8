@@ -42,7 +42,6 @@ export default function NewArticlePage() {
           Visibility
           <select name="visibility" defaultValue="private">
             <option value="private">Private</option>
-            <option value="shared">Shared</option>
             <option value="published">Published</option>
           </select>
         </label>

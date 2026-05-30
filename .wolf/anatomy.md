@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-15T11:00:00.782Z
-> Files: 512 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-05-30T05:57:13.627Z
+> Files: 560 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -10,7 +10,7 @@
 - `CLAUDE.md` — OpenWolf (~1609 tok)
 - `docker-compose.yml` — Docker Compose services (~986 tok)
 - `expat8.code-workspace` (~44 tok)
-- `README.md` — Project documentation (~779 tok)
+- `README.md` — Project documentation (~2014 tok)
 
 ## .claude/
 
@@ -144,7 +144,7 @@
 
 ## backend/db/
 
-- `schema.sql` — Database schema (~1965 tok)
+- `schema.sql` — Database schema (~4244 tok)
 
 ## backend/db/migrations/
 
@@ -179,8 +179,8 @@
 
 ## backend/src/
 
-- `app_credentials.js` — PostgreSQL-backed nonce cache for multi-instance replay protection. (~1614 tok)
-- `app.js` — Create the default rate limiter set for production use. (~9731 tok)
+- `app_credentials.js` — PostgreSQL-backed nonce cache for multi-instance replay protection. (~1672 tok)
+- `app.js` — API routes: GET (5 endpoints) (~3621 tok)
 - `article_processing_pipeline.js` — Exports ArticleProcessingPipeline (~1998 tok)
 - `article_processing_worker.js` — Exports ArticleProcessingWorker (~691 tok)
 - `article_term_extractor.js` — Exports extractCandidateTerms (~384 tok)
@@ -192,7 +192,7 @@
 - `litellm_client.js` — Exports LiteLLMClient (~2767 tok)
 - `logger.js` — Exports createLogger, sanitizeFields (~987 tok)
 - `normalize.js` — Exports normalizeTerm (~32 tok)
-- `postgres_word_store.js` — Exports PostgresWordStore (~19483 tok)
+- `postgres_word_store.js` — Exports PostgresWordStore (~33256 tok)
 - `proficiency.js` — Exports CEFR_LEVELS, HSK_LEVELS, DEFAULT_PROFICIENCY_LEVEL, VALID_STUDY_RATINGS + 16 more (~1416 tok)
 - `rate_limit.js` — Simple in-process sliding-window rate limiter. (~906 tok)
 - `runtime.js` — Exports createStore, createBackendRuntime (~820 tok)
@@ -201,17 +201,18 @@
 - `vocabulary_enrichment_adapter.js` — Exports VocabularyEnrichmentAdapter (~1505 tok)
 - `vocabulary_pool_scheduler.js` — Exports VocabularyPoolScheduler (~1207 tok)
 - `vocabulary_validator.js` — Exports validateVocabularyItem, normalizeSuggestionType (~692 tok)
-- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~27406 tok)
-- `worker.js` — config: tick (~478 tok)
+- `word_store.js` — Exports SPEAKING_EVENT_TYPES, SPEAKING_SELF_RATINGS, WordStore (~28565 tok)
+- `worker.js` — config: handleShutdown, tick (~1310 tok)
 
 ## backend/src/routes/
 
+- `admin.js` — API routes: POST, GET, PATCH, DELETE (16 endpoints) (~3312 tok)
 - `exam.js` — API routes: GET, POST (6 endpoints) (~1602 tok)
 
 ## backend/test/
 
 - `api_logging.test.js` — lines: listen (~757 tok)
-- `api.test.js` — Declares store (~15722 tok)
+- `api.test.js` — Declares store (~18694 tok)
 - `app_credentials.test.js` — activeCredential: signedHeaders (~1798 tok)
 - `article_ingest_integration.test.js` — Integration tests: article ingest → processing state transitions → publish eligibility. (~2219 tok)
 - `article_processing_pipeline.test.js` — Helpers (~2544 tok)
@@ -231,7 +232,7 @@
 - `user_identity.test.js` (~112 tok)
 - `vocabulary_pool_scheduler.test.js` — store: schedulerConfig, wordInput (~798 tok)
 - `vocabulary_validator.test.js` — Declares wordInput (~551 tok)
-- `word_store.test.js` — Declares store (~8006 tok)
+- `word_store.test.js` — Declares store (~8595 tok)
 
 ## backend/test/support/
 
@@ -239,7 +240,7 @@
 
 ## contracts/
 
-- `api.md` — API Contracts (~5704 tok)
+- `api.md` — API Contracts (~18844 tok)
 
 ## docs/
 
@@ -261,8 +262,13 @@
 - `20260509-speaking-prompt-seed-scope.md` — Speaking Prompt Seed Scope - Phase 0-3 (~1227 tok)
 - `20260509-swipe-right-to-left-new-word-invariant.md` — Investigation: Swipe Phải→Trái Chỉ Load Được 3 Từ Mới (~1542 tok)
 - `20260510-article-processing-worker-deployment.md` — Article Processing Worker — Deployment Notes (~1063 tok)
+- `20260530-project-roadmap-12-month.md` — Expat8 12-Month Project Roadmap (~5192 tok)
+- `api-guide.md` — Operational API summary and contract invariants (~620 tok)
 - `app-credential-security.md` — App Credential Security (~3196 tok)
+- `architecture-guide.md` — Runtime topology, request pipeline, storage, and data-flow guide (~790 tok)
 - `architecture.md` — Kiến trúc hệ thống Expat8 — Version 2 (~7138 tok)
+- `backend-guide.md` — Backend service commands, entrypoints, auth, database, and worker notes (~780 tok)
+- `canonical-release-path.md` — Canonical Release and Update Path (~810 tok)
 - `chinese-language-e2e-investigation.md` — Investigation: Tiếng Trung E2E Flow (~2188 tok)
 - `COMMIT_REPORT_20260509_1510.md` — Commit Report (~1378 tok)
 - `COMMIT_REPORT_20260509_155944.md` — Commit Report (~1191 tok)
@@ -271,14 +277,22 @@
 - `COMMIT_REPORT_20260509_204126.md` — Commit Report (~2312 tok)
 - `COMMIT_REPORT_20260510_131500.md` — Commit Report (~1331 tok)
 - `COMMIT_REPORT_20260510_202545.md` — Commit Report (~1374 tok)
+- `COMMIT_REPORT_20260530_125603.md` — Commit Report (~2714 tok)
+- `dashboard-guide.md` — Next.js admin dashboard setup, environment, and admin workflow guide (~560 tok)
+- `deployment-guide.md` — Local Compose and Z440 deployment guide (~760 tok)
+- `developer-setup.md` — Full workspace local development setup guide (~980 tok)
 - `expat8_logs_2026_05_07T16_39_51_937450Z_1.txt` — Expat8 mobile logs (~3685 tok)
+- `index.md` — Expat8 Documentation Index (~575 tok)
+- `mobile-guide.md` — Flutter/ObjectBox app architecture, config, card loading, and release build guide (~800 tok)
 - `mobile-system-logging.md` — Mobile System Logging (~669 tok)
 - `mvp-setup.md` — MVP Setup and Limitations (~2300 tok)
 - `privacy-policy.md` — Privacy Policy — Expat8 (~703 tok)
+- `project-overview.md` — Product scope, repo shape, source-of-truth rules, and invariants (~590 tok)
 - `random-fallback-investigation.md` — Investigation: "Rất ít từ vựng sẵn sàng" khi mở app (~987 tok)
 - `RELEASE_NOTES_9_9.md` — Release Notes: Beta Speaking Foundation (v9.9) (~1709 tok)
 - `release-notes.md` — Release Notes (~537 tok)
 - `seed-vocabulary.md` — Seed Vocabulary Bundling (~1192 tok)
+- `testing-guide.md` — Backend, mobile, dashboard, migration, smoke, and docs verification commands (~560 tok)
 
 ## expat8-dashboard/
 
@@ -306,17 +320,25 @@
 - `layout.tsx` — metadata (~165 tok)
 - `page.tsx` — dynamic — renders form, table (~919 tok)
 
+## expat8-dashboard/src/app/api/certificate/[id]/
+
+- `route.ts` — Next.js API route: GET (~128 tok)
+
 ## expat8-dashboard/src/app/articles/[id]/
 
-- `page.tsx` — dynamic — renders form, table (~938 tok)
+- `page.tsx` — dynamic — renders form, table (~2155 tok)
 
 ## expat8-dashboard/src/app/articles/new/
 
-- `page.tsx` — createArticle — renders form (~467 tok)
+- `page.tsx` — createArticle — renders form (~452 tok)
 
 ## expat8-dashboard/src/app/exam/
 
 - `page.tsx` — dynamic — renders form, table (~840 tok)
+
+## expat8-dashboard/src/app/ops/
+
+- `page.tsx` — dynamic (~1846 tok)
 
 ## expat8-dashboard/src/app/review/
 
@@ -332,7 +354,7 @@
 
 ## expat8-dashboard/src/app/users/[id]/
 
-- `page.tsx` — dynamic — renders table (~1209 tok)
+- `page.tsx` — dynamic — renders table (~2472 tok)
 
 ## expat8-dashboard/src/components/
 
@@ -346,6 +368,7 @@
 - `backend.ts` — Exports backendFetch (~695 tok)
 - `config.ts` — Exports getAdminConfig (~119 tok)
 - `db.ts` — Exports listAdminArticles, getAdminArticle, listArticleVocabulary, listPendingVocabulary + 6 more (~3783 tok)
+- `ops-data.ts` — Exports SpeakingLoopHealth, LogArchiveRecord, HealthProbe, OpsOverview + 6 more (~1920 tok)
 
 ## mobile/
 
@@ -757,3 +780,109 @@
 
 - `gen_dart_plugin_registrant.stamp` (~51 tok)
 - `gen_localizations.stamp` (~7 tok)
+
+## mobile/lib/
+
+- `main.dart` — Stateful widget: LanguageLearningApp (~2344 tok)
+
+## mobile/lib/src/api/models/
+
+- `speaking_models.dart` — / Weekly speaking summary returned by `GET /v1/speaking/summary`. (~609 tok)
+
+## mobile/lib/src/exam/
+
+- `exam_certificate_screen.dart` — / Public certificate view screen. (~1698 tok)
+
+## mobile/lib/src/speaking/
+
+- `speaking_drill_screen.dart` — / 3-minute speaking drill. (~3273 tok)
+- `speaking_repository.dart` — / Speaking event types matching the backend enum. (~4724 tok)
+- `speaking_summary_screen.dart` — / Weekly speaking summary screen. (~1466 tok)
+
+## mobile/lib/src/ui/
+
+- `learning_screen.dart` — Stateful widget: LearningScreen (~7682 tok)
+
+## mobile/test/
+
+- `speaking_test.dart` — ---- Minimal fake audio service (no real mic/plugin) ---- (~3613 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/
+
+- `design.md` — Context (~2003 tok)
+- `proposal.md` — Why (~1091 tok)
+- `tasks.md` — 1. Mobile Device Verification (~1536 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/admin-api-documentation/
+
+- `spec.md` — MODIFIED Requirements (~909 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/learning-cards-api/
+
+- `spec.md` — MODIFIED Requirements (~679 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-exam-navigation/
+
+- `spec.md` — MODIFIED Requirements (~579 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-release-android/
+
+- `spec.md` — MODIFIED Requirements (~670 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/mobile-word-prefetch/
+
+- `spec.md` — MODIFIED Requirements (~762 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-contract-parity/
+
+- `spec.md` — ADDED Requirements (~549 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-dashboard-correctness/
+
+- `spec.md` — ADDED Requirements (~555 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-release-path/
+
+- `spec.md` — ADDED Requirements (~644 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-replay-protection-health/
+
+- `spec.md` — ADDED Requirements (~414 tok)
+
+## openspec/changes/phase-0-trust-and-release-readiness/specs/phase-0-schema-migration-parity/
+
+- `spec.md` — ADDED Requirements (~444 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/
+
+- `design.md` — Context (~1574 tok)
+- `proposal.md` — Why (~871 tok)
+- `tasks.md` — 1. Backend: loop_completed event type (~1729 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/dashboard-loop-health/
+
+- `spec.md` — ADDED Requirements (~320 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/learner-loop-completion-signal/
+
+- `spec.md` — ADDED Requirements (~438 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-speaking-drill/
+
+- `spec.md` — MODIFIED Requirements (~335 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-speaking-session/
+
+- `spec.md` — MODIFIED Requirements (~208 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/mobile-weekly-speaking-summary/
+
+- `spec.md` — ADDED Requirements (~364 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/speaking-study-events/
+
+- `spec.md` — MODIFIED Requirements (~298 tok)
+
+## openspec/changes/phase-1-cohesive-daily-speaking-loop/specs/worker-graceful-shutdown/
+
+- `spec.md` — ADDED Requirements (~230 tok)

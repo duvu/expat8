@@ -1,6 +1,14 @@
 import { backendFetch } from './backend';
 import { getAdminConfig } from './config';
 
+export type SpeakingLoopHealth = {
+  week_start: string;
+  loop_completion_count: number;
+  drill_session_count: number;
+  latest_approved_prompt_at: string | null;
+  latest_published_passage_at: string | null;
+};
+
 export type LogArchiveRecord = {
   id: string;
   file_name: string;
@@ -31,14 +39,17 @@ export type OpsOverview = {
   ready: HealthProbe;
   archives: LogArchiveRecord[];
   archivesError: string | null;
+  loopHealth: SpeakingLoopHealth | null;
+  loopHealthError: string | null;
 };
 
 export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview> {
   const checkedAt = new Date().toISOString();
-  const [live, ready, archivesResult] = await Promise.all([
+  const [live, ready, archivesResult, loopHealthResult] = await Promise.all([
     probeHealth('/health', 'Backend live', checkedAt),
     probeHealth('/health/ready', 'Backend ready', checkedAt),
     loadLogArchives({ limit }),
+    loadSpeakingLoopHealth(),
   ]);
 
   return {
@@ -47,6 +58,8 @@ export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview
     ready,
     archives: archivesResult.items,
     archivesError: archivesResult.error,
+    loopHealth: loopHealthResult.data,
+    loopHealthError: loopHealthResult.error,
   };
 }
 
@@ -74,6 +87,28 @@ export async function loadLogArchives({ limit = 200 } = {}): Promise<{
     return {
       items: [],
       error: error instanceof Error ? error.message : 'Unable to load log archives',
+    };
+  }
+}
+
+export async function loadSpeakingLoopHealth(): Promise<{
+  data: SpeakingLoopHealth | null;
+  error: string | null;
+}> {
+  try {
+    ensureDashboardCredentials();
+    const response = await backendFetch('/v1/admin/speaking/weekly-health');
+    if (!response.ok) {
+      return {
+        data: null,
+        error: await readErrorMessage(response, 'Unable to load loop health'),
+      };
+    }
+    return { data: await response.json() as SpeakingLoopHealth, error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unable to load loop health',
     };
   }
 }

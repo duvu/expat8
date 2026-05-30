@@ -988,6 +988,7 @@ export class PostgresWordStore {
             COUNT(*) FILTER (WHERE self_rating = 'clear')::int AS clear_count,
             COUNT(*) FILTER (WHERE self_rating = 'hesitated')::int AS hesitated_count,
             COUNT(*) FILTER (WHERE self_rating = 'could_not_say')::int AS could_not_say_count,
+            COUNT(*) FILTER (WHERE event_type = 'loop_completed')::int AS loop_completion_count,
             MAX(occurred_at) AS latest_activity_at
           FROM speaking_events
           WHERE user_id = $1 AND language = $2 AND occurred_at >= $3`,
@@ -1001,6 +1002,7 @@ export class PostgresWordStore {
             COUNT(*) FILTER (WHERE self_rating = 'clear')::int AS clear_count,
             COUNT(*) FILTER (WHERE self_rating = 'hesitated')::int AS hesitated_count,
             COUNT(*) FILTER (WHERE self_rating = 'could_not_say')::int AS could_not_say_count,
+            COUNT(*) FILTER (WHERE event_type = 'loop_completed')::int AS loop_completion_count,
             MAX(occurred_at) AS latest_activity_at
           FROM speaking_events
           WHERE device_id = $1 AND user_id IS NULL AND language = $2 AND occurred_at >= $3`,
@@ -1016,12 +1018,41 @@ export class PostgresWordStore {
       recording_count: Number(row.spoken_sentence_count ?? 0),
       retry_count: Number(row.retry_count ?? 0),
       approximate_duration_ms: Number(row.approximate_duration_ms ?? 0),
+      loop_completion_count: Number(row.loop_completion_count ?? 0),
       self_rating_counts: {
         clear: Number(row.clear_count ?? 0),
         hesitated: Number(row.hesitated_count ?? 0),
         could_not_say: Number(row.could_not_say_count ?? 0)
       },
       latest_activity_at: row.latest_activity_at ?? null
+    };
+  }
+
+  async getSpeakingLoopHealthSummary({ weekStart = null } = {}) {
+    const start = normalizeWeekStart(weekStart);
+    const result = await this.pool.query(
+      `SELECT
+        COUNT(*) FILTER (WHERE event_type = 'loop_completed')::int AS loop_completion_count,
+        COUNT(*) FILTER (WHERE event_type = 'speaking_drill_completed')::int AS drill_session_count
+       FROM speaking_events
+       WHERE occurred_at >= $1`,
+      [start]
+    );
+    const row = result.rows[0] ?? {};
+
+    const promptResult = await this.pool.query(
+      `SELECT updated_at FROM speaking_prompts WHERE status = 'approved' ORDER BY updated_at DESC LIMIT 1`
+    );
+    const passageResult = await this.pool.query(
+      `SELECT created_at FROM memorization_passages WHERE visibility = 'published' AND status = 'published' ORDER BY created_at DESC LIMIT 1`
+    );
+
+    return {
+      week_start: start.slice(0, 10),
+      loop_completion_count: Number(row.loop_completion_count ?? 0),
+      drill_session_count: Number(row.drill_session_count ?? 0),
+      latest_approved_prompt_at: promptResult.rows[0]?.updated_at ?? null,
+      latest_published_passage_at: passageResult.rows[0]?.created_at ?? null,
     };
   }
 

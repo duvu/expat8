@@ -32,6 +32,20 @@ See `contracts/api.md` for the request and response shapes.
 - `docs/`: product and technical documentation.
 - `openspec/`: change proposal, design, specs, and tasks.
 
+## Documentation
+
+Start with `docs/index.md` for the full documentation map:
+
+- `docs/project-overview.md`: product scope, repo shape, source-of-truth rules, and invariants.
+- `docs/developer-setup.md`: local backend, mobile, dashboard, and Compose setup.
+- `docs/architecture-guide.md`: runtime topology, request pipeline, storage, and data flows.
+- `docs/backend-guide.md`: backend commands, entrypoints, auth, database, and worker notes.
+- `docs/mobile-guide.md`: Flutter/ObjectBox workflows, app credentials, card loading, and release builds.
+- `docs/dashboard-guide.md`: Next.js admin dashboard setup and integration.
+- `docs/api-guide.md`: operational API summary; `contracts/api.md` remains canonical.
+- `docs/deployment-guide.md`: local Compose and Z440 production deployment notes.
+- `docs/testing-guide.md`: backend, mobile, dashboard, migration, and smoke-test commands.
+
 ## Local Configuration
 
 Mobile compile-time values:
@@ -108,6 +122,10 @@ stored words and rejects failed generation attempts without exposing sensitive
 data.
 
 ## Roadmap
+
+The current execution baseline is the 12-month, evidence-gated [Project Roadmap](docs/20260530-project-roadmap-12-month.md). It supersedes the simple phase list below for near-term sequencing and gate checks.
+
+See [Canonical Release Path](docs/canonical-release-path.md) for the committed mobile release and update distribution model.
 
 ### v1 — Internal Milestone (current)
 

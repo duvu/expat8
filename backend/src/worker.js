@@ -78,7 +78,26 @@ const passageEnrichmentWorker = new PassageEnrichmentWorker({
 
 const intervalMs = Number.parseInt(process.env.ARTICLE_WORKER_INTERVAL_MS ?? '1000', 10);
 
+let isShuttingDown = false;
+let tickInProgress = false;
+
+function handleShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  logger.info?.('article_worker_shutdown_requested', { signal });
+  const drainTimeout = setTimeout(() => {
+    logger.warn?.('article_worker_drain_timeout', { signal });
+    process.exit(1);
+  }, 10_000);
+  drainTimeout.unref();
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
 async function tick() {
+  if (isShuttingDown) return;
+  tickInProgress = true;
   try {
     await worker.runOnce();
   } catch (error) {
@@ -101,6 +120,11 @@ async function tick() {
     await submittedWordWorker.runOnce();
   } catch (error) {
     logger.error?.('submitted_word_worker_tick_failed', { error });
+  }
+  tickInProgress = false;
+  if (isShuttingDown) {
+    logger.info?.('article_worker_shutdown_clean');
+    process.exit(0);
   }
 }
 

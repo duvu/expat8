@@ -5,7 +5,8 @@ class SpeakingWeeklySummary {
     required this.retryCount,
     required this.approximateDurationMs,
     required this.selfRatingCounts,
-    this.latestSpeakingAt,
+    required this.loopCompletionCount,
+    this.latestActivityAt,
   });
 
   factory SpeakingWeeklySummary.fromJson(Map<String, dynamic> json) {
@@ -14,18 +15,20 @@ class SpeakingWeeklySummary {
       spokenSentenceCount: json['spoken_sentence_count'] as int? ?? 0,
       retryCount: json['retry_count'] as int? ?? 0,
       approximateDurationMs: json['approximate_duration_ms'] as int? ?? 0,
+      loopCompletionCount: json['loop_completion_count'] as int? ?? 0,
       selfRatingCounts: raw.map((k, v) => MapEntry(k, (v as num).toInt())),
-      latestSpeakingAt: json['latest_speaking_at'] == null
+      latestActivityAt: json['latest_activity_at'] == null
           ? null
-          : DateTime.tryParse(json['latest_speaking_at'] as String),
+          : DateTime.tryParse(json['latest_activity_at'] as String),
     );
   }
 
   final int spokenSentenceCount;
   final int retryCount;
   final int approximateDurationMs;
+  final int loopCompletionCount;
   final Map<String, int> selfRatingCounts;
-  final DateTime? latestSpeakingAt;
+  final DateTime? latestActivityAt;
 }
 
 /// A single speaking prompt item returned by `GET /v1/speaking/prompts`.

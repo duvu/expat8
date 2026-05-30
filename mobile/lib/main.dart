@@ -126,6 +126,7 @@ Future<void> main() async {
       database: database,
       audioService: audioService,
       fileManager: fileManager,
+      apiClient: apiClient,
     );
     speakingPromptSyncService = SpeakingPromptSyncService(
       apiClient: apiClient,

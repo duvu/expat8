@@ -1693,6 +1693,106 @@ test('speaking_drill_completed event is accepted and reflected in summary', asyn
   assert.equal(summary.first_recording_at, '2026-05-10T09:00:00.000Z');
 });
 
+test('loop_completed event is accepted and reflected in summary loop_completion_count', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_loop',
+      events: [
+        {
+          client_event_id: 'loop_rec1',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-10T09:00:00.000Z',
+          speaking: { attempt_id: 'att1', duration_ms: 3000, retry_count: 0 }
+        },
+        {
+          client_event_id: 'loop_done',
+          event_type: 'loop_completed',
+          occurred_at: '2026-05-10T09:05:00.000Z',
+          speaking: { duration_ms: 60000, prompts_count: 5 }
+        }
+      ]
+    })
+  });
+  assert.deepEqual(sync.accepted_event_ids, ['loop_rec1', 'loop_done']);
+  assert.deepEqual(sync.rejected_events, []);
+
+  const summary = await fetchJson(
+    `${baseUrl}/v1/speaking/summary?device_id=device_loop&language=en&week_start=2026-05-10`
+  );
+  assert.equal(summary.spoken_sentence_count, 1);
+  assert.equal(summary.loop_completion_count, 1);
+});
+
+test('loop_completed events do not contribute to approximate_duration_ms', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_loop_dur',
+      events: [
+        {
+          client_event_id: 'dur_rec1',
+          event_type: 'speaking_recorded',
+          occurred_at: '2026-05-10T09:00:00.000Z',
+          speaking: { attempt_id: 'att1', duration_ms: 5000, retry_count: 0 }
+        },
+        {
+          client_event_id: 'dur_loop',
+          event_type: 'loop_completed',
+          occurred_at: '2026-05-10T09:05:00.000Z',
+          speaking: { duration_ms: 99999, prompts_count: 3 }
+        }
+      ]
+    })
+  });
+
+  const summary = await fetchJson(
+    `${baseUrl}/v1/speaking/summary?device_id=device_loop_dur&language=en&week_start=2026-05-10`
+  );
+  assert.equal(summary.approximate_duration_ms, 5000);
+});
+
+test('posting unknown event_type returns rejected with invalid_speaking_event_type', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const sync = await fetchJson(`${baseUrl}/v1/study-events/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      device_id: 'device_unknown_evt',
+      events: [
+        {
+          client_event_id: 'unk_evt',
+          event_type: 'speaking_magic_unknown_type',
+          occurred_at: '2026-05-10T09:00:00.000Z',
+          speaking: {}
+        }
+      ]
+    })
+  });
+  assert.equal(sync.accepted_event_ids.length, 0);
+  assert.equal(sync.rejected_events.length, 1);
+  assert.equal(sync.rejected_events[0].reason, 'invalid_speaking_event_type');
+});
+
 test('speaking summary returns zeroed response for new device', async (t) => {
   const store = new WordStore({ seed: false });
   const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
