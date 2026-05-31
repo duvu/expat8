@@ -1290,6 +1290,40 @@ Response:
 
 Dashboard: display a staleness warning if either content timestamp is older than 7 days.
 
+## GET /v1/admin/content-pipeline/health
+
+Admin-only. Returns operational backlog counts for content inputs that feed Phase 2 practice surfaces.
+
+Response:
+
+```json
+{
+  "articles": {
+    "pending_count": 2,
+    "failed_count": 1,
+    "last_processed_at": "2026-05-30T08:00:00.000Z"
+  },
+  "memorization": {
+    "pending_count": 1,
+    "failed_count": 0,
+    "last_processed_at": "2026-05-30T09:00:00.000Z"
+  },
+  "shadowing": {
+    "pending_count": 0,
+    "failed_count": 0,
+    "last_processed_at": "2026-05-30T10:00:00.000Z"
+  }
+}
+```
+
+Each section uses:
+
+- `pending_count`: items waiting for backend/worker processing.
+- `failed_count`: items in a terminal failed state.
+- `last_processed_at`: latest processing/update timestamp for that pipeline, or `null` when no items exist.
+
+Dashboard: display a warning when `failed_count > 0` or pending count exceeds the configured threshold.
+
 ## GET /v1/proficiency
 
 Query parameters:

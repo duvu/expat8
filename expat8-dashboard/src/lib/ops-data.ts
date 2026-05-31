@@ -9,6 +9,18 @@ export type SpeakingLoopHealth = {
   latest_published_passage_at: string | null;
 };
 
+export type ContentPipelineSection = {
+  pending_count: number;
+  failed_count: number;
+  last_processed_at: string | null;
+};
+
+export type ContentPipelineHealth = {
+  articles: ContentPipelineSection;
+  memorization: ContentPipelineSection;
+  shadowing: ContentPipelineSection;
+};
+
 export type LogArchiveRecord = {
   id: string;
   file_name: string;
@@ -41,15 +53,18 @@ export type OpsOverview = {
   archivesError: string | null;
   loopHealth: SpeakingLoopHealth | null;
   loopHealthError: string | null;
+  pipelineHealth: ContentPipelineHealth | null;
+  pipelineHealthError: string | null;
 };
 
 export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview> {
   const checkedAt = new Date().toISOString();
-  const [live, ready, archivesResult, loopHealthResult] = await Promise.all([
+  const [live, ready, archivesResult, loopHealthResult, pipelineHealthResult] = await Promise.all([
     probeHealth('/health', 'Backend live', checkedAt),
     probeHealth('/health/ready', 'Backend ready', checkedAt),
     loadLogArchives({ limit }),
     loadSpeakingLoopHealth(),
+    loadContentPipelineHealth(),
   ]);
 
   return {
@@ -60,6 +75,8 @@ export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview
     archivesError: archivesResult.error,
     loopHealth: loopHealthResult.data,
     loopHealthError: loopHealthResult.error,
+    pipelineHealth: pipelineHealthResult.data,
+    pipelineHealthError: pipelineHealthResult.error,
   };
 }
 
@@ -109,6 +126,28 @@ export async function loadSpeakingLoopHealth(): Promise<{
     return {
       data: null,
       error: error instanceof Error ? error.message : 'Unable to load loop health',
+    };
+  }
+}
+
+export async function loadContentPipelineHealth(): Promise<{
+  data: ContentPipelineHealth | null;
+  error: string | null;
+}> {
+  try {
+    ensureDashboardCredentials();
+    const response = await backendFetch('/v1/admin/content-pipeline/health');
+    if (!response.ok) {
+      return {
+        data: null,
+        error: await readErrorMessage(response, 'Unable to load content pipeline health'),
+      };
+    }
+    return { data: await response.json() as ContentPipelineHealth, error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unable to load content pipeline health',
     };
   }
 }

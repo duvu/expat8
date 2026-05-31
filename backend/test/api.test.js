@@ -1904,6 +1904,130 @@ test('PATCH /v1/admin/speaking-prompts/:id updates fields and returns updated ob
   assert.equal(updated.status, 'approved');
 });
 
+test('admin content-pipeline health reports operational backlog and requires admin token', async (t) => {
+  const store = new WordStore({ seed: false });
+  const article = store.createAdminArticle({
+    adminUserId: 'admin_pipeline_api',
+    title: 'Pipeline API article',
+    language: 'en',
+    rawText: 'Pipeline article text.'
+  });
+  const failedJob = store.enqueueArticleProcessingJob({ articleId: article.id });
+  store.completeArticleProcessingJob({ jobId: failedJob.id, status: 'failed', errorMessage: 'pipeline failed' });
+  store.createPassage({
+    title: 'Pending API passage',
+    language: 'en',
+    rawText: 'A'.repeat(80),
+    ownerType: 'admin',
+    visibility: 'published'
+  });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig({ ADMIN_API_TOKENS: 'admin-pipeline-token' }) })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const endpoint = `${baseUrl}/v1/admin/content-pipeline/health`;
+
+  const missingAdminToken = await fetch(endpoint, signedFetchOptions(endpoint, {}));
+  assert.equal(missingAdminToken.status, 403);
+
+  const health = await fetchJson(endpoint, {
+    headers: { 'x-expat8-admin-token': 'admin-pipeline-token' }
+  });
+  assert.equal(health.articles.pending_count, 1);
+  assert.equal(health.articles.failed_count, 1);
+  assert.equal(typeof health.articles.last_processed_at, 'string');
+  assert.equal(health.memorization.pending_count, 1);
+  assert.equal(health.memorization.failed_count, 0);
+  assert.equal(typeof health.memorization.last_processed_at, 'string');
+  assert.deepEqual(health.shadowing, {
+    pending_count: 0,
+    failed_count: 0,
+    last_processed_at: null
+  });
+});
+
+test('memorization passage endpoints require sessions and return contract shapes', async (t) => {
+  const store = new WordStore({ seed: false });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const listUrl = `${baseUrl}/v1/memorization/passages`;
+
+  const missingSession = await fetch(listUrl, signedFetchOptions(listUrl, {}));
+  assert.equal(missingSession.status, 401);
+
+  const registered = await fetchJson(`${baseUrl}/v1/users/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      identifier: 'memorization-contract@example.com',
+      password: 'correct horse battery staple',
+      device_id: 'device_mem_contract'
+    })
+  });
+  const created = await fetchJson(listUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...bearerHeaders(registered.session_token)
+    },
+    body: JSON.stringify({
+      title: 'Contract passage',
+      language: 'en',
+      raw_text: 'A'.repeat(80)
+    })
+  });
+  assert.equal(created.status, 'pending_segmentation');
+
+  const listed = await fetchJson(listUrl, {
+    headers: bearerHeaders(registered.session_token)
+  });
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].id, created.id);
+});
+
+test('shadowing catalog requires device id and rejects invalid bearer session', async (t) => {
+  const store = new WordStore({ seed: false });
+  store.createShadowingVideoEntry({
+    deviceId: 'device_shadow_contract',
+    resolvedVideo: {
+      sourceType: 'youtube',
+      providerVideoId: 'shadow_contract_video',
+      sourceUrl: 'https://youtu.be/shadow_contract_video',
+      title: 'Shadow contract video',
+      transcriptSource: 'manual',
+      segments: [{ position: 0, start_ms: 0, end_ms: 1000, text: 'Hello.' }]
+    }
+  });
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  const missingDeviceIdUrl = `${baseUrl}/v1/shadowing/videos`;
+  const missingDeviceId = await fetch(missingDeviceIdUrl, signedFetchOptions(missingDeviceIdUrl, {}));
+  assert.equal(missingDeviceId.status, 400);
+
+  const invalidSessionUrl = `${baseUrl}/v1/shadowing/videos?device_id=device_shadow_contract`;
+  const invalidSession = await fetch(
+    invalidSessionUrl,
+    signedFetchOptions(invalidSessionUrl, { headers: bearerHeaders('invalid-session') })
+  );
+  assert.equal(invalidSession.status, 401);
+
+  const catalog = await fetchJson(invalidSessionUrl);
+  assert.equal(catalog.items.length, 1);
+  assert.equal(catalog.items[0].source_type, 'youtube');
+  assert.equal(catalog.items[0].segment_count, 1);
+});
+
 test('admin speaking-prompts endpoint rejects missing app credentials with 400', async (t) => {
   const store = new WordStore({ seed: false });
   const server = http.createServer(

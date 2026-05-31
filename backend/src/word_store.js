@@ -681,6 +681,30 @@ export class WordStore {
     };
   }
 
+  getContentPipelineHealth() {
+    const articleJobs = [...this.articleProcessingJobsById.values()];
+    const passages = [...this.memorizationPassagesById.values()];
+    const videos = [...this.shadowingVideosById.values()];
+
+    const articles = buildPipelineHealthSection({
+      pendingCount: articleJobs.filter((job) => job.status === 'pending_processing').length,
+      failedCount: articleJobs.filter((job) => job.status === 'failed').length,
+      processedAtValues: articleJobs.map((job) => job.finished_at ?? job.updated_at)
+    });
+    const memorization = buildPipelineHealthSection({
+      pendingCount: passages.filter((passage) => passage.status === 'pending_segmentation' || passage.status === 'segmenting').length,
+      failedCount: passages.filter((passage) => passage.status === 'failed' || passage.enrichment_status === 'failed').length,
+      processedAtValues: passages.map((passage) => passage.updated_at)
+    });
+    const shadowing = buildPipelineHealthSection({
+      pendingCount: 0,
+      failedCount: 0,
+      processedAtValues: videos.map((video) => video.updated_at)
+    });
+
+    return { articles, memorization, shadowing };
+  }
+
   recordStudyEvent({ deviceId, event, language = 'en', userId = null }) {
     const rating = requireStudyRating(event.rating);
     const eventKey = resolveEventKey(event);
@@ -2696,6 +2720,15 @@ export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userI
     self_rating: selfRating,
     language: normalizeOptionalText(event.language) ?? language,
     occurred_at: event.occurred_at
+  };
+}
+
+function buildPipelineHealthSection({ pendingCount, failedCount, processedAtValues }) {
+  const validProcessedAtValues = processedAtValues.filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)));
+  return {
+    pending_count: pendingCount,
+    failed_count: failedCount,
+    last_processed_at: validProcessedAtValues[0] ?? null
   };
 }
 
