@@ -1,6 +1,6 @@
 import java.io.File
-import java.io.FileInputStream
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -16,8 +16,12 @@ val keystorePropertiesFile: File =
         ?.let { File(it) }
         ?.takeIf { it.exists() }
         ?: File(System.getProperty("user.home"), "keystores/key.properties")
+// Without a keystore (e.g. CI build checks) release builds fall back to debug
+// signing. Distributed builds come from the release workflow, which always
+// provides key.properties.
+val hasReleaseKeystore = keystorePropertiesFile.exists()
 val keystoreProperties = Properties().apply {
-    keystorePropertiesFile.inputStream().use { load(it) }
+    if (hasReleaseKeystore) keystorePropertiesFile.inputStream().use { load(it) }
 }
 
 android {
@@ -26,11 +30,13 @@ android {
     ndkVersion = "27.0.12077973"
 
     signingConfigs {
-        create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = file(keystoreProperties["storeFile"] as String)
-            storePassword = keystoreProperties["storePassword"] as String
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
         }
     }
 
@@ -39,9 +45,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
@@ -56,8 +59,16 @@ android {
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName(
+                if (hasReleaseKeystore) "release" else "debug",
+            )
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11)
     }
 }
 
