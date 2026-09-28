@@ -82,3 +82,15 @@ test('rejects malformed app credential configuration', () => {
     /APP_CREDENTIALS_JSON/
   );
 });
+
+test('parses auth rate limits and trust proxy settings', () => {
+  const defaults = loadConfig({});
+  assert.equal(defaults.authRateLimitIp, 60);
+  assert.equal(defaults.trustProxy, false);
+
+  assert.equal(loadConfig({ AUTH_RATE_LIMIT_IP: '15' }).authRateLimitIp, 15);
+  assert.equal(loadConfig({ TRUST_PROXY: 'true' }).trustProxy, true);
+  assert.equal(loadConfig({ TRUST_PROXY: 'false' }).trustProxy, false);
+  assert.equal(loadConfig({ TRUST_PROXY: '1' }).trustProxy, 1);
+  assert.equal(loadConfig({ TRUST_PROXY: 'loopback, 10.0.0.0/8' }).trustProxy, 'loopback, 10.0.0.0/8');
+});

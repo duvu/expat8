@@ -271,7 +271,7 @@ class _SeverityDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appColors = Theme.of(context).extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     final color = switch (level) {
       AppLogLevel.debug => appColors.severityDebug,
       AppLogLevel.info => appColors.severityInfo,

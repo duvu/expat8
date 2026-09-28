@@ -18,12 +18,12 @@ import { normalizeSentenceText } from './workplace_sentence_validator.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
-  createPasswordHash,
+  createPasswordHashSync,
   createSessionToken,
   hashSessionToken,
   normalizeUserIdentifier,
   requireRegistrationInput,
-  verifyPassword
+  verifyPasswordSync
 } from './user_identity.js';
 import { normalizeResolvedShadowingVideo } from './shadowing_videos.js';
 
@@ -781,7 +781,7 @@ export class WordStore {
       id: createId('user'),
       identifier: input.identifier,
       display_name: displayName,
-      password_hash: createPasswordHash(input.password),
+      password_hash: createPasswordHashSync(input.password),
       created_at: now,
       updated_at: now
     };
@@ -800,7 +800,7 @@ export class WordStore {
     if (!user) {
       throw new InvalidCredentialsError({ reason: 'user_not_found' });
     }
-    if (!verifyPassword(password, user.password_hash)) {
+    if (!verifyPasswordSync(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
     // Claim device-only word states and cached words for the signing-in user
@@ -2610,6 +2610,9 @@ export async function routeStudyEvents({ events, recordSpeakingEvent, recordStud
           accepted.push(eventKey);
         }
       } catch (error) {
+        if (!isEventDataError(error)) {
+          throw error;
+        }
         rejected.push({
           client_event_id: event.client_event_id ?? null,
           event_id: event.event_id ?? null,
@@ -2643,6 +2646,9 @@ export async function routeStudyEvents({ events, recordSpeakingEvent, recordStud
         accepted.push(eventKey);
       }
     } catch (error) {
+      if (!isEventDataError(error)) {
+        throw error;
+      }
       rejected.push({
         client_event_id: event.client_event_id ?? null,
         event_id: event.event_id ?? null,
@@ -2652,6 +2658,28 @@ export async function routeStudyEvents({ events, recordSpeakingEvent, recordStud
   }
 
   return { accepted, duplicates, rejected, latestProficiency };
+}
+
+const EVENT_VALIDATION_MESSAGES = new Set([
+  'missing_event_id',
+  'missing_required_field',
+  'invalid_speaking_event',
+  'invalid_speaking_event_type',
+  'invalid_self_rating',
+  'forbidden_audio_field'
+]);
+
+// Only problems with the submitted event become `rejected_events`, which
+// clients treat as permanent. Storage failures (connection loss, schema drift,
+// constraint mismatches) propagate as 5xx so the client keeps the event queued
+// and retries after the server is fixed.
+export function isEventDataError(error) {
+  if (error?.name === 'InvalidStudyRatingError' || EVENT_VALIDATION_MESSAGES.has(error?.message)) {
+    return true;
+  }
+  const code = typeof error?.code === 'string' ? error.code : '';
+  // 22xxx: invalid input value (e.g. malformed timestamp); 23503: unknown referenced row.
+  return code.startsWith('22') || code === '23503';
 }
 
 export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null, strict = false }) {

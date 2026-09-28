@@ -421,7 +421,7 @@ test('claim cached words with no device cache is a no-op', () => {
 // 4.3 — Integration test: study anonymously → register → exam succeeds
 // ---------------------------------------------------------------------------
 
-test('device-only study → register → exam start succeeds (full flow)', async (t) => {
+test('device-only study → register → exam start succeeds (full flow)', async () => {
   const store = makeStore();
   const deviceId = 'device_exam_flow';
 
@@ -456,7 +456,7 @@ test('device-only study → register → exam start succeeds (full flow)', async
   }
 
   // Register with the same deviceId → should claim all device states
-  const { user, session_token } = store.registerUser({
+  const { user } = store.registerUser({
     identifier: 'examiner@test.com',
     password: 'password123!',
     displayName: 'Examiner',
@@ -478,7 +478,7 @@ test('device-only study → register → exam start succeeds (full flow)', async
   assert.ok(examResult.question_count >= 5, `should have at least 5 questions, got: ${examResult.question_count}`);
 });
 
-test('device-only study → sign-in → exam start succeeds (full flow via createUserSession)', async (t) => {
+test('device-only study → sign-in → exam start succeeds (full flow via createUserSession)', async () => {
   const store = makeStore();
   const deviceId = 'device_signin_exam';
 

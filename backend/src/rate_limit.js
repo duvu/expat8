@@ -20,6 +20,7 @@ export class InMemoryRateLimiter {
     this.maxRequests = maxRequests;
     /** @type {Map<string, number[]>} key → sorted array of request timestamps */
     this._buckets = new Map();
+    this._lastPruneMs = 0;
   }
 
   /**
@@ -30,6 +31,12 @@ export class InMemoryRateLimiter {
    * @returns {{ allowed: boolean, remaining: number, resetMs: number }}
    */
   check(key, nowMs = Date.now()) {
+    // Amortized cleanup: without it every distinct key (IP, identifier, …)
+    // would stay in memory for the lifetime of the process.
+    if (nowMs - this._lastPruneMs >= this.windowMs) {
+      this.prune(nowMs);
+    }
+
     const cutoff = nowMs - this.windowMs;
     let timestamps = this._buckets.get(key) ?? [];
 
@@ -53,6 +60,7 @@ export class InMemoryRateLimiter {
 
   /** Prune all expired buckets — call periodically to reclaim memory. */
   prune(nowMs = Date.now()) {
+    this._lastPruneMs = nowMs;
     const cutoff = nowMs - this.windowMs;
     for (const [key, timestamps] of this._buckets) {
       const fresh = timestamps.filter((t) => t > cutoff);

@@ -901,8 +901,27 @@ class WordRepository {
             events: [payload],
             sessionToken: session?.sessionToken,
           );
-          for (final acceptedId in result.acceptedEventIds) {
-            await database.markEventSynced(acceptedId);
+          for (final syncedId in [
+            ...result.acceptedEventIds,
+            ...result.duplicateEventIds,
+          ]) {
+            await database.markEventSynced(syncedId);
+          }
+          for (final rejected in result.rejectedEvents) {
+            final rejectedId = rejected['client_event_id'] as String?;
+            if (rejectedId == null) {
+              continue;
+            }
+            await database.markEventFailed(rejectedId);
+            await _logger.warning(
+              category: AppLogCategory.sync,
+              event: 'sync.event.rejected',
+              message: 'Server rejected event; it will not be retried.',
+              context: {
+                'client_event_id': rejectedId,
+                'reason': rejected['reason'],
+              },
+            );
           }
         }
       } catch (error) {

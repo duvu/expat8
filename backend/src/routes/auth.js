@@ -1,15 +1,20 @@
 import express from 'express';
 import { rateLimitMiddleware } from '../rate_limit.js';
-import { DuplicateUserError, InvalidCredentialsError, InvalidRegistrationInputError } from '../user_identity.js';
+import {
+  DuplicateUserError,
+  InvalidCredentialsError,
+  InvalidRegistrationInputError,
+  normalizeUserIdentifier
+} from '../user_identity.js';
 import { asyncHandler, bearerToken } from './helpers.js';
 
 export function createAuthRouter({ store, _config, rateLimiters = {} }) {
-  const { registerLimiter, signInLimiter } = rateLimiters;
+  const { registerLimiter, signInLimiter, authIpLimiter } = rateLimiters;
   const router = express.Router();
 
   router.post(
     '/users/register',
-    ...(registerLimiter ? [rateLimitMiddleware(registerLimiter, { keyPrefix: 'register' })] : []),
+    ...authRateLimits({ ipLimiter: authIpLimiter, accountLimiter: registerLimiter, keyPrefix: 'register' }),
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -34,7 +39,7 @@ export function createAuthRouter({ store, _config, rateLimiters = {} }) {
 
   router.post(
     '/users/sign-in',
-    ...(signInLimiter ? [rateLimitMiddleware(signInLimiter, { keyPrefix: 'signin' })] : []),
+    ...authRateLimits({ ipLimiter: authIpLimiter, accountLimiter: signInLimiter, keyPrefix: 'signin' }),
     asyncHandler(async (request, response) => {
       const body = request.body ?? {};
       try {
@@ -74,6 +79,28 @@ export function createAuthRouter({ store, _config, rateLimiters = {} }) {
   );
 
   return router;
+}
+
+// The IP limiter runs first so a single source cannot mint unbounded
+// per-account buckets by cycling identifiers.
+function authRateLimits({ ipLimiter, accountLimiter, keyPrefix }) {
+  const middlewares = [];
+  if (ipLimiter) {
+    middlewares.push(rateLimitMiddleware(ipLimiter, { keyPrefix: 'auth-ip', keyFn: clientIp }));
+  }
+  if (accountLimiter) {
+    middlewares.push(rateLimitMiddleware(accountLimiter, { keyPrefix, keyFn: buildAuthAccountRateLimitKey }));
+  }
+  return middlewares;
+}
+
+function clientIp(request) {
+  return request.ip || 'unknown';
+}
+
+function buildAuthAccountRateLimitKey(request) {
+  const identifier = normalizeUserIdentifier(request.body?.identifier).slice(0, 320) || '-';
+  return `${clientIp(request)}|${identifier}`;
 }
 
 function userSessionResponse({ user, sessionToken }) {

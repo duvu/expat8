@@ -223,7 +223,7 @@ class _ReadingPhaseView extends StatelessWidget {
               Text(
                 'Segment ${segment.position + 1}',
                 style: TextStyle(
-                    color: Theme.of(context).extension<AppColors>()!.subtleText,
+                    color: AppColors.of(context).subtleText,
                     fontSize: 13),
               ),
             ],
@@ -256,7 +256,7 @@ class _ReadingPhaseView extends StatelessWidget {
   }
 
   Color _statusColor(BuildContext context, String status) {
-    final appColors = Theme.of(context).extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     return switch (status) {
       'learning' => appColors.statusWarning,
       'review' => Theme.of(context).colorScheme.primary,
@@ -304,7 +304,7 @@ class _FullRecallExerciseState extends State<_FullRecallExercise> {
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: Theme.of(context).extension<AppColors>()!.subtleText)),
+                  ?.copyWith(color: AppColors.of(context).subtleText)),
           const SizedBox(height: 8),
           Text('Complete the segment:', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
@@ -446,7 +446,7 @@ class _ClozeExerciseState extends State<_ClozeExercise> {
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: Theme.of(context).extension<AppColors>()!.subtleText)),
+                  ?.copyWith(color: AppColors.of(context).subtleText)),
           const SizedBox(height: 8),
           Text('Tap the blanks to reveal:',
               style: Theme.of(context).textTheme.titleMedium),
@@ -577,7 +577,7 @@ class _NextSegmentPredictionExerciseState
               style: Theme.of(context)
                   .textTheme
                   .labelLarge
-                  ?.copyWith(color: Theme.of(context).extension<AppColors>()!.subtleText)),
+                  ?.copyWith(color: AppColors.of(context).subtleText)),
           const SizedBox(height: 8),
           Text('What comes after?',
               style: Theme.of(context).textTheme.titleMedium),
@@ -641,7 +641,7 @@ class _RatingButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appColors = Theme.of(context).extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     return Row(
       children: [
         Expanded(
@@ -691,7 +691,7 @@ class _DrillCompleteView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final allMastered = masteredCount >= totalSegments;
-    final appColors = Theme.of(context).extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(

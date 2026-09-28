@@ -31,7 +31,7 @@ class _StubShadowingRepository extends ShadowingRepository {
 
   @override
   Future<ShadowingVideo> importVideo({required String sourceUrl}) async {
-    if (_importError != null) throw _importError!;
+    if (_importError != null) throw _importError;
     return _makeVideo(id: 'imported-1', title: 'Imported Video', type: 'saved');
   }
 

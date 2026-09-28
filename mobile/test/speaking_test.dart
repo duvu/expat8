@@ -114,7 +114,7 @@ void main() {
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'speaking_repository_test.db');
+          databaseName: 'speaking_repository_test_${DateTime.now().microsecondsSinceEpoch}.db');
       audio = FakeAudioService();
       files = FakeFileManager();
       repo = SpeakingRepository(
@@ -250,7 +250,7 @@ void main() {
     setUp(() async {
       _drillTestCounter++;
       db = await LocalDatabase.open(
-          databaseName: 'drill_selection_test_$_drillTestCounter.db');
+          databaseName: 'drill_selection_test_${_drillTestCounter}_${DateTime.now().microsecondsSinceEpoch}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),
@@ -308,7 +308,7 @@ void main() {
   group('SpeakingPromptEntity cache', () {
     test('cacheSpeakingPrompt upserts on conflict', () async {
       final db = await LocalDatabase.open(
-          databaseName: 'speaking_prompt_upsert_test.db');
+          databaseName: 'speaking_prompt_upsert_test_${DateTime.now().microsecondsSinceEpoch}.db');
       try {
         final now = DateTime.now().toUtc().millisecondsSinceEpoch;
         db.cacheSpeakingPrompt(SpeakingPromptEntity(
@@ -330,7 +330,7 @@ void main() {
 
     test('recentCachedPrompts returns most recently cached first', () async {
       final db = await LocalDatabase.open(
-          databaseName: 'speaking_prompt_recent_test.db');
+          databaseName: 'speaking_prompt_recent_test_${DateTime.now().microsecondsSinceEpoch}.db');
       try {
         final base = DateTime.utc(2026, 1, 1).millisecondsSinceEpoch;
         for (var i = 0; i < 3; i++) {
@@ -355,7 +355,7 @@ void main() {
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'loop_completed_test_${databaseCounter++}.db');
+          databaseName: 'loop_completed_test_${databaseCounter++}_${DateTime.now().microsecondsSinceEpoch}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),
@@ -401,7 +401,7 @@ void main() {
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'get_weekly_summary_test.db');
+          databaseName: 'get_weekly_summary_test_${DateTime.now().microsecondsSinceEpoch}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),

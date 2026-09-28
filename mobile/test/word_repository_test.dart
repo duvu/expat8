@@ -19,7 +19,7 @@ void main() {
 
   test('falls back to local new words when backend fails', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_fallback.db',
+      databaseName: 'word_repository_test_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final localWord = _word('local_word');
     await database.upsertWord(localWord);
@@ -34,7 +34,7 @@ void main() {
 
   test('emits local-hit log even when backend fails', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_logging_fallback.db',
+      databaseName: 'word_repository_test_logging_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final localWord = _word('local_word_log');
     await database.upsertWord(localWord);
@@ -212,7 +212,7 @@ void main() {
   test('reports local fallback source when backend fails but local word exists',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_fallback_result.db',
+      databaseName: 'word_repository_test_fallback_result_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final localWord = _word('local_word_result');
     await database.upsertWord(localWord);
@@ -230,7 +230,7 @@ void main() {
   test('reports miss source when backend fails and no local word exists',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_fallback_miss.db',
+      databaseName: 'word_repository_test_fallback_miss_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final repository = WordRepository(
       database: database,
@@ -248,7 +248,7 @@ void main() {
   test('returns server proficiency after immediate rating submission',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_rating.db',
+      databaseName: 'word_repository_test_rating_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(
@@ -380,7 +380,7 @@ void main() {
       'registers user, persists session, and sends session token on learning requests',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_user_session.db',
+      databaseName: 'word_repository_test_user_session_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(database: database, apiClient: apiClient);
@@ -403,7 +403,7 @@ void main() {
       'clears local session on sign out and keeps anonymous learning available',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_sign_out.db',
+      databaseName: 'word_repository_test_sign_out_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(database: database, apiClient: apiClient);
@@ -422,7 +422,7 @@ void main() {
 
   test('sync pending events logs retry on failure', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_sync_retry_log.db',
+      databaseName: 'word_repository_test_sync_retry_log_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final entries = <LogEntry>[];
     final logger = PersistedLogger(
@@ -453,6 +453,51 @@ void main() {
     );
 
     expect(entries.any((entry) => entry.event == 'sync.batch.retry'), true);
+  });
+
+  test('sync treats server duplicates as synced and drops rejected events',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_sync_outcomes_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final entries = <LogEntry>[];
+    final repository = WordRepository(
+      database: database,
+      apiClient: _SyncOutcomeApiClient(
+        duplicateIds: {'evt_dup'},
+        rejectedIds: {'evt_bad'},
+      ),
+      logger: PersistedLogger(
+        minimumLevel: AppLogLevel.debug,
+        write: (entry) async => entries.add(entry),
+      ),
+    );
+
+    final now = DateTime.now().toUtc();
+    for (final id in ['evt_dup', 'evt_bad']) {
+      await database.insertStudyEvent(
+        StudyEvent(
+          clientEventId: id,
+          localWordId: 'local_$id',
+          serverWordId: 'server_$id',
+          rating: StudyRating.easy,
+          occurredAt: now,
+          syncStatus: SyncStatus.pending,
+        ),
+      );
+    }
+
+    await repository.syncPendingEvents(
+      deviceId: 'device_repo',
+      now: now.add(const Duration(minutes: 1)),
+    );
+
+    final remaining =
+        await database.dueSyncEntries(now.add(const Duration(days: 365)));
+    expect(remaining, isEmpty);
+    expect(entries.any((entry) => entry.event == 'sync.batch.retry'), false);
+    expect(entries.any((entry) => entry.event == 'sync.event.rejected'), true);
   });
 
   test('exports logs as a sanitized UTF-8 text file with metadata', () async {
@@ -587,7 +632,7 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_first_install_$ts.db',
+      databaseName: 'word_repository_test_topup_first_install_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient(
       learningCardItems: List.generate(20, (i) => _word('first_install_$i')),
@@ -610,7 +655,7 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_hourly_$ts.db',
+      databaseName: 'word_repository_test_topup_hourly_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     for (var i = 0; i < 5; i++) {
       await database.upsertWord(_word('seed_$i'));
@@ -637,7 +682,7 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_idle_$ts.db',
+      databaseName: 'word_repository_test_topup_idle_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     for (var i = 0; i < 100; i++) {
       await database.upsertWord(_word('idle_$i'));
@@ -660,7 +705,7 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_rotation_$ts.db',
+      databaseName: 'word_repository_test_topup_rotation_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.utc(2026, 5, 1);
     // 10 mastered words (oldest first)
@@ -704,7 +749,7 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_seed_$ts.db',
+      databaseName: 'word_repository_test_seed_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     // English language already has data — should be skipped.
     await database.upsertWord(_word('existing_en_word'));
@@ -1135,4 +1180,38 @@ AppConfig _testConfig() {
     logLevel: 'info',
     logMaxEntries: 100,
   );
+}
+
+class _SyncOutcomeApiClient extends BackendApiClient {
+  _SyncOutcomeApiClient({required this.duplicateIds, required this.rejectedIds})
+      : super(
+          baseUrl: 'http://unused',
+          timeout: Duration.zero,
+          appId: 'test-app',
+          appSecret: 'test-secret',
+        );
+
+  final Set<String> duplicateIds;
+  final Set<String> rejectedIds;
+
+  @override
+  Future<SyncResult> syncStudyEvents({
+    required String deviceId,
+    required List<Map<String, dynamic>> events,
+    String? sessionToken,
+  }) async {
+    final ids = [for (final e in events) e['client_event_id'] as String];
+    return SyncResult(
+      acceptedEventIds: const [],
+      duplicateEventIds: [
+        for (final id in ids)
+          if (duplicateIds.contains(id)) id,
+      ],
+      rejectedEvents: [
+        for (final id in ids)
+          if (rejectedIds.contains(id))
+            {'client_event_id': id, 'reason': 'invalid_event'},
+      ],
+    );
+  }
 }

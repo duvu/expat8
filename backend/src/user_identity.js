@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
+
+const scryptAsync = promisify(crypto.scrypt);
 
 export class DuplicateUserError extends Error {
   constructor(identifier) {
@@ -39,17 +42,39 @@ export function requireRegistrationInput({ identifier, password }) {
   };
 }
 
-export function createPasswordHash(password, salt = crypto.randomBytes(16).toString('base64url')) {
-  const hash = crypto.scryptSync(password, salt, 32).toString('base64url');
+function derivePasswordHash(password, salt) {
+  return crypto.scryptSync(password, salt, 32).toString('base64url');
+}
+
+async function derivePasswordHashAsync(password, salt) {
+  const hash = await scryptAsync(password, salt, 32);
+  return hash.toString('base64url');
+}
+
+export function createPasswordHashSync(password, salt = crypto.randomBytes(16).toString('base64url')) {
+  return `scrypt:${salt}:${derivePasswordHash(password, salt)}`;
+}
+
+export async function createPasswordHash(password, salt = crypto.randomBytes(16).toString('base64url')) {
+  const hash = await derivePasswordHashAsync(password, salt);
   return `scrypt:${salt}:${hash}`;
 }
 
-export function verifyPassword(password, storedHash) {
+export function verifyPasswordSync(password, storedHash) {
   const [algorithm, salt, expectedHash] = String(storedHash).split(':');
   if (algorithm !== 'scrypt' || !salt || !expectedHash) {
     return false;
   }
-  const actualHash = crypto.scryptSync(password, salt, 32).toString('base64url');
+  const actualHash = derivePasswordHash(password, salt);
+  return timingSafeEqual(actualHash, expectedHash);
+}
+
+export async function verifyPassword(password, storedHash) {
+  const [algorithm, salt, expectedHash] = String(storedHash).split(':');
+  if (algorithm !== 'scrypt' || !salt || !expectedHash) {
+    return false;
+  }
+  const actualHash = await derivePasswordHashAsync(password, salt);
   return timingSafeEqual(actualHash, expectedHash);
 }
 

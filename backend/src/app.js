@@ -40,6 +40,9 @@ export function createApp({
   shadowingVideoResolver = null
 }) {
   const app = express();
+  if (config.trustProxy !== undefined && config.trustProxy !== false) {
+    app.set('trust proxy', config.trustProxy);
+  }
   const resolvedLogArchiveStore =
     logArchiveStore ??
     new FileLogArchiveStore({
@@ -82,7 +85,8 @@ export function createApp({
 
   const rateLimiters = createRateLimiters({
     registerMax: config.authRateLimitRegister,
-    signInMax: config.authRateLimitSignIn
+    signInMax: config.authRateLimitSignIn,
+    authIpMax: config.authRateLimitIp
   });
 
   app.use(
@@ -124,7 +128,10 @@ export function createApp({
     });
 
     if (statusCode >= 500) {
-      response.status(statusCode).json({ error: 'internal_error', message: error.message });
+      response.status(statusCode).json({
+        error: 'internal_error',
+        request_id: request.requestId
+      });
       return;
     }
     response.status(statusCode).json({ error: error.code ?? 'bad_request', message: error.message });
@@ -139,9 +146,16 @@ function createRateLimiters({
   registerMax = 10,
   registerWindowMs = 60_000,
   signInMax = 20,
-  signInWindowMs = 60_000
+  signInWindowMs = 60_000,
+  authIpMax = 60,
+  authIpWindowMs = 60_000
 } = {}) {
   return {
+    // Shared by register + sign-in, keyed by client IP only: caps credential
+    // stuffing across many identifiers from one source.
+    authIpLimiter: new InMemoryRateLimiter({ windowMs: authIpWindowMs, maxRequests: authIpMax }),
+    // Keyed by IP + identifier: caps guessing against one account without
+    // letting a third party lock that account out from elsewhere.
     registerLimiter: new InMemoryRateLimiter({ windowMs: registerWindowMs, maxRequests: registerMax }),
     signInLimiter: new InMemoryRateLimiter({ windowMs: signInWindowMs, maxRequests: signInMax }),
     articleUploadLimiter: new InMemoryRateLimiter({ windowMs: 60_000, maxRequests: 20 }),
@@ -325,11 +339,13 @@ function appCredentialGuard({ config, nonceCache }) {
       });
     } catch (err) {
       if (err instanceof NonceStorageUnavailableError) {
-        const writeMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method.toUpperCase());
-        if (writeMethod) {
-          return response.status(503).json({ error: 'REPLAY_PROTECTION_UNAVAILABLE' });
-        }
-        return next();
+        request.log?.warn('replay_protection_unavailable', {
+          method: request.method,
+          path: request.originalUrl,
+          reason: err.reason ?? 'storage_error',
+          error_name: err.name
+        });
+        return response.status(503).json({ error: 'REPLAY_PROTECTION_UNAVAILABLE' });
       }
       return badRequest(response);
     }

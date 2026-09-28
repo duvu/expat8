@@ -64,7 +64,7 @@ void main() {
 
     // Tap anywhere on the card
     await tester.tap(find.byType(FitbCard));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // exampleVi now visible
     expect(find.text(word.exampleVi), findsOneWidget);
