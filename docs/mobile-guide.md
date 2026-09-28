@@ -80,6 +80,19 @@ The app exposes an add-word flow for learner-entered words or short expressions:
 
 The v1 speaking feature is local record/playback/self-rating. It syncs behavioral speaking events and summary data, but does not upload pronunciation audio for server-side scoring.
 
+## Games (offline)
+
+`lib/src/games/` holds offline mini-games, opened from the drawer's **Games** item for every user (no sign-in, no network). `GamesHubScreen` lists them; add new games there.
+
+Sudoku (`lib/src/games/sudoku/`):
+
+- `SudokuGenerator` builds puzzles on-device (run in an isolate via `compute`), always with a unique solution. Five levels (`SudokuDifficulty`): Beginner 45, Easy 38, Medium 32, Hard 28, Expert 24 target givens.
+- `SudokuGameController` handles input, notes, undo, hints, mistakes and the timer, and auto-saves the unfinished game so it can be continued after the app restarts.
+- `SudokuChampionStore` keeps the top 10 solves per level (ranked by time + 30s per hint, then mistakes), play stats and the player name.
+- All game data lives in the ObjectBox settings table through `LocalDatabaseGameStorage` (keys prefixed `games.`); nothing is sent to the backend.
+
+`test/offline_mode_test.dart` checks that learning (bundled vocabulary, studying, rating, queued sync) works with the backend unreachable.
+
 ## Android Release Builds
 
 Use the same current production define set for APK and AAB builds. Source real values from a local env file or secret manager; never commit them.
