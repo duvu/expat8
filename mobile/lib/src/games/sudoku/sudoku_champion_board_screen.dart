@@ -34,7 +34,8 @@ class _SudokuChampionBoardScreenState extends State<SudokuChampionBoardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear champion board?'),
-        content: const Text('All saved records on this device will be removed.'),
+        content:
+            const Text('All saved records on this device will be removed.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -125,9 +126,7 @@ class _RecordList extends StatelessWidget {
             backgroundColor: i == 0
                 ? theme.colorScheme.tertiaryContainer
                 : theme.colorScheme.surfaceContainerHighest,
-            child: i == 0
-                ? const Icon(Icons.emoji_events)
-                : Text('${i + 1}'),
+            child: i == 0 ? const Icon(Icons.emoji_events) : Text('${i + 1}'),
           ),
           title: Text(record.playerName),
           subtitle: Text(

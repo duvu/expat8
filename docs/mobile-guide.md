@@ -107,7 +107,8 @@ An `OfflineBanner` is shown above every screen while the device has no connectio
 Sudoku (`lib/src/games/sudoku/`):
 
 - `SudokuGenerator` builds puzzles on-device (run in an isolate via `compute`), always with a unique solution. Five levels (`SudokuDifficulty`): Beginner 45, Easy 38, Medium 32, Hard 28, Expert 24 target givens.
-- `SudokuGameController` handles input, notes, undo, hints, mistakes and the timer, and auto-saves the unfinished game so it can be continued after the app restarts.
+- `SudokuGameController` handles input, notes, undo, hints, mistakes and the timer, auto-saves the unfinished game, and emits `SudokuFeedback` events (correct, wrong, hint, unit completed, solved) for animations.
+- `SudokuBoardGame` renders the board with the Flame engine: cell states, a gliding selection ring, pop/shake/glow tweens and particle effects (sparkles, confetti). Tests tap cells by board coordinates and avoid `pumpAndSettle` while the game loop runs.
 - `SudokuChampionStore` keeps the top 10 solves per level (ranked by time + 30s per hint, then mistakes), play stats and the player name.
 - All game data lives in the ObjectBox settings table through `LocalDatabaseGameStorage` (keys prefixed `games.`); nothing is sent to the backend.
 

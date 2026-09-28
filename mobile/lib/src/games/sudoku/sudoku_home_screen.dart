@@ -108,7 +108,8 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => SudokuGameScreen(controller: game, championStore: _store),
+        builder: (_) =>
+            SudokuGameScreen(controller: game, championStore: _store),
       ),
     );
     // The route future completes before the screen is disposed, so persist
@@ -121,20 +122,26 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
   }
 
   void _openBoard([SudokuDifficulty? difficulty]) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SudokuChampionBoardScreen(
-          store: _store,
-          initialDifficulty: difficulty ?? SudokuDifficulty.beginner,
-        ),
-      ),
-    ).then((_) => _refresh());
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => SudokuChampionBoardScreen(
+              store: _store,
+              initialDifficulty: difficulty ?? SudokuDifficulty.beginner,
+            ),
+          ),
+        )
+        .then((_) => _refresh());
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final saved = _savedDifficulty;
+    final solved =
+        _stats.values.fold<int>(0, (sum, stats) => sum + stats.completed);
+    final champions =
+        _board.values.where((records) => records.isNotEmpty).length;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sudoku'),
@@ -147,42 +154,33 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
+          _HeroCard(solved: solved, levelsWithRecords: champions),
+          const SizedBox(height: 16),
           if (saved != null) ...[
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.play_circle_outline),
-                title: const Text('Continue game'),
-                subtitle: Text(saved.label),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _resume,
-              ),
-            ),
+            _ContinueCard(difficulty: saved, onTap: _resume),
             const SizedBox(height: 16),
           ],
-          Text('New game', style: theme.textTheme.titleMedium),
+          Text('Choose a level', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           for (final d in SudokuDifficulty.values)
-            Card(
-              child: ListTile(
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _LevelCard(
                 key: ValueKey('sudoku-difficulty-${d.name}'),
-                title: Text(d.label),
-                subtitle: Text(_subtitle(d)),
-                trailing: _generating == d
-                    ? const SizedBox.square(
-                        dimension: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : _DifficultyDots(level: d.index + 1),
+                difficulty: d,
+                subtitle: _subtitle(d),
+                generating: _generating == d,
                 onTap: _generating == null ? () => _startNew(d) : null,
                 onLongPress: () => _openBoard(d),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
-            'Works offline. Records are saved on this device. '
-            'Each hint adds ${SudokuRecord.hintPenalty.inSeconds}s to your time.',
+            'Works offline. Records are saved on this device. Each hint adds '
+            '${SudokuRecord.hintPenalty.inSeconds}s to your time. '
+            'Long-press a level to see its champions.',
             style: theme.textTheme.bodySmall,
           ),
         ],
@@ -203,10 +201,190 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
   }
 }
 
+/// Accent color per level, from calm to intense.
+Color levelColor(SudokuDifficulty d) => switch (d) {
+      SudokuDifficulty.beginner => const Color(0xFF43A047),
+      SudokuDifficulty.easy => const Color(0xFF00897B),
+      SudokuDifficulty.medium => const Color(0xFF1E88E5),
+      SudokuDifficulty.hard => const Color(0xFF8E24AA),
+      SudokuDifficulty.expert => const Color(0xFFE53935),
+    };
+
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.solved, required this.levelsWithRecords});
+
+  final int solved;
+  final int levelsWithRecords;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primary, scheme.tertiary],
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: scheme.onPrimary.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child:
+                Icon(Icons.grid_on_rounded, size: 36, color: scheme.onPrimary),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Train your brain',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: scheme.onPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$solved solved · $levelsWithRecords/5 levels on the board',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onPrimary.withValues(alpha: 0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContinueCard extends StatelessWidget {
+  const _ContinueCard({required this.difficulty, required this.onTap});
+
+  final SudokuDifficulty difficulty;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 0,
+      color: scheme.secondaryContainer,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Icon(Icons.play_circle_fill_rounded,
+            size: 36, color: scheme.onSecondaryContainer),
+        title: const Text('Continue game'),
+        subtitle: Text(difficulty.label),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _LevelCard extends StatelessWidget {
+  const _LevelCard({
+    required this.difficulty,
+    required this.subtitle,
+    required this.generating,
+    required this.onTap,
+    required this.onLongPress,
+    super.key,
+  });
+
+  final SudokuDifficulty difficulty;
+  final String subtitle;
+  final bool generating;
+  final VoidCallback? onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = levelColor(difficulty);
+    return Material(
+      color: scheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 6, color: accent),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 22,
+                        backgroundColor: accent.withValues(alpha: 0.15),
+                        child: Text(
+                          '${difficulty.index + 1}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: accent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              difficulty.label,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(subtitle, style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                      generating
+                          ? const SizedBox.square(
+                              dimension: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : _DifficultyDots(
+                              level: difficulty.index + 1, color: accent),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DifficultyDots extends StatelessWidget {
-  const _DifficultyDots({required this.level});
+  const _DifficultyDots({required this.level, required this.color});
 
   final int level;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -220,7 +398,7 @@ class _DifficultyDots extends StatelessWidget {
             child: Icon(
               Icons.circle,
               size: 10,
-              color: i <= level ? scheme.primary : scheme.outlineVariant,
+              color: i <= level ? color : scheme.outlineVariant,
             ),
           ),
       ],

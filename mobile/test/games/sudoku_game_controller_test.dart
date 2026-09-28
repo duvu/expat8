@@ -203,6 +203,34 @@ void main() {
     expect(storage.values, isNot(contains(SudokuGameController.savedGameKey)));
   });
 
+  test('emits feedback for correct, wrong, completed units and solve', () async {
+    final puzzle = nearlySolved([0, 1]);
+    final game = SudokuGameController.fromPuzzle(puzzle,
+        storage: storage, clock: clock.call)
+      ..start();
+    final events = <SudokuFeedback>[];
+    final sub = game.feedback.listen(events.add);
+
+    game.select(0);
+    game.enter(wrongDigitFor(game, 0, puzzle.solution[0]));
+    game.erase();
+    game.enter(puzzle.solution[0]);
+    game.select(1);
+    game.enter(puzzle.solution[1]);
+    await Future<void>.delayed(Duration.zero);
+
+    final kinds = events.map((e) => e.kind).toList();
+    expect(kinds.first, SudokuFeedbackKind.wrong);
+    expect(kinds, contains(SudokuFeedbackKind.correct));
+    // Filling cell 1 completes row 0, column 1 and box 0.
+    final completed =
+        events.where((e) => e.kind == SudokuFeedbackKind.unitCompleted).toList();
+    expect(completed.map((e) => e.cells.length), everyElement(9));
+    expect(completed.length, greaterThanOrEqualTo(3));
+    expect(kinds.last, SudokuFeedbackKind.solved);
+    await sub.cancel();
+  });
+
   test('remaining counts correctly placed digits', () {
     final puzzle = nearlySolved([0]);
     final game = SudokuGameController.fromPuzzle(puzzle,
