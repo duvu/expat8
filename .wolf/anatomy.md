@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-09-28T07:24:18.089Z
-> Files: 589 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-09-28T09:34:07.529Z
+> Files: 602 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -303,6 +303,10 @@
 - `release-notes.md` — Release Notes (~537 tok)
 - `seed-vocabulary.md` — Seed Vocabulary Bundling (~1192 tok)
 - `testing-guide.md` — Backend, mobile, dashboard, migration, smoke, and docs verification commands (~560 tok)
+
+## docs/games/
+
+- `20260928-word-blaster-game-design.md` — Word Blaster — Thiết kế game bắn từ vựng (GDD) (~2239 tok)
 
 ## expat8-dashboard/
 
@@ -806,10 +810,14 @@
 ## mobile/lib/src/games/
 
 - `game_storage.dart` — / Minimal key-value persistence for games. Everything is stored on the (~331 tok)
+- `game_storage.dart` — GameStorage interface; LocalDatabaseGameStorage (ObjectBox settings), InMemoryGameStorage (~300 tok)
 - `games_hub_screen.dart` — / Entry point for offline mini-games. Add new games to [_games]. (~407 tok)
+- `games_hub_screen.dart` — Games list screen (Sudoku entry) (~400 tok)
+- `sudoku/sudoku_difficulty.dart` — 5 levels + target givens (~150 tok)
 
 ## mobile/lib/src/games/sudoku/
 
+- `sudoku_board_game.dart` — Class: SudokuBoardPalette (~3768 tok)
 - `sudoku_board_view.dart` — / The 9x9 grid. Tapping a cell selects it. (~1413 tok)
 - `sudoku_champion_board_screen.dart` — / Top solves per difficulty, stored on this device. (~1178 tok)
 - `sudoku_champion_store.dart` — / One finished game on the champion board. (~1681 tok)
@@ -818,6 +826,23 @@
 - `sudoku_game_screen.dart` — / Plays one Sudoku game. Pauses when the app goes to the background and (~2906 tok)
 - `sudoku_generator.dart` — / A generated puzzle: [puzzle] uses 0 for empty cells, [solution] is the (~1207 tok)
 - `sudoku_home_screen.dart` — Stateful widget: SudokuHomeScreen (~1833 tok)
+
+## mobile/lib/src/games/word_blaster/
+
+- `question_generator.dart` — / One prompt and the labels that will fly on the meteors. (~2292 tok)
+- `word_blaster_session.dart` — Class: WordBlasterEvent (~4029 tok)
+- `word_blaster_stats.dart` — / One finished round, as used by stats (and synced to the backend). (~1563 tok)
+
+## mobile/lib/src/games/word_blaster/game/
+
+- `word_blaster_game.dart` — Class: WordBlasterPalette (~7360 tok)
+
+## mobile/lib/src/games/word_blaster/ui/
+
+- `word_blaster_board_screen.dart` — Stateful widget: WordBlasterBoardScreen (~2415 tok)
+- `word_blaster_home_screen.dart` — / Mode picker and entry to records/stats/settings for Word Blaster. (~2641 tok)
+- `word_blaster_play_screen.dart` — Stateful widget: WordBlasterPlayScreen (~4935 tok)
+- `word_blaster_recap_screen.dart` — / Post-round summary: result, record, and the words to review. (~3139 tok)
 
 ## mobile/lib/src/speaking/
 
@@ -948,12 +973,3 @@
 ## openspec/changes/phase-3-lightweight-ai-feedback/specs/speaking-study-events/
 
 - `spec.md` — MODIFIED Requirements (~287 tok)
-
-## mobile/lib/src/games/
-- `game_storage.dart` — GameStorage interface; LocalDatabaseGameStorage (ObjectBox settings), InMemoryGameStorage (~300 tok)
-- `games_hub_screen.dart` — Games list screen (Sudoku entry) (~400 tok)
-- `sudoku/sudoku_difficulty.dart` — 5 levels + target givens (~150 tok)
-- `sudoku/sudoku_generator.dart` — generator, unique-solution solver, peers helpers (~1.2k tok)
-- `sudoku/sudoku_game_controller.dart` — game state, notes/undo/hints/timer, save/restore (~2.3k tok)
-- `sudoku/sudoku_champion_store.dart` — top-10 per level, stats, player name (~1.5k tok)
-- `sudoku/sudoku_home_screen.dart`, `sudoku_game_screen.dart`, `sudoku_board_view.dart`, `sudoku_champion_board_screen.dart` — UI (~5k tok)

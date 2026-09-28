@@ -46,6 +46,41 @@
       "count": 1,
       "tokens": 0,
       "first_read": "2026-09-28T07:43:16.717Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/f_game_light.png": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:03:22.560Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/f_home_light.png": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:03:23.099Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/f_game_dark.png": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:03:23.685Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/wb_play.png": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:40:56.811Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/wb_reveal.png": {
+      "count": 2,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:40:57.380Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/wb_home.png": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:40:58.067Z"
+    },
+    "/tmp/claude-1000/-home-beou-IdeaProjects-expat8/6304b84a-c8a6-4e24-b837-019826a670f8/scratchpad/wb_recap.png": {
+      "count": 1,
+      "tokens": 0,
+      "first_read": "2026-09-28T09:40:58.655Z"
     }
   },
   "files_written": [
@@ -138,6 +173,66 @@
       "action": "create",
       "tokens": 436,
       "at": "2026-09-28T07:24:18.099Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/sudoku/sudoku_board_game.dart",
+      "action": "create",
+      "tokens": 4038,
+      "at": "2026-09-28T09:00:24.426Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/docs/games/20260928-word-blaster-game-design.md",
+      "action": "create",
+      "tokens": 2559,
+      "at": "2026-09-28T09:06:43.916Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/question_generator.dart",
+      "action": "create",
+      "tokens": 2456,
+      "at": "2026-09-28T09:18:59.856Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/word_blaster_session.dart",
+      "action": "create",
+      "tokens": 4317,
+      "at": "2026-09-28T09:20:52.800Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/game/word_blaster_game.dart",
+      "action": "create",
+      "tokens": 7886,
+      "at": "2026-09-28T09:24:35.347Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/word_blaster_stats.dart",
+      "action": "create",
+      "tokens": 1675,
+      "at": "2026-09-28T09:25:18.398Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/ui/word_blaster_home_screen.dart",
+      "action": "create",
+      "tokens": 2830,
+      "at": "2026-09-28T09:26:15.258Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/ui/word_blaster_play_screen.dart",
+      "action": "create",
+      "tokens": 5288,
+      "at": "2026-09-28T09:27:08.741Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/ui/word_blaster_recap_screen.dart",
+      "action": "create",
+      "tokens": 3363,
+      "at": "2026-09-28T09:27:48.452Z"
+    },
+    {
+      "file": "/home/beou/IdeaProjects/expat8/mobile/lib/src/games/word_blaster/ui/word_blaster_board_screen.dart",
+      "action": "create",
+      "tokens": 2587,
+      "at": "2026-09-28T09:34:07.538Z"
     }
   ],
   "edit_counts": {
@@ -155,11 +250,21 @@
     "mobile/lib/src/games/sudoku/sudoku_game_screen.dart": 1,
     "mobile/lib/src/games/sudoku/sudoku_champion_board_screen.dart": 1,
     "mobile/lib/src/games/sudoku/sudoku_home_screen.dart": 1,
-    "mobile/lib/src/games/games_hub_screen.dart": 1
+    "mobile/lib/src/games/games_hub_screen.dart": 1,
+    "mobile/lib/src/games/sudoku/sudoku_board_game.dart": 1,
+    "docs/games/20260928-word-blaster-game-design.md": 1,
+    "mobile/lib/src/games/word_blaster/question_generator.dart": 1,
+    "mobile/lib/src/games/word_blaster/word_blaster_session.dart": 1,
+    "mobile/lib/src/games/word_blaster/game/word_blaster_game.dart": 1,
+    "mobile/lib/src/games/word_blaster/word_blaster_stats.dart": 1,
+    "mobile/lib/src/games/word_blaster/ui/word_blaster_home_screen.dart": 1,
+    "mobile/lib/src/games/word_blaster/ui/word_blaster_play_screen.dart": 1,
+    "mobile/lib/src/games/word_blaster/ui/word_blaster_recap_screen.dart": 1,
+    "mobile/lib/src/games/word_blaster/ui/word_blaster_board_screen.dart": 1
   },
   "anatomy_hits": 2,
-  "anatomy_misses": 7,
-  "repeated_reads_warned": 1,
+  "anatomy_misses": 14,
+  "repeated_reads_warned": 3,
   "cerebrum_warnings": 0,
-  "stop_count": 13
+  "stop_count": 20
 }
