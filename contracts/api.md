@@ -31,6 +31,43 @@ requests return:
 { "error": "bad_request" }
 ```
 
+If the server cannot record the nonce (replay storage unavailable), the request
+is rejected for every method without reaching the route handler and returns
+`503`:
+
+```json
+{ "error": "REPLAY_PROTECTION_UNAVAILABLE" }
+```
+
+Clients must treat this as transient: keep queued writes and retry with
+backoff.
+
+## Server Errors
+
+Unexpected `5xx` responses never include internal error messages. They return
+the request id, which matches the `x-request-id` response header and server
+logs:
+
+```json
+{ "error": "internal_error", "request_id": "req_abc123" }
+```
+
+## Rate Limits
+
+Rate-limited requests return `429 { "error": "rate_limit_exceeded" }` with
+`X-RateLimit-Remaining` and `X-RateLimit-Reset` (epoch seconds) headers.
+
+`POST /v1/users/register` and `POST /v1/users/sign-in` apply two limits:
+
+| Limit | Key | Default | Env |
+|---|---|---|---|
+| Per client | client IP, shared by register + sign-in | 60 / minute | `AUTH_RATE_LIMIT_IP` |
+| Per account attempt | client IP + normalized `identifier` | register 10, sign-in 20 / minute | `AUTH_RATE_LIMIT_REGISTER`, `AUTH_RATE_LIMIT_SIGN_IN` |
+
+The per-account limit is scoped to the client, so failed attempts from one
+address cannot lock the account out for its owner elsewhere. Behind a reverse
+proxy, set `TRUST_PROXY` so the client IP comes from `X-Forwarded-For`.
+
 ## Browser CORS
 
 Browser preflight requests are the only `/v1/*` exception to app credential
@@ -150,7 +187,8 @@ Response `201`:
 ```
 
 Duplicate identifiers return `409 { "error": "user_exists" }`. Invalid input
-returns `400 { "error": "bad_request" }`.
+returns `400 { "error": "bad_request" }`. See [Rate Limits](#rate-limits) for
+`429` behavior.
 
 ## POST /v1/users/sign-in
 
@@ -175,7 +213,8 @@ Response `200`:
 }
 ```
 
-Bad credentials return `401 { "error": "invalid_credentials" }`.
+Bad credentials return `401 { "error": "invalid_credentials" }`. See
+[Rate Limits](#rate-limits) for `429` behavior.
 
 ## POST /v1/users/sign-out
 

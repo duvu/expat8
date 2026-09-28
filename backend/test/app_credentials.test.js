@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   InMemoryNonceCache,
   PostgresNonceCache,
+  NonceStorageUnavailableError,
   buildCanonicalRequest,
   canonicalPathWithSortedQuery,
   hashBody,
@@ -209,14 +210,36 @@ test('PostgresNonceCache uses INSERT ON CONFLICT to detect replays', async () =>
   assert.ok(pruneCallCount >= 1, 'prune was triggered');
 });
 
-test('PostgresNonceCache fails open on database error', async () => {
-  const pool = {
-    query: async () => {
-      throw new Error('db down');
+test('PostgresNonceCache maps storage failures to nonce storage unavailable', async () => {
+  const failures = [
+    { name: 'connection error', error: new Error('connect ECONNREFUSED'), reason: 'storage_error' },
+    { name: 'timeout', error: Object.assign(new Error('statement timeout'), { code: '57014' }), reason: 'timeout' },
+    {
+      name: 'pool exhaustion',
+      error: Object.assign(new Error('too many clients'), { code: '53300' }),
+      reason: 'pool_unavailable'
+    },
+    {
+      name: 'missing schema',
+      error: Object.assign(new Error('relation "nonces" does not exist'), { code: '42P01' }),
+      reason: 'missing_schema'
     }
-  };
-  const cache = new PostgresNonceCache(pool);
-  assert.equal(await cache.use('app1', 'nonce_x', Date.now(), 300), true, 'fails open on error');
+  ];
+
+  for (const failure of failures) {
+    const pool = {
+      query: async () => {
+        throw failure.error;
+      }
+    };
+    const cache = new PostgresNonceCache(pool);
+
+    await assert.rejects(
+      () => cache.use('app1', `nonce_${failure.name}`, Date.now(), 300),
+      (error) => error instanceof NonceStorageUnavailableError && error.reason === failure.reason,
+      failure.name
+    );
+  }
 });
 
 function signedHeaders({ method, url, rawBody, timestamp, nonce }) {

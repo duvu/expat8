@@ -3,6 +3,7 @@ import http from 'node:http';
 import test from 'node:test';
 
 import { createApp } from '../src/app.js';
+import { NonceStorageUnavailableError } from '../src/app_credentials.js';
 import { WordStore } from '../src/word_store.js';
 import { loadTestConfig, signedFetchOptions } from './support/app_credential_helpers.js';
 
@@ -705,6 +706,60 @@ test('does not expose legacy words next route', async (t) => {
   assert.equal(response.status, 404);
 });
 
+test('returns 503 and skips protected handler when nonce storage is unavailable', async (t) => {
+  let handlerCallCount = 0;
+  const logEvents = [];
+  const store = {
+    recentWords() {
+      handlerCallCount++;
+      return { items: [] };
+    }
+  };
+  const logger = {
+    child() {
+      return this;
+    },
+    info() {},
+    warn(event, context) {
+      logEvents.push({ event, ...context });
+    },
+    error() {}
+  };
+  const nonceCache = {
+    use() {
+      throw new NonceStorageUnavailableError('timeout');
+    }
+  };
+  const server = http.createServer(
+    createApp({
+      store,
+      generationService: null,
+      config: loadTestConfig(),
+      logger,
+      nonceCache
+    })
+  );
+  await listen(server);
+  t.after(() => server.close());
+
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const url = `${baseUrl}/v1/words/recent?limit=1&target_language=en`;
+  const response = await fetch(url, signedFetchOptions(url));
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'REPLAY_PROTECTION_UNAVAILABLE' });
+  assert.equal(handlerCallCount, 0);
+  assert.deepEqual(logEvents, [
+    {
+      event: 'replay_protection_unavailable',
+      method: 'GET',
+      path: '/v1/words/recent?limit=1&target_language=en',
+      reason: 'timeout',
+      error_name: 'NonceStorageUnavailableError'
+    }
+  ]);
+});
+
 test('registers, signs in, signs out, and associates signed-in learning with user', async (t) => {
   const store = new WordStore({ seed: false });
   store.insertWord(
@@ -963,9 +1018,9 @@ test('auth rate limit config applies separate register and sign-in limits', asyn
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        identifier: 'limited-2@example.com',
+        identifier: 'limited@example.com',
         password: 'correct horse battery staple',
-        device_id: 'device_auth_limit'
+        device_id: 'device_auth_limit_other'
       })
     })
   );
@@ -1014,6 +1069,67 @@ test('auth rate limit config applies separate register and sign-in limits', asyn
   );
   assert.equal(thirdSignIn.status, 429);
   assert.deepEqual(await thirdSignIn.json(), { error: 'rate_limit_exceeded' });
+});
+
+async function startAuthRateLimitServer(t, env) {
+  const server = http.createServer(
+    createApp({ store: new WordStore({ seed: false }), generationService: null, config: loadTestConfig(env) })
+  );
+  await listen(server);
+  t.after(() => server.close());
+  return `http://127.0.0.1:${server.address().port}/v1/users/sign-in`;
+}
+
+function signIn(url, identifier, { forwardedFor } = {}) {
+  return fetch(
+    url,
+    signedFetchOptions(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {})
+      },
+      body: JSON.stringify({ identifier, password: 'wrong password!', device_id: 'device_rl' })
+    })
+  );
+}
+
+test('auth IP rate limit caps attempts across many identifiers from one client', async (t) => {
+  const url = await startAuthRateLimitServer(t, { AUTH_RATE_LIMIT_IP: '3', AUTH_RATE_LIMIT_SIGN_IN: '100' });
+
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal((await signIn(url, `user${i}@example.com`)).status, 401);
+  }
+  const blocked = await signIn(url, 'user99@example.com');
+  assert.equal(blocked.status, 429);
+  assert.deepEqual(await blocked.json(), { error: 'rate_limit_exceeded' });
+});
+
+test('auth account rate limit is scoped per client and cannot lock the account out elsewhere', async (t) => {
+  const url = await startAuthRateLimitServer(t, {
+    AUTH_RATE_LIMIT_IP: '100',
+    AUTH_RATE_LIMIT_SIGN_IN: '2',
+    TRUST_PROXY: 'true'
+  });
+  const attacker = { forwardedFor: '203.0.113.7' };
+  const victim = { forwardedFor: '198.51.100.23' };
+
+  assert.equal((await signIn(url, 'victim@example.com', attacker)).status, 401);
+  assert.equal((await signIn(url, 'Victim@Example.com', attacker)).status, 401);
+  assert.equal((await signIn(url, 'victim@example.com', attacker)).status, 429);
+
+  // Same attacker can still try other accounts until the IP cap.
+  assert.equal((await signIn(url, 'someone-else@example.com', attacker)).status, 401);
+  // The legitimate owner on another address is unaffected.
+  assert.equal((await signIn(url, 'victim@example.com', victim)).status, 401);
+});
+
+test('forwarded client addresses are ignored unless TRUST_PROXY is set', async (t) => {
+  const url = await startAuthRateLimitServer(t, { AUTH_RATE_LIMIT_IP: '2', AUTH_RATE_LIMIT_SIGN_IN: '100' });
+
+  assert.equal((await signIn(url, 'a@example.com', { forwardedFor: '203.0.113.1' })).status, 401);
+  assert.equal((await signIn(url, 'b@example.com', { forwardedFor: '203.0.113.2' })).status, 401);
+  assert.equal((await signIn(url, 'c@example.com', { forwardedFor: '203.0.113.3' })).status, 429);
 });
 
 test('handles browser CORS preflight while preserving app credential protection', async (t) => {
@@ -1636,7 +1752,9 @@ test('sync processes out-of-order events deterministically', async (t) => {
 
 test('speaking_drill_completed event is accepted and reflected in summary', async (t) => {
   const store = new WordStore({ seed: false });
-  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
   await listen(server);
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -1695,7 +1813,9 @@ test('speaking_drill_completed event is accepted and reflected in summary', asyn
 
 test('loop_completed event is accepted and reflected in summary loop_completion_count', async (t) => {
   const store = new WordStore({ seed: false });
-  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  const server = http.createServer(
+    createApp({ store, generationService: null, config: loadTestConfig() })
+  );
   await listen(server);
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -1950,9 +2070,7 @@ test('admin content-pipeline health reports operational backlog and requires adm
 
 test('memorization passage endpoints require sessions and return contract shapes', async (t) => {
   const store = new WordStore({ seed: false });
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
+  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
   await listen(server);
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -2004,9 +2122,7 @@ test('shadowing catalog requires device id and rejects invalid bearer session', 
       segments: [{ position: 0, start_ms: 0, end_ms: 1000, text: 'Hello.' }]
     }
   });
-  const server = http.createServer(
-    createApp({ store, generationService: null, config: loadTestConfig() })
-  );
+  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
   await listen(server);
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;

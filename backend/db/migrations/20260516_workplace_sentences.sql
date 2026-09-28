@@ -1,4 +1,4 @@
-CREATE TABLE workplace_sentences (
+CREATE TABLE IF NOT EXISTS workplace_sentences (
   id TEXT PRIMARY KEY,
   text TEXT NOT NULL,
   normalized_text TEXT NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE workplace_sentences (
   UNIQUE(language, normalized_text)
 );
 
-CREATE TABLE article_workplace_sentences (
+CREATE TABLE IF NOT EXISTS article_workplace_sentences (
   id TEXT PRIMARY KEY,
   article_id TEXT NOT NULL,
   workplace_sentence_id TEXT NOT NULL,
@@ -21,11 +21,11 @@ CREATE TABLE article_workplace_sentences (
   FOREIGN KEY (workplace_sentence_id) REFERENCES workplace_sentences(id)
 );
 
-CREATE INDEX idx_workplace_sentences_language_updated
+CREATE INDEX IF NOT EXISTS idx_workplace_sentences_language_updated
   ON workplace_sentences(language, updated_at DESC);
 
-CREATE INDEX idx_article_workplace_sentences_article
+CREATE INDEX IF NOT EXISTS idx_article_workplace_sentences_article
   ON article_workplace_sentences(article_id);
 
-CREATE INDEX idx_article_workplace_sentences_sentence
+CREATE INDEX IF NOT EXISTS idx_article_workplace_sentences_sentence
   ON article_workplace_sentences(workplace_sentence_id);

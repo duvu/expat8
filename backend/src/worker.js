@@ -85,6 +85,10 @@ function handleShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   logger.info?.('article_worker_shutdown_requested', { signal });
+  if (!tickInProgress) {
+    logger.info?.('article_worker_shutdown_clean');
+    process.exit(0);
+  }
   const drainTimeout = setTimeout(() => {
     logger.warn?.('article_worker_drain_timeout', { signal });
     process.exit(1);
@@ -96,7 +100,8 @@ process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 async function tick() {
-  if (isShuttingDown) return;
+  // A tick can outlast the interval (LLM calls), so never run two at once.
+  if (isShuttingDown || tickInProgress) return;
   tickInProgress = true;
   try {
     await worker.runOnce();

@@ -1129,7 +1129,7 @@ export class PostgresWordStore {
           )
           VALUES ($1, $2, $3, $4, $5, $6)
           RETURNING *`,
-          [createId('user'), input.identifier, displayName, createPasswordHash(input.password), now, now]
+          [createId('user'), input.identifier, displayName, await createPasswordHash(input.password), now, now]
         );
       } catch (error) {
         if (error?.code === '23505') {
@@ -1161,7 +1161,7 @@ export class PostgresWordStore {
     if (!user) {
       throw new InvalidCredentialsError({ reason: 'user_not_found' });
     }
-    if (!verifyPassword(password, user.password_hash)) {
+    if (!await verifyPassword(password, user.password_hash)) {
       throw new InvalidCredentialsError();
     }
     return this.#withOptionalTransaction(async (client) => {
@@ -2777,7 +2777,7 @@ export class PostgresWordStore {
       params.push(ownerType);
     }
     if (userId) {
-      sql += ` AND (owner_user_id = $${idx++} OR visibility = 'published')`;
+      sql += ` AND (owner_user_id = $${idx} OR visibility = 'published')`;
       params.push(userId);
     }
     sql += ` ORDER BY created_at DESC`;

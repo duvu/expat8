@@ -3,9 +3,10 @@ import crypto from 'node:crypto';
 const SIGNATURE_VERSION = 'v1';
 
 export class NonceStorageUnavailableError extends Error {
-  constructor() {
+  constructor(reason = 'storage_error') {
     super('REPLAY_PROTECTION_UNAVAILABLE');
     this.name = 'NonceStorageUnavailableError';
+    this.reason = reason;
   }
 }
 
@@ -43,9 +44,9 @@ export class InMemoryNonceCache {
  * Expired rows are pruned lazily (at most once per minute) via a fire-and-forget
  * DELETE, so the table stays small without a separate cron job.
  *
- * Falls back to accepting the request on any database error so a transient
- * Postgres hiccup does not lock out legitimate clients — an acceptable tradeoff
- * given that timestamp-based skew checks bound the replay window.
+ * Fails closed for storage failures so replay protection remains authoritative.
+ * Missing-table errors are surfaced as a hard reject because there is no
+ * secure replay state when the table is unavailable.
  */
 export class PostgresNonceCache {
   #pool;
@@ -73,10 +74,7 @@ export class PostgresNonceCache {
       }
       return claimed;
     } catch (err) {
-      if (err?.code === '42P01') {
-        throw new NonceStorageUnavailableError();
-      }
-      return true;
+      throw new NonceStorageUnavailableError(classifyNonceStorageFailure(err));
     }
   }
 
@@ -88,6 +86,19 @@ export class PostgresNonceCache {
     // Fire-and-forget — errors are intentionally swallowed.
     this.#pool.query('DELETE FROM nonces WHERE expires_at <= NOW()').catch(() => {});
   }
+}
+
+function classifyNonceStorageFailure(err) {
+  if (err?.code === '42P01') {
+    return 'missing_schema';
+  }
+  if (err?.code === '57014' || err?.code === 'ETIMEDOUT' || err?.name === 'TimeoutError') {
+    return 'timeout';
+  }
+  if (err?.code === '53300' || err?.code === '53400') {
+    return 'pool_unavailable';
+  }
+  return 'storage_error';
 }
 
 export function canonicalPathWithSortedQuery(url) {

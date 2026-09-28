@@ -4,7 +4,6 @@ import test from 'node:test';
 
 import { createApp } from '../src/app.js';
 import { PassageEnrichmentPipeline } from '../src/passage_enrichment_pipeline.js';
-import { PassageEnrichmentWorker } from '../src/passage_enrichment_worker.js';
 import { PassageSegmentationPipeline } from '../src/passage_segmentation_pipeline.js';
 import { PassageSegmentationWorker } from '../src/passage_segmentation_worker.js';
 import { WordStore } from '../src/word_store.js';
@@ -1130,7 +1129,7 @@ test('worker: handles unexpected pipeline exceptions', async () => {
 test('enrichment pipeline: successful enrichment with mock LLM', async () => {
   const store = makeStore();
   const passage = store.createPassage({ title: 'Enrich Test', language: 'en', rawText: LONG_TEXT, ownerUserId: 'u1' });
-  const [segment] = store.createSegments({ passageId: passage.id, segments: [{ position: 0, text: 'Four score and seven years ago.' }] });
+  store.createSegments({ passageId: passage.id, segments: [{ position: 0, text: 'Four score and seven years ago.' }] });
   store.updatePassage({ passageId: passage.id, status: 'segmented' });
 
   const mockLLM = {

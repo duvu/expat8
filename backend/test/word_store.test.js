@@ -888,3 +888,40 @@ function wordInput(overrides = {}) {
     ...overrides
   };
 }
+
+test('routeStudyEvents rejects invalid events but surfaces storage failures', async () => {
+  const { routeStudyEvents, isEventDataError } = await import('../src/word_store.js');
+  const event = {
+    client_event_id: 'evt_route_1',
+    server_word_id: 'word_1',
+    rating: 'easy',
+    occurred_at: '2026-05-04T10:30:00.000Z'
+  };
+
+  const invalid = await routeStudyEvents({
+    events: [event],
+    recordSpeakingEvent: async () => ({ idempotent: false }),
+    recordStudyEvent: async () => {
+      throw Object.assign(new Error('invalid input syntax for type timestamp'), { code: '22007' });
+    },
+    initialProficiency: null
+  });
+  assert.deepEqual(invalid.rejected, [{ client_event_id: 'evt_route_1', event_id: null, reason: 'invalid_event' }]);
+
+  await assert.rejects(
+    routeStudyEvents({
+      events: [event],
+      recordSpeakingEvent: async () => ({ idempotent: false }),
+      recordStudyEvent: async () => {
+        throw Object.assign(new Error('violates check constraint'), { code: '23514' });
+      },
+      initialProficiency: null
+    }),
+    /violates check constraint/
+  );
+
+  assert.equal(isEventDataError(new Error('missing_required_field')), true);
+  assert.equal(isEventDataError(Object.assign(new Error('fk'), { code: '23503' })), true);
+  assert.equal(isEventDataError(Object.assign(new Error('connection terminated'), { code: 'ECONNRESET' })), false);
+  assert.equal(isEventDataError(new Error('boom')), false);
+});

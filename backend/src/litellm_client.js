@@ -378,25 +378,25 @@ function buildPromptLines({ sourceLanguage, targetLanguage, limit, avoidTerms, p
   ];
 }
 
-function buildSubmittedVocabularyPromptLines({ sourceLanguage, targetLanguage, term, profile, difficultyLevel }) {
+function buildSubmittedVocabularyPromptLines({ sourceLanguage: _sourceLanguage, targetLanguage, term, profile, difficultyLevel }) {
   const difficultyLevels = profile.levels.join('/');
   if (profile.scale === 'hsk') {
     return [
-      `Generate exactly one ${targetLanguage} vocabulary item for the submitted learner term \"${term}\".`,
+      `Generate exactly one ${targetLanguage} vocabulary item for the submitted learner term "${term}".`,
       `The final term MUST stay the same submitted term after normalization; do not replace it with a synonym or different expression.`,
       `Target proficiency scale is HSK and target level is ${difficultyLevel}.`,
       `Return a JSON array with exactly one object containing these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics, entry_type, blank_word, explanation.`,
-      `Set language to \"${targetLanguage}\". Chinese does not use IPA so ipa MUST be empty. vietnamese_pronunciation MUST contain pinyin-style romanization.`,
+      `Set language to "${targetLanguage}". Chinese does not use IPA so ipa MUST be empty. vietnamese_pronunciation MUST contain pinyin-style romanization.`,
       `Difficulty must be one of ${difficultyLevels} and should equal ${difficultyLevel}. explanation is a short Vietnamese usage note. blank_word is null for word entry_type.`
     ];
   }
 
   return [
-    `Generate exactly one ${targetLanguage} vocabulary item for the submitted learner term \"${term}\".`,
+    `Generate exactly one ${targetLanguage} vocabulary item for the submitted learner term "${term}".`,
     `The final term MUST stay the same submitted term after normalization; do not replace it with a synonym or different expression.`,
     `Target proficiency scale is CEFR and target level is ${difficultyLevel}.`,
     `Return a JSON array with exactly one object containing these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, topics, entry_type, blank_word, explanation.`,
-    `Set language to \"${targetLanguage}\". explanation is a short Vietnamese usage note. entry_type is one of \"word\"/\"phrase\"/\"idiom\". blank_word is null for word entry_type.`
+    `Set language to "${targetLanguage}". explanation is a short Vietnamese usage note. entry_type is one of "word"/"phrase"/"idiom". blank_word is null for word entry_type.`
   ];
 }
 

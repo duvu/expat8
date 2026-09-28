@@ -39,6 +39,9 @@ export function loadConfig(env = process.env) {
     vocabSchedulerLockTtlSeconds: Number.parseInt(env.VOCAB_SCHEDULER_LOCK_TTL_SECONDS ?? '120', 10),
     authRateLimitRegister: Number.parseInt(env.AUTH_RATE_LIMIT_REGISTER ?? '10', 10),
     authRateLimitSignIn: Number.parseInt(env.AUTH_RATE_LIMIT_SIGN_IN ?? '20', 10),
+    authRateLimitIp: Number.parseInt(env.AUTH_RATE_LIMIT_IP ?? '60', 10),
+    trustProxy: parseTrustProxy(env.TRUST_PROXY),
+    migrateOnStart: parseBoolean(env.MIGRATE_ON_START ?? 'false'),
     dbPoolMax: Number.parseInt(env.DB_POOL_MAX ?? '10', 10),
     dbIdleTimeoutMs: Number.parseInt(env.DB_IDLE_TIMEOUT_MS ?? '10000', 10),
     dbConnectionTimeoutMs: Number.parseInt(env.DB_CONNECTION_TIMEOUT_MS ?? '5000', 10),
@@ -97,4 +100,25 @@ function parseAppCredentials(raw) {
       status: credential.status
     };
   });
+}
+
+// Express `trust proxy` setting. Only enable behind a reverse proxy that
+// overwrites X-Forwarded-For, otherwise clients can spoof their IP and bypass
+// IP-based rate limits. Accepts false/true, a hop count, or a comma-separated
+// list of trusted addresses/subnets.
+function parseTrustProxy(value) {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  const trimmed = String(value).trim();
+  if (trimmed === '' || trimmed.toLowerCase() === 'false') {
+    return false;
+  }
+  if (trimmed.toLowerCase() === 'true') {
+    return true;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+  return trimmed;
 }

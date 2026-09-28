@@ -25,6 +25,7 @@ services:
     environment:
       PORT: ${PORT:-8787}
       DATABASE_URL: postgres://${POSTGRES_USER:-expat8}:${POSTGRES_PASSWORD:-CHANGEME}@postgres:5432/${POSTGRES_DB:-expat8}
+      MIGRATE_ON_START: ${MIGRATE_ON_START:-true}
       LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
       LITELLM_API_KEY: ${LITELLM_API_KEY:-}
       LITELLM_MODEL: ${LITELLM_MODEL:-gpt-4o-mini}

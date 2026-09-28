@@ -5,7 +5,7 @@ import test from 'node:test';
 import pg from 'pg';
 
 import { createApp } from '../src/app.js';
-import { initializeDatabaseSchema } from '../src/database.js';
+import { migrateDatabase } from '../src/migrations.js';
 import { PostgresWordStore } from '../src/postgres_word_store.js';
 import { loadTestConfig, signedFetchOptions } from './support/app_credential_helpers.js';
 
@@ -49,7 +49,8 @@ test('postgres store works against the schema SQL', pgTestOptions, async (t) => 
   assert.deepEqual(first.word.topics, ['work', 'people']);
   assert.equal(recent.length, 1);
   assert.deepEqual(sync.accepted_event_ids, ['evt_pg_1']);
-  assert.deepEqual(retry.accepted_event_ids, ['evt_pg_1']);
+  assert.deepEqual(retry.accepted_event_ids, []);
+  assert.deepEqual(retry.duplicates, ['evt_pg_1']);
   assert.equal(sync.proficiency.level, 'A1');
 });
 
@@ -104,10 +105,8 @@ test('API routes work with postgres store when a test database is available', pg
 });
 
 async function resetSchema(pool) {
-  await pool.query(
-    'DROP TABLE IF EXISTS shadowing_video_entries, shadowing_video_segments, shadowing_videos, vocabulary_review_items, article_terms, word_senses, terms, article_processing_jobs, articles, user_cached_words, user_word_states, user_proficiency, study_events, words CASCADE'
-  );
-  await initializeDatabaseSchema({ pool });
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+  await migrateDatabase({ pool });
 }
 
 function listen(server) {

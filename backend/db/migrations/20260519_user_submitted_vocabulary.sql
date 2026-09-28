@@ -1,4 +1,4 @@
-CREATE TABLE user_submitted_words (
+CREATE TABLE IF NOT EXISTS user_submitted_words (
   id TEXT PRIMARY KEY,
   user_id TEXT,
   device_id TEXT NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE user_submitted_words (
   FOREIGN KEY (resolved_word_id) REFERENCES words(id)
 );
 
-CREATE TABLE user_submitted_word_jobs (
+CREATE TABLE IF NOT EXISTS user_submitted_word_jobs (
   id TEXT PRIMARY KEY,
   submission_id TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL,
@@ -30,24 +30,24 @@ CREATE TABLE user_submitted_word_jobs (
   FOREIGN KEY (submission_id) REFERENCES user_submitted_words(id)
 );
 
-CREATE INDEX idx_user_submitted_words_device_updated
+CREATE INDEX IF NOT EXISTS idx_user_submitted_words_device_updated
   ON user_submitted_words(device_id, updated_at DESC);
 
-CREATE INDEX idx_user_submitted_words_user_updated
+CREATE INDEX IF NOT EXISTS idx_user_submitted_words_user_updated
   ON user_submitted_words(user_id, updated_at DESC)
   WHERE user_id IS NOT NULL;
 
-CREATE UNIQUE INDEX idx_user_submitted_words_active_device_term
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_submitted_words_active_device_term
   ON user_submitted_words(device_id, language, normalized_term)
   WHERE user_id IS NULL AND status IN ('queued', 'processing');
 
-CREATE UNIQUE INDEX idx_user_submitted_words_active_user_term
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_submitted_words_active_user_term
   ON user_submitted_words(user_id, language, normalized_term)
   WHERE user_id IS NOT NULL AND status IN ('queued', 'processing');
 
-CREATE INDEX idx_user_submitted_words_resolved_word
+CREATE INDEX IF NOT EXISTS idx_user_submitted_words_resolved_word
   ON user_submitted_words(resolved_word_id)
   WHERE resolved_word_id IS NOT NULL;
 
-CREATE INDEX idx_user_submitted_word_jobs_status_queued
+CREATE INDEX IF NOT EXISTS idx_user_submitted_word_jobs_status_queued
   ON user_submitted_word_jobs(status, queued_at);

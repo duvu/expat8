@@ -13,3 +13,8 @@ backend/data/
 node_modules/
 coverage/
 openspec/
+!backend/openspec/
+!backend/openspec/changes/
+!backend/openspec/changes/fail-closed-replay-protection/
+!backend/openspec/changes/fail-closed-replay-protection/**
+*.tsbuildinfo
