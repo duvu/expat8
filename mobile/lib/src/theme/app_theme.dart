@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 ///
 /// Access in widgets via:
 /// ```dart
-/// final appColors = Theme.of(context).extension<AppColors>()!;
+/// final appColors = AppColors.of(context);
 /// ```
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
@@ -86,6 +86,14 @@ class AppColors extends ThemeExtension<AppColors> {
       severityWarn: Color.lerp(severityWarn, other.severityWarn, t)!,
       severityError: Color.lerp(severityError, other.severityError, t)!,
     );
+  }
+
+  /// Returns the registered tokens, falling back to the brightness-matched
+  /// defaults when the enclosing theme was not built by [AppTheme].
+  static AppColors of(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.extension<AppColors>() ??
+        (theme.brightness == Brightness.dark ? _dark : _light);
   }
 
   // ---- Predefined instances ----

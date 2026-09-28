@@ -92,14 +92,25 @@ class _FitbCardState extends State<FitbCard> {
                 ),
               ),
               const SizedBox(height: 8),
-              // Vietnamese example fades in; hint fades out simultaneously
-              AnimatedCrossFade(
-                firstChild: _TapToRevealHint(textTheme: textTheme),
-                secondChild: Text(word.exampleVi, style: textTheme.bodyMedium),
-                crossFadeState: _revealed
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
+              // Vietnamese example fades in; hint fades out. AnimatedSwitcher
+              // drops the outgoing child after the transition so the hidden
+              // translation is never in the tree before reveal.
+              AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
+                layoutBuilder: (current, previous) => Stack(
+                  alignment: Alignment.topLeft,
+                  children: [...previous, if (current != null) current],
+                ),
+                child: _revealed
+                    ? Text(
+                        word.exampleVi,
+                        key: const ValueKey('fitb-example-vi'),
+                        style: textTheme.bodyMedium,
+                      )
+                    : _TapToRevealHint(
+                        key: const ValueKey('fitb-reveal-hint'),
+                        textTheme: textTheme,
+                      ),
               ),
             ],
           ),
@@ -151,7 +162,7 @@ class _BlankedSentence extends StatelessWidget {
 }
 
 class _TapToRevealHint extends StatelessWidget {
-  const _TapToRevealHint({required this.textTheme});
+  const _TapToRevealHint({required this.textTheme, super.key});
 
   final TextTheme textTheme;
 

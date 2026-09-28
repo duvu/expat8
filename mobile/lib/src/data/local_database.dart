@@ -1052,12 +1052,22 @@ class LocalDatabase {
   }
 
   Future<void> markEventSynced(String clientEventId) async {
+    _finishEventSync(clientEventId, SyncStatus.synced);
+  }
+
+  /// Marks an event the server permanently rejected and stops retrying it.
+  /// The event itself stays in local history.
+  Future<void> markEventFailed(String clientEventId) async {
+    _finishEventSync(clientEventId, SyncStatus.failed);
+  }
+
+  void _finishEventSync(String clientEventId, SyncStatus status) {
     final event = _studyEvents
         .query(StudyEventEntity_.clientEventId.equals(clientEventId))
         .build()
         .findFirst();
     if (event != null) {
-      event.syncStatus = SyncStatus.synced.name;
+      event.syncStatus = status.name;
       _studyEvents.put(event);
     }
 
@@ -1308,7 +1318,11 @@ class LocalDatabase {
   /// Pass 3: Fallback — remove oldest words by createdAt.
   ///
   /// Words with pending (unsynced) study events are skipped in all passes.
-  Future<int> pruneToCapSmartly({int maxWords = 1000, String? language}) async {
+  Future<int> pruneToCapSmartly({
+    int maxWords = 1000,
+    String? language,
+    DateTime? now,
+  }) async {
     final all = language == null
         ? _localWords.getAll()
         : _localWords
@@ -1328,7 +1342,7 @@ class LocalDatabase {
     bool hasPending(LocalWordEntity e) => pendingLocalIds.contains(e.localId);
 
     var removed = 0;
-    final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+    final nowMs = (now ?? DateTime.now()).toUtc().millisecondsSinceEpoch;
     final thirtyDaysMs = const Duration(days: 30).inMilliseconds;
 
     // Pass 1: mastered words, least-recently-seen first.

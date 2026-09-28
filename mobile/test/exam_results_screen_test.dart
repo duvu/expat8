@@ -339,7 +339,7 @@ void main() {
       if (req.url.path.endsWith('/start')) {
         return http.Response(_makeStartResponse(), 201, headers: _jsonHeaders);
       }
-      return http.Response(_makeSubmitResponse(passed: false), 200,
+      return http.Response(_makeSubmitResponse(passed: true), 200,
           headers: _jsonHeaders);
     });
 

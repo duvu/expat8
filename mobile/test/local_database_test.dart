@@ -10,7 +10,7 @@ void main() {
 
   test('persists words and prunes to 1000 most recent', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_prune.db',
+      databaseName: 'local_database_test_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
 
@@ -26,7 +26,7 @@ void main() {
 
   test('stores pending study events before sync', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_sync.db',
+      databaseName: 'local_database_test_sync_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     await database.insertStudyEvent(
@@ -61,7 +61,7 @@ void main() {
 
   test('normalizes an existing raw device id to anonymous format', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_device_id_normalize.db',
+      databaseName: 'local_database_test_device_id_normalize_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.setSetting('device_id', 'raw_uuid');
@@ -73,7 +73,7 @@ void main() {
 
   test('persists and clears active user session', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_user_session.db',
+      databaseName: 'local_database_test_user_session_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     const session = UserSession(
       userId: 'user_1',
@@ -95,7 +95,7 @@ void main() {
   test('returns the most recently learned word before due-review fallback',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_recent_review.db',
+      databaseName: 'local_database_test_recent_review_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     // Both words are due (nextReviewAt in the past) so the scheduling gate
@@ -161,7 +161,7 @@ void main() {
 
   test('prunes logs by age and max entries', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_log_prune.db',
+      databaseName: 'local_database_test_log_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.persistLogEntry(
@@ -248,7 +248,7 @@ void main() {
 
   test('getSetting returns null for unknown key', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_get_setting_null.db',
+      databaseName: 'local_database_test_get_setting_null_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     final value = await database.getSetting('unknown_key');
@@ -257,7 +257,7 @@ void main() {
 
   test('setSetting stores and getSetting retrieves a value', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_set_get_setting.db',
+      databaseName: 'local_database_test_set_get_setting_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.setSetting('my_key', 'my_value');
@@ -268,7 +268,7 @@ void main() {
 
   test('setSetting replaces existing value for the same key', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_set_replace_setting.db',
+      databaseName: 'local_database_test_set_replace_setting_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.setSetting('my_key', 'first');
@@ -280,7 +280,7 @@ void main() {
 
   test('countUnstudiedNewWords returns 0 for empty database', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_count_new_empty.db',
+      databaseName: 'local_database_test_count_new_empty_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     final count = await database.countUnstudiedNewWords();
@@ -289,7 +289,7 @@ void main() {
 
   test('countUnstudiedNewWords counts only new_word status entries', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_count_new.db',
+      databaseName: 'local_database_test_count_new_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     await database.upsertWord(_word('new_1', now));
@@ -305,7 +305,7 @@ void main() {
   test('lists active cached server ids and deletes local words by id',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_active_cache_delete.db',
+      databaseName: 'local_database_test_active_cache_delete_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     await database.upsertWord(_word('server_1', now));
@@ -322,7 +322,7 @@ void main() {
   test('addBatch prunes to 990 before inserting when count is at 995',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_add_batch_prune.db',
+      databaseName: 'local_database_test_add_batch_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.utc(2026, 5, 4);
 
@@ -349,7 +349,7 @@ void main() {
   test('addBatch inserts all words without pruning when count is low',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_add_batch_no_prune.db',
+      databaseName: 'local_database_test_add_batch_no_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.utc(2026, 5, 4);
 
@@ -419,7 +419,7 @@ void main() {
   test('markWordRememberedLowFrequency schedules far review as mastered',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_mark_remembered.db',
+      databaseName: 'local_database_test_mark_remembered_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4, 10, 0);
     final word = _word('remembered_1', now);
@@ -441,7 +441,7 @@ void main() {
   test('markWordDifficultForRelearn schedules near-term relearn as learning',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_mark_difficult.db',
+      databaseName: 'local_database_test_mark_difficult_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4, 10, 0);
     final word = _word('difficult_1', now);
@@ -482,7 +482,7 @@ void main() {
     }
     // Total = 1050, need to remove 50
 
-    final removed = await database.pruneToCapSmartly(maxWords: 1000);
+    final removed = await database.pruneToCapSmartly(maxWords: 1000, now: base);
 
     expect(removed, 50);
     // All mastered words with lowest lastSeen indices should have been removed
@@ -532,7 +532,7 @@ void main() {
     }
     // Total = 1080, need to remove 80; no mastered → pass 2 handles far review
 
-    final removed = await database.pruneToCapSmartly(maxWords: 1000);
+    final removed = await database.pruneToCapSmartly(maxWords: 1000, now: base);
 
     expect(removed, 80);
     final activeIds = await database.activeCachedServerWordIds(limit: 1200);
@@ -584,7 +584,7 @@ void main() {
     // Total = 1010, need to remove 10
     // mastered_0..9 have pending events → skip; mastered_10..19 can be removed
 
-    final removed = await database.pruneToCapSmartly(maxWords: 1000);
+    final removed = await database.pruneToCapSmartly(maxWords: 1000, now: base);
 
     expect(removed, 10);
     final activeIds = await database.activeCachedServerWordIds(limit: 1100);

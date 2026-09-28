@@ -876,8 +876,14 @@ class LearningSessionController extends ChangeNotifier {
           (error.statusCode == 401 || backendError == 'invalid_credentials')) {
         return 'Email or password is incorrect.';
       }
-      if (error.statusCode == 429 || backendError == 'too_many_requests') {
+      if (error.statusCode == 429 ||
+          backendError == 'rate_limit_exceeded' ||
+          backendError == 'too_many_requests') {
         return 'Too many attempts. Please wait a moment and try again.';
+      }
+      final statusCode = error.statusCode;
+      if (statusCode != null && statusCode >= 500) {
+        return 'The server is temporarily unavailable. Please try again shortly.';
       }
       if (error.statusCode == 400 || backendError == 'bad_request') {
         return 'The request was rejected. Check the entered details and try again.';

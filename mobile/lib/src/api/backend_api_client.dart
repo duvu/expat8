@@ -617,6 +617,9 @@ class BackendApiClient {
       rejectedEvents: List<Map<String, dynamic>>.from(
         body['rejected_events'] as List? ?? const [],
       ),
+      duplicateEventIds: List<String>.from(
+        body['duplicates'] as List? ?? const [],
+      ),
       proficiency: body['proficiency'] is Map<String, dynamic>
           ? ProficiencyState.fromJson(
               body['proficiency'] as Map<String, dynamic>)

@@ -5,10 +5,14 @@ class SyncResult {
   const SyncResult({
     required this.acceptedEventIds,
     required this.rejectedEvents,
+    this.duplicateEventIds = const [],
     this.proficiency,
   });
 
   final List<String> acceptedEventIds;
+
+  /// Events the server already stored (e.g. a retry after a lost response).
+  final List<String> duplicateEventIds;
   final List<Map<String, dynamic>> rejectedEvents;
   final ProficiencyState? proficiency;
 }

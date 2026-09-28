@@ -182,6 +182,30 @@ void main() {
     );
   });
 
+  test('auth server unavailability uses plain-language feedback', () async {
+    final controller = LearningSessionController(
+      repository: await _repository(
+        _ControllerApiClient(
+          signInError: BackendApiException(
+            'Sign-in failed: 503',
+            statusCode: 503,
+            backendError: 'REPLAY_PROTECTION_UNAVAILABLE',
+          ),
+        ),
+      ),
+    );
+
+    await controller.signIn(
+      identifier: 'learner@example.com',
+      password: 'correct-password',
+    );
+
+    expect(
+      controller.authErrorMessage,
+      'The server is temporarily unavailable. Please try again shortly.',
+    );
+  });
+
   test(
       'sign-out failure still reports local sign-out when session is cleared locally',
       () async {

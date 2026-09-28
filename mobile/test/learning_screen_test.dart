@@ -342,10 +342,10 @@ void main() {
     );
 
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+        _gestureArea(), const Offset(-300, 0), 1200);
     await tester.pumpAndSettle();
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(300, 0), 1200);
+        _gestureArea(), const Offset(300, 0), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 1);
@@ -375,10 +375,10 @@ void main() {
     );
 
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(0, -320), 1200);
+        _gestureArea(), const Offset(0, -320), 1200);
     await tester.pumpAndSettle();
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(0, 320), 1200);
+        _gestureArea(), const Offset(0, 320), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 0);
@@ -409,10 +409,10 @@ void main() {
     );
 
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+        _gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+        _gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
 
     expect(rightToLeftCount, 1);
@@ -421,7 +421,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+        _gestureArea(), const Offset(-300, 0), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 2);
@@ -447,10 +447,10 @@ void main() {
     );
 
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+        _gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
     await tester.fling(
-        find.byType(LearningCardGestureSurface), const Offset(-300, 0), 1200);
+        _gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
 
     expect(rightToLeftCount, 2);
@@ -616,7 +616,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('No learned items yet.'), findsOneWidget);
+    expect(find.text('No history yet'), findsOneWidget);
   });
 
   testWidgets('learning progress stats screen shows zero totals', (tester) async {
@@ -873,3 +873,12 @@ VocabularyWord _word() {
     updatedAt: now,
   );
 }
+
+/// The swipe-sensitive region of [LearningCardGestureSurface]. Flinging at the
+/// surface's own center can land outside a card smaller than the screen.
+Finder _gestureArea() => find
+    .descendant(
+      of: find.byType(LearningCardGestureSurface),
+      matching: find.byType(GestureDetector),
+    )
+    .first;

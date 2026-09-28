@@ -168,7 +168,7 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
   }
 
   Widget _statusIcon(String status) {
-    final appColors = Theme.of(context).extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     switch (status) {
       case 'published':
       case 'segmented':
@@ -605,7 +605,7 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
                   '${passage.language.toUpperCase()} · ${passage.status} · '
                   '${passage.segmentCount} segments',
                   style: TextStyle(
-                      color: Theme.of(context).extension<AppColors>()!.subtleText),
+                      color: AppColors.of(context).subtleText),
                 ),
               ],
             ),
@@ -622,7 +622,7 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
                 child: Text(
                   'No segments yet. The passage is being processed...',
                   style: TextStyle(
-                      color: Theme.of(context).extension<AppColors>()!.subtleText),
+                      color: AppColors.of(context).subtleText),
                 ),
               ),
             ),
@@ -683,7 +683,7 @@ class _SegmentCardState extends State<_SegmentCard> {
               Text(
                 '${segment.wordCount} words',
                 style: TextStyle(
-                    color: Theme.of(context).extension<AppColors>()!.subtleText,
+                    color: AppColors.of(context).subtleText,
                     fontSize: 12),
               ),
                 const Spacer(),

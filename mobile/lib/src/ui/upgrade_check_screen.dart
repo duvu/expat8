@@ -135,7 +135,7 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
 
   Widget _buildUpToDate() {
     final theme = Theme.of(context);
-    final appColors = theme.extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -160,7 +160,7 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
     final release = _latestRelease!;
     final sizeMB = (release.fileSizeBytes / (1024 * 1024)).toStringAsFixed(1);
     final theme = Theme.of(context);
-    final appColors = theme.extension<AppColors>()!;
+    final appColors = AppColors.of(context);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
