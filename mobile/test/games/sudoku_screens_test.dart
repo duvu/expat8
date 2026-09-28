@@ -22,6 +22,27 @@ SudokuPuzzle oneCellLeft(SudokuDifficulty difficulty) {
   );
 }
 
+/// Taps a cell on the Flame-rendered board (see BoardComponent layout).
+Future<void> tapCell(WidgetTester tester, int index) async {
+  final rect = tester.getRect(find.byKey(const ValueKey('sudoku-board')));
+  final side = rect.shortestSide;
+  final padding = side * 0.02;
+  final cell = (side - padding * 2) / 9;
+  await tester.tapAt(Offset(
+    rect.left + padding + (index % 9 + 0.5) * cell,
+    rect.top + padding + (index ~/ 9 + 0.5) * cell,
+  ));
+  await tester.pump();
+}
+
+/// The game loop keeps scheduling frames, so settle by elapsed time instead of
+/// pumpAndSettle.
+Future<void> settle(WidgetTester tester, [int ms = 600]) async {
+  for (var i = 0; i < ms ~/ 50; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
 void main() {
   testWidgets('games hub lists Sudoku and opens its home screen',
       (tester) async {
@@ -55,20 +76,20 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('sudoku-difficulty-hard')));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('Sudoku · Hard'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('sudoku-cell-0')));
-    await tester.pump();
+    await tapCell(tester, 0);
     await tester.tap(find.byKey(ValueKey('sudoku-digit-${puzzle.solution[0]}')));
-    await tester.pumpAndSettle();
+    // Celebration plays before the result dialogs.
+    await settle(tester, 2200);
 
     // First record on an empty board: rank #1, asks for a name.
     expect(find.text('Rank #1!'), findsOneWidget);
     await tester.enterText(
         find.byKey(const ValueKey('sudoku-player-name')), 'Lan');
     await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('New champion!'), findsOneWidget);
     await tester.tap(find.text('Done'));
@@ -105,7 +126,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sudoku-difficulty-easy')));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -115,7 +136,11 @@ void main() {
         SudokuDifficulty.easy);
 
     await tester.tap(find.text('Continue game'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('Sudoku · Easy'), findsOneWidget);
+
+    // Leave again so the game loop stops before the test ends.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
   });
 }

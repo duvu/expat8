@@ -29,6 +29,7 @@ dependencies:
   uuid: ^4.4.2
   youtube_player_iframe: ^5.2.2
   connectivity_plus: ^7.3.1
+  flame: ^1.38.2
 
 dev_dependencies:
   build_runner: ^2.4.11

@@ -9,6 +9,21 @@ import 'sudoku_generator.dart';
 
 typedef Clock = DateTime Function();
 
+enum SudokuFeedbackKind { correct, wrong, hint, unitCompleted, solved }
+
+/// A moment worth animating: emitted after a move changes the board.
+class SudokuFeedback {
+  const SudokuFeedback(this.kind, {this.index, this.cells = const []});
+
+  final SudokuFeedbackKind kind;
+
+  /// The cell that was filled (for correct / wrong / hint).
+  final int? index;
+
+  /// Cells of a completed row, column or box, in reading order.
+  final List<int> cells;
+}
+
 class _Move {
   const _Move(this.index, this.value, this.notes);
 
@@ -120,6 +135,11 @@ class SudokuGameController extends ChangeNotifier {
   final List<Set<int>> _notes;
   final Clock _clock;
   final List<_Move> _undo = [];
+  final StreamController<SudokuFeedback> _feedback =
+      StreamController<SudokuFeedback>.broadcast();
+
+  /// Board events for animations (sound, particles, highlights).
+  Stream<SudokuFeedback> get feedback => _feedback.stream;
 
   int? _selected;
   bool _notesMode = false;
@@ -211,12 +231,37 @@ class SudokuGameController extends ChangeNotifier {
     _notes[index].clear();
     if (digit != _solution[index]) {
       _mistakes++;
+      _emit(SudokuFeedback(SudokuFeedbackKind.wrong, index: index));
     } else {
       for (final peer in peersOf(index)) {
         _notes[peer].remove(digit);
       }
+      _emit(SudokuFeedback(SudokuFeedbackKind.correct, index: index));
+      _emitCompletedUnits(index);
     }
     _changed();
+  }
+
+  void _emit(SudokuFeedback event) {
+    if (!_feedback.isClosed) _feedback.add(event);
+  }
+
+  /// Emits one event per row, column and box that [index] just completed.
+  void _emitCompletedUnits(int index) {
+    final row = index ~/ 9, col = index % 9;
+    final boxRow = (row ~/ 3) * 3, boxCol = (col ~/ 3) * 3;
+    final units = [
+      [for (var c = 0; c < 9; c++) row * 9 + c],
+      [for (var r = 0; r < 9; r++) r * 9 + col],
+      [
+        for (var k = 0; k < 9; k++) (boxRow + k ~/ 3) * 9 + boxCol + k % 3,
+      ],
+    ];
+    for (final unit in units) {
+      if (unit.every((i) => _values[i] == _solution[i])) {
+        _emit(SudokuFeedback(SudokuFeedbackKind.unitCompleted, cells: unit));
+      }
+    }
   }
 
   void erase() {
@@ -248,6 +293,8 @@ class SudokuGameController extends ChangeNotifier {
     }
     _hintsUsed++;
     _selected = index;
+    _emit(SudokuFeedback(SudokuFeedbackKind.hint, index: index));
+    _emitCompletedUnits(index);
     _changed();
   }
 
@@ -274,6 +321,7 @@ class SudokuGameController extends ChangeNotifier {
         _runningSince = null;
       }
       _undo.clear();
+      _emit(const SudokuFeedback(SudokuFeedbackKind.solved));
       notifyListeners();
       unawaited(clearSaved(storage));
       return;
@@ -301,4 +349,10 @@ class SudokuGameController extends ChangeNotifier {
 
   /// Persists the current state immediately (e.g. when leaving the screen).
   Future<void> save() => _save();
+
+  @override
+  void dispose() {
+    _feedback.close();
+    super.dispose();
+  }
 }
