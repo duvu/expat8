@@ -561,6 +561,59 @@
       "related_bugs": [],
       "occurrences": 1,
       "last_seen": "2026-05-30T05:45:40.197Z"
+    },
+    {
+      "id": "bug-036",
+      "timestamp": "2026-08-01T06:56:00.000Z",
+      "error_message": "Postgres nonce cache accepted signed requests when nonce storage failed",
+      "file": "backend/src/app_credentials.js",
+      "root_cause": "PostgreSQL nonce-store errors were not represented as an explicit replay-protection-unavailable condition, so the app-credential guard could not reliably fail closed",
+      "fix": "Map nonce-store failures to NonceStorageUnavailableError, return 503 before route handlers run, and add safe structured replay-store-unavailable logging plus tests",
+      "tags": [
+        "security",
+        "replay-protection",
+        "backend",
+        "issue-5"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-08-01T06:56:00.000Z"
+    },
+    {
+      "id": "bug-037",
+      "timestamp": "2026-09-28T00:00:00Z",
+      "error_message": "Cannot read properties of undefined (reading 'scrypt') — 4 backend tests fail",
+      "file": "backend/src/user_identity.js",
+      "root_cause": "Uncommitted change uses crypto.promises.scrypt, which does not exist in Node 22",
+      "fix": "Use util.promisify(crypto.scrypt) as scryptAsync in derivePasswordHashAsync",
+      "tags": [
+        "auth",
+        "scrypt",
+        "node",
+        "uncommitted"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-28T00:00:00Z"
+    },
+    {
+      "id": "bug-038",
+      "timestamp": "2026-09-28T00:00:00Z",
+      "error_message": "Auth rate limit keyed only by identifier allowed remote account lockout and unlimited cross-identifier stuffing; limiter buckets never pruned",
+      "file": "backend/src/routes/auth.js",
+      "root_cause": "buildAuthRateLimitKey used identifier alone; InMemoryRateLimiter.prune was never called",
+      "fix": "Added shared per-IP authIpLimiter (AUTH_RATE_LIMIT_IP) before per ip|identifier limiter; amortized prune in check(); TRUST_PROXY config",
+      "tags": [
+        "auth",
+        "rate-limit",
+        "security",
+        "memory"
+      ],
+      "related_bugs": [
+        "bug-037"
+      ],
+      "occurrences": 1,
+      "last_seen": "2026-09-28T00:00:00Z"
     }
   ]
 }

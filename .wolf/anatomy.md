@@ -1,7 +1,7 @@
 # anatomy.md
 
-> Auto-maintained by OpenWolf. Last scanned: 2026-05-30T10:27:10.221Z
-> Files: 573 tracked | Anatomy hits: 0 | Misses: 0
+> Auto-maintained by OpenWolf. Last scanned: 2026-09-28T07:24:18.089Z
+> Files: 589 tracked | Anatomy hits: 0 | Misses: 0
 
 ## ./
 
@@ -86,6 +86,10 @@
 ## .github/skills/openspec-propose/
 
 - `SKILL.md` (~1161 tok)
+
+## .github/workflows/
+
+- `ci.yml` — Runs every test suite on pull requests and on pushes to main. (~612 tok)
 
 ## .opencode/
 
@@ -191,6 +195,7 @@
 - `ids.js` — Exports createId (~34 tok)
 - `litellm_client.js` — Exports LiteLLMClient (~2767 tok)
 - `logger.js` — Exports createLogger, sanitizeFields (~987 tok)
+- `migrations.js` — Brings the database up to date and records what was applied in (~942 tok)
 - `normalize.js` — Exports normalizeTerm (~32 tok)
 - `postgres_word_store.js` — Exports PostgresWordStore (~33256 tok)
 - `proficiency.js` — Exports CEFR_LEVELS, HSK_LEVELS, DEFAULT_PROFICIENCY_LEVEL, VALID_STUDY_RATINGS + 16 more (~1416 tok)
@@ -228,6 +233,7 @@
 - `postgres_integration.test.js` — testDatabaseUrl: resetSchema, listen, fetchJson, wordInput (~1270 tok)
 - `postgres_word_store.test.js` — Declares store (~6198 tok)
 - `proficiency.test.js` (~574 tok)
+- `rate_limit.test.js` — InMemoryRateLimiter window cap + amortized pruning (~300 tok)
 - `runtime.test.js` — Declares store (~264 tok)
 - `user_identity.test.js` (~112 tok)
 - `vocabulary_pool_scheduler.test.js` — store: schedulerConfig, wordInput (~798 tok)
@@ -263,6 +269,9 @@
 - `20260509-swipe-right-to-left-new-word-invariant.md` — Investigation: Swipe Phải→Trái Chỉ Load Được 3 Từ Mới (~1542 tok)
 - `20260510-article-processing-worker-deployment.md` — Article Processing Worker — Deployment Notes (~1063 tok)
 - `20260530-project-roadmap-12-month.md` — Expat8 12-Month Project Roadmap (~5192 tok)
+- `20260928-deploy-runbook-prod-readiness.md` — Runbook deploy — prod-readiness 2026-09-28 (~529 tok)
+- `20260928-engagement-features-proposal.md` — Expat8 — Đề xuất tính năng tạo thói quen học (học hỏi từ các app nổi tiếng) (~2539 tok)
+- `20260928-system-review-and-proposals.md` — Expat8 — Review hiện trạng hệ thống & Đề xuất (~4741 tok)
 - `api-guide.md` — Operational API summary and contract invariants (~620 tok)
 - `app-credential-security.md` — App Credential Security (~3196 tok)
 - `architecture-guide.md` — Runtime topology, request pipeline, storage, and data-flow guide (~790 tok)
@@ -794,6 +803,22 @@
 
 - `exam_certificate_screen.dart` — / Public certificate view screen. (~1698 tok)
 
+## mobile/lib/src/games/
+
+- `game_storage.dart` — / Minimal key-value persistence for games. Everything is stored on the (~331 tok)
+- `games_hub_screen.dart` — / Entry point for offline mini-games. Add new games to [_games]. (~407 tok)
+
+## mobile/lib/src/games/sudoku/
+
+- `sudoku_board_view.dart` — / The 9x9 grid. Tapping a cell selects it. (~1413 tok)
+- `sudoku_champion_board_screen.dart` — / Top solves per difficulty, stored on this device. (~1178 tok)
+- `sudoku_champion_store.dart` — / One finished game on the champion board. (~1681 tok)
+- `sudoku_difficulty.dart` — / The five Sudoku difficulty levels, from most to fewest given digits. (~215 tok)
+- `sudoku_game_controller.dart` — Class: _Move (~2262 tok)
+- `sudoku_game_screen.dart` — / Plays one Sudoku game. Pauses when the app goes to the background and (~2906 tok)
+- `sudoku_generator.dart` — / A generated puzzle: [puzzle] uses 0 for empty cells, [solution] is the (~1207 tok)
+- `sudoku_home_screen.dart` — Stateful widget: SudokuHomeScreen (~1833 tok)
+
 ## mobile/lib/src/speaking/
 
 - `speaking_drill_screen.dart` — / 3-minute speaking drill. (~3273 tok)
@@ -923,3 +948,12 @@
 ## openspec/changes/phase-3-lightweight-ai-feedback/specs/speaking-study-events/
 
 - `spec.md` — MODIFIED Requirements (~287 tok)
+
+## mobile/lib/src/games/
+- `game_storage.dart` — GameStorage interface; LocalDatabaseGameStorage (ObjectBox settings), InMemoryGameStorage (~300 tok)
+- `games_hub_screen.dart` — Games list screen (Sudoku entry) (~400 tok)
+- `sudoku/sudoku_difficulty.dart` — 5 levels + target givens (~150 tok)
+- `sudoku/sudoku_generator.dart` — generator, unique-solution solver, peers helpers (~1.2k tok)
+- `sudoku/sudoku_game_controller.dart` — game state, notes/undo/hints/timer, save/restore (~2.3k tok)
+- `sudoku/sudoku_champion_store.dart` — top-10 per level, stats, player name (~1.5k tok)
+- `sudoku/sudoku_home_screen.dart`, `sudoku_game_screen.dart`, `sudoku_board_view.dart`, `sudoku_champion_board_screen.dart` — UI (~5k tok)

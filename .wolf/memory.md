@@ -275,3 +275,42 @@
 | 17:11 | Session end: 116 writes across 30 files (proposal.md, design.md, spec.md, tasks.md, canonical-release-path.md) | 152 reads | ~272791 tok |
 | 17:12 | Session end: 116 writes across 30 files (proposal.md, design.md, spec.md, tasks.md, canonical-release-path.md) | 152 reads | ~272791 tok |
 | 17:27 | Created docs/COMMIT_REPORT_20260530_172604.md | — | ~1966 |
+| 13:58 | Session end: 117 writes across 31 files (proposal.md, design.md, spec.md, tasks.md, canonical-release-path.md) | 162 reads | ~277976 tok |
+
+## Session: 2026-09-28 13:40
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 13:44 | Created docs/20260928-system-review-and-proposals.md | — | ~5057 |
+| 13:45 | System review + proposals doc; backend 4 fail (crypto.promises.scrypt), mobile 18 fail on Flutter 3.47.5 | docs/20260928-system-review-and-proposals.md, docs/index.md | written | ~60k |
+| 13:46 | Session end: 1 writes across 1 files (20260928-system-review-and-proposals.md) | 0 reads | ~5418 tok |
+| 13:51 | Fixed P0 scrypt (promisify) + auth rate limit (IP + ip|identifier, prune, TRUST_PROXY); contract/.env/deploy docs | backend/src/{user_identity,rate_limit,app,config}.js, routes/auth.js, tests, contracts/api.md, docs/deployment-guide.md | 303 pass 0 fail | ~40k |
+| 13:51 | Session end: 1 writes across 1 files (20260928-system-review-and-proposals.md) | 0 reads | ~5418 tok |
+| 13:58 | Created backend/src/migrations.js | — | ~942 |
+| 14:08 | Created .github/workflows/ci.yml | — | ~612 |
+| 14:10 | Prod readiness: migration runner, loop_completed fix, sync error classification, mobile 246 green, CI, audits; 3 commits on prod-readiness/20260928 | backend, mobile, .github, dashboard | done | ~150k |
+| 14:11 | Created docs/20260928-engagement-features-proposal.md | — | ~2708 |
+| 14:11 | Engagement features proposal doc | docs/20260928-engagement-features-proposal.md | committed | ~8k |
+| 14:11 | Session end: 4 writes across 4 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md) | 0 reads | ~9873 tok |
+| 14:12 | Created docs/20260928-deploy-runbook-prod-readiness.md | — | ~564 |
+| 14:16 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:16 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:16 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:16 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:16 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:17 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:17 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:17 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:17 | Session end: 5 writes across 5 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 0 reads | ~10478 tok |
+| 14:21 | Created mobile/lib/src/games/sudoku/sudoku_difficulty.dart | — | ~215 |
+| 14:21 | Created mobile/lib/src/games/sudoku/sudoku_generator.dart | — | ~1207 |
+| 14:22 | Created mobile/lib/src/games/game_storage.dart | — | ~331 |
+| 14:22 | Created mobile/lib/src/games/sudoku/sudoku_champion_store.dart | — | ~1681 |
+| 14:22 | Created mobile/lib/src/games/sudoku/sudoku_game_controller.dart | — | ~2262 |
+| 14:23 | Created mobile/lib/src/games/sudoku/sudoku_board_view.dart | — | ~1413 |
+| 14:23 | Created mobile/lib/src/games/sudoku/sudoku_game_screen.dart | — | ~2906 |
+| 14:23 | Created mobile/lib/src/games/sudoku/sudoku_champion_board_screen.dart | — | ~1178 |
+| 14:24 | Created mobile/lib/src/games/sudoku/sudoku_home_screen.dart | — | ~1833 |
+| 14:24 | Created mobile/lib/src/games/games_hub_screen.dart | — | ~407 |
+| 14:30 | Sudoku offline game (5 levels, champion board) + offline learning test; 274 mobile tests pass | mobile/lib/src/games, mobile/test/games | committed on feature/sudoku-game | ~60k |
+| 14:30 | Session end: 15 writes across 15 files (20260928-system-review-and-proposals.md, migrations.js, ci.yml, 20260928-engagement-features-proposal.md, 20260928-deploy-runbook-prod-readiness.md) | 3 reads | ~24870 tok |
