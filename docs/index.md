@@ -8,6 +8,7 @@ This directory contains durable project documentation for the Expat8 workspace. 
 - [Project Roadmap 2026-2027](20260530-project-roadmap-12-month.md) — evidence-gated 12-month execution roadmap, phase gates, reliability tracks, and non-goals.
 - [System Review & Proposals (2026-09-28)](20260928-system-review-and-proposals.md) — review hiện trạng sản phẩm/kiến trúc, rủi ro (P0–P2) và đề xuất theo lộ trình.
 - [Engagement Features Proposal (2026-09-28)](20260928-engagement-features-proposal.md) — tính năng tạo thói quen học (streak, Daily Loop, nhắc học, chấm phát âm, nhập vai AI) học hỏi từ Duolingo/Speak/ELSA.
+- [Deploy Runbook: prod-readiness (2026-09-28)](20260928-deploy-runbook-prod-readiness.md) — backup, migrate, TRUST_PROXY, kiểm tra và rollback trên Z440.
 - [Canonical Release Path](canonical-release-path.md) — committed three-stage mobile release and update distribution model (Phase 0 decision).
 - [Developer Setup](developer-setup.md) — local prerequisites, install commands, configuration, and common workflows.
 - [Architecture Guide](architecture-guide.md) — runtime topology, request pipeline, data ownership, and background processing.
