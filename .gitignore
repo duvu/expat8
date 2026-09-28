@@ -18,3 +18,8 @@ openspec/
 !backend/openspec/changes/fail-closed-replay-protection/
 !backend/openspec/changes/fail-closed-replay-protection/**
 *.tsbuildinfo
+
+# Local logs (tool daemons, exported device logs)
+.wolf/daemon.log
+*.log
+docs/*_logs_*.txt
