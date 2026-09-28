@@ -22,8 +22,8 @@ void main() {
 
   for (final difficulty in SudokuDifficulty.values) {
     test('${difficulty.name} puzzle has a unique, consistent solution', () {
-      final puzzle =
-          SudokuGenerator(random: Random(difficulty.index + 7)).generate(difficulty);
+      final puzzle = SudokuGenerator(random: Random(difficulty.index + 7))
+          .generate(difficulty);
 
       expect(puzzle.puzzle, hasLength(81));
       expectValidSolution(puzzle.solution);

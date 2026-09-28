@@ -25,12 +25,14 @@ void main() {
   test('ranks by time with hint penalty, then mistakes, then date', () async {
     final store = SudokuChampionStore(InMemoryGameStorage());
     await store.addRecord(record(seconds: 100, name: 'slow'));
-    await store.addRecord(record(seconds: 60, hints: 2, name: 'hinted')); // 120s
+    await store
+        .addRecord(record(seconds: 60, hints: 2, name: 'hinted')); // 120s
     await store.addRecord(record(seconds: 90, mistakes: 3, name: 'sloppy'));
     await store.addRecord(record(seconds: 90, mistakes: 0, name: 'clean'));
 
     final names = [
-      for (final r in await store.recordsFor(SudokuDifficulty.easy)) r.playerName,
+      for (final r in await store.recordsFor(SudokuDifficulty.easy))
+        r.playerName,
     ];
     expect(names, ['clean', 'sloppy', 'slow', 'hinted']);
   });
@@ -73,10 +75,8 @@ void main() {
     expect(board.values.every((records) => records.isEmpty), isTrue);
   });
 
-  test('champion board persists in the local database across reopen',
-      () async {
-    final name =
-        'sudoku_champions_${DateTime.now().microsecondsSinceEpoch}.db';
+  test('champion board persists in the local database across reopen', () async {
+    final name = 'sudoku_champions_${DateTime.now().microsecondsSinceEpoch}.db';
     final database = await LocalDatabase.open(databaseName: name);
     await SudokuChampionStore(LocalDatabaseGameStorage(database))
         .addRecord(record(seconds: 77, name: 'Minh'));

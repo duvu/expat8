@@ -80,7 +80,8 @@ void main() {
     expect(find.text('Sudoku · Hard'), findsOneWidget);
 
     await tapCell(tester, 0);
-    await tester.tap(find.byKey(ValueKey('sudoku-digit-${puzzle.solution[0]}')));
+    await tester
+        .tap(find.byKey(ValueKey('sudoku-digit-${puzzle.solution[0]}')));
     // Celebration plays before the result dialogs.
     await settle(tester, 2200);
 
@@ -99,12 +100,13 @@ void main() {
     expect(find.textContaining('Lan'), findsOneWidget);
     expect(find.text('Continue game'), findsNothing);
 
-    final records = await SudokuChampionStore(storage)
-        .recordsFor(SudokuDifficulty.hard);
+    final records =
+        await SudokuChampionStore(storage).recordsFor(SudokuDifficulty.hard);
     expect(records.single.playerName, 'Lan');
 
     // Long-pressing a level opens the champion board on that level.
-    await tester.longPress(find.byKey(const ValueKey('sudoku-difficulty-hard')));
+    await tester
+        .longPress(find.byKey(const ValueKey('sudoku-difficulty-hard')));
     await tester.pumpAndSettle();
     expect(find.text('Champion board'), findsOneWidget);
     expect(find.text('Lan'), findsOneWidget);

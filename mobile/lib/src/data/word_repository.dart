@@ -34,6 +34,9 @@ class WordRepository {
   final LocalDatabase database;
   final BackendApiClient apiClient;
   final Logger _logger;
+
+  /// App logger, for features that record diagnostics (e.g. games).
+  Logger get logger => _logger;
   final Uuid _uuid;
   final SeedVocabularyLoader _seedLoader;
   String? _refillDeviceId;
@@ -526,6 +529,72 @@ class WordRepository {
     );
   }
 
+  /// Queues a finished game round summary (sync JSON) for upload.
+  void enqueueGameRound(Map<String, dynamic> round) {
+    unawaited(() async {
+      await database.enqueueGameRound(round);
+      try {
+        await syncPendingEvents(deviceId: await getOrCreateDeviceId());
+      } on Object {
+        // Stays queued for the next sync cycle.
+      }
+    }());
+  }
+
+  /// Weekly leaderboard; requires a signed-in session and a connection.
+  Future<GameLeaderboard?> fetchGameLeaderboard({
+    required String game,
+    required String mode,
+  }) async {
+    final session = await database.loadUserSession();
+    if (session == null) return null;
+    return apiClient.fetchGameLeaderboard(
+      sessionToken: session.sessionToken,
+      game: game,
+      mode: mode,
+    );
+  }
+
+  /// Records a practice answer (games, quick reviews) as a real study event:
+  /// queued for offline sync and applied to the local schedule, without the
+  /// card flow's side effects (an `easy` swipe removes the word locally).
+  ///
+  /// Correct new words start learning (review tomorrow); other correct
+  /// answers count as `easy` (review in 3 days); wrong answers as `hard`
+  /// (review tomorrow).
+  Future<void> recordPracticeAnswer({
+    required VocabularyWord word,
+    required bool correct,
+    required String source,
+    DateTime? now,
+  }) async {
+    final at = (now ?? DateTime.now()).toUtc();
+    final rating = correct ? StudyRating.easy : StudyRating.hard;
+    await database.insertStudyEvent(StudyEvent(
+      clientEventId: _uuid.v4(),
+      localWordId: word.localId,
+      serverWordId: word.serverWordId,
+      rating: rating,
+      occurredAt: at,
+      syncStatus: SyncStatus.pending,
+      language: word.language,
+      source: source,
+    ));
+    final (status, next) = switch ((correct, word.status)) {
+      (true, WordStatus.newWord) => (WordStatus.learning, const Duration(days: 1)),
+      (true, WordStatus.mastered) => (WordStatus.mastered, const Duration(days: 7)),
+      (true, _) => (WordStatus.review, const Duration(days: 3)),
+      (false, WordStatus.newWord) => (WordStatus.learning, const Duration(hours: 12)),
+      (false, _) => (WordStatus.review, const Duration(days: 1)),
+    };
+    await database.scheduleWordReview(
+      localId: word.localId,
+      status: status,
+      nextReviewAt: at.add(next),
+      now: at,
+    );
+  }
+
   StudyEvent _createStudyEvent({
     required VocabularyWord word,
     required StudyRating rating,
@@ -877,6 +946,28 @@ class WordRepository {
             passed: response.passed,
             certificateId: response.certificateId,
           );
+        } else if (entry.type == 'game_round') {
+          if (payload['client_round_id'] is! String) {
+            await _dropSyncEntry(entry, reason: 'malformed_payload');
+            continue;
+          }
+          final session = await database.loadUserSession();
+          final result = await apiClient.syncGameRounds(
+            deviceId: deviceId,
+            rounds: [payload],
+            sessionToken: session?.sessionToken,
+          );
+          if (result.rejectedRounds.isNotEmpty) {
+            await _logger.warning(
+              category: AppLogCategory.sync,
+              event: 'game_round.rejected',
+              message: 'Server rejected a game round; it will not be retried.',
+              context: {'reason': result.rejectedRounds.first['reason']},
+            );
+          }
+          if (entry.id != null) {
+            await database.removeSyncQueueEntry(entry.id!);
+          }
         } else if (entry.type == 'submitted_word_create') {
           final localSubmissionId = payload['local_submission_id'] as String?;
           if (localSubmissionId == null) {

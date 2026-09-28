@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../common/game_score_store.dart';
 import '../game_storage.dart';
 import 'sudoku_difficulty.dart';
 
@@ -73,37 +74,82 @@ class SudokuStats {
 }
 
 /// Local champion board: the best [maxEntries] solves per difficulty.
+/// Backed by the shared [GameScoreStore] (mode = difficulty name).
 class SudokuChampionStore {
-  SudokuChampionStore(this.storage);
+  SudokuChampionStore(this.storage)
+      : _scores = GameScoreStore(
+          storage,
+          gameId: 'sudoku',
+          compare: _compareScores,
+          maxEntries: maxEntries,
+        );
 
   static const maxEntries = 10;
-  static const _boardKey = 'games.sudoku.champions.v1';
+  static const legacyBoardKey = 'games.sudoku.champions.v1';
   static const _statsKey = 'games.sudoku.stats.v1';
-  static const _playerNameKey = 'games.player_name';
 
   final GameStorage storage;
+  final GameScoreStore _scores;
 
-  Future<Map<SudokuDifficulty, List<SudokuRecord>>> loadBoard() async {
-    final raw = await storage.read(_boardKey);
-    final board = {
-      for (final d in SudokuDifficulty.values) d: <SudokuRecord>[],
-    };
-    if (raw == null) return board;
+  static int _compareScores(GameScore a, GameScore b) => SudokuRecord.compare(
+        _fromScore(a, SudokuDifficulty.easy),
+        _fromScore(b, SudokuDifficulty.easy),
+      );
+
+  static GameScore _toScore(SudokuRecord r) => GameScore(
+        playerName: r.playerName,
+        score: r.scoreMs,
+        completedAt: r.completedAt,
+        data: {
+          'elapsed_ms': r.elapsedMs,
+          'hints_used': r.hintsUsed,
+          'mistakes': r.mistakes,
+        },
+      );
+
+  static SudokuRecord _fromScore(GameScore s, SudokuDifficulty difficulty) =>
+      SudokuRecord(
+        playerName: s.playerName,
+        difficulty: difficulty,
+        elapsedMs: (s.data['elapsed_ms'] as num?)?.toInt() ?? s.score,
+        hintsUsed: (s.data['hints_used'] as num?)?.toInt() ?? 0,
+        mistakes: (s.data['mistakes'] as num?)?.toInt() ?? 0,
+        completedAt: s.completedAt,
+      );
+
+  /// Moves records saved by the first Sudoku release into the shared store.
+  Future<void> _migrateLegacyBoard() async {
+    final raw = await storage.read(legacyBoardKey);
+    if (raw == null) return;
     try {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final board = await _scores.loadAll();
       for (final d in SudokuDifficulty.values) {
-        final entries = decoded[d.name] as List<dynamic>? ?? const [];
-        board[d] = [
-          for (final e in entries)
+        final legacy = [
+          for (final e in decoded[d.name] as List<dynamic>? ?? const [])
             SudokuRecord.fromJson(e as Map<String, dynamic>),
-        ]..sort(SudokuRecord.compare);
+        ];
+        if (legacy.isEmpty) continue;
+        final merged = [...?board[d.name], ...legacy.map(_toScore)]
+          ..sort(_compareScores);
+        board[d.name] = merged.take(maxEntries).toList();
       }
-    } on FormatException {
-      // Corrupt data: start a fresh board rather than crash the game.
-    } on TypeError {
-      // Same as above for unexpected shapes.
+      await _scores.replaceAll(board);
+    } on Object {
+      // Unreadable legacy data is dropped.
     }
-    return board;
+    await storage.remove(legacyBoardKey);
+  }
+
+  Future<Map<SudokuDifficulty, List<SudokuRecord>>> loadBoard() async {
+    await _migrateLegacyBoard();
+    final all = await _scores.loadAll();
+    return {
+      for (final d in SudokuDifficulty.values)
+        d: [
+          for (final s in all[d.name] ?? const <GameScore>[]) _fromScore(s, d)
+        ],
+    };
   }
 
   Future<List<SudokuRecord>> recordsFor(SudokuDifficulty difficulty) async =>
@@ -112,34 +158,21 @@ class SudokuChampionStore {
   /// The 1-based rank [record] would get, or null if it would not make the
   /// board.
   Future<int?> rankFor(SudokuRecord record) async {
-    final records = await recordsFor(record.difficulty);
-    final position =
-        records.where((r) => SudokuRecord.compare(r, record) <= 0).length;
-    return position < maxEntries ? position + 1 : null;
+    await _migrateLegacyBoard();
+    return _scores.rankFor(record.difficulty.name, _toScore(record));
   }
 
-  /// Adds [record] and returns its 1-based rank, or null if it did not
-  /// make the top [maxEntries].
+  /// Adds [record] and returns its 1-based rank, or null if it did not make
+  /// the top [maxEntries].
   Future<int?> addRecord(SudokuRecord record) async {
-    final board = await loadBoard();
-    final records = board[record.difficulty]!
-      ..add(record)
-      ..sort(SudokuRecord.compare);
-    final rank = records.indexOf(record) + 1;
-    if (records.length > maxEntries) {
-      records.removeRange(maxEntries, records.length);
-    }
-    await storage.write(
-      _boardKey,
-      jsonEncode({
-        for (final entry in board.entries)
-          entry.key.name: [for (final r in entry.value) r.toJson()],
-      }),
-    );
-    return rank <= maxEntries ? rank : null;
+    await _migrateLegacyBoard();
+    return _scores.add(record.difficulty.name, _toScore(record));
   }
 
-  Future<void> clearBoard() => storage.remove(_boardKey);
+  Future<void> clearBoard() async {
+    await storage.remove(legacyBoardKey);
+    await _scores.clear();
+  }
 
   Future<Map<SudokuDifficulty, SudokuStats>> loadStats() async {
     final raw = await storage.read(_statsKey);
@@ -189,9 +222,7 @@ class SudokuChampionStore {
     );
   }
 
-  Future<String> loadPlayerName() async =>
-      (await storage.read(_playerNameKey)) ?? 'Player';
+  Future<String> loadPlayerName() => _scores.loadPlayerName();
 
-  Future<void> savePlayerName(String name) =>
-      storage.write(_playerNameKey, name.trim().isEmpty ? 'Player' : name);
+  Future<void> savePlayerName(String name) => _scores.savePlayerName(name);
 }

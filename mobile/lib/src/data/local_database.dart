@@ -371,6 +371,16 @@ class LocalDatabase {
     );
   }
 
+  /// Every cached word for [language] (used by games to build question pools).
+  Future<List<VocabularyWord>> wordsForLanguage(String language) async {
+    return _localWords
+        .query(LocalWordEntity_.language.equals(language))
+        .build()
+        .find()
+        .map(_wordFromEntity)
+        .toList();
+  }
+
   Future<VocabularyWord?> nextNewWord({String language = 'en'}) async {
     final rows = _localWords
         .query(
@@ -647,6 +657,19 @@ class LocalDatabase {
     return items.take(limit).toList(growable: false);
   }
 
+  /// Queues a finished game round summary for upload.
+  Future<void> enqueueGameRound(Map<String, dynamic> round) async {
+    _syncQueue.put(
+      SyncQueueEntity(
+        type: 'game_round',
+        payload: jsonEncode(round),
+        retryCount: 0,
+        nextRetryAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+        createdAtMs: DateTime.now().toUtc().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
   Future<void> enqueueSubmittedWordCreate(
     String localSubmissionId, {
     DateTime? nextRetryAt,
@@ -749,6 +772,26 @@ class LocalDatabase {
     existing.status = status.name;
     existing.lastSeenAtMs = now.toUtc().millisecondsSinceEpoch;
     existing.nextReviewAtMs = nextReview.toUtc().millisecondsSinceEpoch;
+    existing.updatedAtMs = now.toUtc().millisecondsSinceEpoch;
+    _localWords.put(existing);
+  }
+
+  /// Sets a word's SRS status and next review time directly (practice modes
+  /// such as games, which must not remove words from the local cache).
+  Future<void> scheduleWordReview({
+    required String localId,
+    required WordStatus status,
+    required DateTime nextReviewAt,
+    required DateTime now,
+  }) async {
+    final existing = _localWords
+        .query(LocalWordEntity_.localId.equals(localId))
+        .build()
+        .findFirst();
+    if (existing == null) return;
+    existing.status = status.name;
+    existing.lastSeenAtMs = now.toUtc().millisecondsSinceEpoch;
+    existing.nextReviewAtMs = nextReviewAt.toUtc().millisecondsSinceEpoch;
     existing.updatedAtMs = now.toUtc().millisecondsSinceEpoch;
     _localWords.put(existing);
   }

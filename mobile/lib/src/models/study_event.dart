@@ -20,6 +20,7 @@ class StudyEvent {
     required this.occurredAt,
     required this.syncStatus,
     this.language,
+    this.source,
   });
 
   final String clientEventId;
@@ -33,6 +34,10 @@ class StudyEvent {
   /// ratings are applied to the right proficiency track when replayed.
   final String? language;
 
+  /// Where the rating came from when not the main card flow
+  /// (e.g. `game_word_blaster`), for analytics.
+  final String? source;
+
   Map<String, dynamic> toSyncJson() {
     return {
       'client_event_id': clientEventId,
@@ -41,6 +46,7 @@ class StudyEvent {
       'rating': rating.apiValue,
       'occurred_at': occurredAt.toUtc().toIso8601String(),
       if (language != null) 'language': language,
+      if (source != null) 'source': source,
     };
   }
 }

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
+import '../config.dart';
+import '../games/common/game_audio.dart';
+import '../games/common/game_settings.dart';
+import '../games/word_blaster/word_blaster_context.dart';
 import '../games/game_storage.dart';
 import '../games/games_hub_screen.dart';
 import '../data/article_repository.dart';
@@ -378,11 +382,33 @@ class _LearningScreenState extends State<LearningScreen> {
   }
 
   void _openGames() {
+    final controller = widget.controller;
+    final repository = controller.repository;
+    final storage = LocalDatabaseGameStorage(repository.database);
+    final settings = GameSettings(storage);
+    final speaking = widget.speakingRepository;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => GamesHubScreen(
-          storage:
-              LocalDatabaseGameStorage(widget.controller.repository.database),
+          storage: storage,
+          wordBlaster: AppConfig.fromEnvironment().wordBlasterEnabled
+              ? WordBlasterContext(
+                  repository: repository,
+                  storage: storage,
+                  settings: settings,
+                  audio: GameAudio(settings),
+                  language: controller.activeLearningLanguage,
+                  learnerLevelIndex: controller.proficiency.levelIndex,
+                  speak: speaking == null
+                      ? null
+                      : (text, languageCode) =>
+                          speaking.playSample(text, languageCode: languageCode),
+                  logger: repository.logger,
+                  onRoundFinished: (round) =>
+                      repository.enqueueGameRound(round.toSyncJson()),
+                  fetchLeaderboard: repository.fetchGameLeaderboard,
+                )
+              : null,
         ),
       ),
     );
