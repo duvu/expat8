@@ -19,7 +19,7 @@
 
 > **Cập nhật 2026-09-28 (sau khi sửa):**
 > - Đã sửa: F1, F1b, F2, F3, F5, F6 và các lỗi phát hiện thêm khi chạy PostgreSQL thật (F14–F17 bên dưới).
-> - Kết quả: backend 311/311 test (gồm PostgreSQL 16 thật, 0 skip), eslint sạch, 0 lỗ hổng; mobile 246/246 test, analyzer 0 error/warning, Flutter ghim 3.47.5; dashboard lint/test/build xanh, 0 lỗ hổng; CI `.github/workflows/ci.yml` chạy cả ba.
+> - Kết quả: backend 311/311 test (gồm PostgreSQL 16 thật, 0 skip), eslint sạch, 0 lỗ hổng; mobile 246/246 test, analyzer 0 error/warning, Flutter ghim 3.47.5; dashboard lint/test/build xanh, 0 lỗ hổng. (CI trên PR đã được gỡ ngày 2026-09-28 theo quyết định của chủ dự án vì thời gian chờ check quá lâu; kiểm tra chạy local theo `docs/testing-guide.md`.)
 > - Còn lại cho production: chạy `npm run migrate` và đặt `TRUST_PROXY` trên Z440 ([deployment-guide](deployment-guide.md#database-migrations)); gate test trên thiết bị Android thật (F4); các mục P2 (F7–F13).
 
 **Ba việc quan trọng nhất cần làm ngay:**
@@ -138,7 +138,7 @@ Mức độ: **P0** = chặn release/lỗi production · **P1** = rủi ro cao t
 | F2 | P1 — Đã sửa | Rate-limit đăng nhập đổi sang key theo `identifier` thay vì IP | `routes/auth.js` `buildAuthRateLimitKey` | (a) Kẻ tấn công có thể khoá tạm tài khoản người khác bằng cách spam identifier đó; (b) credential stuffing trên nhiều identifier từ một IP không còn bị giới hạn. Nên giới hạn đồng thời cả IP và identifier |
 | F3 | P1 — Đã sửa | Fail-closed replay protection áp dụng cả GET | `app.js` `appCredentialGuard` | Đúng về bảo mật, nhưng khi DB chập chờn mọi đọc đều 503. Cần xác nhận mobile coi 503 là lỗi tạm thời (retry/backoff, fallback local) — chưa thấy xử lý riêng cho 503 trong `backend_api_client.dart` |
 | F4 | P1 | Roadmap đình trệ: Phase 0–2 đóng gate code từ 30/05 nhưng các gate thiết bị thật vẫn Pending; không commit nào sau 31/05 | Roadmap 12 tháng, `git log` | North Star chưa được đo trên người dùng thật; Phase 3 bị chặn vô thời hạn |
-| F5 | P1 — Đã sửa | Không có CI cho test | `.github/workflows/` chỉ có `android-release.yml` | Lỗi như F1 có thể vào `main`/production |
+| F5 | P1 — Đã gỡ CI (quyết định 2026-09-28) | Không có CI cho test | `.github/workflows/` chỉ có `android-release.yml` | Lỗi như F1 có thể vào `main`/production |
 | F6 | P1 — Đã sửa | Migration không tự apply; `schema.sql` và 27 migration phải được giữ song song bằng tay | `project-overview.md`, `verify:migrations` cần DB sống | Lệch schema giữa môi trường; nonce table đã từng thiếu (lý do có gate Phase 0) |
 | F7 | P2 | Store backend là "god object" với hai bản cài đặt song song | `word_store.js` 2.954 dòng, `postgres_word_store.js` 3.446 dòng; ví dụ F1 cho thấy hai bản đã tách hành vi (sync vs async) | Mỗi tính năng phải viết 2 lần; test chủ yếu chạy in-memory nên hành vi PostgreSQL ít được bao phủ |
 | F8 | P2 | Dashboard đọc thẳng PostgreSQL (`lib/db.ts`, `lib/analytics.ts`) bên cạnh API | — | Coupling schema ngoài hợp đồng API; mọi đổi schema phải sửa dashboard. 4 trang `/analytics/*` đi ngược non-goal "không xây nền tảng analytics lớn" |

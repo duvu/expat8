@@ -104,3 +104,20 @@ git diff -- README.md docs/
 ```
 
 Review links and commands for consistency with [`contracts/api.md`](../contracts/api.md), [`AGENTS.md`](../AGENTS.md), and module package files.
+
+## Pre-merge checks (run locally)
+
+There is no CI on pull requests (removed 2026-09-28 because checks took too long). Run the checks for the surfaces you changed before merging:
+
+```bash
+# Backend (PostgreSQL suites run when TEST_DATABASE_URL is set; use --test-concurrency=1 then)
+cd backend && npm run lint && npm test
+
+# Mobile (Flutter 3.47.5, see mobile/.fvmrc)
+cd mobile && flutter analyze && flutter test
+
+# Dashboard
+cd expat8-dashboard && npm run lint && npm test && npm run build
+```
+
+Release builds still run on GitHub Actions (`.github/workflows/android-release.yml`) when a `v<pubspec version>` tag is pushed, because the signing secrets live there. If that workflow fails, fix it and release a new patch version rather than moving the tag.
