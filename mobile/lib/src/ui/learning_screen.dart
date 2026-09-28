@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 
+import '../games/game_storage.dart';
+import '../games/games_hub_screen.dart';
 import '../data/article_repository.dart';
 import '../data/memorization_repository.dart';
 import '../data/workplace_sentence_repository.dart';
@@ -125,6 +127,7 @@ class _LearningScreenState extends State<LearningScreen> {
         onSubmittedWords: _openSubmittedWords,
         onVocabulary: () => Navigator.of(context).maybePop(),
         onWorkplaceSentences: _openWorkplaceSentences,
+        onGames: _openGames,
         onHistory: _openHistory,
         onStats: _openStats,
         onLogs: () {
@@ -366,6 +369,17 @@ class _LearningScreenState extends State<LearningScreen> {
     await _openHistory();
   }
 
+  void _openGames() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GamesHubScreen(
+          storage:
+              LocalDatabaseGameStorage(widget.controller.repository.database),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openHistory() async {
     Navigator.of(context).maybePop();
     await Navigator.of(context).push(
@@ -505,6 +519,7 @@ class LearningDrawer extends StatelessWidget {
     this.onExam,
     this.onShadowing,
     this.onCheckUpdates,
+    this.onGames,
     super.key,
   });
 
@@ -533,6 +548,9 @@ class LearningDrawer extends StatelessWidget {
 
   /// Called when the user taps "Check for updates".
   final VoidCallback? onCheckUpdates;
+
+  /// Called when the user taps "Games". Games run fully offline.
+  final VoidCallback? onGames;
 
   @override
   Widget build(BuildContext context) {
@@ -577,6 +595,15 @@ class LearningDrawer extends StatelessWidget {
                     title: const Text('Add word'),
                     onTap: onSubmittedWords,
                   ),
+                  if (onGames != null)
+                    ListTile(
+                      leading: const Icon(Icons.sports_esports_outlined),
+                      title: const Text('Games'),
+                      onTap: () {
+                        Navigator.of(context).maybePop();
+                        onGames!();
+                      },
+                    ),
                   if (isSignedIn && onExam != null)
                     ListTile(
                       leading: const Icon(Icons.quiz_outlined),
