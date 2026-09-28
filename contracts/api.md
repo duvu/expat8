@@ -224,7 +224,7 @@ attached to the account:
 
 - word states and cached word ids (existing behavior; on conflict the state
   with more reviews wins),
-- study events and speaking events with no user yet,
+- study events, speaking events and game rounds with no user yet,
 - device proficiency per language, unless the account already has a level for
   that language.
 
@@ -1143,6 +1143,110 @@ Request:
 
 `POST /v1/study-events` remains a single rating-event endpoint and requires a
 valid `rating`. Use `POST /v1/study-events/sync` for speaking events.
+
+### Study event `source` (optional)
+
+Each event in `POST /v1/study-events` and `POST /v1/study-events/sync` may
+carry `"source": "<tag>"` (lowercase letters, digits and `_`, at most 64
+characters; anything else is ignored). Mobile sends `game_word_blaster` for
+answers given in the Word Blaster game and `game_word_blaster_review` for its
+post-round review.
+
+Events whose source starts with `game_` update word review state like any
+other rating but **never** change proficiency: they are excluded from the
+consecutive-rating streak that moves the CEFR/HSK level.
+
+## Games
+
+Practice games run fully offline on mobile. Finished rounds are queued and
+synced; the weekly leaderboard is online-only and for signed-in learners.
+
+### POST /v1/games/rounds
+
+Optional `Authorization: Bearer <session_token>`; rounds are attached to the
+account when present, otherwise to `device_id` (and claimed on sign-in).
+
+```json
+{
+  "device_id": "device_abc",
+  "rounds": [
+    {
+      "client_round_id": "0f8c…",
+      "game": "word_blaster",
+      "mode": "classic",
+      "language": "en",
+      "score": 2400,
+      "correct_count": 12,
+      "answered_count": 15,
+      "best_combo": 7,
+      "wave": 2,
+      "duration_ms": 90000,
+      "completed_at": "2026-09-28T08:00:00.000Z"
+    }
+  ]
+}
+```
+
+- 1–50 rounds per request; `mode` ∈ `classic`, `reverse`, `listening`,
+  `fillGap`, `timeAttack`.
+- Idempotent by `client_round_id`.
+
+Response `200`:
+
+```json
+{
+  "accepted_round_ids": ["0f8c…"],
+  "duplicates": [],
+  "rejected_rounds": [{ "client_round_id": "x", "reason": "unknown_mode" }]
+}
+```
+
+Rejected rounds are malformed and must not be retried. Rounds whose score is
+implausible (more points than the answers allow, faster than 400 ms per
+answer, `correct_count > answered_count`, longer than 2 hours) are stored for
+analytics but excluded from the leaderboard.
+
+### GET /v1/games/leaderboard
+
+Requires `Authorization: Bearer <session_token>` (`401` otherwise).
+
+Query: `game` (default `word_blaster`), `mode` (default `classic`),
+optional `week_start` (ISO date; defaults to the current week, Monday 00:00
+UTC), optional `limit` (1–100, default 50). Unknown game/mode → `400`.
+
+Response `200` (best eligible round per learner, highest score first):
+
+```json
+{
+  "game": "word_blaster",
+  "mode": "classic",
+  "week_start": "2026-09-28T00:00:00.000Z",
+  "entries": [
+    { "rank": 1, "display_name": "Lan", "score": 5000, "accuracy": 0.83, "best_combo": 12, "is_me": false }
+  ],
+  "me": { "rank": 4, "display_name": "mi***", "score": 3100, "accuracy": 0.7, "best_combo": 6, "is_me": true }
+}
+```
+
+`display_name` is the account's display name, or the first two characters of
+the identifier's local part followed by `***`.
+
+### GET /v1/admin/games/summary
+
+Admin only. Query `days` (1–180, default 30).
+
+```json
+{
+  "days": 30,
+  "total_rounds": 120,
+  "players": 34,
+  "mean_accuracy": 0.78,
+  "words_reviewed_via_games": 1840,
+  "rounds_by_mode": { "word_blaster:classic": 80 },
+  "accuracy_buckets": { "under_50": 5, "from_50_to_70": 20, "from_70_to_85": 60, "from_85": 35 },
+  "rounds_per_day": [{ "day": "2026-09-28", "rounds": 12, "players": 5 }]
+}
+```
 
 ## GET /v1/speaking/summary
 

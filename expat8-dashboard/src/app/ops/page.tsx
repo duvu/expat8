@@ -140,6 +140,69 @@ export default async function OpsPage() {
       <section className="table-panel">
         <div className="panel-heading">
           <div>
+            <h3>Games (last 30 days)</h3>
+            <p className="muted">Word Blaster rounds and reviews recorded through games.</p>
+          </div>
+        </div>
+
+        {overview.gamesError ? (
+          <div className="empty-state error-state">{overview.gamesError}</div>
+        ) : !overview.games ? (
+          <div className="empty-state">Game analytics unavailable.</div>
+        ) : (
+          <>
+            <dl className="stats-panel" style={{ marginTop: 0 }}>
+              <div>
+                <dt>Rounds</dt>
+                <dd>{overview.games.total_rounds.toLocaleString()}</dd>
+                <small className="muted">{overview.games.players.toLocaleString()} players</small>
+              </div>
+              <div>
+                <dt>Mean accuracy</dt>
+                <dd>{Math.round(overview.games.mean_accuracy * 100)}%</dd>
+                <small className="muted">Target 70–85%</small>
+              </div>
+              <div>
+                <dt>Words reviewed via games</dt>
+                <dd>{overview.games.words_reviewed_via_games.toLocaleString()}</dd>
+                <small className="muted">Study events with a game source</small>
+              </div>
+              <div>
+                <dt>Accuracy distribution</dt>
+                <dd style={{ fontSize: '1rem' }}>
+                  {overview.games.accuracy_buckets.under_50} · {overview.games.accuracy_buckets.from_50_to_70} ·{' '}
+                  {overview.games.accuracy_buckets.from_70_to_85} · {overview.games.accuracy_buckets.from_85}
+                </dd>
+                <small className="muted">&lt;50% · 50–70% · 70–85% · ≥85%</small>
+              </div>
+            </dl>
+            {overview.games.rounds_per_day.length > 0 && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Day</th>
+                    <th>Rounds</th>
+                    <th>Players</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overview.games.rounds_per_day.slice(-14).map((row) => (
+                    <tr key={row.day}>
+                      <td>{row.day}</td>
+                      <td>{row.rounds}</td>
+                      <td>{row.players}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="table-panel">
+        <div className="panel-heading">
+          <div>
             <h3>Content Pipeline</h3>
             <p className="muted">Article, memorization, and shadowing processing backlogs.</p>
           </div>
