@@ -571,10 +571,15 @@ class BackendApiClient {
     required String deviceId,
     required List<Map<String, dynamic>> events,
     String? sessionToken,
+    String? language,
   }) async {
     final traceId = _newTraceId();
     final uri = Uri.parse('$baseUrl/v1/study-events/sync');
-    final payload = jsonEncode({'device_id': deviceId, 'events': events});
+    final payload = jsonEncode({
+      'device_id': deviceId,
+      if (language != null) 'language': language,
+      'events': events,
+    });
     await _logger.info(
       category: AppLogCategory.sync,
       event: 'sync.request',

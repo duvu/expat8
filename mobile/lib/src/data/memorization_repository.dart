@@ -11,6 +11,15 @@ import 'local_database_entities.dart';
 ///   local cache (metadata only — no segments).
 /// - [getPassage] checks local segment cache first; fetches from backend when
 ///   missing and writes segments to cache for offline access.
+/// Data plus whether it came from the local cache because the backend was
+/// unreachable.
+class CachedResult<T> {
+  const CachedResult(this.data, {required this.fromCache});
+
+  final T data;
+  final bool fromCache;
+}
+
 class MemorizationRepository {
   MemorizationRepository({required this.apiClient, LocalDatabase? localDb})
       : localDb = localDb;
@@ -59,6 +68,75 @@ class MemorizationRepository {
     required String sessionToken,
   }) =>
       apiClient.listPassages(sessionToken: sessionToken);
+
+  /// Offline-first list: refreshes from the backend when reachable (dropping
+  /// passages deleted on the server), otherwise returns the cached list.
+  Future<CachedResult<List<MemorizationPassage>>> loadPassages({
+    required String sessionToken,
+  }) async {
+    try {
+      final passages = await syncPassageMetadata(sessionToken: sessionToken);
+      final live = passages.map((p) => p.id).toSet();
+      for (final cached in localDb!.getAllPassages()) {
+        if (!live.contains(cached.passageId)) {
+          localDb!.removePassageLocal(cached.passageId);
+        }
+      }
+      return CachedResult(passages, fromCache: false);
+    } on Object {
+      return CachedResult(listPassagesCached(), fromCache: true);
+    }
+  }
+
+  /// Offline-first progress: merges server progress into the local store
+  /// (never overwriting unsynced local drill results) and falls back to local
+  /// progress when offline.
+  Future<List<MemorizationSegmentProgress>> loadPassageProgress({
+    required String sessionToken,
+    required String passageId,
+  }) async {
+    try {
+      final remote = await apiClient.getPassageProgress(
+        sessionToken: sessionToken,
+        passageId: passageId,
+      );
+      final imported = <LocalSegmentProgressEntity>[];
+      for (final r in remote) {
+        final local = localDb!.getSegmentProgress(r.segmentId);
+        if (local != null && local.isDirty == 1) continue;
+        imported.add(LocalSegmentProgressEntity(
+          id: local?.id ?? 0,
+          segmentId: r.segmentId,
+          passageId: passageId,
+          status: r.status,
+          reviewCount: r.reviewCount,
+          easeFactor: local?.easeFactor ?? 2.5,
+          intervalDays: local?.intervalDays ?? 0,
+          lastReviewedAtMs: r.lastReviewedAt == null
+              ? local?.lastReviewedAtMs
+              : DateTime.tryParse(r.lastReviewedAt!)?.millisecondsSinceEpoch,
+          nextReviewAtMs: local?.nextReviewAtMs,
+          isDirty: 0,
+        ));
+      }
+      localDb!.importBackendSegmentProgress(imported);
+    } on Object {
+      // Offline: use what is stored locally.
+    }
+    return localDb!
+        .getPassageProgressLocal(passageId)
+        .map((e) => MemorizationSegmentProgress(
+              segmentId: e.segmentId,
+              status: e.status,
+              reviewCount: e.reviewCount,
+              lastReviewedAt: e.lastReviewedAtMs == null
+                  ? null
+                  : DateTime.fromMillisecondsSinceEpoch(e.lastReviewedAtMs!,
+                          isUtc: true)
+                      .toIso8601String(),
+            ))
+        .toList();
+  }
 
   Future<MemorizationPassage> createPassage({
     required String sessionToken,
@@ -152,11 +230,13 @@ class MemorizationRepository {
   Future<void> deletePassage({
     required String sessionToken,
     required String passageId,
-  }) =>
-      apiClient.deletePassage(
-        sessionToken: sessionToken,
-        passageId: passageId,
-      );
+  }) async {
+    await apiClient.deletePassage(
+      sessionToken: sessionToken,
+      passageId: passageId,
+    );
+    localDb!.removePassageLocal(passageId);
+  }
 
   // ---------------------------------------------------------------------------
   // Segment progress

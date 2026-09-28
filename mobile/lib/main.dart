@@ -11,6 +11,7 @@ import 'src/data/memorization_repository.dart';
 import 'src/data/workplace_sentence_repository.dart';
 import 'src/data/word_repository.dart';
 import 'src/logging/logger.dart';
+import 'src/network/connectivity_monitor.dart';
 import 'src/session/learning_session_controller.dart';
 import 'src/speaking/audio_file_manager.dart';
 import 'src/speaking/speaking_audio_service.dart';
@@ -20,6 +21,7 @@ import 'src/data/shadowing_repository.dart';
 import 'src/theme/app_theme.dart';
 import 'src/ui/learning_screen.dart';
 import 'src/update/update_banner.dart';
+import 'src/widgets/offline_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,7 +57,8 @@ Future<void> main() async {
     appSecret: config.appCredentialSecret,
     logger: logger,
   );
-  final articleRepository = ArticleRepository(apiClient: apiClient);
+  final articleRepository =
+      ArticleRepository(apiClient: apiClient, localDb: database);
   final memorizationRepository = MemorizationRepository(apiClient: apiClient, localDb: database);
   final repository = WordRepository(
     database: database,
@@ -87,13 +90,34 @@ Future<void> main() async {
     // Flush the study/speaking event queue at startup and every 3 minutes so
     // events from drill sessions reach the backend even when no card swipe
     // triggers a cache sync.
-    unawaited(repository.syncPendingEvents(deviceId: deviceId));
+    // Everything written offline: study/speaking events, submitted words,
+    // exam results, and (for signed-in users) memorization drill progress.
+    Future<void> syncOfflineData() async {
+      await repository.syncPendingEvents(deviceId: deviceId);
+      final session = await repository.loadUserSession();
+      if (session == null) return;
+      try {
+        await memorizationRepository.syncDirtyProgress(
+          sessionToken: session.sessionToken,
+        );
+      } on Object catch (error) {
+        await logger.warning(
+          category: AppLogCategory.sync,
+          event: 'memorization.progress_sync_deferred',
+          message: 'Memorization progress stays queued until the next sync.',
+          context: {'error': '$error'},
+        );
+      }
+    }
+
+    unawaited(syncOfflineData());
     Timer.periodic(const Duration(minutes: 3), (_) {
-      unawaited(repository.syncPendingEvents(deviceId: deviceId));
+      unawaited(syncOfflineData());
     });
     onAppResumeSyncEvents = () {
-      unawaited(repository.syncPendingEvents(deviceId: deviceId));
+      unawaited(syncOfflineData());
     };
+    controller.onSignedIn = () => unawaited(syncOfflineData());
     unawaited(repository.topUpInventoryIfNeeded());
   } catch (error) {
     await logger.warning(
@@ -150,6 +174,16 @@ Future<void> main() async {
     message: 'App bootstrap completed.',
   );
 
+  // Resync as soon as the network comes back, not only on the next timer tick.
+  final connectivityMonitor = ConnectivityMonitor();
+  connectivityMonitor.onReconnect(() {
+    unawaited(contentPackSyncService.sync());
+    unawaited(speakingPromptSyncService?.sync());
+    onAppResumeSyncEvents?.call();
+    unawaited(repository.topUpInventoryIfNeeded());
+  });
+  unawaited(connectivityMonitor.start());
+
   runApp(LanguageLearningApp(
       controller: controller,
       articleRepository: articleRepository,
@@ -160,6 +194,7 @@ Future<void> main() async {
       shadowingRepository: shadowingRepository,
     speakingPromptSyncService: speakingPromptSyncService,
     onResumeSyncEvents: onAppResumeSyncEvents,
+    connectivityMonitor: connectivityMonitor,
   ));
 }
 
@@ -174,6 +209,7 @@ class LanguageLearningApp extends StatefulWidget {
     this.shadowingRepository,
     this.speakingPromptSyncService,
     this.onResumeSyncEvents,
+    this.connectivityMonitor,
     super.key,
   });
 
@@ -186,6 +222,7 @@ class LanguageLearningApp extends StatefulWidget {
   final ShadowingRepository? shadowingRepository;
   final SpeakingPromptSyncService? speakingPromptSyncService;
   final VoidCallback? onResumeSyncEvents;
+  final ConnectivityMonitor? connectivityMonitor;
 
   @override
   State<LanguageLearningApp> createState() => _LanguageLearningAppState();
@@ -226,6 +263,11 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
       title: 'Expat8 Vocabulary',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      builder: (context, child) {
+        final monitor = widget.connectivityMonitor;
+        if (monitor == null || child == null) return child ?? const SizedBox();
+        return OfflineBanner(monitor: monitor, child: child);
+      },
       home: UpdateBannerWrapper(
         child: LearningScreen(
           controller: widget.controller,

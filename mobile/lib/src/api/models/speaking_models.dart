@@ -7,6 +7,7 @@ class SpeakingWeeklySummary {
     required this.selfRatingCounts,
     required this.loopCompletionCount,
     this.latestActivityAt,
+    this.isLocalEstimate = false,
   });
 
   factory SpeakingWeeklySummary.fromJson(Map<String, dynamic> json) {
@@ -29,6 +30,9 @@ class SpeakingWeeklySummary {
   final int loopCompletionCount;
   final Map<String, int> selfRatingCounts;
   final DateTime? latestActivityAt;
+
+  /// True when computed on-device while offline (this device's data only).
+  final bool isLocalEstimate;
 }
 
 /// A single speaking prompt item returned by `GET /v1/speaking/prompts`.

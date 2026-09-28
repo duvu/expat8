@@ -333,6 +333,16 @@ class FakePool {
   async query(sql, params = []) {
     const normalizedSql = sql.replace(/\s+/g, ' ').trim();
 
+    // --- Device activity claim (study/speaking events, proficiency) ---
+    // Behaviour is covered against real PostgreSQL in migrations.test.js.
+    if (
+      normalizedSql.startsWith('UPDATE study_events SET user_id = $1 WHERE device_id = $2') ||
+      normalizedSql.startsWith('UPDATE speaking_events SET user_id = $1 WHERE device_id = $2') ||
+      normalizedSql.startsWith('UPDATE user_proficiency device_row SET user_id = $1')
+    ) {
+      return { rows: [], rowCount: 0 };
+    }
+
     if (normalizedSql === 'BEGIN' || normalizedSql === 'COMMIT' || normalizedSql === 'ROLLBACK') {
       return { rows: [] };
     }

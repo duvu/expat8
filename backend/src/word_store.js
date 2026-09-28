@@ -790,6 +790,7 @@ export class WordStore {
     // Claim device-only word states and cached words for the new user
     this.#claimDeviceWordStates({ userId: user.id, deviceId });
     this.#claimDeviceCachedWords({ userId: user.id, deviceId });
+    this.#claimDeviceActivity({ userId: user.id, deviceId });
     const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
@@ -806,6 +807,7 @@ export class WordStore {
     // Claim device-only word states and cached words for the signing-in user
     this.#claimDeviceWordStates({ userId: user.id, deviceId });
     this.#claimDeviceCachedWords({ userId: user.id, deviceId });
+    this.#claimDeviceActivity({ userId: user.id, deviceId });
     const session = this.#createSessionForUser({ user, deviceId });
     return { user, ...session };
   }
@@ -894,6 +896,26 @@ export class WordStore {
     }
 
     return { claimed, conflicts };
+  }
+
+  // Attach study/speaking history and proficiency recorded on this device
+  // before sign-in (including offline events synced anonymously) to the user.
+  #claimDeviceActivity({ userId, deviceId }) {
+    if (!deviceId) return;
+    for (const event of this.studyEventsByClientId.values()) {
+      if (event.device_id === deviceId && !event.user_id) event.user_id = userId;
+    }
+    for (const event of this.speakingEventsByKey.values()) {
+      if (event.device_id === deviceId && !event.user_id) event.user_id = userId;
+    }
+    for (const [key, proficiency] of [...this.userProficiencies.entries()]) {
+      if (!key.startsWith(`device:${deviceId}:`) || proficiency.user_id) continue;
+      const userKey = `user:${userId}:${proficiency.language}`;
+      if (!this.userProficiencies.has(userKey)) {
+        this.userProficiencies.delete(key);
+        this.userProficiencies.set(userKey, { ...proficiency, user_id: userId });
+      }
+    }
   }
 
   #claimDeviceCachedWords({ userId, deviceId }) {

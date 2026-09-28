@@ -216,6 +216,21 @@ Response `200`:
 Bad credentials return `401 { "error": "invalid_credentials" }`. See
 [Rate Limits](#rate-limits) for `429` behavior.
 
+### Claiming device data on register and sign-in
+
+When `device_id` is sent to `POST /v1/users/register` or
+`POST /v1/users/sign-in`, everything that device recorded while signed out is
+attached to the account:
+
+- word states and cached word ids (existing behavior; on conflict the state
+  with more reviews wins),
+- study events and speaking events with no user yet,
+- device proficiency per language, unless the account already has a level for
+  that language.
+
+Mobile apps keep events recorded offline in a local queue and replay them
+after sign-in, so offline and pre-sign-in practice both end up on the account.
+
 ## POST /v1/users/sign-out
 
 Requires a valid bearer session.

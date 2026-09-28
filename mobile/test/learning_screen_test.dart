@@ -258,7 +258,9 @@ void main() {
 
       expect(startCalled, isFalse);
       expect(find.byType(ExamQuestionScreen), findsNothing);
-      expect(find.text('Backend unavailable. Please try again.'),
+      expect(
+          find.text(
+              'Exams need an internet connection to load questions. Please try again when you are online.'),
           findsOneWidget);
     } finally {
       controller.dispose();

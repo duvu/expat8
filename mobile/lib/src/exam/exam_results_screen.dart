@@ -92,6 +92,38 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
     );
   }
 
+  Widget _buildPendingUI() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_upload_outlined,
+                size: 48, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 16),
+            Text(
+              'Answers saved',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your exam will be scored automatically when you are back '
+              'online. You can keep learning in the meantime.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _onRetry,
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ─── build ───────────────────────────────────────────────────────────────
 
   @override
@@ -113,11 +145,13 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
           return _buildResultsScaffold(context, result);
         }
 
-        // Priority 2: 20-second timeout expired without a result.
+        // Priority 2: no response yet (offline or slow). The attempt is saved
+        // locally and queued, so the score arrives once the device is back
+        // online; do not ask the learner to redo the exam.
         if (_timedOut) {
           return Scaffold(
             appBar: AppBar(title: const Text('Results')),
-            body: _buildErrorUI('Exam submission timed out. Please try again.'),
+            body: _buildPendingUI(),
           );
         }
 

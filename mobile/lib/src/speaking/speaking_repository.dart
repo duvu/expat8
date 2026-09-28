@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
@@ -460,6 +461,7 @@ class SpeakingRepository {
     required int durationMs,
     required int promptsCount,
   }) {
+    unawaited(_incrementLocalLoopCount(DateTime.now()));
     _enqueueEvent({
       'event_type': SpeakingEventType.loopCompleted,
       'client_event_id': _uuid.v4(),
@@ -469,25 +471,82 @@ class SpeakingRepository {
     });
   }
 
-  /// Fetches the weekly speaking summary from the backend.
-  ///
-  /// Returns `null` when offline or when [_apiClient] is not available.
-  Future<SpeakingWeeklySummary?> getWeeklySummary({
+  /// Weekly speaking summary: from the backend when reachable, otherwise
+  /// computed from attempts recorded on this device (see [localWeeklySummary]).
+  Future<SpeakingWeeklySummary> getWeeklySummary({
     String language = 'en',
+    DateTime? now,
   }) async {
     final client = _apiClient;
-    if (client == null) return null;
-    try {
-      final deviceId = await _database.getOrCreateDeviceId(_uuid.v4);
-      final session = await _database.loadUserSession();
-      return await client.fetchSpeakingSummary(
-        deviceId: deviceId,
-        language: language,
-        sessionToken: session?.sessionToken,
-      );
-    } catch (_) {
-      return null;
+    if (client != null) {
+      try {
+        final deviceId = await _database.getOrCreateDeviceId(_uuid.v4);
+        final session = await _database.loadUserSession();
+        return await client.fetchSpeakingSummary(
+          deviceId: deviceId,
+          language: language,
+          sessionToken: session?.sessionToken,
+        );
+      } catch (_) {
+        // Fall through to the on-device summary.
+      }
     }
+    return localWeeklySummary(now: now);
+  }
+
+  /// Same week boundary as the backend: Monday 00:00 UTC.
+  static DateTime weekStartUtc(DateTime now) {
+    final utc = now.toUtc();
+    final monday = utc.subtract(Duration(days: utc.weekday - DateTime.monday));
+    return DateTime.utc(monday.year, monday.month, monday.day);
+  }
+
+  static String _loopCountKey(DateTime weekStart) =>
+      'speaking.loop_completions.${weekStart.toIso8601String().substring(0, 10)}';
+
+  /// This week's summary from local attempts only. Marked with
+  /// [SpeakingWeeklySummary.isLocalEstimate] because events recorded on other
+  /// devices are not included.
+  Future<SpeakingWeeklySummary> localWeeklySummary({DateTime? now}) async {
+    final weekStart = weekStartUtc(now ?? DateTime.now());
+    final attempts =
+        _database.speakingAttemptsSince(weekStart.millisecondsSinceEpoch);
+    var durationMs = 0;
+    var retries = 0;
+    var latest = 0;
+    final ratings = <String, int>{};
+    for (final attempt in attempts) {
+      durationMs += attempt.durationMs ?? 0;
+      retries += attempt.retryCount;
+      if (attempt.occurredAtMs > latest) latest = attempt.occurredAtMs;
+      final rating = switch (attempt.selfRating) {
+        'clear' || 'easy' => 'clear',
+        'hesitated' || 'ok' => 'hesitated',
+        'could_not_say' || 'hard' => 'could_not_say',
+        _ => null,
+      };
+      if (rating != null) ratings[rating] = (ratings[rating] ?? 0) + 1;
+    }
+    final loops =
+        int.tryParse(await _database.getSetting(_loopCountKey(weekStart)) ?? '') ??
+            0;
+    return SpeakingWeeklySummary(
+      spokenSentenceCount: attempts.length,
+      retryCount: retries,
+      approximateDurationMs: durationMs,
+      selfRatingCounts: ratings,
+      loopCompletionCount: loops,
+      latestActivityAt: latest == 0
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(latest, isUtc: true),
+      isLocalEstimate: true,
+    );
+  }
+
+  Future<void> _incrementLocalLoopCount(DateTime now) async {
+    final key = _loopCountKey(weekStartUtc(now));
+    final current = int.tryParse(await _database.getSetting(key) ?? '') ?? 0;
+    await _database.setSetting(key, '${current + 1}');
   }
 
   // ---- TTS playback ----

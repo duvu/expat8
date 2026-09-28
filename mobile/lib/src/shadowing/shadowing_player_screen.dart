@@ -42,6 +42,22 @@ class _ShadowingPlayerScreenState extends State<ShadowingPlayerScreen> {
     _segments = widget.video.segments;
     _progress = widget.repository.loadProgress(widget.video);
     _initPlayer();
+    if (_segments.isEmpty) {
+      unawaited(_loadTranscript());
+    }
+  }
+
+  /// Library entries carry no transcript; fetch it (cached after the first
+  /// successful load, so it also works offline later).
+  Future<void> _loadTranscript() async {
+    try {
+      final detail =
+          await widget.repository.getVideoDetail(entryId: widget.video.id);
+      if (!mounted || detail.segments.isEmpty) return;
+      setState(() => _segments = detail.segments);
+    } on Object {
+      // Offline and not cached yet: the empty-transcript state explains it.
+    }
   }
 
   void _initPlayer() {
@@ -200,7 +216,16 @@ class _ShadowingPlayerScreenState extends State<ShadowingPlayerScreen> {
           // Transcript
           Expanded(
             child: _segments.isEmpty
-                ? const Center(child: Text('No transcript available.'))
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'No transcript yet. Open this video once while online '
+                        'to save its transcript for offline practice.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
                 : _TranscriptPanel(
                     segments: _segments,
                     activeIndex: _activeSegmentIndex,

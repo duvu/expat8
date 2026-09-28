@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -43,6 +44,7 @@ class _ShadowingLibraryScreenState extends State<ShadowingLibraryScreen> {
     // Refresh from backend in background.
     try {
       final refreshed = await widget.repository.refreshLibrary();
+      unawaited(widget.repository.prefetchTranscripts());
       if (mounted) {
         setState(() {
           _videos = refreshed;

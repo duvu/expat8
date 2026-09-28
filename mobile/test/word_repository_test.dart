@@ -786,7 +786,7 @@ void main() {
     expect(words.map((word) => word.term).toSet(), hasLength(100));
   });
 
-  test('submitted word failure is stored immediately without queued sync',
+  test('submitted word made offline is queued and sent when back online',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -805,8 +805,54 @@ void main() {
       language: 'en',
     );
 
+    expect(submission.status, SubmittedWordStatus.queuedSync);
+    final queued = await database
+        .dueSyncEntries(DateTime.now().toUtc().add(const Duration(days: 1)));
+    expect(queued.map((e) => e.type), contains('submitted_word_create'));
+
+    // Connection is back: the queued submission is sent.
+    apiClient
+      ..submittedWordCreateError = null
+      ..submittedWordCreateResult = _submittedWord(
+        localId: submission.localSubmissionId,
+        serverId: 'submission_offline',
+        term: 'stubborn',
+        status: SubmittedWordStatus.ready,
+        resolutionType: SubmittedWordResolutionType.generatedWord,
+        resolvedWord: _word('stubborn'),
+      );
+    await repository.syncPendingEvents(
+      deviceId: 'device_repo',
+      now: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+    );
+
+    final synced = await database.getSubmittedWord(submission.localSubmissionId);
+    expect(synced!.status, SubmittedWordStatus.ready);
+  });
+
+  test('submitted word rejected by the server is marked failed', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_submitted_rejected_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    final apiClient = _RecordingApiClient()
+      ..submittedWordCreateError =
+          BackendApiException('rejected', statusCode: 400);
+    final repository = WordRepository(
+      database: database,
+      apiClient: apiClient,
+      config: _testConfig(),
+    );
+
+    final submission = await repository.submitSubmittedWord(
+      term: '???',
+      language: 'en',
+    );
+
     expect(submission.status, SubmittedWordStatus.failed);
-    expect(submission.failureReason, contains('offline'));
+    final queued = await database
+        .dueSyncEntries(DateTime.now().toUtc().add(const Duration(days: 1)));
+    expect(queued, isEmpty);
   });
 
   test('submitted word success imports ready resolved word into local inventory and counts as learned',
@@ -1116,6 +1162,7 @@ class _SyncFailingApiClient extends BackendApiClient {
     required String deviceId,
     required List<Map<String, dynamic>> events,
     String? sessionToken,
+    String? language,
   }) {
     throw BackendApiException('forced sync failure');
   }
@@ -1199,6 +1246,7 @@ class _SyncOutcomeApiClient extends BackendApiClient {
     required String deviceId,
     required List<Map<String, dynamic>> events,
     String? sessionToken,
+    String? language,
   }) async {
     final ids = [for (final e in events) e['client_event_id'] as String];
     return SyncResult(

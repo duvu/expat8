@@ -41,6 +41,18 @@ class ManagedArticle {
   final String? processingError;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'source_url': sourceUrl,
+        'language': language,
+        'visibility': visibility,
+        'status': status,
+        'processing_error': processingError,
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+      };
 }
 
 class ArticleVocabularyItem {
@@ -84,6 +96,19 @@ class ArticleVocabularyItem {
   final String status;
   final String? classification;
   final String? suggestionType;
+
+  Map<String, dynamic> toJson() => {
+        'term_id': termId,
+        'display_term': displayTerm,
+        'word_sense_id': wordSenseId,
+        'meaning_vi': meaningVi,
+        'part_of_speech': partOfSpeech,
+        'ipa': ipa,
+        'level': level,
+        'status': status,
+        'classification': classification,
+        'suggestion_type': suggestionType,
+      };
 }
 
 class ArticleVocabularyResponse {
@@ -105,4 +130,9 @@ class ArticleVocabularyResponse {
 
   final String articleId;
   final List<ArticleVocabularyItem> items;
+
+  Map<String, dynamic> toJson() => {
+        'article_id': articleId,
+        'items': [for (final item in items) item.toJson()],
+      };
 }

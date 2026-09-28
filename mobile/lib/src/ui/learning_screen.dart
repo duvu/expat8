@@ -194,13 +194,21 @@ class _LearningScreenState extends State<LearningScreen> {
                       speakingRepository: widget.speakingRepository,
                     )
             else
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: EmptyStateView(
-                  icon: Icons.school_outlined,
-                  title: 'No card loaded',
-                  body: 'Loading your next vocabulary card...',
-                ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: controller.isLoading || controller.statusMessage == null
+                    ? const EmptyStateView(
+                        icon: Icons.school_outlined,
+                        title: 'No card loaded',
+                        body: 'Loading your next vocabulary card...',
+                      )
+                    : EmptyStateView(
+                        icon: Icons.inbox_outlined,
+                        title: 'No card available',
+                        body: controller.statusMessage!,
+                        actionLabel: 'Try again',
+                        onAction: controller.showNewWord,
+                      ),
               ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

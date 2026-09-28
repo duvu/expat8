@@ -88,15 +88,15 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
   String _feedbackMessageFor(SubmittedWord submission) {
     return switch (submission.status) {
       SubmittedWordStatus.queuedSync =>
-        'The request did not finish. Please try again when your connection is stable.',
+        'Saved offline. It will be added automatically when you are back online.',
       SubmittedWordStatus.queued => 'This word is still pending from an older app flow.',
       SubmittedWordStatus.processing => 'This word is still processing from an older app flow.',
       SubmittedWordStatus.ready => submission.resolutionType ==
               SubmittedWordResolutionType.existingWord
           ? 'This word already exists. It was added and counted as one learned item.'
           : 'Word created and added to your study list. Counted as one learned item.',
-      SubmittedWordStatus.failed => submission.failureReason ??
-          'The app could not prepare this word right now. Please try again.',
+      SubmittedWordStatus.failed =>
+        'The server could not use this word. Check the spelling and try again.',
     };
   }
 

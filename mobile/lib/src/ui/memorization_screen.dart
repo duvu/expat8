@@ -26,6 +26,7 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
   List<MemorizationPassage> _passages = [];
   Map<String, _PassageProgressSummary> _progressByPassageId = const {};
   bool _isLoading = true;
+  bool _showingCached = false;
   String? _errorMessage;
 
   @override
@@ -40,15 +41,16 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
       _errorMessage = null;
     });
     try {
-      final passages = await widget.repository.listPassages(
+      final result = await widget.repository.loadPassages(
         sessionToken: widget.userSession.sessionToken,
       );
+      final passages = result.data;
       final progressEntries = await Future.wait(
         passages.map((passage) async {
           if (passage.segmentCount <= 0) {
             return MapEntry(passage.id, const _PassageProgressSummary.empty());
           }
-          final progress = await widget.repository.getPassageProgress(
+          final progress = await widget.repository.loadPassageProgress(
             sessionToken: widget.userSession.sessionToken,
             passageId: passage.id,
           );
@@ -65,12 +67,13 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
       setState(() {
         _passages = passages;
         _progressByPassageId = Map.fromEntries(progressEntries);
+        _showingCached = result.fromCache;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to load passages: $e';
+        _errorMessage = 'Could not load passages. Check your connection.';
         _isLoading = false;
       });
     }
@@ -147,6 +150,14 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
                         )
                       : ListView(
                           children: [
+                            if (_showingCached)
+                              const ListTile(
+                                dense: true,
+                                leading: Icon(Icons.cloud_off, size: 20),
+                                title: Text(
+                                  'Offline — showing passages saved on this device.',
+                                ),
+                              ),
                             _PassageSection(
                               title: 'My Passages',
                               passages: myPassages,
@@ -477,7 +488,7 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
           sessionToken: widget.userSession.sessionToken,
           passageId: widget.passageId,
         ),
-        widget.repository.getPassageProgress(
+        widget.repository.loadPassageProgress(
           sessionToken: widget.userSession.sessionToken,
           passageId: widget.passageId,
         ),
@@ -491,7 +502,8 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to load passage: $e';
+        _errorMessage = 'This passage is not saved on this device yet. '
+            'Open it once while online to use it offline.';
         _isLoading = false;
       });
     }

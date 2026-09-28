@@ -186,10 +186,10 @@ void main() {
     // Advance the fake clock past the 20-second timeout.
     await tester.pump(const Duration(seconds: 21));
 
-    // Timeout error UI must now be visible.
-    expect(find.text('Exam submission timed out. Please try again.'),
-        findsOneWidget);
-    expect(find.text('Try Again'), findsOneWidget);
+    // Offline/slow submit: answers are saved and queued, not lost.
+    expect(find.text('Answers saved'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
 
     // Cleanup: resolve the stalled future so the test runner is not left with
     // a pending microtask queue.
@@ -392,7 +392,7 @@ void main() {
 
   // ─── 4.4: Retry tap ──────────────────────────────────────────────────────
 
-  testWidgets('tapping Try Again resets controller and pops the route',
+  testWidgets('tapping Done on a pending offline result resets and pops the route',
       (tester) async {
     // Backend never responds — submit remains unanswered, triggering timeout.
     final neverCompleter = Completer<http.Response>();
@@ -435,14 +435,13 @@ void main() {
     // Initially showing spinner (result=null, not timed out).
     expect(find.byType(CircularProgressIndicator), findsAtLeastNWidgets(1));
 
-    // Advance past the 20-second timeout to trigger the Try Again UI.
+    // Advance past the 20-second timeout to show the pending (saved) UI.
     await tester.pump(const Duration(seconds: 21));
 
-    expect(find.text('Try Again'), findsOneWidget);
+    expect(find.text('Answers saved'), findsOneWidget);
     expect(find.text('Home'), findsNothing);
 
-    // Tap the retry button.
-    await tester.tap(find.text('Try Again'));
+    await tester.tap(find.text('Done'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 

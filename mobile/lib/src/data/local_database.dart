@@ -1664,6 +1664,13 @@ class LocalDatabase {
   /// Returns the total number of speaking attempts stored locally.
   int countSpeakingAttempts() => _speakingAttempts.count();
 
+  /// Speaking attempts recorded at or after [sinceMs] (UTC epoch ms).
+  List<SpeakingAttemptEntity> speakingAttemptsSince(int sinceMs) =>
+      _speakingAttempts
+          .query(SpeakingAttemptEntity_.occurredAtMs.greaterOrEqual(sinceMs))
+          .build()
+          .find();
+
   /// Returns all cached prompts linked to [wordSenseId].
   List<SpeakingPromptEntity> getPromptsByWordSenseId(String wordSenseId) {
     return _speakingPrompts
@@ -1701,6 +1708,9 @@ class LocalDatabase {
       );
     }
     // Delete any locally-cached prompts that were not in the server response.
+    // An empty response is treated as "no information" rather than "delete
+    // everything", so offline drills keep working after a bad sync.
+    if (prompts.isEmpty) return;
     final receivedIds = prompts.map((p) => p.promptId).toSet();
     final allLocal = _speakingPrompts.getAll();
     final staleObjectIds = allLocal
@@ -1814,6 +1824,22 @@ class LocalDatabase {
   List<LocalPassageEntity> getAllPassages() {
     return _passages.getAll()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// Removes a passage and its cached segments and progress.
+  void removePassageLocal(String passageId) {
+    _passages
+        .query(LocalPassageEntity_.passageId.equals(passageId))
+        .build()
+        .remove();
+    _segments
+        .query(LocalSegmentEntity_.passageId.equals(passageId))
+        .build()
+        .remove();
+    _segmentProgress
+        .query(LocalSegmentProgressEntity_.passageId.equals(passageId))
+        .build()
+        .remove();
   }
 
   /// Returns cached passage by server ID, or null if not cached.

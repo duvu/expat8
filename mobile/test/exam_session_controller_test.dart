@@ -133,7 +133,7 @@ void main() {
     await ctrl.startSession(userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, 'Backend unavailable. Please try again.');
+    expect(ctrl.errorMessage, 'Exams need an internet connection to load questions. Please try again when you are online.');
     expect(ctrl.session, isNull);
     expect(startCalled, false);
   });
@@ -218,7 +218,7 @@ void main() {
         userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, 'Backend unavailable. Please try again.');
+    expect(ctrl.errorMessage, 'Exams need an internet connection to load questions. Please try again when you are online.');
   });
 
   test('startSession can recover after the backend becomes healthy', () async {
@@ -247,7 +247,7 @@ void main() {
     // First attempt: readiness probe fails.
     await ctrl.startSession(userSession: _session, language: 'en');
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, 'Backend unavailable. Please try again.');
+    expect(ctrl.errorMessage, 'Exams need an internet connection to load questions. Please try again when you are online.');
 
     // Second attempt: probe succeeds, start session should proceed normally.
     backendReady = true;
