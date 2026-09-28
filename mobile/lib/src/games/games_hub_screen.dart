@@ -2,14 +2,27 @@ import 'package:flutter/material.dart';
 
 import 'game_storage.dart';
 import 'sudoku/sudoku_home_screen.dart';
+import 'word_blaster/ui/word_blaster_home_screen.dart';
+import 'word_blaster/word_blaster_context.dart';
 
 /// Entry point for offline mini-games. Add new games to [_games].
 class GamesHubScreen extends StatelessWidget {
-  const GamesHubScreen({required this.storage, super.key});
+  const GamesHubScreen({required this.storage, this.wordBlaster, super.key});
 
   final GameStorage storage;
 
+  /// Null when Word Blaster is disabled by its feature flag.
+  final WordBlasterContext? wordBlaster;
+
   List<_GameEntry> get _games => [
+        if (wordBlaster != null)
+          _GameEntry(
+            title: 'Word Blaster',
+            description:
+                'Shoot the right word · 5 modes · every answer is a review',
+            icon: Icons.rocket_launch_outlined,
+            builder: (_) => WordBlasterHomeScreen(context: wordBlaster!),
+          ),
         _GameEntry(
           title: 'Sudoku',
           description: '5 difficulty levels · champion board · offline',

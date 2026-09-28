@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flame/game.dart';
 
+import '../common/game_audio.dart';
 import 'sudoku_board_game.dart';
 import 'sudoku_champion_store.dart';
 import 'sudoku_game_controller.dart';
@@ -15,11 +16,15 @@ class SudokuGameScreen extends StatefulWidget {
   const SudokuGameScreen({
     required this.controller,
     required this.championStore,
+    this.audio,
+    this.reducedMotion = false,
     super.key,
   });
 
   final SudokuGameController controller;
   final SudokuChampionStore championStore;
+  final GameAudio? audio;
+  final bool reducedMotion;
 
   @override
   State<SudokuGameScreen> createState() => _SudokuGameScreenState();
@@ -30,6 +35,7 @@ class _SudokuGameScreenState extends State<SudokuGameScreen>
   Timer? _ticker;
   bool _completionHandled = false;
   SudokuBoardGame? _boardGame;
+  StreamSubscription<SudokuFeedback>? _feedbackSounds;
 
   SudokuGameController get _game => widget.controller;
 
@@ -38,6 +44,7 @@ class _SudokuGameScreenState extends State<SudokuGameScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _game.addListener(_onGameChanged);
+    _feedbackSounds = _game.feedback.listen(_playFeedback);
     _game.start();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && _game.isRunning) setState(() {});
@@ -49,6 +56,7 @@ class _SudokuGameScreenState extends State<SudokuGameScreen>
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _game.removeListener(_onGameChanged);
+    _feedbackSounds?.cancel();
     _game.pause();
     _game.dispose();
     super.dispose();
@@ -61,6 +69,25 @@ class _SudokuGameScreenState extends State<SudokuGameScreen>
       return;
     }
     _game.pause();
+  }
+
+  void _playFeedback(SudokuFeedback event) {
+    final audio = widget.audio;
+    if (audio == null) return;
+    switch (event.kind) {
+      case SudokuFeedbackKind.correct:
+      case SudokuFeedbackKind.hint:
+        audio.play(GameSound.select);
+        audio.haptic(GameHaptic.selection);
+      case SudokuFeedbackKind.wrong:
+        audio.play(GameSound.wrong, volume: 0.6);
+        audio.haptic(GameHaptic.medium);
+      case SudokuFeedbackKind.unitCompleted:
+        audio.play(GameSound.combo, volume: 0.6);
+      case SudokuFeedbackKind.solved:
+        audio.play(GameSound.solved);
+        audio.haptic(GameHaptic.heavy);
+    }
   }
 
   void _onGameChanged() {
@@ -137,7 +164,11 @@ class _SudokuGameScreenState extends State<SudokuGameScreen>
     );
     final game = _boardGame;
     if (game == null) {
-      _boardGame = SudokuBoardGame(controller: _game, palette: palette);
+      _boardGame = SudokuBoardGame(
+        controller: _game,
+        palette: palette,
+        reducedMotion: widget.reducedMotion,
+      );
     } else {
       game.palette = palette;
     }

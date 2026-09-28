@@ -68,9 +68,16 @@ class SudokuBoardPalette {
 /// Flame game that renders and animates the Sudoku board. All rules live in
 /// [SudokuGameController]; this layer only draws state and plays feedback.
 class SudokuBoardGame extends FlameGame {
-  SudokuBoardGame({required this.controller, required this.palette});
+  SudokuBoardGame({
+    required this.controller,
+    required this.palette,
+    this.reducedMotion = false,
+  });
 
   final SudokuGameController controller;
+
+  /// Skips particle effects (confetti, sparkles).
+  final bool reducedMotion;
   SudokuBoardPalette palette;
 
   late final BoardComponent board;
@@ -127,6 +134,7 @@ class SudokuBoardGame extends FlameGame {
   }
 
   void _sparkle(CellComponent cell) {
+    if (reducedMotion) return;
     final center = board.position + cell.position + cell.size / 2;
     final color = palette.glow;
     add(ParticleSystemComponent(
@@ -154,6 +162,7 @@ class SudokuBoardGame extends FlameGame {
     for (var i = 0; i < 81; i++) {
       board.cells[i].glow(delay: ((i ~/ 9) + (i % 9)) * 0.035);
     }
+    if (reducedMotion) return;
     final origin =
         board.position + Vector2(board.size.x / 2, board.size.y * 0.35);
     final colors = palette.confetti;

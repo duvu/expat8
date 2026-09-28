@@ -1,6 +1,6 @@
 # Word Blaster — Thiết kế game bắn từ vựng (GDD)
 
-> Ngày: 2026-09-28 · Trạng thái: Đã lên kế hoạch (backlog: epic "Word Blaster" trên GitHub Issues)
+> Ngày: 2026-09-28 · Trạng thái: **Đã triển khai** (epic #26, issues #27–#36); còn lại: kiểm chứng trên thiết bị thật (#36)
 > Engine: Flame 1.38 (đã dùng cho Sudoku, xem `mobile/lib/src/games/sudoku/sudoku_board_game.dart`)
 > Liên quan: [Đề xuất tính năng tạo thói quen](../20260928-engagement-features-proposal.md), [Mobile guide — Offline Mode, Games](../mobile-guide.md)
 
@@ -35,7 +35,7 @@ Prompt hiện ở đáy màn hình  ──►  Các "thiên thạch" chứa đá
                                                                      án đúng 1.2s, reset combo
 ```
 
-- **Điều khiển:** chạm vào thiên thạch → pháo ở đáy xoay và bắn (đạn bay ~0.15s, trúng mới tính). Một chạm = một phát; chạm liên tục vào nhiễu bị phạt.
+- **Điều khiển:** chạm vào thiên thạch → pháo ở đáy xoay và bắn (đạn bay ~0.15s, trúng mới tính). Một chạm = một phát; bắn sai liên tục bị phạt quá nhiệt (3 lần sai trong 6 giây → pháo khoá 1.5 giây; vì mỗi lần sai đã dừng 1.2 giây để hiện đáp án nên cửa sổ phải dài hơn 2 giây).
 - **Mạng:** 3 tim. Hết tim → kết thúc ván.
 - **Wave:** mỗi 8 prompt là một wave; tốc độ rơi và số nhiễu tăng dần; wave 5, 10, … là **boss wave**.
 - **Kết thúc ván:** màn tổng kết gồm điểm, độ chính xác, combo cao nhất, danh sách **từ sai** (bấm để nghe/xem ví dụ) và nút **"Ôn các từ sai"** (mở phiên học chỉ với các từ đó).
@@ -101,7 +101,8 @@ Bộ sinh câu hỏi là Dart thuần, có seed để test tất định.
 
 - Mỗi từ chỉ ghi **tối đa 1 study event mỗi ván** (lần đầu gặp), để game không làm méo SRS.
 - Study event dùng `WordRepository` (cùng hàng đợi offline, có `language`), gắn `source: "game_word_blaster"` trong payload để phân tích sau (backend bỏ qua field lạ, cần xác nhận trong hợp đồng API).
-- Cấp độ proficiency vẫn chỉ đổi theo luật hiện có (5 lần `too_easy`/`hard` liên tiếp); game **không** gửi `too_easy`/`too_hard`.
+- Lượt ôn từ game (`source` bắt đầu bằng `game_`) **không** làm thay đổi cấp độ CEFR/HSK và không được tính vào chuỗi 5 lần liên tiếp, vì luật hạ cấp dùng `hard` — nếu không, một ván chơi tệ có thể làm người học tụt cấp.
+- Game không xoá từ khỏi bộ nhớ máy (khác với vuốt `easy` trong màn học): đúng → ôn lại sau 3 ngày (từ mới → `learning`, 1 ngày), sai → ôn lại sau 1 ngày.
 
 ## 8. Bảng xếp hạng và thống kê
 

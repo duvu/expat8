@@ -1,3 +1,15 @@
+import {
+  InvalidGameRoundError,
+  buildGamesSummary,
+  gameWeekEnd,
+  gameWeekStart,
+  isGameSource,
+  isPlausibleGameRound,
+  leaderboardName,
+  normalizeEventSource,
+  normalizeGameRound,
+  rankLeaderboard
+} from './game_rounds.js';
 import crypto from 'node:crypto';
 
 import { createId } from './ids.js';
@@ -831,11 +843,12 @@ export class PostgresWordStore {
           local_word_id,
           rating,
           occurred_at,
-          received_at
+          received_at,
+          source
         )
         SELECT $1, $2, $3, $4, $5,
           (SELECT id FROM words WHERE id = $6 LIMIT 1),
-          $7, $8, $9, $10
+          $7, $8, $9, $10, $11
         ON CONFLICT (client_event_id) DO NOTHING
         RETURNING *`,
         [
@@ -848,7 +861,8 @@ export class PostgresWordStore {
           event.local_word_id ?? null,
           event.rating,
           event.occurred_at,
-          receivedAt
+          receivedAt,
+          normalizeEventSource(event.source)
         ]
       );
 
@@ -881,14 +895,17 @@ export class PostgresWordStore {
         event: inserted.rows[0]
       });
 
-      const levelChange = await this.#applyProficiencyChange({
-        client,
-        deviceId,
-        userId: eventUserId,
-        language,
-        rating: event.rating,
-        currentLevel: proficiency.level
-      });
+      // Practice games review words but never move the CEFR/HSK ladder.
+      const levelChange = isGameSource(inserted.rows[0].source)
+        ? null
+        : await this.#applyProficiencyChange({
+            client,
+            deviceId,
+            userId: eventUserId,
+            language,
+            rating: event.rating,
+            currentLevel: proficiency.level
+          });
 
       this.logger.debug?.('db_record_study_event_completed', {
         device_id: deviceId,
@@ -1023,6 +1040,78 @@ export class PostgresWordStore {
       },
       latest_activity_at: row.latest_activity_at ?? null
     };
+  }
+
+  async recordGameRounds({ deviceId, userId = null, rounds }) {
+    const accepted = [];
+    const duplicates = [];
+    const rejected = [];
+    for (const raw of rounds) {
+      let round;
+      try {
+        round = normalizeGameRound(raw);
+      } catch (error) {
+        if (!(error instanceof InvalidGameRoundError)) throw error;
+        rejected.push({ client_round_id: raw?.client_round_id ?? null, reason: error.reason });
+        continue;
+      }
+      const inserted = await this.pool.query(
+        `INSERT INTO game_rounds (
+          id, client_round_id, device_id, user_id, game, mode, language, score,
+          correct_count, answered_count, best_combo, wave, duration_ms,
+          leaderboard_eligible, completed_at, received_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ON CONFLICT (client_round_id) DO NOTHING
+        RETURNING id`,
+        [
+          createId('game_round'),
+          round.client_round_id,
+          deviceId,
+          userId,
+          round.game,
+          round.mode,
+          round.language,
+          round.score,
+          round.correct_count,
+          round.answered_count,
+          round.best_combo,
+          round.wave,
+          round.duration_ms,
+          isPlausibleGameRound(round),
+          round.completed_at,
+          new Date().toISOString()
+        ]
+      );
+      (inserted.rows[0] ? accepted : duplicates).push(round.client_round_id);
+    }
+    return { accepted_round_ids: accepted, duplicates, rejected_rounds: rejected };
+  }
+
+  async getGameLeaderboard({ game, mode, weekStart = null, userId = null, limit = 50 }) {
+    const start = gameWeekStart(weekStart);
+    const end = gameWeekEnd(start);
+    const result = await this.pool.query(
+      `SELECT r.user_id, r.score, r.correct_count, r.answered_count, r.best_combo, r.completed_at,
+              u.display_name, u.identifier
+       FROM game_rounds r
+       JOIN users u ON u.id = r.user_id
+       WHERE r.game = $1 AND r.mode = $2 AND r.user_id IS NOT NULL AND r.leaderboard_eligible
+         AND r.completed_at >= $3 AND r.completed_at < $4`,
+      [game, mode, start, end]
+    );
+    const rows = result.rows.map((row) => ({ ...row, display_name: leaderboardName(row) }));
+    return { game, mode, week_start: start, ...rankLeaderboard(rows, { limit, userId }) };
+  }
+
+  async getGamesSummary({ days = 30, now = new Date() } = {}) {
+    const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+    const rounds = await this.pool.query('SELECT * FROM game_rounds WHERE completed_at >= $1', [since]);
+    const reviews = await this.pool.query(
+      `SELECT count(*)::int AS n FROM study_events
+       WHERE source LIKE 'game\\_%' AND occurred_at >= $1`,
+      [since]
+    );
+    return buildGamesSummary({ rounds: rounds.rows, gameReviewCount: reviews.rows[0].n, days });
   }
 
   async getSpeakingLoopHealthSummary({ weekStart = null } = {}) {
@@ -1572,14 +1661,14 @@ export class PostgresWordStore {
     const result = userId
       ? await client.query(
           `SELECT * FROM study_events
-          WHERE user_id = $1
+          WHERE user_id = $1 AND (source IS NULL OR source NOT LIKE 'game\\_%')
           ORDER BY occurred_at DESC, received_at DESC, id DESC
           LIMIT 10`,
           [userId]
         )
       : await client.query(
           `SELECT * FROM study_events
-          WHERE device_id = $1
+          WHERE device_id = $1 AND (source IS NULL OR source NOT LIKE 'game\\_%')
           ORDER BY occurred_at DESC, received_at DESC, id DESC
           LIMIT 10`,
           [deviceId]
@@ -2220,6 +2309,10 @@ export class PostgresWordStore {
       deviceId
     ]);
     await client.query('UPDATE speaking_events SET user_id = $1 WHERE device_id = $2 AND user_id IS NULL', [
+      userId,
+      deviceId
+    ]);
+    await client.query('UPDATE game_rounds SET user_id = $1 WHERE device_id = $2 AND user_id IS NULL', [
       userId,
       deviceId
     ]);

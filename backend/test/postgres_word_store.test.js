@@ -338,6 +338,7 @@ class FakePool {
     if (
       normalizedSql.startsWith('UPDATE study_events SET user_id = $1 WHERE device_id = $2') ||
       normalizedSql.startsWith('UPDATE speaking_events SET user_id = $1 WHERE device_id = $2') ||
+      normalizedSql.startsWith('UPDATE game_rounds SET user_id = $1 WHERE device_id = $2') ||
       normalizedSql.startsWith('UPDATE user_proficiency device_row SET user_id = $1')
     ) {
       return { rows: [], rowCount: 0 };

@@ -12,6 +12,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createLearningRouter } from './routes/learning.js';
 import { createArticlesRouter } from './routes/articles.js';
+import { createGamesRouter } from './routes/games.js';
 import { createSpeakingRouter } from './routes/speaking.js';
 import { createProficiencyRouter } from './routes/proficiency.js';
 import { createStudyEventsRouter } from './routes/study_events.js';
@@ -185,6 +186,7 @@ function createV1Router({
   router.use('/learning', createLearningRouter({ store, config, rateLimiters }));
   router.use('/articles', createArticlesRouter({ store, config, rateLimiters }));
   router.use('/speaking', createSpeakingRouter({ store, config }));
+  router.use('/games', createGamesRouter({ store }));
   router.use('/proficiency', createProficiencyRouter({ store, config }));
   router.use('/study-events', createStudyEventsRouter({ store, config, rateLimiters }));
   router.use('/content-packs', createContentPacksRouter({ store, config }));

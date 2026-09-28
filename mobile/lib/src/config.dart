@@ -10,6 +10,7 @@ class AppConfig {
     required this.logLevel,
     required this.logMaxEntries,
     this.logRetention = defaultLogRetention,
+    this.wordBlasterEnabled = true,
   });
 
   factory AppConfig.fromEnvironment() {
@@ -44,6 +45,10 @@ class AppConfig {
         'APP_LOG_MAX_ENTRIES',
         defaultValue: 5000,
       ),
+      wordBlasterEnabled: bool.fromEnvironment(
+        'WORD_BLASTER_ENABLED',
+        defaultValue: true,
+      ),
     );
   }
 
@@ -57,6 +62,9 @@ class AppConfig {
   final String logLevel;
   final int logMaxEntries;
   final Duration logRetention;
+
+  /// Feature flag for the Word Blaster game (beta).
+  final bool wordBlasterEnabled;
 
   static const Duration defaultLogRetention = Duration(minutes: 60);
 }

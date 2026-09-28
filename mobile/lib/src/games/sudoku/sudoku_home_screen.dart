@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../common/game_audio.dart';
+import '../common/game_settings.dart';
 import '../game_storage.dart';
 import 'sudoku_champion_board_screen.dart';
 import 'sudoku_champion_store.dart';
@@ -24,11 +26,17 @@ class SudokuHomeScreen extends StatefulWidget {
   const SudokuHomeScreen({
     required this.storage,
     this.puzzleFactory = generateSudokuPuzzle,
+    this.settings,
+    this.audio,
     super.key,
   });
 
   final GameStorage storage;
   final SudokuPuzzleFactory puzzleFactory;
+
+  /// Shared game settings/audio; created from [storage] when not provided.
+  final GameSettings? settings;
+  final GameAudio? audio;
 
   @override
   State<SudokuHomeScreen> createState() => _SudokuHomeScreenState();
@@ -36,6 +44,9 @@ class SudokuHomeScreen extends StatefulWidget {
 
 class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
   late final SudokuChampionStore _store = SudokuChampionStore(widget.storage);
+  late final GameSettings _settings =
+      widget.settings ?? GameSettings(widget.storage);
+  late final GameAudio _audio = widget.audio ?? GameAudio(_settings);
   SudokuDifficulty? _savedDifficulty;
   Map<SudokuDifficulty, List<SudokuRecord>> _board = const {};
   Map<SudokuDifficulty, SudokuStats> _stats = const {};
@@ -44,6 +55,8 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
   @override
   void initState() {
     super.initState();
+    _settings.load();
+    _audio.preload();
     _refresh();
   }
 
@@ -108,8 +121,12 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            SudokuGameScreen(controller: game, championStore: _store),
+        builder: (_) => SudokuGameScreen(
+          controller: game,
+          championStore: _store,
+          audio: _audio,
+          reducedMotion: _settings.reducedMotion,
+        ),
       ),
     );
     // The route future completes before the screen is disposed, so persist
@@ -150,6 +167,11 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
             tooltip: 'Champion board',
             icon: const Icon(Icons.emoji_events_outlined),
             onPressed: _openBoard,
+          ),
+          IconButton(
+            tooltip: 'Game settings',
+            icon: const Icon(Icons.tune),
+            onPressed: () => showGameSettingsSheet(context, _settings),
           ),
         ],
       ),

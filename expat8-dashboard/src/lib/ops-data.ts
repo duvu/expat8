@@ -21,6 +21,22 @@ export type ContentPipelineHealth = {
   shadowing: ContentPipelineSection;
 };
 
+export type GamesSummary = {
+  days: number;
+  total_rounds: number;
+  players: number;
+  mean_accuracy: number;
+  words_reviewed_via_games: number;
+  rounds_by_mode: Record<string, number>;
+  accuracy_buckets: {
+    under_50: number;
+    from_50_to_70: number;
+    from_70_to_85: number;
+    from_85: number;
+  };
+  rounds_per_day: { day: string; rounds: number; players: number }[];
+};
+
 export type LogArchiveRecord = {
   id: string;
   file_name: string;
@@ -55,16 +71,19 @@ export type OpsOverview = {
   loopHealthError: string | null;
   pipelineHealth: ContentPipelineHealth | null;
   pipelineHealthError: string | null;
+  games: GamesSummary | null;
+  gamesError: string | null;
 };
 
 export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview> {
   const checkedAt = new Date().toISOString();
-  const [live, ready, archivesResult, loopHealthResult, pipelineHealthResult] = await Promise.all([
+  const [live, ready, archivesResult, loopHealthResult, pipelineHealthResult, gamesResult] = await Promise.all([
     probeHealth('/health', 'Backend live', checkedAt),
     probeHealth('/health/ready', 'Backend ready', checkedAt),
     loadLogArchives({ limit }),
     loadSpeakingLoopHealth(),
     loadContentPipelineHealth(),
+    loadGamesSummary(),
   ]);
 
   return {
@@ -76,6 +95,8 @@ export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview
     loopHealth: loopHealthResult.data,
     loopHealthError: loopHealthResult.error,
     pipelineHealth: pipelineHealthResult.data,
+    games: gamesResult.data,
+    gamesError: gamesResult.error,
     pipelineHealthError: pipelineHealthResult.error,
   };
 }
@@ -148,6 +169,28 @@ export async function loadContentPipelineHealth(): Promise<{
     return {
       data: null,
       error: error instanceof Error ? error.message : 'Unable to load content pipeline health',
+    };
+  }
+}
+
+export async function loadGamesSummary(days = 30): Promise<{
+  data: GamesSummary | null;
+  error: string | null;
+}> {
+  try {
+    ensureDashboardCredentials();
+    const response = await backendFetch(`/v1/admin/games/summary?days=${days}`);
+    if (!response.ok) {
+      return {
+        data: null,
+        error: await readErrorMessage(response, 'Unable to load game analytics'),
+      };
+    }
+    return { data: (await response.json()) as GamesSummary, error: null };
+  } catch (error) {
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Unable to load game analytics',
     };
   }
 }
