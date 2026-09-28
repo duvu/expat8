@@ -33,7 +33,7 @@ class _SpeakingSummaryScreenState extends State<SpeakingSummaryScreen> {
     if (!mounted) return;
     setState(() {
       _summary = result;
-      _offline = result == null;
+      _offline = result.isLocalEstimate;
       _loading = false;
     });
   }
@@ -50,13 +50,35 @@ class _SpeakingSummaryScreenState extends State<SpeakingSummaryScreen> {
   }
 
   Widget _buildBody(ThemeData theme) {
-    if (_offline) return _offlineState(theme);
     final s = _summary!;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_offline) ...[
+            Row(
+              children: [
+                Icon(Icons.cloud_off_outlined,
+                    size: 18, color: theme.colorScheme.outline),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Offline — showing practice from this device.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _loading = true);
+                    _fetchSummary();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           _StatCard(
             icon: Icons.record_voice_over_outlined,
             label: 'Sentences recorded',
@@ -87,50 +109,6 @@ class _SpeakingSummaryScreenState extends State<SpeakingSummaryScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _offlineState(ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_outlined,
-                size: 64, color: theme.colorScheme.outline),
-            const SizedBox(height: 16),
-            Text(
-              'Summary unavailable',
-              style: theme.textTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Check your connection and try again.',
-              style: theme.textTheme.bodyMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton(
-              onPressed: () {
-                setState(() {
-                  _loading = true;
-                  _offline = false;
-                });
-                _fetchSummary();
-              },
-              child: const Text('Retry'),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.mic_outlined),
-              label: const Text('Start drill anyway'),
-            ),
-          ],
-        ),
       ),
     );
   }

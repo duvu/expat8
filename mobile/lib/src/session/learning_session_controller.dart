@@ -48,6 +48,10 @@ class LearningSessionController extends ChangeNotifier {
   String? authSuccessMessage;
   String? authErrorMessage;
   ProficiencyState proficiency = ProficiencyState.initial();
+
+  /// Called after a successful sign-in or registration so other offline
+  /// stores (e.g. memorization progress) can upload what was saved locally.
+  VoidCallback? onSignedIn;
   UserSession? userSession;
   String? _deviceId;
   String? _levelChangeMessage;
@@ -69,6 +73,7 @@ class LearningSessionController extends ChangeNotifier {
     repository.setActiveLanguage(language);
     notifyListeners();
     _deviceId ??= await repository.getOrCreateDeviceId();
+    await _restoreCachedProficiency(language);
     await showNewWord();
     _refreshProficiencyInBackground(
       deviceId: _deviceId!,
@@ -109,6 +114,7 @@ class LearningSessionController extends ChangeNotifier {
     );
     _deviceId ??= await repository.getOrCreateDeviceId();
     userSession = await repository.loadUserSession();
+    await _restoreCachedProficiency(_activeLearningLanguage);
     await showNewWord();
     _startInventoryTimer();
     _refreshProficiencyInBackground(
@@ -293,7 +299,8 @@ class LearningSessionController extends ChangeNotifier {
     required _CardSelectionMode mode,
     Future<void> Function()? beforeSelect,
     String emptyMessage =
-        'No learning card is available. Check connection and try again.',
+        'You have studied every saved card. New words download automatically '
+            'when you are online.',
   }) async {
     if (isLoading) {
       return;
@@ -588,12 +595,23 @@ class LearningSessionController extends ChangeNotifier {
     _applyUpdatedProficiency(updatedProficiency, notify: true);
   }
 
+  /// Shows the last known level for [language] immediately, so an offline
+  /// start does not fall back to A1.
+  Future<void> _restoreCachedProficiency(String language) async {
+    final cached = await repository.loadCachedProficiency(language);
+    proficiency = cached ?? ProficiencyState.initial();
+  }
+
   void _applyUpdatedProficiency(
     ProficiencyState updatedProficiency, {
     bool notify = false,
   }) {
     final previousLevel = proficiency.level;
     proficiency = updatedProficiency;
+    unawaited(repository.cacheProficiency(
+      updatedProficiency,
+      language: _activeLearningLanguage,
+    ));
     if (updatedProficiency.levelChanged &&
         updatedProficiency.level != previousLevel) {
       _levelChangeMessage =
@@ -699,6 +717,7 @@ class LearningSessionController extends ChangeNotifier {
       _telemetry.track(TelemetryEvent.authRegisterSuccess, {
         'user_id': session.userId,
       });
+      unawaited(_syncAfterSignIn());
     } catch (error) {
       userSession = previousSession;
       authErrorMessage = _authFailureMessage(AuthAction.register, error);
@@ -731,6 +750,7 @@ class LearningSessionController extends ChangeNotifier {
       _telemetry.track(TelemetryEvent.authSignInSuccess, {
         'user_id': session.userId,
       });
+      unawaited(_syncAfterSignIn());
     } catch (error) {
       userSession = previousSession;
       authErrorMessage = _authFailureMessage(AuthAction.signIn, error);
@@ -741,6 +761,28 @@ class LearningSessionController extends ChangeNotifier {
     } finally {
       _endAuthAction();
     }
+  }
+
+  /// Uploads everything recorded offline or before signing in, then refreshes
+  /// account-scoped state. Failures leave data queued for the next sync.
+  Future<void> _syncAfterSignIn() async {
+    final deviceId = _deviceId ??= await repository.getOrCreateDeviceId();
+    onSignedIn?.call();
+    try {
+      await repository.syncPendingEvents(deviceId: deviceId);
+      await repository.syncCacheInventory(deviceId: deviceId);
+    } on Object catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'auth.post_sign_in_sync_failed',
+        message: 'Post sign-in sync failed; data stays queued.',
+        context: {'error': '$error'},
+      );
+    }
+    _refreshProficiencyInBackground(
+      deviceId: deviceId,
+      language: _activeLearningLanguage,
+    );
   }
 
   Future<void> signOut() async {

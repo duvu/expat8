@@ -44,7 +44,7 @@ class ExamAnswerState {
 /// Does NOT touch [LearningSessionController] or any SRS state.
 class ExamSessionController extends ChangeNotifier {
   static const String _backendUnavailableMessage =
-      'Backend unavailable. Please try again.';
+      'Exams need an internet connection to load questions. Please try again when you are online.';
 
   ExamSessionController({
     required BackendApiClient apiClient,

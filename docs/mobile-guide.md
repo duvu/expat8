@@ -80,6 +80,26 @@ The app exposes an add-word flow for learner-entered words or short expressions:
 
 The v1 speaking feature is local record/playback/self-rating. It syncs behavioral speaking events and summary data, but does not upload pronunciation audio for server-side scoring.
 
+## Offline Mode
+
+Every feature opens without a network connection; data is cached in ObjectBox and writes are queued, then synced when the backend is reachable again.
+
+| Feature | Offline behavior |
+|---|---|
+| Vocabulary cards, sentences, speaking drill, history, stats | Fully local; ratings/speaking events queued |
+| Proficiency level | Last known level per language cached (`proficiency.cache.<lang>` setting) |
+| Add word | Saved as `queuedSync`, sent automatically when online; 4xx from the server marks it failed |
+| Memorization | Passage list, segments and progress served from cache; drill progress synced with the other queues |
+| Articles | List, article and vocabulary cached per account; creating an article needs a connection |
+| Video shadowing | Library and transcripts cached (transcripts prefetched after a library refresh); video playback itself needs internet |
+| Weekly speaking summary | Computed from this device's attempts when the backend is unreachable |
+| Exam | Starting needs a connection (answers are server-side); submitted answers are saved and scored when back online |
+| Games | Fully local |
+
+Sync (`WordRepository.syncPendingEvents` + memorization progress) runs at startup, every 3 minutes, on app resume, when connectivity returns (`ConnectivityMonitor`, `connectivity_plus`) and right after sign-in/registration. Runs never overlap. Network, auth, rate-limit and 5xx failures stay queued with backoff; permanent rejections (400/404/409/410/413/422) are dropped and the event is marked failed. On sign-in the backend attaches the device's anonymous study/speaking history and proficiency to the account (see `contracts/api.md`).
+
+An `OfflineBanner` is shown above every screen while the device has no connection.
+
 ## Games (offline)
 
 `lib/src/games/` holds offline mini-games, opened from the drawer's **Games** item for every user (no sign-in, no network). `GamesHubScreen` lists them; add new games there.

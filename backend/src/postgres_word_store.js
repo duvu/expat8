@@ -1140,6 +1140,7 @@ export class PostgresWordStore {
       // Claim device-only word states and cached words for the new user
       await this.#claimDeviceWordStates({ client, userId: inserted.rows[0].id, deviceId });
       await this.#claimDeviceCachedWords({ client, userId: inserted.rows[0].id, deviceId });
+      await this.#claimDeviceActivity({ client, userId: inserted.rows[0].id, deviceId });
       const sessionResult = await this.#createSessionForUser({
         client,
         user: inserted.rows[0],
@@ -1168,6 +1169,7 @@ export class PostgresWordStore {
       // Claim device-only word states and cached words for the signing-in user
       await this.#claimDeviceWordStates({ client, userId: user.id, deviceId });
       await this.#claimDeviceCachedWords({ client, userId: user.id, deviceId });
+      await this.#claimDeviceActivity({ client, userId: user.id, deviceId });
       const sessionResult = await this.#createSessionForUser({
         client,
         user,
@@ -2207,6 +2209,31 @@ export class PostgresWordStore {
       session: inserted.rows[0],
       sessionToken
     };
+  }
+
+  // Attach study/speaking history and proficiency recorded on this device
+  // before sign-in (including offline events synced anonymously) to the user.
+  async #claimDeviceActivity({ client, userId, deviceId }) {
+    if (!deviceId) return;
+    await client.query('UPDATE study_events SET user_id = $1 WHERE device_id = $2 AND user_id IS NULL', [
+      userId,
+      deviceId
+    ]);
+    await client.query('UPDATE speaking_events SET user_id = $1 WHERE device_id = $2 AND user_id IS NULL', [
+      userId,
+      deviceId
+    ]);
+    await client.query(
+      `UPDATE user_proficiency device_row
+       SET user_id = $1
+       WHERE device_row.device_id = $2
+         AND device_row.user_id IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM user_proficiency user_row
+           WHERE user_row.user_id = $1 AND user_row.language = device_row.language
+         )`,
+      [userId, deviceId]
+    );
   }
 
   async #claimDeviceWordStates({ client, userId, deviceId }) {

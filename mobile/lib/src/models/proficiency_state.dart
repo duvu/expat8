@@ -46,6 +46,18 @@ class ProficiencyState {
   final String language;
   final DateTime? lastUpdated;
 
+  Map<String, dynamic> toJson() => {
+        'scale': scale,
+        'level': level,
+        'level_index': levelIndex,
+        'previous_level': previousLevel,
+        'triggered_by': triggeredBy,
+        'consecutive_count': consecutiveCount,
+        'consecutive_rating_type': consecutiveRatingType,
+        'language': language,
+        'last_updated': lastUpdated?.toUtc().toIso8601String(),
+      };
+
   static String _inferScaleFromLevel(String level) {
     if (level.toUpperCase().startsWith('HSK')) {
       return 'hsk';

@@ -412,9 +412,36 @@ void main() {
 
     tearDown(() async => db.close());
 
-    test('returns null when no apiClient is configured', () async {
-      final result = await repo.getWeeklySummary();
-      expect(result, isNull);
+    test('falls back to an on-device summary without a backend', () async {
+      final now = DateTime.utc(2026, 9, 30, 12); // Wednesday
+      final monday = SpeakingRepository.weekStartUtc(now);
+      expect(monday, DateTime.utc(2026, 9, 28));
+
+      db.saveSpeakingAttempt(SpeakingAttemptEntity(
+        attemptId: 'this-week',
+        occurredAtMs: monday.add(const Duration(days: 1)).millisecondsSinceEpoch,
+        durationMs: 4000,
+        retryCount: 2,
+        selfRating: 'clear',
+        syncStatus: 'pending',
+      ));
+      db.saveSpeakingAttempt(SpeakingAttemptEntity(
+        attemptId: 'last-week',
+        occurredAtMs:
+            monday.subtract(const Duration(days: 1)).millisecondsSinceEpoch,
+        durationMs: 9000,
+        retryCount: 0,
+        syncStatus: 'synced',
+      ));
+      repo.postLoopCompletedEvent(durationMs: 60000, promptsCount: 3);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      final result = await repo.getWeeklySummary(now: now);
+      expect(result.isLocalEstimate, isTrue);
+      expect(result.spokenSentenceCount, 1);
+      expect(result.approximateDurationMs, 4000);
+      expect(result.retryCount, 2);
+      expect(result.selfRatingCounts, {'clear': 1});
     });
   });
 }

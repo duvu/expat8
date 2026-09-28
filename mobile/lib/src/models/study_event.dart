@@ -19,6 +19,7 @@ class StudyEvent {
     required this.rating,
     required this.occurredAt,
     required this.syncStatus,
+    this.language,
   });
 
   final String clientEventId;
@@ -28,6 +29,10 @@ class StudyEvent {
   final DateTime occurredAt;
   final SyncStatus syncStatus;
 
+  /// Learning language of the rated word. Queued with the event so offline
+  /// ratings are applied to the right proficiency track when replayed.
+  final String? language;
+
   Map<String, dynamic> toSyncJson() {
     return {
       'client_event_id': clientEventId,
@@ -35,6 +40,7 @@ class StudyEvent {
       'local_word_id': localWordId,
       'rating': rating.apiValue,
       'occurred_at': occurredAt.toUtc().toIso8601String(),
+      if (language != null) 'language': language,
     };
   }
 }

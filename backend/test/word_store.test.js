@@ -925,3 +925,50 @@ test('routeStudyEvents rejects invalid events but surfaces storage failures', as
   assert.equal(isEventDataError(Object.assign(new Error('connection terminated'), { code: 'ECONNRESET' })), false);
   assert.equal(isEventDataError(new Error('boom')), false);
 });
+
+test('sign-in claims anonymous study, speaking and proficiency history from the device', () => {
+  const store = new WordStore({ seed: false });
+  const word = store.insertWord({
+    term: 'reliable',
+    language: 'en',
+    meaning_vi: 'đáng tin cậy',
+    part_of_speech: 'adjective',
+    ipa: '/rɪˈlaɪəbl/',
+    vietnamese_pronunciation: 'ri-lai-ơ-bồ',
+    example: 'She is reliable.',
+    example_vi: 'Cô ấy đáng tin cậy.',
+    difficulty: 'A1',
+    topics: ['work']
+  }).word;
+  const events = Array.from({ length: 5 }, (_, i) => ({
+    client_event_id: `evt_claim_${i}`,
+    server_word_id: word.id,
+    rating: 'too_easy',
+    occurred_at: `2026-09-28T08:0${i}:00.000Z`
+  }));
+  events.push({
+    client_event_id: 'loop_claim',
+    event_type: 'loop_completed',
+    occurred_at: '2026-09-28T09:00:00.000Z',
+    speaking: { duration_ms: 60000, prompts_count: 3 }
+  });
+  store.syncStudyEvents({ deviceId: 'device_claim', events, language: 'en' });
+  const deviceLevel = store.getProficiency({ deviceId: 'device_claim', language: 'en' }).level;
+  assert.notEqual(deviceLevel, 'A1', 'five too_easy ratings upgrade the device level');
+
+  const { user } = store.registerUser({
+    identifier: 'claim@example.com',
+    password: 'correct horse battery',
+    deviceId: 'device_claim'
+  });
+
+  assert.equal(store.getProficiency({ deviceId: 'other_device', userId: user.id, language: 'en' }).level, deviceLevel);
+  const summary = store.getSpeakingSummary({
+    deviceId: 'other_device',
+    userId: user.id,
+    weekStart: '2026-09-28T00:00:00.000Z'
+  });
+  assert.equal(summary.loop_completion_count, 1);
+  const claimedStudyEvents = [...store.studyEventsByClientId.values()].filter((e) => e.user_id === user.id);
+  assert.equal(claimedStudyEvents.length, 5);
+});

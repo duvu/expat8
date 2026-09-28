@@ -77,6 +77,21 @@ class ShadowingRepository {
     return video;
   }
 
+  /// Downloads transcripts that are not cached yet so shadowing works offline
+  /// later. Best effort: stops at the first failure (likely offline).
+  Future<void> prefetchTranscripts({int maxVideos = 20}) async {
+    final missing = listCachedVideos()
+        .where((video) => database.getShadowingSegments(video.id).isEmpty)
+        .take(maxVideos);
+    for (final video in missing) {
+      try {
+        await refreshVideoDetail(entryId: video.id);
+      } on Object {
+        return;
+      }
+    }
+  }
+
   Future<ShadowingVideo> getVideoDetail({required String entryId}) async {
     final cached = getCachedVideo(entryId);
     if (cached != null && cached.hasSegments) {

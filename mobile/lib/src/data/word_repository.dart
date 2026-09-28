@@ -13,6 +13,7 @@ import '../models/learning_progress.dart';
 import '../models/proficiency_state.dart';
 import '../models/study_event.dart';
 import '../models/submitted_word.dart';
+import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import 'local_database.dart';
@@ -199,11 +200,36 @@ class WordRepository {
         'has_session': session != null,
       },
     );
-    return apiClient.fetchProficiency(
+    final proficiency = await apiClient.fetchProficiency(
       deviceId: deviceId,
       language: language,
       sessionToken: session?.sessionToken,
     );
+    await cacheProficiency(proficiency, language: language);
+    return proficiency;
+  }
+
+  static String _proficiencyCacheKey(String language) =>
+      'proficiency.cache.$language';
+
+  /// Keeps the last known level so it survives restarts while offline.
+  Future<void> cacheProficiency(
+    ProficiencyState proficiency, {
+    required String language,
+  }) =>
+      database.setSetting(
+        _proficiencyCacheKey(language),
+        jsonEncode(proficiency.toJson()),
+      );
+
+  Future<ProficiencyState?> loadCachedProficiency(String language) async {
+    final raw = await database.getSetting(_proficiencyCacheKey(language));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return ProficiencyState.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } on Object {
+      return null;
+    }
   }
 
   /// Fetches the weekly speaking summary from the backend.
@@ -255,13 +281,28 @@ class WordRepository {
       await database.removeSubmittedWordQueueEntries(merged.localSubmissionId);
       return (await database.getSubmittedWord(merged.localSubmissionId)) ?? merged;
     } catch (error) {
-      final failed = localSubmission.copyWith(
-        status: SubmittedWordStatus.failed,
-        failureReason: '$error',
-        updatedAt: now,
-      );
-      await database.upsertSubmittedWord(failed);
-      await database.removeSubmittedWordQueueEntries(failed.localSubmissionId);
+      if (_isPermanentSyncFailure(error)) {
+        final failed = localSubmission.copyWith(
+          status: SubmittedWordStatus.failed,
+          failureReason: '$error',
+          updatedAt: now,
+        );
+        await database.upsertSubmittedWord(failed);
+        await database.removeSubmittedWordQueueEntries(failed.localSubmissionId);
+      } else {
+        // Offline or server unavailable: keep it queued; syncPendingEvents
+        // sends it once the backend is reachable again.
+        await database.enqueueSubmittedWordCreate(
+          localSubmission.localSubmissionId,
+          nextRetryAt: now.add(const Duration(minutes: 1)),
+        );
+        await _logger.info(
+          category: AppLogCategory.sync,
+          event: 'submitted_word.queued_offline',
+          message: 'Submitted word saved locally and queued for sync.',
+          context: {'local_submission_id': localSubmission.localSubmissionId},
+        );
+      }
     }
     return (await database.getSubmittedWord(localSubmission.localSubmissionId)) ??
         localSubmission;
@@ -271,7 +312,18 @@ class WordRepository {
     return database.listSubmittedWords();
   }
 
+  /// Sends any offline submissions first (best effort), then lists them.
   Future<List<SubmittedWord>> refreshSubmittedWords() async {
+    try {
+      await syncPendingEvents(deviceId: await getOrCreateDeviceId());
+    } on Object catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'submitted_word.refresh_sync_failed',
+        message: 'Could not sync submitted words; showing local list.',
+        context: {'error': '$error'},
+      );
+    }
     return database.listSubmittedWords();
   }
 
@@ -486,6 +538,7 @@ class WordRepository {
       rating: rating,
       occurredAt: now,
       syncStatus: SyncStatus.pending,
+      language: word.language,
     );
   }
 
@@ -760,7 +813,22 @@ class WordRepository {
     await database.markWordAsLearning(word: word, now: now);
   }
 
+  Future<void>? _syncInFlight;
+
+  /// Replays queued offline writes. Concurrent callers (startup, timer, app
+  /// resume, reconnect, sign-in) share one run instead of sending duplicates.
   Future<void> syncPendingEvents({
+    required String deviceId,
+    DateTime? now,
+  }) {
+    final running = _syncInFlight;
+    if (running != null) return running;
+    final run = _syncPendingEvents(deviceId: deviceId, now: now);
+    _syncInFlight = run;
+    return run.whenComplete(() => _syncInFlight = null);
+  }
+
+  Future<void> _syncPendingEvents({
     required String deviceId,
     DateTime? now,
   }) async {
@@ -782,14 +850,16 @@ class WordRepository {
           // Background sync for a locally-saved exam attempt.
           final session = await database.loadUserSession();
           if (session == null) {
-            // Cannot sync without a session; leave in queue for later.
+            // Needs an account; try again later instead of blocking the
+            // head of the queue.
+            await database.scheduleRetry(entry, effectiveNow);
             continue;
           }
           final localAttemptId = payload['local_attempt_id'] as String?;
           final sessionId = payload['session_id'] as String?;
           final rawAnswers = payload['answers'] as List<dynamic>?;
           if (localAttemptId == null || sessionId == null || rawAnswers == null) {
-            // Malformed entry; skip it.
+            await _dropSyncEntry(entry, reason: 'malformed_payload');
             continue;
           }
           final answers = rawAnswers.map((e) => (e as num).toInt()).toList();
@@ -810,6 +880,7 @@ class WordRepository {
         } else if (entry.type == 'submitted_word_create') {
           final localSubmissionId = payload['local_submission_id'] as String?;
           if (localSubmissionId == null) {
+            await _dropSyncEntry(entry, reason: 'malformed_payload');
             continue;
           }
           final submission = await database.getSubmittedWord(localSubmissionId);
@@ -849,6 +920,7 @@ class WordRepository {
           final localSubmissionId = payload['local_submission_id'] as String?;
           final serverSubmissionId = payload['server_submission_id'] as String?;
           if (localSubmissionId == null || serverSubmissionId == null) {
+            await _dropSyncEntry(entry, reason: 'malformed_payload');
             continue;
           }
           final submission = await database.getSubmittedWord(localSubmissionId);
@@ -896,10 +968,12 @@ class WordRepository {
         } else {
           // study_event and other existing types.
           final session = await database.loadUserSession();
+          final language = payload.remove('language') as String?;
           final result = await apiClient.syncStudyEvents(
             deviceId: deviceId,
             events: [payload],
             sessionToken: session?.sessionToken,
+            language: language,
           );
           for (final syncedId in [
             ...result.acceptedEventIds,
@@ -925,6 +999,10 @@ class WordRepository {
           }
         }
       } catch (error) {
+        if (_isPermanentSyncFailure(error)) {
+          await _dropSyncEntry(entry, reason: '$error');
+          continue;
+        }
         await database.scheduleRetry(entry, effectiveNow);
         await _logger.warning(
           category: AppLogCategory.sync,
@@ -938,6 +1016,40 @@ class WordRepository {
         );
       }
     }
+  }
+
+  /// The server rejected the request itself (bad payload, unknown or expired
+  /// resource); retrying cannot succeed. Auth, rate-limit, timeout and 5xx
+  /// failures stay queued.
+  static bool _isPermanentSyncFailure(Object error) {
+    if (error is! BackendApiException) return false;
+    const permanent = {400, 404, 409, 410, 413, 422};
+    return permanent.contains(error.statusCode);
+  }
+
+  Future<void> _dropSyncEntry(
+    SyncQueueEntry entry, {
+    required String reason,
+  }) async {
+    String? clientEventId;
+    try {
+      clientEventId = (jsonDecode(entry.payload)
+          as Map<String, dynamic>)['client_event_id'] as String?;
+    } on Object {
+      clientEventId = null;
+    }
+    if (clientEventId != null) {
+      await database.markEventFailed(clientEventId);
+    }
+    if (entry.id != null) {
+      await database.removeSyncQueueEntry(entry.id!);
+    }
+    await _logger.warning(
+      category: AppLogCategory.sync,
+      event: 'sync.entry.dropped',
+      message: 'Sync entry cannot succeed and was removed from the queue.',
+      context: {'queue_id': entry.id, 'type': entry.type, 'reason': reason},
+    );
   }
 
   Future<SubmittedWord> _applyRemoteSubmittedWord({
