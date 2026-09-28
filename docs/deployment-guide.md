@@ -57,6 +57,27 @@ curl -i -sS http://<INTERNAL_HOST>:18787/health
 
 Do not treat a healthy repository-local `expat8-backend-1` container as production verification.
 
+### Database migrations
+
+The backend tracks applied migrations in `schema_migrations` (`backend/src/migrations.js`). On a database that predates the runner, the first run records the `schema.sql` baseline and replays every file in `backend/db/migrations/` once; all migrations are idempotent and this path is covered by `test/migrations.test.js` against PostgreSQL 16.
+
+Production deploy step, before recreating `expat8-backend` (take a `pg_dump` first):
+
+```bash
+cd ~/deployment/worker-z440
+docker compose run --rm expat8-backend npm run migrate
+```
+
+Local Compose sets `MIGRATE_ON_START=true`, so the API migrates itself on boot. The first production run also applies `20260928_speaking_loop_completed_event_type.sql`, without which PostgreSQL rejects every `loop_completed` speaking event.
+
+### Client IP and auth rate limits
+
+`/v1/users/register` and `/v1/users/sign-in` are rate limited per client IP and per client IP + identifier (see `contracts/api.md#rate-limits`). Production traffic for `expat8.x51.vn` reaches the backend through a reverse proxy, so without `TRUST_PROXY` every learner shares the proxy's IP and the per-IP auth limit (`AUTH_RATE_LIMIT_IP`, default 60/min) becomes a global cap.
+
+Set `TRUST_PROXY` on `expat8-backend` to the address of the proxy that forwards to port `18787` (for example `TRUST_PROXY=10.113.213.1`, or a hop count such as `1`). Only trust addresses that overwrite `X-Forwarded-For`; because `18787` is also reachable directly on the internal network, prefer a specific address over `true`.
+
+Verify after deploy: send a sign-in request from two different networks (e.g. Wi-Fi and mobile data); each should see its own `X-RateLimit-Remaining` value start from the per-IP cap instead of sharing one counter.
+
 ## Worker Deployment
 
 The article worker should run as a separate service using the same backend image and `npm run start:worker`. It shares PostgreSQL and LiteLLM configuration with the backend service. Stopping the worker leaves queued jobs durable in PostgreSQL.

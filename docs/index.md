@@ -6,6 +6,7 @@ This directory contains durable project documentation for the Expat8 workspace. 
 
 - [Project Overview](project-overview.md) — product scope, repo shape, shipped capabilities, and important invariants.
 - [Project Roadmap 2026-2027](20260530-project-roadmap-12-month.md) — evidence-gated 12-month execution roadmap, phase gates, reliability tracks, and non-goals.
+- [System Review & Proposals (2026-09-28)](20260928-system-review-and-proposals.md) — review hiện trạng sản phẩm/kiến trúc, rủi ro (P0–P2) và đề xuất theo lộ trình.
 - [Canonical Release Path](canonical-release-path.md) — committed three-stage mobile release and update distribution model (Phase 0 decision).
 - [Developer Setup](developer-setup.md) — local prerequisites, install commands, configuration, and common workflows.
 - [Architecture Guide](architecture-guide.md) — runtime topology, request pipeline, data ownership, and background processing.
