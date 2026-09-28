@@ -133,3 +133,72 @@ test('postgres sign-in claims anonymous study, speaking and proficiency history'
   const { rows } = await pool.query('SELECT count(*)::int AS n FROM study_events WHERE user_id = $1', [user.id]);
   assert.equal(rows[0].n, 5);
 });
+
+test('postgres game rounds: idempotent sync, leaderboard, claim, summary, source', pgTestOptions, async (t) => {
+  const pool = new pg.Pool({ connectionString: testDatabaseUrl });
+  t.after(async () => pool.end());
+  await dropAllTables(pool);
+  await migrateDatabase({ pool });
+  const store = new PostgresWordStore({ pool });
+  const now = new Date().toISOString();
+  const round = (id, score, extra = {}) => ({
+    client_round_id: id,
+    game: 'word_blaster',
+    mode: 'classic',
+    language: 'en',
+    score,
+    correct_count: 10,
+    answered_count: 12,
+    best_combo: 6,
+    wave: 2,
+    duration_ms: 80_000,
+    completed_at: now,
+    ...extra
+  });
+
+  const first = await store.recordGameRounds({ deviceId: 'dev_pg_g', rounds: [round('r1', 3000), round('bad', 1, { game: 'x' })] });
+  assert.deepEqual(first.accepted_round_ids, ['r1']);
+  assert.equal(first.rejected_rounds[0].reason, 'unknown_game');
+  const again = await store.recordGameRounds({ deviceId: 'dev_pg_g', rounds: [round('r1', 3000)] });
+  assert.deepEqual(again.duplicates, ['r1']);
+
+  const { user } = await store.registerUser({
+    identifier: 'pg-games@example.com',
+    password: 'correct horse battery',
+    displayName: 'Gamer',
+    deviceId: 'dev_pg_g'
+  });
+  await store.recordGameRounds({ deviceId: 'dev_pg_g', userId: user.id, rounds: [round('r2', 5000), round('cheat', 999_999)] });
+  const board = await store.getGameLeaderboard({ game: 'word_blaster', mode: 'classic', userId: user.id });
+  assert.deepEqual(board.entries.map((e) => [e.display_name, e.score]), [['Gamer', 5000]]);
+  assert.equal(board.me.rank, 1);
+
+  const summary = await store.getGamesSummary({ days: 7 });
+  assert.equal(summary.total_rounds, 3);
+
+  const { word } = await store.insertWord({
+    term: 'brave',
+    language: 'en',
+    meaning_vi: 'dũng cảm',
+    part_of_speech: 'adjective',
+    ipa: '/x/',
+    vietnamese_pronunciation: 'x',
+    example: 'x',
+    example_vi: 'x',
+    difficulty: 'A1',
+    topics: []
+  });
+  await store.syncStudyEvents({
+    deviceId: 'dev_pg_p',
+    events: Array.from({ length: 6 }, (_, i) => ({
+      client_event_id: `pg_game_${i}`,
+      server_word_id: word.id,
+      rating: 'hard',
+      occurred_at: `2026-09-28T08:0${i}:00.000Z`,
+      source: 'game_word_blaster'
+    }))
+  });
+  assert.equal((await store.getProficiency({ deviceId: 'dev_pg_p' })).level, 'A1');
+  const { rows } = await pool.query("SELECT count(*)::int AS n FROM study_events WHERE source = 'game_word_blaster'");
+  assert.equal(rows[0].n, 6);
+});

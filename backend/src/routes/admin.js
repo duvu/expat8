@@ -200,6 +200,14 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   );
 
   router.get(
+    '/games/summary',
+    asyncHandler(async (request, response) => {
+      const days = clampLimit(request.query.days ?? 30, 1, 180);
+      return response.json(await store.getGamesSummary({ days }));
+    })
+  );
+
+  router.get(
     '/content-pipeline/health',
     asyncHandler(async (_request, response) => {
       const summary = await store.getContentPipelineHealth();
