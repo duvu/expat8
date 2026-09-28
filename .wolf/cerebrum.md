@@ -10,6 +10,12 @@
 
 ## Key Learnings
 
+- **Production backend sits behind a reverse proxy** (expat8.x51.vn → Z440 port 18787); IP-based limits need `TRUST_PROXY` set to the proxy address. Z440 Caddyfile does not route expat8 — the proxy is upstream/elsewhere.
+- **Auth rate limiting:** `authIpLimiter` (per IP, shared) runs before per `ip|identifier` limiters in `routes/auth.js`.
+
+- **Root `openspec/` is gitignored and absent locally**; only `backend/openspec/changes/` is tracked. Roadmap references to `openspec/changes/*` cannot be verified from the repo.
+- **Dashboard reads PostgreSQL directly** (`expat8-dashboard/src/lib/db.ts`, `analytics.ts`) in addition to signed backend API calls.
+
 - **Project:** expat8
 - **Description:** This workspace contains the OpenSpec-driven MVP implementation for a Flutter vocabulary learning app and a lightweight backend service.
 - **Repo guidance:** `backend/` is Node.js 22 + Express, `mobile/` is Flutter, `contracts/api.md` is the API source of truth, and `docker-compose.yml` starts PostgreSQL + backend locally.
@@ -17,12 +23,16 @@
 
 ## User Preferences
 
+- User writes in Vietnamese (no diacritics); reply and write review docs in Vietnamese.
+- Goal (2026-09-28): production-grade, high-quality product.
 - Keep root repo instructions compact and only include high-signal, repo-specific facts.
 
 ## Do-Not-Repeat
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->
+- [2026-09-28] `crypto.promises` does not exist in Node — use `util.promisify(crypto.scrypt)` for async scrypt.
+- [2026-09-28] `flutter test` on the local Flutter 3.47.5 rewrites `mobile/pubspec.lock` and `analysis_options.yaml`; revert them after running if not intended. Flutter version is not pinned.
 
 ## Decision Log
 
