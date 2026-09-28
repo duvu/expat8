@@ -10,6 +10,9 @@
 
 ## Key Learnings
 
+- **Practice games must not use the card-flow `easy` rating path**: it deletes the word locally. Use `WordRepository.recordPracticeAnswer`. Game-sourced study events (`source` starting `game_`) never move proficiency (the ladder downgrades on 5× `hard`).
+- **Flame widget tests**: tap by canvas coordinates, advance with timed `pump`, never `pumpAndSettle` while a game loop runs; widget-test HTTP returns 400 for every request, so fake offline APIs must throw instead.
+
 - **Production backend sits behind a reverse proxy** (expat8.x51.vn → Z440 port 18787); IP-based limits need `TRUST_PROXY` set to the proxy address. Z440 Caddyfile does not route expat8 — the proxy is upstream/elsewhere.
 - **Auth rate limiting:** `authIpLimiter` (per IP, shared) runs before per `ip|identifier` limiters in `routes/auth.js`.
 
@@ -23,11 +26,15 @@
 
 ## User Preferences
 
+- [2026-09-28] User removed PR CI (GitHub Actions checks too slow). Do not re-add CI workflows; run checks locally. Keep android-release.yml (signing secrets).
 - User writes in Vietnamese (no diacritics); reply and write review docs in Vietnamese.
 - Goal (2026-09-28): production-grade, high-quality product.
 - Keep root repo instructions compact and only include high-signal, repo-specific facts.
 
 ## Do-Not-Repeat
+
+- [2026-09-28] Flutter 3.47.5 needs Gradle ≥ 8.14, AGP ≥ 8.11.1, Kotlin ≥ 2.2.20; objectbox_flutter_libs declares compileSdk 31 → root build.gradle.kts raises library plugins to 36. CI was removed on 2026-09-28 (user: checks too slow), so a failing Android build only shows up in the tag-triggered release workflow.
+- [2026-09-28] Release signing secrets exist only in GitHub Actions; build releases by pushing tag `v<pubspec version>` (Android Release workflow), not locally.
 
 <!-- Mistakes made and corrected. Each entry prevents the same mistake recurring. -->
 <!-- Format: [YYYY-MM-DD] Description of what went wrong and what to do instead. -->
