@@ -5,6 +5,7 @@ import '../models/memorization_passage.dart';
 import '../models/user_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/language_picker.dart';
 import 'memorization_drill_screen.dart';
 
 /// Main memorization passages list screen.
@@ -121,9 +122,10 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Memorization')),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreate,
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text('New passage'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -144,7 +146,8 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
                             EmptyStateView(
                               icon: Icons.menu_book_outlined,
                               title: 'No passages yet',
-                              body: 'Tap + to create your first passage.',
+                              body:
+                                  'Tap “New passage” to add a text you want to learn by heart.',
                             ),
                           ],
                         )
@@ -159,14 +162,14 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
                                 ),
                               ),
                             _PassageSection(
-                              title: 'My Passages',
+                              title: 'My passages',
                               passages: myPassages,
                               progressByPassageId: _progressByPassageId,
                               onTap: _openDetail,
                               statusIconBuilder: _statusIcon,
                             ),
                             _PassageSection(
-                              title: 'Featured',
+                              title: 'Recommended',
                               passages: featuredPassages,
                               progressByPassageId: _progressByPassageId,
                               onTap: _openDetail,
@@ -218,13 +221,15 @@ class _PassageSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: theme.textTheme.titleMedium),
+          Text(title,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           if (passages.isEmpty)
             Text(
-              title == 'My Passages'
-                  ? 'Create your first passage with the + button.'
-                  : 'No featured passages are available yet.',
+              title == 'My passages'
+                  ? 'Tap “New passage” to add your first one.'
+                  : 'No recommended passages yet.',
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.outline),
             )
@@ -259,27 +264,51 @@ class _PassageListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ready = passage.status == 'segmented' ||
+        passage.status == 'published' ||
+        passage.status == 'ready';
+    final percent = progress.percentage;
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        title: Text(passage.title),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${passage.language.toUpperCase()} · '
-              '${passage.segmentCount} segments · '
-              '${_statusLabel(passage.status)}',
-            ),
-            if (passage.segmentCount > 0) ...[
-              const SizedBox(height: 6),
-              LinearProgressIndicator(value: progress.percentage / 100),
-              const SizedBox(height: 4),
-              Text('${progress.percentage}% memorized'),
-            ],
-          ],
+        contentPadding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+        title: Text(passage.title,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            [
+              if (passage.segmentCount > 0)
+                '${passage.segmentCount} ${passage.segmentCount == 1 ? 'part' : 'parts'}',
+              languageName(passage.language),
+              if (!ready) _statusLabel(passage.status),
+            ].join(' · '),
+          ),
         ),
-        trailing: trailing,
+        trailing: ready && passage.segmentCount > 0
+            ? Semantics(
+                label: '$percent% memorized',
+                excludeSemantics: true,
+                child: SizedBox.square(
+                  dimension: 48,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: percent / 100,
+                        strokeWidth: 5,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                      ),
+                      Text('$percent%',
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              )
+            : trailing,
         onTap: onTap,
       ),
     );
@@ -299,7 +328,8 @@ class _PassageProgressSummary {
       return const _PassageProgressSummary.empty();
     }
     final completed = progress
-        .where((entry) => entry.status == 'review' || entry.status == 'mastered')
+        .where(
+            (entry) => entry.status == 'review' || entry.status == 'mastered')
         .length;
     return _PassageProgressSummary(
       percentage: ((completed / totalSegments) * 100).round(),
@@ -312,15 +342,15 @@ class _PassageProgressSummary {
 String _statusLabel(String status) {
   switch (status) {
     case 'pending_segmentation':
-      return 'pending segmentation';
     case 'segmenting':
-      return 'segmenting';
+      return 'Preparing…';
     case 'segmented':
-      return 'ready';
+    case 'ready':
+      return 'Ready';
     case 'published':
-      return 'published';
+      return 'Published';
     case 'failed':
-      return 'failed';
+      return 'Could not prepare';
     default:
       return status;
   }
@@ -395,27 +425,23 @@ class _PassageCreateScreenState extends State<PassageCreateScreen> {
                   labelText: 'Title',
                   hintText: 'e.g. I Have a Dream',
                 ),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Title is required' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Title is required'
+                    : null,
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _language,
-                decoration: const InputDecoration(labelText: 'Language'),
-                items: const [
-                  DropdownMenuItem(value: 'en', child: Text('English')),
-                  DropdownMenuItem(value: 'zh', child: Text('Chinese')),
-                  DropdownMenuItem(value: 'vi', child: Text('Vietnamese')),
-                ],
-                onChanged: (v) => setState(() => _language = v ?? 'en'),
+              LanguagePicker(
+                languages: const ['en', 'zh', 'vi'],
+                selected: _language,
+                onChanged: (v) => setState(() => _language = v),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _textController,
                 decoration: const InputDecoration(
-                  labelText: 'Passage Text',
+                  labelText: 'Text to memorize',
                   hintText:
-                      'Paste the full passage here (50-20000 characters)...',
+                      'Paste a speech, dialogue or paragraph (at least 50 characters)',
                   alignLabelWithHint: true,
                 ),
                 maxLines: 12,
@@ -568,7 +594,8 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
         title: Text(_passage?.title ?? 'Passage'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete),
+            tooltip: 'Delete passage',
+            icon: const Icon(Icons.delete_outline),
             onPressed: _deletePassage,
           ),
         ],
@@ -584,14 +611,14 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
                   onAction: _loadPassage,
                 )
               : _buildContent(),
-      floatingActionButton: _passage != null &&
-              (_passage!.segments?.isNotEmpty ?? false)
-          ? FloatingActionButton.extended(
-              onPressed: _startDrill,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Start Drill'),
-            )
-          : null,
+      floatingActionButton:
+          _passage != null && (_passage!.segments?.isNotEmpty ?? false)
+              ? FloatingActionButton.extended(
+                  onPressed: _startDrill,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Practice'),
+                )
+              : null,
     );
   }
 
@@ -603,27 +630,21 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Metadata
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(passage.title,
-                    style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text(
-                  '${passage.language.toUpperCase()} · ${passage.status} · '
-                  '${passage.segmentCount} segments',
-                  style: TextStyle(
-                      color: AppColors.of(context).subtleText),
-                ),
-              ],
-            ),
-          ),
+        Text(
+          [
+            '${passage.segmentCount} ${passage.segmentCount == 1 ? 'part' : 'parts'}',
+            languageName(passage.language),
+          ].join(' · '),
+          style: TextStyle(color: AppColors.of(context).subtleText),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 4),
+        Text(
+          'Read each part aloud. Tap IPA, Meaning or Reading for help.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.of(context).subtleText,
+              ),
+        ),
+        const SizedBox(height: 12),
 
         // Segments
         if (segments.isEmpty)
@@ -632,9 +653,8 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
-                  'No segments yet. The passage is being processed...',
-                  style: TextStyle(
-                      color: AppColors.of(context).subtleText),
+                  'This passage is still being prepared. Pull down or come back in a minute.',
+                  style: TextStyle(color: AppColors.of(context).subtleText),
                 ),
               ),
             ),
@@ -688,63 +708,62 @@ class _SegmentCardState extends State<_SegmentCard> {
                   radius: 14,
                   child: Text(
                     '${segment.position + 1}',
-                  style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${segment.wordCount} words',
-                style: TextStyle(
-                    color: AppColors.of(context).subtleText,
-                    fontSize: 12),
-              ),
+                const SizedBox(width: 8),
+                Text(
+                  '${segment.wordCount} words',
+                  style: TextStyle(
+                      color: AppColors.of(context).subtleText, fontSize: 12),
+                ),
                 const Spacer(),
-                if (segment.ipaText != null)
-                  _ToggleButton(
-                    active: _showIpa,
-                    icon: Icons.record_voice_over_outlined,
-                    tooltip: 'IPA',
-                    onTap: () => setState(() => _showIpa = !_showIpa),
-                  ),
-                if (segment.translationText != null)
-                  _ToggleButton(
-                    active: _showTranslation,
-                    icon: Icons.translate,
-                    tooltip: 'Translation',
-                    onTap: () =>
-                        setState(() => _showTranslation = !_showTranslation),
-                  ),
-                if (segment.vietReadingText != null)
-                  _ToggleButton(
-                    active: _showVietReading,
-                    icon: Icons.spellcheck,
-                    tooltip: 'Cách đọc',
-                    onTap: () =>
-                        setState(() => _showVietReading = !_showVietReading),
-                  ),
-                if (prog != null) ...[
-                  const SizedBox(width: 6),
-                  Chip(
-                    label: Text(prog.status,
-                        style: const TextStyle(fontSize: 11)),
-                    padding: EdgeInsets.zero,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ],
+                if (prog != null) _ProgressBadge(status: prog.status),
               ],
             ),
             const SizedBox(height: 8),
             // Original text (always shown)
-            Text(segment.text),
+            Text(segment.text, style: theme.textTheme.titleMedium),
+            if (segment.ipaText != null ||
+                segment.translationText != null ||
+                segment.vietReadingText != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                children: [
+                  if (segment.ipaText != null)
+                    FilterChip(
+                      label: const Text('IPA'),
+                      selected: _showIpa,
+                      onSelected: (v) => setState(() => _showIpa = v),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  if (segment.translationText != null)
+                    FilterChip(
+                      label: const Text('Meaning'),
+                      selected: _showTranslation,
+                      onSelected: (v) => setState(() => _showTranslation = v),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  if (segment.vietReadingText != null)
+                    FilterChip(
+                      label: const Text('Reading'),
+                      selected: _showVietReading,
+                      onSelected: (v) => setState(() => _showVietReading = v),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ],
             // IPA row (interlinear — below text, not replacing it)
             if (_showIpa && segment.ipaText != null) ...[
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                  color: theme.colorScheme.primaryContainer
+                      .withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -763,10 +782,10 @@ class _SegmentCardState extends State<_SegmentCard> {
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.4),
+                  color: theme.colorScheme.secondaryContainer
+                      .withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -783,10 +802,10 @@ class _SegmentCardState extends State<_SegmentCard> {
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+                  color: theme.colorScheme.tertiaryContainer
+                      .withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -806,39 +825,43 @@ class _SegmentCardState extends State<_SegmentCard> {
   }
 }
 
-class _ToggleButton extends StatelessWidget {
-  const _ToggleButton({
-    required this.active,
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
+class _ProgressBadge extends StatelessWidget {
+  const _ProgressBadge({required this.status});
 
-  final bool active;
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
+  final String status;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(
-            icon,
-            size: 18,
-            color: active
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outline,
-          ),
+    final scheme = Theme.of(context).colorScheme;
+    final (String label, Color bg, Color fg) = switch (status) {
+      'memorized' || 'mastered' => (
+          'Memorized',
+          scheme.primaryContainer,
+          scheme.onPrimaryContainer
         ),
+      'learning' => (
+          'Learning',
+          scheme.secondaryContainer,
+          scheme.onSecondaryContainer
+        ),
+      'review' || 'reviewing' => (
+          'Reviewing',
+          scheme.tertiaryContainer,
+          scheme.onTertiaryContainer
+        ),
+      _ => ('New', scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      child: Text(
+        label,
+        style: Theme.of(context)
+            .textTheme
+            .labelMedium
+            ?.copyWith(color: fg, fontWeight: FontWeight.w600),
       ),
     );
   }
 }
-

@@ -23,7 +23,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('My article'), findsOneWidget);
-    expect(find.textContaining('processed'), findsOneWidget);
+    expect(find.textContaining('Ready to study'), findsOneWidget);
     await tester.tap(find.text('My article'));
     await tester.pumpAndSettle();
 

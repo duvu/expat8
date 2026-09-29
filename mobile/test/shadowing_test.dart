@@ -109,7 +109,7 @@ void main() {
 
       expect(find.text('Curated One'), findsOneWidget);
       expect(find.text('My Video'), findsOneWidget);
-      expect(find.text('Curated'), findsOneWidget);
+      expect(find.text('Recommended'), findsOneWidget);
       expect(find.text('My Videos'), findsOneWidget);
     });
 

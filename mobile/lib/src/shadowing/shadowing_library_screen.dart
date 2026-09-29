@@ -170,8 +170,7 @@ class _ShadowingLibraryScreenState extends State<ShadowingLibraryScreen> {
     );
   }
 
-  Widget _buildBody(
-      List<ShadowingVideo> curated, List<ShadowingVideo> saved) {
+  Widget _buildBody(List<ShadowingVideo> curated, List<ShadowingVideo> saved) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -220,12 +219,14 @@ class _ShadowingLibraryScreenState extends State<ShadowingLibraryScreen> {
       child: ListView(
         children: [
           if (curated.isNotEmpty) ...[
-            const _SectionHeader(title: 'Curated'),
-            ...curated.map((v) => _VideoTile(video: v, onTap: () => _openPlayer(v))),
+            const _SectionHeader(title: 'Recommended'),
+            ...curated
+                .map((v) => _VideoTile(video: v, onTap: () => _openPlayer(v))),
           ],
           if (saved.isNotEmpty) ...[
             const _SectionHeader(title: 'My Videos'),
-            ...saved.map((v) => _VideoTile(video: v, onTap: () => _openPlayer(v))),
+            ...saved
+                .map((v) => _VideoTile(video: v, onTap: () => _openPlayer(v))),
           ],
         ],
       ),
@@ -265,12 +266,11 @@ class _VideoTile extends StatelessWidget {
       leading: _Thumbnail(url: video.thumbnailUrl),
       title: Text(video.title, maxLines: 2, overflow: TextOverflow.ellipsis),
       subtitle: video.channelTitle != null
-          ? Text(video.channelTitle!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(video.channelTitle!,
+              maxLines: 1, overflow: TextOverflow.ellipsis)
           : null,
       trailing: Text(
-        video.segmentCount > 0
-            ? '${video.segmentCount} lines'
-            : '',
+        video.segmentCount > 0 ? '${video.segmentCount} lines' : '',
         style: Theme.of(context).textTheme.bodySmall,
       ),
       onTap: onTap,
