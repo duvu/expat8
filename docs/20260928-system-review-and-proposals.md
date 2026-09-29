@@ -183,7 +183,7 @@ Mức độ: **P0** = chặn release/lỗi production · **P1** = rủi ro cao t
 |---|---|---|
 | Ngày kiểm thử thiết bị Android tập trung | Đóng toàn bộ gate Pending Phase 0–2 (exam, summary, swipe prefetch, shadowing, memorization E2E) | Checklist có ảnh/log; OpenSpec change được archive |
 | Beta kín 20–50 người học | Có dữ liệu North Star đầu tiên | Dashboard ops hiển thị phút nói/tuần, loop completion, retry, sync failure |
-| CI tối thiểu | Chặn regression | GitHub Actions: `npm test` (kèm service PostgreSQL để chạy `postgres_*` test + `verify:migrations`), `flutter test`, dashboard `lint`+`build` trên mọi PR |
+| CI tối thiểu (đã bỏ 2026-09-28, kiểm tra chạy local — xem [testing-guide.md](testing-guide.md)) | Chặn regression | GitHub Actions: `npm test` (kèm service PostgreSQL để chạy `postgres_*` test + `verify:migrations`), `flutter test`, dashboard `lint`+`build` trên mọi PR |
 | Migration runner | Loại bỏ lệch schema | Bảng `schema_migrations`; backend/deploy apply migration khi khởi động; `schema.sql` sinh ra từ migration hoặc chỉ dùng cho test |
 | Khôi phục truy vết OpenSpec | Minh bạch gate | Bỏ `openspec/` khỏi `.gitignore` (hoặc chuyển change đã archive vào `docs/specs/`) |
 | Dọn repo | Giảm nhiễu | `.gitignore` cho `.wolf/hooks`, `token-ledger.json`, `.serena/`, `.omo/`; chuyển `COMMIT_REPORT_*` vào `docs/archive/`; xoá file log `.txt` |

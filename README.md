@@ -45,6 +45,7 @@ Start with `docs/index.md` for the full documentation map:
 - `docs/api-guide.md`: operational API summary; `contracts/api.md` remains canonical.
 - `docs/deployment-guide.md`: local Compose and Z440 production deployment notes.
 - `docs/testing-guide.md`: backend, mobile, dashboard, migration, and smoke-test commands.
+- `docs/ops/`: production operations — deploy, mobile release, backup/restore, monitoring, troubleshooting, secrets, maintenance (start at `docs/ops/README.md`).
 
 ## Local Configuration
 
