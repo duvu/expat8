@@ -33,6 +33,7 @@ import 'workplace_sentence_screen.dart';
 import 'learning_history_screen.dart';
 import 'learning_progress_stats_screen.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/study_action_bar.dart';
 
 const Map<String, String> kLearningLanguageLabels = {
   'en': 'English',
@@ -102,17 +103,27 @@ class _LearningScreenState extends State<LearningScreen> {
     final controller = widget.controller;
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Vocabulary'),
-            ProficiencyLevelLabel(
-              scale: controller.proficiency.scale,
-              level: controller.proficiency.level,
-            ),
-          ],
-        ),
+        title: const Text('Vocabulary'),
+        titleSpacing: 0,
+        actions: [
+          LearningLanguageSelector(
+            currentLanguage: controller.activeLearningLanguage,
+            supportedLanguages: controller.supportedLearningLanguages,
+            isLoading: controller.isLoading,
+            onChanged: controller.setActiveLearningLanguage,
+          ),
+          const SizedBox(width: 6),
+          ProficiencyLevelLabel(
+            scale: controller.proficiency.scale,
+            level: controller.proficiency.level,
+          ),
+          IconButton(
+            tooltip: 'History',
+            icon: const Icon(Icons.history_rounded),
+            onPressed: _openHistory,
+          ),
+          const SizedBox(width: 4),
+        ],
         bottom: controller.isAuthInProgress
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(4),
@@ -165,65 +176,75 @@ class _LearningScreenState extends State<LearningScreen> {
           await controller.signOut();
         },
       ),
-      body: LearningCardGestureSurface(
-        isEnabled: !controller.isLoading,
-        onSwipeRightToLeft: controller.onSwipeRightToLeft,
-        onSwipeLeftToRight: _handleHistoryGesture,
-        onSwipeBottomToTop: controller.onSwipeBottomToTop,
-        onSwipeTopToBottom: controller.onSwipeTopToBottom,
-        child: ListView(
-          physics: const NeverScrollableScrollPhysics(),
+      body: SafeArea(
+        top: false,
+        child: Column(
           children: [
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: LearningLanguageSelector(
-                currentLanguage: controller.activeLearningLanguage,
-                supportedLanguages: controller.supportedLearningLanguages,
-                isLoading: controller.isLoading,
-                onChanged: controller.setActiveLearningLanguage,
+            Expanded(
+              child: LearningCardGestureSurface(
+                isEnabled: !controller.isLoading,
+                onSwipeRightToLeft: controller.onSwipeRightToLeft,
+                onSwipeLeftToRight: _handleHistoryGesture,
+                onSwipeBottomToTop: controller.onSwipeBottomToTop,
+                onSwipeTopToBottom: controller.onSwipeTopToBottom,
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minHeight: constraints.maxHeight),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (controller.isLoading)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 120),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else if (controller.currentWord != null)
+                            controller.shouldShowFitb(
+                              controller.currentWord!,
+                              cardKind: controller.currentCardKind,
+                            )
+                                ? FitbCard(word: controller.currentWord!)
+                                : VocabularyCardView(
+                                    word: controller.currentWord!,
+                                    speakingRepository:
+                                        widget.speakingRepository,
+                                  )
+                          else
+                            Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: controller.isLoading ||
+                                      controller.statusMessage == null
+                                  ? const EmptyStateView(
+                                      icon: Icons.school_outlined,
+                                      title: 'No card loaded',
+                                      body:
+                                          'Loading your next vocabulary card...',
+                                    )
+                                  : EmptyStateView(
+                                      icon: Icons.inbox_outlined,
+                                      title: 'No card available',
+                                      body: controller.statusMessage!,
+                                      actionLabel: 'Try again',
+                                      onAction: controller.showNewWord,
+                                    ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            if (controller.isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (controller.currentWord != null)
-              controller.shouldShowFitb(
-                controller.currentWord!,
-                cardKind: controller.currentCardKind,
-              )
-                  ? FitbCard(word: controller.currentWord!)
-                  : VocabularyCardView(
-                      word: controller.currentWord!,
-                      speakingRepository: widget.speakingRepository,
-                    )
-            else
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: controller.isLoading || controller.statusMessage == null
-                    ? const EmptyStateView(
-                        icon: Icons.school_outlined,
-                        title: 'No card loaded',
-                        body: 'Loading your next vocabulary card...',
-                      )
-                    : EmptyStateView(
-                        icon: Icons.inbox_outlined,
-                        title: 'No card available',
-                        body: controller.statusMessage!,
-                        actionLabel: 'Try again',
-                        onAction: controller.showNewWord,
-                      ),
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Text(
-                'Swipe Right->Left: next card (15% new, 85% review). '
-                 'Swipe Left->Right: open history.\n'
-                 'Swipe Bottom->Top: remembered (10% relearn). '
-                 'Swipe Top->Bottom: difficult (relearn group).',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+            StudyActionBar(
+              enabled: !controller.isLoading && controller.currentWord != null,
+              onDifficult: controller.onSwipeTopToBottom,
+              onNext: controller.onSwipeRightToLeft,
+              onRemembered: controller.onSwipeBottomToTop,
+              swipeHint:
+                  'You can also swipe the card: left for next, up if you remember it, down if it is hard.',
             ),
           ],
         ),
@@ -493,39 +514,20 @@ class LearningLanguageSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            const Icon(Icons.language),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Learning language',
-                    style: Theme.of(context).textTheme.labelMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _labelFor(currentLanguage),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
-              ),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: isLoading ? null : () => _showPicker(context),
-              icon: const Icon(Icons.swap_vert),
-              label: const Text('Change'),
-            ),
-          ],
+    final theme = Theme.of(context);
+    final label = _labelFor(currentLanguage);
+    return Tooltip(
+      message: 'Change learning language',
+      child: Semantics(
+        button: true,
+        label: 'Learning language: $label. Change',
+        excludeSemantics: true,
+        child: ActionChip(
+          avatar: const Icon(Icons.translate_rounded, size: 18),
+          label: Text(label),
+          onPressed: isLoading ? null : () => _showPicker(context),
+          labelStyle: theme.textTheme.labelLarge,
+          visualDensity: VisualDensity.compact,
         ),
       ),
     );
@@ -586,151 +588,164 @@ class LearningDrawer extends StatelessWidget {
   /// Called when the user taps "Games". Games run fully offline.
   final VoidCallback? onGames;
 
+  void _go(BuildContext context, VoidCallback action) {
+    Navigator.of(context).maybePop();
+    action();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final speaking = speakingRepository;
     return Drawer(
       child: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: ListView(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
                 children: [
-                  ListTile(
-                    leading: const Icon(Icons.menu_book_outlined),
-                    title: const Text('Vocabulary'),
+                  _DrawerHeaderCard(
+                    isSignedIn: isSignedIn,
+                    userSession: userSession,
+                    isAuthInProgress: isAuthInProgress,
+                    onSignIn: onSignIn,
+                    onRegister: onRegister,
+                  ),
+                  const _DrawerSection('Learn'),
+                  _DrawerItem(
+                    icon: Icons.menu_book_rounded,
+                    label: 'Vocabulary',
+                    selected: true,
                     onTap: onVocabulary,
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.record_voice_over_outlined),
-                    title: const Text('Sentences'),
+                  _DrawerItem(
+                    icon: Icons.record_voice_over_outlined,
+                    label: 'Sentences',
                     onTap: onWorkplaceSentences,
                   ),
-                  if (onShadowing != null)
-                    ListTile(
-                      leading: const Icon(Icons.play_lesson_outlined),
-                      title: const Text('Video Shadowing'),
-                      onTap: onShadowing,
-                    ),
+                  _DrawerItem(
+                    icon: Icons.add_circle_outline,
+                    label: 'Add word',
+                    onTap: onSubmittedWords,
+                  ),
                   if (isSignedIn)
-                    ListTile(
-                      leading: const Icon(Icons.auto_stories),
-                      title: const Text('Memorization'),
+                    _DrawerItem(
+                      icon: Icons.auto_stories_outlined,
+                      label: 'Memorization',
                       onTap: onMemorization,
                     ),
                   if (isSignedIn)
-                    ListTile(
-                      leading: const Icon(Icons.article_outlined),
-                      title: const Text('Articles'),
+                    _DrawerItem(
+                      icon: Icons.article_outlined,
+                      label: 'Articles',
                       onTap: onArticles,
                     ),
-                  ListTile(
-                    leading: const Icon(Icons.add_circle_outline),
-                    title: const Text('Add word'),
-                    onTap: onSubmittedWords,
-                  ),
+                  const _DrawerSection('Practice'),
+                  if (speaking != null)
+                    _DrawerItem(
+                      icon: Icons.mic_none_rounded,
+                      label: '3-minute drill',
+                      onTap: () => _go(
+                        context,
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                SpeakingDrillScreen(repository: speaking),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (onShadowing != null)
+                    _DrawerItem(
+                      icon: Icons.play_circle_outline,
+                      label: 'Video Shadowing',
+                      onTap: onShadowing!,
+                    ),
                   if (onGames != null)
-                    ListTile(
-                      leading: const Icon(Icons.sports_esports_outlined),
-                      title: const Text('Games'),
-                      onTap: () {
-                        Navigator.of(context).maybePop();
-                        onGames!();
-                      },
+                    _DrawerItem(
+                      icon: Icons.sports_esports_outlined,
+                      label: 'Games',
+                      onTap: () => _go(context, onGames!),
                     ),
                   if (isSignedIn && onExam != null)
-                    ListTile(
-                      leading: const Icon(Icons.quiz_outlined),
-                      title: const Text('Take Exam'),
-                      onTap: () {
-                        Navigator.of(context).maybePop();
-                        onExam!();
-                      },
+                    _DrawerItem(
+                      icon: Icons.quiz_outlined,
+                      label: 'Take Exam',
+                      onTap: () => _go(context, onExam!),
                     ),
-                  ListTile(
-                    leading: const Icon(Icons.bug_report_outlined),
-                    title: const Text('Logs'),
-                    onTap: onLogs,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.history_outlined),
-                    title: const Text('History'),
+                  const _DrawerSection('Progress'),
+                  _DrawerItem(
+                    icon: Icons.history_rounded,
+                    label: 'History',
                     onTap: onHistory,
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.bar_chart_outlined),
-                    title: const Text('Stats'),
+                  _DrawerItem(
+                    icon: Icons.insights_rounded,
+                    label: 'Stats',
                     onTap: onStats,
                   ),
-                  if (speakingRepository != null) ...[
-                    ListTile(
-                      leading: const Icon(Icons.mic_outlined),
-                      title: const Text('3-minute drill'),
-                      onTap: () {
-                        Navigator.of(context).maybePop();
-                        Navigator.of(context).push(
+                  if (speaking != null)
+                    _DrawerItem(
+                      icon: Icons.graphic_eq_rounded,
+                      label: 'Speaking stats',
+                      onTap: () => _go(
+                        context,
+                        () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => SpeakingDrillScreen(
-                              repository: speakingRepository!,
-                            ),
+                            builder: (_) =>
+                                SpeakingSummaryScreen(repository: speaking),
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.bar_chart_outlined),
-                      title: const Text('Speaking stats'),
-                      onTap: () {
-                        Navigator.of(context).maybePop();
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => SpeakingSummaryScreen(
-                              repository: speakingRepository!,
-                            ),
+                  const SizedBox(height: 8),
+                  Theme(
+                    data: Theme.of(context)
+                        .copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: const ValueKey('drawer-tools'),
+                      leading: const Icon(Icons.tune_rounded),
+                      title: const Text('Tools & settings'),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(16)),
+                      ),
+                      childrenPadding: const EdgeInsets.only(left: 8),
+                      children: [
+                        if (onCheckUpdates != null)
+                          _DrawerItem(
+                            icon: Icons.system_update_outlined,
+                            label: 'Check for updates',
+                            onTap: onCheckUpdates!,
                           ),
-                        );
-                      },
+                        _DrawerItem(
+                          icon: Icons.bug_report_outlined,
+                          label: 'Logs',
+                          onTap: onLogs,
+                        ),
+                        if (speaking != null)
+                          _DrawerItem(
+                            icon: Icons.delete_outline,
+                            label: 'Delete all recordings',
+                            onTap: () async {
+                              Navigator.of(context).maybePop();
+                              await _confirmDeleteAll(context);
+                            },
+                          ),
+                      ],
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.delete_outline),
-                      title: const Text('Delete all recordings'),
-                      onTap: () async {
-                        Navigator.of(context).maybePop();
-                        await _confirmDeleteAll(context);
-                      },
-                    ),
-                  ],
-                  if (isSignedIn)
-                    _DrawerUserInfo(
-                      userSession: userSession,
-                    ),
-                  if (onCheckUpdates != null)
-                    ListTile(
-                      leading: const Icon(Icons.system_update_outlined),
-                      title: const Text('Check for updates'),
-                      onTap: onCheckUpdates,
-                    ),
+                  ),
                 ],
               ),
             ),
             if (isSignedIn)
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Sign out'),
-                onTap: isAuthInProgress ? null : onSignOut,
-              )
-            else ...[
-              ListTile(
-                leading: const Icon(Icons.person_add_alt_1_outlined),
-                title: const Text('Register'),
-                onTap: isAuthInProgress ? null : onRegister,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                child: _DrawerItem(
+                  icon: Icons.logout_rounded,
+                  label: 'Sign out',
+                  onTap: isAuthInProgress ? null : onSignOut,
+                ),
               ),
-              ListTile(
-                leading: const Icon(Icons.login),
-                title: const Text('Sign in'),
-                onTap: isAuthInProgress ? null : onSignIn,
-              ),
-            ],
           ],
         ),
       ),
@@ -769,24 +784,154 @@ class LearningDrawer extends StatelessWidget {
   }
 }
 
-class _DrawerUserInfo extends StatelessWidget {
-  const _DrawerUserInfo({required this.userSession});
+class _DrawerHeaderCard extends StatelessWidget {
+  const _DrawerHeaderCard({
+    required this.isSignedIn,
+    required this.userSession,
+    required this.isAuthInProgress,
+    required this.onSignIn,
+    required this.onRegister,
+  });
 
+  final bool isSignedIn;
   final UserSession? userSession;
+  final bool isAuthInProgress;
+  final VoidCallback onSignIn;
+  final VoidCallback onRegister;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final displayName = userSession?.displayName?.trim();
     final identifier = userSession?.identifier;
-    final title = displayName == null || displayName.isEmpty
-        ? identifier ?? 'Signed in'
-        : displayName;
-    final subtitle =
-        identifier == null || identifier == title ? null : identifier;
+    final title = !isSignedIn
+        ? 'Guest'
+        : (displayName == null || displayName.isEmpty
+            ? identifier ?? 'Signed in'
+            : displayName);
+    final subtitle = !isSignedIn
+        ? 'Sign in to keep your progress on every device.'
+        : (identifier == null || identifier == title ? null : identifier);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: scheme.primary,
+                foregroundColor: scheme.onPrimary,
+                child: isSignedIn && title.isNotEmpty
+                    ? Text(
+                        title.characters.first.toUpperCase(),
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(color: scheme.onPrimary),
+                      )
+                    : const Icon(Icons.person_outline_rounded),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onPrimaryContainer,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: scheme.onPrimaryContainer),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (!isSignedIn) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: isAuthInProgress ? null : onSignIn,
+                    child: const Text('Sign in'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: isAuthInProgress ? null : onRegister,
+                    child: const Text('Register'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DrawerSection extends StatelessWidget {
+  const _DrawerSection(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+      child: Text(
+        title.toUpperCase(),
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrawerItem extends StatelessWidget {
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListTile(
-      leading: const Icon(Icons.account_circle_outlined),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle),
+      leading: Icon(icon),
+      title: Text(label),
+      selected: selected,
+      selectedColor: scheme.onSecondaryContainer,
+      selectedTileColor: scheme.secondaryContainer,
+      visualDensity: VisualDensity.compact,
+      onTap: onTap,
     );
   }
 }
@@ -970,12 +1115,20 @@ class ProficiencyLevelLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Center(
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Text(
           'Level $formattedLevel',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: scheme.onPrimaryContainer,
+                fontWeight: FontWeight.w700,
+              ),
         ),
       ),
     );

@@ -128,13 +128,13 @@ class _SpeakingDrillScreenState extends State<SpeakingDrillScreen> {
                 size: 64, color: theme.colorScheme.outline),
             const SizedBox(height: 16),
             Text(
-              'No prompts cached yet',
+              'No speaking practice yet',
               style: theme.textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'Study a few vocabulary cards first. Speaking prompts will appear here once your device has loaded them.',
+              'Study a few vocabulary cards first. Speaking exercises download automatically when you are online.',
               style: theme.textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

@@ -94,9 +94,10 @@ void main() {
       ),
     );
 
-    expect(find.text('Learning language'), findsOneWidget);
+    // Compact chip in the app bar: current language plus a change affordance.
     expect(find.text('Chinese'), findsOneWidget);
-    expect(find.text('Change'), findsOneWidget);
+    expect(find.byTooltip('Change learning language'), findsOneWidget);
+    expect(find.bySemanticsLabel('Learning language: Chinese. Change'), findsOneWidget);
   });
 
   testWidgets('language selector opens choices and reports selection changes',
@@ -116,7 +117,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Change'));
+    await tester.tap(find.byTooltip('Change learning language'));
     await tester.pumpAndSettle();
 
     expect(find.text('Choose learning language'), findsOneWidget);
@@ -160,6 +161,10 @@ void main() {
     expect(find.text('Sentences'), findsOneWidget);
     expect(find.text('Memorization'), findsNothing);
     expect(find.text('Articles'), findsNothing);
+    // Secondary tools live in a collapsed section.
+    expect(find.text('Logs'), findsNothing);
+    await tester.tap(find.text('Tools & settings'));
+    await tester.pumpAndSettle();
     expect(find.text('Logs'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
     expect(find.text('Sign in'), findsOneWidget);
@@ -621,7 +626,7 @@ void main() {
     expect(find.text('No history yet'), findsOneWidget);
   });
 
-  testWidgets('learning progress stats screen shows zero totals', (tester) async {
+  testWidgets('learning progress stats screen shows an empty state before studying', (tester) async {
     final database = await LocalDatabase.open(
       databaseName:
           'learning_stats_screen_empty_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -634,9 +639,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Learned'), findsOneWidget);
-    expect(find.text('Remembered'), findsOneWidget);
-    expect(find.text('Difficult'), findsOneWidget);
+    expect(find.text('No stats yet'), findsOneWidget);
+    expect(find.text('Learned'), findsNothing);
   });
 
   testWidgets('learning history screen preserves learned order', (tester) async {

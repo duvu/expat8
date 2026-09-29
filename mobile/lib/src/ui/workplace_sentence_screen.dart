@@ -6,6 +6,7 @@ import 'learning_gesture_surface.dart';
 import 'learning_history_screen.dart';
 import 'learning_progress_stats_screen.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/study_action_bar.dart';
 
 class WorkplaceSentenceScreen extends StatefulWidget {
   const WorkplaceSentenceScreen({
@@ -16,7 +17,8 @@ class WorkplaceSentenceScreen extends StatefulWidget {
   final WorkplaceSentenceSessionController controller;
 
   @override
-  State<WorkplaceSentenceScreen> createState() => _WorkplaceSentenceScreenState();
+  State<WorkplaceSentenceScreen> createState() =>
+      _WorkplaceSentenceScreenState();
 }
 
 class _WorkplaceSentenceScreenState extends State<WorkplaceSentenceScreen> {
@@ -49,7 +51,8 @@ class _WorkplaceSentenceScreenState extends State<WorkplaceSentenceScreen> {
         actions: [
           IconButton(
             tooltip: 'History',
-            onPressed: controller.isLoading ? null : () => _openHistory(context),
+            onPressed:
+                controller.isLoading ? null : () => _openHistory(context),
             icon: const Icon(Icons.history_outlined),
           ),
           IconButton(
@@ -59,42 +62,49 @@ class _WorkplaceSentenceScreenState extends State<WorkplaceSentenceScreen> {
           ),
         ],
       ),
-      body: LearningCardGestureSurface(
-        isEnabled: !controller.isLoading,
-        onSwipeRightToLeft: controller.onSwipeRightToLeft,
-        onSwipeLeftToRight: () async {
-          await controller.onSwipeLeftToRight();
-          if (context.mounted) {
-            await _openHistory(context);
-          }
-        },
-        onSwipeBottomToTop: controller.onSwipeBottomToTop,
-        onSwipeTopToBottom: controller.onSwipeTopToBottom,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (controller.isLoading) const LinearProgressIndicator(),
-              const SizedBox(height: 16),
-              Expanded(
-                child: controller.currentSentence == null
-                    ? EmptyStateView(
-                        icon: Icons.work_outline,
-                        title: controller.statusMessage ?? 'No sentence loaded',
-                        body: 'Swipe to load your next workplace sentence.',
-                      )
-                    : _WorkplaceSentenceCard(sentence: controller.currentSentence!),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            if (controller.isLoading) const LinearProgressIndicator(),
+            Expanded(
+              child: LearningCardGestureSurface(
+                isEnabled: !controller.isLoading,
+                onSwipeRightToLeft: controller.onSwipeRightToLeft,
+                onSwipeLeftToRight: () async {
+                  await controller.onSwipeLeftToRight();
+                  if (context.mounted) {
+                    await _openHistory(context);
+                  }
+                },
+                onSwipeBottomToTop: controller.onSwipeBottomToTop,
+                onSwipeTopToBottom: controller.onSwipeTopToBottom,
+                child: Center(
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: controller.currentSentence == null
+                        ? EmptyStateView(
+                            icon: Icons.work_outline,
+                            title:
+                                controller.statusMessage ?? 'No sentence yet',
+                            body: 'Tap Next to load a workplace sentence.',
+                          )
+                        : _WorkplaceSentenceCard(
+                            sentence: controller.currentSentence!),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Swipe Right->Left: learned. Swipe Left->Right: history. '
-                'Swipe Bottom->Top: remembered. Swipe Top->Bottom: difficult.',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
+            ),
+            StudyActionBar(
+              enabled: !controller.isLoading,
+              onDifficult: controller.onSwipeTopToBottom,
+              onRemembered: controller.onSwipeBottomToTop,
+              onNext: controller.onSwipeRightToLeft,
+              swipeHint:
+                  'You can also swipe the card: left for next, up if you remember it, down if it is hard.',
+            ),
+          ],
         ),
       ),
     );
@@ -129,37 +139,43 @@ class _WorkplaceSentenceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Card(
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerHighest,
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            if (sentence.topic != null && sentence.topic!.isNotEmpty) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: scheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  sentence.topic!,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: scheme.onSecondaryContainer,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             Text(
               sentence.text,
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
             Text(
               sentence.meaningVi,
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (sentence.topic != null && sentence.topic!.isNotEmpty)
-                  Chip(label: Text(sentence.topic!)),
-                if (sentence.sourceTitle != null && sentence.sourceTitle!.isNotEmpty)
-                  Chip(label: Text(sentence.sourceTitle!)),
-                if (sentence.isBundled)
-                  const Chip(label: Text('Bundled starter')),
-              ],
+              style:
+                  theme.textTheme.titleMedium?.copyWith(color: scheme.primary),
             ),
           ],
         ),
