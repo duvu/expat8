@@ -36,7 +36,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('stubborn'), findsOneWidget);
-    expect(find.textContaining('Failed'), findsOneWidget);
+    expect(find.textContaining('Could not add'), findsOneWidget);
     expect(
       find.textContaining('Unable to generate a valid vocabulary item'),
       findsOneWidget,

@@ -137,22 +137,80 @@ class AppColors extends ThemeExtension<AppColors> {
 abstract final class AppTheme {
   static const Color _seedColor = Color(0xFF256D5A);
 
-  static ThemeData light() {
-    return ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: _seedColor),
-      useMaterial3: true,
-      extensions: const [AppColors._light],
-    );
-  }
+  static ThemeData light() => _build(
+        ColorScheme.fromSeed(seedColor: _seedColor),
+        AppColors._light,
+      );
 
-  static ThemeData dark() {
-    return ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: _seedColor,
-        brightness: Brightness.dark,
+  static ThemeData dark() => _build(
+        ColorScheme.fromSeed(seedColor: _seedColor, brightness: Brightness.dark),
+        AppColors._dark,
+      );
+
+  /// Shared look: flat tonal cards, generous touch targets (48dp), rounded
+  /// inputs and buttons, and a clear title weight.
+  static ThemeData _build(ColorScheme scheme, AppColors colors) {
+    final base = ThemeData(colorScheme: scheme, useMaterial3: true);
+    final text = base.textTheme;
+    const radius = BorderRadius.all(Radius.circular(20));
+    const buttonShape = StadiumBorder();
+    const minButton = Size(64, 48);
+    return base.copyWith(
+      extensions: [colors],
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 1,
+        titleTextStyle: text.titleLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface,
+        ),
       ),
-      useMaterial3: true,
-      extensions: const [AppColors._dark],
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: scheme.surfaceContainerLow,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: const RoundedRectangleBorder(borderRadius: radius),
+        clipBehavior: Clip.antiAlias,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: minButton,
+          shape: buttonShape,
+          textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(minimumSize: minButton, shape: buttonShape),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        border: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        shape: const StadiumBorder(),
+        side: BorderSide.none,
+        backgroundColor: scheme.surfaceContainerHigh,
+      ),
+      listTileTheme: const ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+        minVerticalPadding: 12,
+      ),
+      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+      dividerTheme: DividerThemeData(color: scheme.outlineVariant.withValues(alpha: 0.6)),
     );
   }
 }
