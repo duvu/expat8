@@ -20,7 +20,7 @@ This document defines the canonical three-stage model for mobile release distrib
 - This provides a controlled, app-credential-signed update check that does not depend on GitHub API availability.
 - The `mobile-self-upgrade` change implements this flow end-to-end (backend store, routes, mobile upgrade check screen).
 
-> **Note on `mobile-github-releases`:** The in-app update check in `github_release_service.dart` currently queries the GitHub API directly. This is an interim approach. It should be updated to use the backend-hosted metadata endpoint (`GET /v1/releases/latest`) as the canonical runtime source. Until that migration is complete, the two update-check paths coexist; the backend-hosted path takes precedence when both are available.
+> **Current state (2026-09-29):** both update paths ship in the app. The update *banner* (`update/update_banner.dart` → `github_release_service.dart`) queries the GitHub API; the *Check for updates* screen (`ui/upgrade_check_screen.dart`) uses the backend endpoint and downloads the APK from the backend. Every release therefore needs both the GitHub Release (automatic) and the backend upload (manual, [ops/mobile-release.md](ops/mobile-release.md#4-đưa-apk-lên-backend-cập-nhật-trong-app)); `scripts/ops-check.mjs` flags a mismatch. Moving the banner to the backend endpoint remains the intended end state.
 
 ### Stage 3 — Play Store (Deferred Public Distribution)
 
@@ -34,16 +34,20 @@ This document defines the canonical three-stage model for mobile release distrib
 
 | Change | Stage | Status |
 |---|---|---|
-| `fix-build-release-consistency` | Stage 1 (CI workflow, APK+AAB artifacts) | All tasks complete ✅ |
-| `mobile-github-releases` | Stage 1 (release CI, artifact upload) + in-app check (interim) | Core implementation complete; end-to-end on real tag pending |
+| `fix-build-release-consistency` | Stage 1 (release workflow, APK+AAB artifacts) | All tasks complete ✅ |
+| `mobile-github-releases` | Stage 1 (release workflow, artifact upload) + in-app banner (interim) | Complete ✅ — verified end-to-end on v1.3.3 and v1.3.4 |
 | `mobile-self-upgrade` | Stage 2 (backend metadata, mobile upgrade screen) | All tasks complete ✅ |
+
+Only the tag-triggered `Android Release` workflow remains in GitHub Actions; pull-request CI was removed (2026-09-28, #38) and checks run locally ([testing-guide.md](testing-guide.md)).
 
 ## Verification Requirements
 
 Each release must:
-1. Upload APK/AAB to GitHub Releases (Stage 1).
-2. Update backend release metadata via `POST /v1/admin/releases` (Stage 2).
-3. Confirm mobile app update check discovers new version via `GET /v1/releases/latest`.
+1. Upload APK/AAB to GitHub Releases (Stage 1) — done by the `Android Release` workflow.
+2. Update backend release metadata via `POST /v1/admin/releases` (Stage 2) — `node scripts/admin-request.mjs POST /v1/admin/releases --file app-release.apk ...`.
+3. Confirm mobile app update check discovers new version via `GET /v1/releases/latest` — `node scripts/ops-check.mjs`.
+
+Step-by-step runbook: [ops/mobile-release.md](ops/mobile-release.md).
 
 ## Related Files
 

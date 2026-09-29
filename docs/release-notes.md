@@ -1,5 +1,14 @@
 # Release Notes
 
+Per-version change lists (PR links) are generated on [GitHub Releases](https://github.com/duvu/expat8/releases). This file keeps the operator view: what each mobile release needs from the backend. **Deploy the backend listed before publishing the app** ([ops/mobile-release.md](ops/mobile-release.md)).
+
+| App | Date | Highlights | Backend requirement |
+|---|---|---|---|
+| 1.3.4+8 | 2026-09-29 | Simpler UI for all main screens: study action bar, friendly statuses, language picker (#42, #43) | Same as 1.3.3 |
+| 1.3.3+7 | 2026-09-28 | Word Blaster game (#39), Sudoku on Flame (#25) | Backend with `POST /v1/games/rounds`, `GET /v1/games/leaderboard` and migration `20260929_games_rounds_and_event_source`. Older backend → game rounds get 404 and are dropped from the sync queue |
+| 1.3.2 | 2026-09-28 | Offline-first app: every feature works offline, sync on reconnect, anonymous history claimed on sign-in (#24); Flutter 3.47 Android build (#23) | Backend from prod-readiness (#20) or later: migration runner, `20260928_speaking_loop_completed_event_type`, auth rate limits, scrypt passwords |
+| 1.3.0–1.3.1 | 2026-09-28 | Sudoku game (#21), production hardening (#20), Gradle fixes (#22) | Same as 1.3.2 |
+
 ## Unreleased — Codebase Consistency Pass
 
 - `POST /v1/learning/cards` now rejects unsupported `card_mode` values with

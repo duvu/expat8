@@ -2,6 +2,8 @@
 
 This guide covers local Compose deployment and the production Z440 deployment constraints captured in repo guidance.
 
+> **Operators:** the step-by-step production procedures live in [`docs/ops/`](ops/README.md) — [deploy](ops/deploy.md), [mobile release](ops/mobile-release.md), [backup/restore](ops/backup-restore.md), [monitoring](ops/monitoring.md), [troubleshooting](ops/troubleshooting.md), [secrets](ops/secrets.md), [maintenance](ops/maintenance.md). This page is the reference behind them.
+
 ## Local Compose Stack
 
 From the repository root:
@@ -41,11 +43,11 @@ docker build -t <YOUR_REGISTRY>/expat8-backend:<TAG> backend
 docker push <YOUR_REGISTRY>/expat8-backend:<TAG>
 ```
 
-Then update the Z440 deployment compose file so `expat8-backend` uses the new image tag, and redeploy from the deployment directory:
+Then point `expat8-backend` **and** `expat8-worker` at the new tag (`EXPAT8_BACKEND_IMAGE` / `EXPAT8_WORKER_IMAGE` in `~/deployment/worker-z440/.env`), migrate, and redeploy from the deployment directory:
 
 ```bash
 cd ~/deployment/worker-z440
-docker compose up -d --force-recreate expat8-backend
+docker compose up -d --force-recreate expat8-backend expat8-worker
 ```
 
 Verify:
@@ -61,11 +63,13 @@ Do not treat a healthy repository-local `expat8-backend-1` container as producti
 
 The backend tracks applied migrations in `schema_migrations` (`backend/src/migrations.js`). On a database that predates the runner, the first run records the `schema.sql` baseline and replays every file in `backend/db/migrations/` once; all migrations are idempotent and this path is covered by `test/migrations.test.js` against PostgreSQL 16.
 
-Production deploy step, before recreating `expat8-backend` (take a `pg_dump` first):
+Production deploy step, before recreating `expat8-backend` (take a `pg_dump` first). The runner holds a session-level `pg_advisory_lock`, so connect **directly to Postgres**, not through pgbouncer (transaction pooling can strand or skip the lock):
 
 ```bash
 cd ~/deployment/worker-z440
-docker compose run --rm expat8-backend npm run migrate
+docker compose run --rm --no-deps \
+  -e DATABASE_URL='postgres://<user>:<password>@postgres:5432/<expat8_db>' \
+  expat8-backend npm run migrate
 ```
 
 Local Compose sets `MIGRATE_ON_START=true`, so the API migrates itself on boot. The first production run also applies `20260928_speaking_loop_completed_event_type.sql`, without which PostgreSQL rejects every `loop_completed` speaking event.
@@ -80,7 +84,7 @@ Verify after deploy: send a sign-in request from two different networks (e.g. Wi
 
 ## Worker Deployment
 
-The article worker should run as a separate service using the same backend image and `npm run start:worker`. It shares PostgreSQL and LiteLLM configuration with the backend service. Stopping the worker leaves queued jobs durable in PostgreSQL.
+The article worker runs as a separate service using the same backend image (same tag as `expat8-backend`) and `npm run start:worker`. It shares PostgreSQL and LiteLLM configuration with the backend service. Stopping the worker leaves queued jobs durable in PostgreSQL.
 
 ## Environment and Secrets
 
