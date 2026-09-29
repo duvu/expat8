@@ -48,7 +48,8 @@ void main() {
     final db = await LocalDatabase.open(
       databaseName: 'exam_topic_${DateTime.now().microsecondsSinceEpoch}.db',
     );
-    final ctrl = ExamSessionController(apiClient: makeApiClient(), database: db);
+    final ctrl =
+        ExamSessionController(apiClient: makeApiClient(), database: db);
     return (ctrl, db);
   }
 
@@ -65,7 +66,7 @@ void main() {
     ));
     await tester.pump();
 
-    // The dropdown should show 'English' as the default selected value
+    // 'English' is selected by default
     expect(find.text('English'), findsOneWidget);
   });
 
@@ -84,10 +85,7 @@ void main() {
     ));
     await tester.pump();
 
-    await tester.tap(find.byType(DropdownButton<String>));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('English Idioms').last);
+    await tester.tap(find.text('English idioms'));
     await tester.pumpAndSettle();
 
     // Verify the setting was persisted
@@ -111,7 +109,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('English Idioms'), findsOneWidget);
+    final chip = tester
+        .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'English idioms'));
+    expect(chip.selected, isTrue);
   });
 
   // 8.1: verify all 5 language options are present in the dropdown
@@ -127,10 +127,7 @@ void main() {
     ));
     await tester.pump();
 
-    await tester.tap(find.byType(DropdownButton<String>));
-    await tester.pumpAndSettle();
-
-    expect(find.text('English Idioms'), findsOneWidget);
-    expect(find.text('Chinese Idioms (成语)'), findsOneWidget);
+    expect(find.text('English idioms'), findsOneWidget);
+    expect(find.text('Chinese idioms'), findsOneWidget);
   });
 }

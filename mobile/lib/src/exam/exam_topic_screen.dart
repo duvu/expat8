@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/local_database.dart';
 import '../models/user_session.dart';
+import '../widgets/language_picker.dart';
 import 'exam_question_screen.dart';
 import 'exam_session_controller.dart';
 
@@ -130,19 +131,11 @@ class _ExamTopicScreenState extends State<ExamTopicScreen> {
             const SizedBox(height: 16),
 
             // Language picker
-            DropdownButtonFormField<String>(
-              value: _language,
-              decoration: const InputDecoration(
-                labelText: 'Language',
-                border: OutlineInputBorder(),
-              ),
-              items: _languages.entries
-                  .map((e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value),
-                      ))
-                  .toList(),
-              onChanged: isLoading ? null : _onLanguageChanged,
+            LanguagePicker(
+              languages: _languages.keys.toList(),
+              selected: _language,
+              enabled: !isLoading,
+              onChanged: _onLanguageChanged,
             ),
 
             if (errorMessage != null &&

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/article_repository.dart';
 import '../models/article.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/language_picker.dart';
 
 const Map<String, String> kArticleLanguageLabels = {
   'en': 'English',
@@ -25,7 +26,8 @@ class ArticleManagementScreen extends StatefulWidget {
   final List<String> supportedLanguages;
 
   @override
-  State<ArticleManagementScreen> createState() => _ArticleManagementScreenState();
+  State<ArticleManagementScreen> createState() =>
+      _ArticleManagementScreenState();
 }
 
 class _ArticleManagementScreenState extends State<ArticleManagementScreen> {
@@ -179,29 +181,39 @@ class _ArticleManagementScreenState extends State<ArticleManagementScreen> {
                         ],
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                         itemCount: _articles.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           final article = _articles[index];
                           return Card(
+                            margin: EdgeInsets.zero,
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                                 vertical: 10,
                               ),
-                              leading: Icon(
-                                _statusIcon(article.status),
-                                color: _statusColor(context, article.status),
+                              leading: CircleAvatar(
+                                backgroundColor:
+                                    _statusColor(context, article.status)
+                                        .withValues(alpha: 0.15),
+                                foregroundColor:
+                                    _statusColor(context, article.status),
+                                child:
+                                    Icon(_statusIcon(article.status), size: 20),
                               ),
-                              title: Text(article.title),
+                              title: Text(
+                                article.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const SizedBox(height: 4),
                                   Text(
-                                    '${_languageLabel(article.language)} • ${_statusLabel(article.status)} • ${_formatDate(article.createdAt)}',
+                                    '${_statusLabel(article.status)} · ${_languageLabel(article.language)} · ${_formatDate(article.createdAt)}',
                                   ),
                                   if (article.processingError != null) ...[
                                     const SizedBox(height: 4),
@@ -303,79 +315,71 @@ class _ArticleCreateScreenState extends State<ArticleCreateScreen> {
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            children: [
-              Text(
-                'Paste article text and let the backend extract vocabulary.',
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                key: const Key('article_create_title'),
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: 'Title'),
-                textInputAction: TextInputAction.next,
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Title is required.'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _selectedLanguage,
-                decoration: const InputDecoration(labelText: 'Language'),
-                items: languages
-                    .map(
-                      (language) => DropdownMenuItem<String>(
-                        value: language,
-                        child: Text(_languageLabel(language)),
-                      ),
-                    )
-                    .toList(growable: false),
-                onChanged: _isSubmitting
-                    ? null
-                    : (value) {
-                        if (value == null) return;
-                        setState(() => _selectedLanguage = value);
-                      },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('article_create_source_url'),
-                controller: _sourceUrlController,
-                decoration: const InputDecoration(
-                  labelText: 'Source URL (optional)',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Paste an article you want to learn from. We will pick out useful words for you to study. Needs an internet connection.',
+                  style: theme.textTheme.bodyMedium,
                 ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                key: const Key('article_create_raw_text'),
-                controller: _rawTextController,
-                decoration: const InputDecoration(
-                  labelText: 'Article text',
-                  alignLabelWithHint: true,
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const Key('article_create_title'),
+                  controller: _titleController,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                  textInputAction: TextInputAction.next,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Title is required.'
+                      : null,
                 ),
-                maxLines: 12,
-                minLines: 8,
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Article text is required.'
-                    : null,
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                key: const Key('article_create_submit'),
-                onPressed: _isSubmitting ? null : _submit,
-                icon: _isSubmitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.publish),
-                label: Text(_isSubmitting ? 'Creating...' : 'Create article'),
-              ),
-            ],
+                const SizedBox(height: 12),
+                LanguagePicker(
+                  languages: languages,
+                  selected: _selectedLanguage,
+                  enabled: !_isSubmitting,
+                  onChanged: (value) =>
+                      setState(() => _selectedLanguage = value),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('article_create_source_url'),
+                  controller: _sourceUrlController,
+                  decoration: const InputDecoration(
+                    labelText: 'Source URL (optional)',
+                  ),
+                  keyboardType: TextInputType.url,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('article_create_raw_text'),
+                  controller: _rawTextController,
+                  decoration: const InputDecoration(
+                    labelText: 'Article text',
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 12,
+                  minLines: 8,
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Article text is required.'
+                      : null,
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  key: const Key('article_create_submit'),
+                  onPressed: _isSubmitting ? null : _submit,
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.publish),
+                  label: Text(_isSubmitting ? 'Creating...' : 'Create article'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -534,15 +538,21 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                             spacing: 8,
                             runSpacing: 8,
                             children: [
-                              _MetaChip(label: _languageLabel(_article!.language)),
+                              _MetaChip(
+                                  label: _languageLabel(_article!.language)),
                               _MetaChip(label: _statusLabel(_article!.status)),
-                              _MetaChip(label: _article!.visibility),
-                              _MetaChip(label: _formatDate(_article!.createdAt)),
+                              _MetaChip(
+                                  label: _article!.visibility == 'public'
+                                      ? 'Public'
+                                      : 'Only me'),
+                              _MetaChip(
+                                  label: _formatDate(_article!.createdAt)),
                             ],
                           ),
                           if (_article!.sourceUrl != null) ...[
                             const SizedBox(height: 16),
-                            Text('Source URL', style: theme.textTheme.titleSmall),
+                            Text('Source URL',
+                                style: theme.textTheme.titleSmall),
                             const SizedBox(height: 4),
                             Text(_article!.sourceUrl!),
                           ],
@@ -560,12 +570,14 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                             ),
                           ],
                           const SizedBox(height: 24),
-                          Text('Vocabulary', style: theme.textTheme.titleMedium),
+                          Text('Vocabulary',
+                              style: theme.textTheme.titleMedium),
                           const SizedBox(height: 8),
                           if ((_vocabulary?.items ?? const []).isEmpty)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Text('No vocabulary has been extracted yet.'),
+                              child:
+                                  Text('No vocabulary has been extracted yet.'),
                             )
                           else
                             ..._vocabulary!.items.map(
@@ -589,11 +601,15 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                         children: [
                                           if (item.level != null)
                                             _MetaChip(label: item.level!),
-                                          _MetaChip(label: item.status),
+                                          _MetaChip(
+                                              label: _termStatusLabel(
+                                                  item.status)),
                                           if (item.classification != null)
-                                            _MetaChip(label: item.classification!),
+                                            _MetaChip(
+                                                label: item.classification!),
                                           if (item.suggestionType != null)
-                                            _MetaChip(label: item.suggestionType!),
+                                            _MetaChip(
+                                                label: item.suggestionType!),
                                         ],
                                       ),
                                       if (item.partOfSpeech != null ||
@@ -625,7 +641,25 @@ String _languageLabel(String language) {
 }
 
 String _statusLabel(String status) {
-  return status.replaceAll('_', ' ');
+  return switch (status) {
+    'pending_processing' => 'Waiting to start',
+    'processing' => 'Finding words…',
+    'pending_review' => 'Being reviewed',
+    'processed' => 'Ready to study',
+    'published' => 'Published',
+    'failed' => 'Could not process',
+    'deleted' => 'Deleted',
+    _ => status.replaceAll('_', ' '),
+  };
+}
+
+String _termStatusLabel(String status) {
+  return switch (status) {
+    'approved' => 'Approved',
+    'pending_review' => 'Being reviewed',
+    'rejected' => 'Rejected',
+    _ => status.replaceAll('_', ' '),
+  };
 }
 
 IconData _statusIcon(String status) {
@@ -654,9 +688,22 @@ Color _statusColor(BuildContext context, String status) {
 }
 
 String _formatDate(DateTime value) {
-  final local = value.toLocal();
-  final iso = local.toIso8601String();
-  return iso.length >= 16 ? iso.substring(0, 16).replaceFirst('T', ' ') : iso;
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
+  ];
+  final d = value.toLocal();
+  return '${d.day} ${months[d.month - 1]} ${d.year}';
 }
 
 class _MetaChip extends StatelessWidget {
