@@ -341,6 +341,14 @@ Response:
 }
 ```
 
+`GET /v1/articles` also returns articles with `visibility: "published"` and `status: "published"` (for example crawler articles). List items do not include the article body.
+
+---
+
+## GET /v1/articles/:id
+
+Returns the same fields as a list item plus `raw_text`, the full article body to read. Available for the caller's own articles and for published articles.
+
 ---
 
 ## GET /v1/articles/:id/vocabulary
@@ -363,11 +371,15 @@ Response:
       "level": "A1",
       "status": "approved",
       "classification": "article_keyword",
-      "suggestion_type": "word"
+      "suggestion_type": "word",
+      "word": { "server_word_id": "word_42", "term": "reliable", "...": "learning-card word shape" }
     }
   ]
 }
 ```
+
+`word` is the study word with the same language and normalized term (or
+`null`). The app offers "Add to review" for it while the learner reads.
 
 ## DELETE /v1/articles/:id
 
@@ -459,14 +471,21 @@ Fields:
   clients use `anonymous_<uuid-v4>`.
 - `target_language`: optional target language code, default `en`.
 - `limit`: optional maximum returned cards, capped at `100`.
+- `level`: optional study-level override for this request (CEFR `A1`..`C2`, or
+  `HSK1`..`HSK6` for Chinese; case-insensitive). When present, new cards are
+  centred on that level instead of the learner's own proficiency level; the
+  stored proficiency is not changed. Missing or `null` means "use the learner's
+  level". A value invalid for the target language returns
+  `400 { "error": "bad_request" }`.
 - `card_mode`: optional mode. `new` is the only supported value for this flow.
   Missing, `null`, or empty values are treated as `new`. Any other value
   returns `400 { "error": "bad_request" }`.
 
-Response:
+Response (`level` is the level the new cards were centred on):
 
 ```json
 {
+  "level": "B1",
   "target_mix": {
     "new": 10,
     "review": 0
@@ -1508,6 +1527,84 @@ Response:
 
 With a valid bearer session, `user_id` is populated and the level reflects the
 signed-in user's proficiency state instead of anonymous device state.
+
+### Level changes (CEFR A1→C2 / HSK1→HSK6)
+
+Computed on the server from non-game ratings, in occurrence order:
+
+- every 5th consecutive `too_easy` → up one level;
+- every 5th consecutive `hard` → down one level;
+- 6 `too_hard` among the last 10 ratings that occurred after the previous level
+  change → down one level (`triggered_by`: `"6 of last 10 too_hard"`). The
+  window restarts at every change, so one offline batch never drops two levels.
+
+---
+
+## Spaced repetition (SRS)
+
+Every rated word has a per-owner memory (owner = signed-in user, else the
+device): `reps`, `lapses`, `ease`, `interval_days`, and `next_review_at`. It is
+a pure fold over the word's study events in `occurred_at` order
+(`backend/src/domain/srs.js`; the app runs the same algorithm offline in
+`mobile/lib/src/srs/srs_scheduler.dart`; both are pinned by
+`contracts/srs_vectors.json`). The server rebuilds it from all events whenever
+one arrives, so events uploaded late from an offline device converge to the same
+state regardless of arrival order.
+
+| rating | effect |
+|---|---|
+| `too_hard` | lapse: `reps` 0, `lapses`+1, ease −0.2 (min 1.3), due in 10 minutes (`learning`) |
+| `hard` | ease −0.15; interval 1 day first, then ×1.2 |
+| `easy` | interval 2 days, then 6, then ×ease |
+| `too_easy` | ease +0.15 (max 3.0); interval 4 days first, then ×ease×1.3 |
+
+Intervals cap at 365 days. Status: `learning` (interval 0), `review`, `mastered`
+(interval ≥ 21 days). `POST /v1/learning/cards` fills up to 85% of a batch with
+due reviews (`card_type: "review"`, `selection_reason: "srs_due"`).
+
+## GET /v1/review/states
+
+The owner's SRS states changed since a cursor, each with its word, oldest change
+first. The app pulls after uploading its queued events (new phone, reinstall,
+another device of the same learner).
+
+Query parameters:
+
+- `device_id`: required
+- `language`: optional, default `en`
+- `cursor`: optional opaque `next_cursor` from the previous page; absent or
+  malformed starts from the beginning
+- `limit`: optional, default 200, max 500
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "word": { "server_word_id": "word_1", "term": "resilient", "...": "same shape as learning cards" },
+      "state": {
+        "status": "review",
+        "last_rating": "easy",
+        "last_studied_at": "2026-01-01T08:00:00.000Z",
+        "next_review_at": "2026-01-03T08:00:00.000Z",
+        "ease": 2.5,
+        "interval_days": 2,
+        "reps": 1,
+        "lapses": 0,
+        "review_count": 1,
+        "updated_at": "2026-01-01T08:00:01.123Z"
+      }
+    }
+  ],
+  "next_cursor": "WyIyMDI2LTAxLTAxVDA4OjAwOjAxLjEyM1oiLCJ3b3JkX3N0YXRlXzEiXQ",
+  "has_more": false
+}
+```
+
+Always store `next_cursor` (the last item's position, or the request's cursor
+when nothing changed) and send it next time to receive only newer changes.
+Request the next page immediately while `has_more` is true.
 
 ---
 

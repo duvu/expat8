@@ -7,6 +7,7 @@ import '../theme/app_theme.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/language_picker.dart';
 import 'memorization_drill_screen.dart';
+import '../widgets/brand_backdrop.dart';
 
 /// Main memorization passages list screen.
 class MemorizationScreen extends StatefulWidget {
@@ -127,57 +128,58 @@ class _MemorizationScreenState extends State<MemorizationScreen> {
         icon: const Icon(Icons.add),
         label: const Text('New passage'),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? EmptyStateView(
-                  icon: Icons.error_outline,
-                  title: 'Could not load passages',
-                  body: _errorMessage,
-                  actionLabel: 'Retry',
-                  onAction: _loadPassages,
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadPassages,
-                  child: _passages.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 100),
-                            EmptyStateView(
-                              icon: Icons.menu_book_outlined,
-                              title: 'No passages yet',
-                              body:
-                                  'Tap “New passage” to add a text you want to learn by heart.',
-                            ),
-                          ],
-                        )
-                      : ListView(
-                          children: [
-                            if (_showingCached)
-                              const ListTile(
-                                dense: true,
-                                leading: Icon(Icons.cloud_off, size: 20),
-                                title: Text(
-                                  'Offline — showing passages saved on this device.',
+      body: BrandBackdrop(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
+                  ? EmptyStateView(
+                      icon: Icons.error_outline,
+                      title: 'Could not load passages',
+                      body: _errorMessage,
+                      actionLabel: 'Retry',
+                      onAction: _loadPassages,
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _loadPassages,
+                      child: _passages.isEmpty
+                          ? ListView(
+                              children: const [
+                                SizedBox(height: 100),
+                                EmptyStateView(
+                                  icon: Icons.menu_book_outlined,
+                                  title: 'No passages yet',
+                                  body:
+                                      'Tap “New passage” to add a text you want to learn by heart.',
                                 ),
-                              ),
-                            _PassageSection(
-                              title: 'My passages',
-                              passages: myPassages,
-                              progressByPassageId: _progressByPassageId,
-                              onTap: _openDetail,
-                              statusIconBuilder: _statusIcon,
+                              ],
+                            )
+                          : ListView(
+                              children: [
+                                if (_showingCached)
+                                  const ListTile(
+                                    dense: true,
+                                    leading: Icon(Icons.cloud_off, size: 20),
+                                    title: Text(
+                                      'Offline — showing passages saved on this device.',
+                                    ),
+                                  ),
+                                _PassageSection(
+                                  title: 'My passages',
+                                  passages: myPassages,
+                                  progressByPassageId: _progressByPassageId,
+                                  onTap: _openDetail,
+                                  statusIconBuilder: _statusIcon,
+                                ),
+                                _PassageSection(
+                                  title: 'Recommended',
+                                  passages: featuredPassages,
+                                  progressByPassageId: _progressByPassageId,
+                                  onTap: _openDetail,
+                                  statusIconBuilder: _statusIcon,
+                                ),
+                              ],
                             ),
-                            _PassageSection(
-                              title: 'Recommended',
-                              passages: featuredPassages,
-                              progressByPassageId: _progressByPassageId,
-                              onTap: _openDetail,
-                              statusIconBuilder: _statusIcon,
-                            ),
-                          ],
-                        ),
-                ),
+                    )),
     );
   }
 
@@ -413,7 +415,8 @@ class _PassageCreateScreenState extends State<PassageCreateScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('New Passage')),
-      body: Padding(
+      body: BrandBackdrop(
+          child: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
@@ -469,7 +472,7 @@ class _PassageCreateScreenState extends State<PassageCreateScreen> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -600,17 +603,18 @@ class _PassageDetailScreenState extends State<PassageDetailScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? EmptyStateView(
-                  icon: Icons.error_outline,
-                  title: 'Could not load passage',
-                  body: _errorMessage,
-                  actionLabel: 'Retry',
-                  onAction: _loadPassage,
-                )
-              : _buildContent(),
+      body: BrandBackdrop(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
+                  ? EmptyStateView(
+                      icon: Icons.error_outline,
+                      title: 'Could not load passage',
+                      body: _errorMessage,
+                      actionLabel: 'Retry',
+                      onAction: _loadPassage,
+                    )
+                  : _buildContent()),
       floatingActionButton:
           _passage != null && (_passage!.segments?.isNotEmpty ?? false)
               ? FloatingActionButton.extended(

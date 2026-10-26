@@ -102,8 +102,7 @@ class _LearningCardGestureSurfaceState
               }
             } else {
               if (vel.dy < -200 || dy < -80) {
-                _dispatchGesture(
-                    widget.onSwipeBottomToTop, _SlideDirection.up);
+                _dispatchGesture(widget.onSwipeBottomToTop, _SlideDirection.up);
               } else if (vel.dy > 200 || dy > 80) {
                 _dispatchGesture(
                     widget.onSwipeTopToBottom, _SlideDirection.down);

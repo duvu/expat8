@@ -131,7 +131,8 @@ class _FakeArticleRepository extends ArticleRepository {
   ];
 
   @override
-  Future<List<ManagedArticle>> listArticles({required String sessionToken}) async {
+  Future<List<ManagedArticle>> listArticles(
+      {required String sessionToken}) async {
     return _articles;
   }
 
@@ -230,7 +231,8 @@ class _MissingArticleRepository extends ArticleRepository {
   }
 
   @override
-  Future<List<ManagedArticle>> listArticles({required String sessionToken}) async {
+  Future<List<ManagedArticle>> listArticles(
+      {required String sessionToken}) async {
     return const [];
   }
 

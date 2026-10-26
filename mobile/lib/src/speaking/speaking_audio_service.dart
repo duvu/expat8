@@ -52,6 +52,9 @@ class SpeakingAudioService implements ISpeakingAudioService {
       : _fileManager = fileManager;
 
   final AudioFileManager _fileManager;
+  // flutter_tts treats 0.5 as normal speed (1.0 is roughly double); slightly slower helps learners.
+  static const double _sampleSpeechRate = 0.4;
+
   final FlutterTts _tts = FlutterTts();
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
@@ -83,7 +86,7 @@ class SpeakingAudioService implements ISpeakingAudioService {
   @override
   Future<void> speakSample(String text, {String languageCode = 'en-US'}) async {
     await _tts.setLanguage(languageCode);
-    await _tts.setSpeechRate(0.85);
+    await _tts.setSpeechRate(_sampleSpeechRate);
     await _tts.speak(text);
   }
 

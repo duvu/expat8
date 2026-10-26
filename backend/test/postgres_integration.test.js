@@ -104,6 +104,61 @@ test('API routes work with postgres store when a test database is available', pg
   assert.equal(sync.proficiency.level, 'A1');
 });
 
+test('postgres SRS: late offline events replay in order, states page by cursor, misses drop the level', pgTestOptions, async (t) => {
+  const pool = new pg.Pool({ connectionString: testDatabaseUrl });
+  t.after(async () => pool.end());
+  await resetSchema(pool);
+  const store = new PostgresWordStore({ pool });
+  const { word } = await store.insertWord(wordInput({ term: 'resilient' }));
+  const other = (await store.insertWord(wordInput({ term: 'diligent' }))).word;
+  const event = (id, rating, occurredAt, wordId = word.id) => ({
+    client_event_id: id,
+    server_word_id: wordId,
+    rating,
+    occurred_at: occurredAt
+  });
+
+  // The newer rating arrives first; the older offline one arrives later and must not win.
+  await store.syncStudyEvents({ deviceId: 'phone', events: [event('b', 'too_hard', '2026-01-03T08:00:00.000Z')] });
+  await store.syncStudyEvents({ deviceId: 'phone', events: [event('a', 'easy', '2026-01-01T08:00:00+00:00')] });
+  const state = await store.wordStateFor({ deviceId: 'phone', wordId: word.id });
+  assert.equal(state.last_rating, 'too_hard');
+  assert.equal(state.status, 'learning');
+  assert.equal(state.lapses, 1);
+  assert.equal(state.review_count, 2);
+
+  await store.syncStudyEvents({ deviceId: 'phone', events: [event('c', 'easy', '2026-01-02T08:00:00.000Z', other.id)] });
+  const firstPage = await store.listWordStatesSince({ deviceId: 'any', language: 'en', limit: 1 });
+  assert.equal(firstPage.length, 0, 'anonymous states belong to their device');
+  const page = await store.listWordStatesSince({ deviceId: 'phone', language: 'en', limit: 10 });
+  assert.deepEqual(page.map((row) => row.word.term), ['resilient', 'diligent']);
+  const last = page.at(-1).state;
+  const after = await store.listWordStatesSince({
+    deviceId: 'phone',
+    language: 'en',
+    cursor: { updatedAt: last.updated_at, id: last.id },
+    limit: 10
+  });
+  assert.deepEqual(after, []);
+
+  assert.equal(await store.rebuildWordStates(), 2);
+  assert.equal((await store.wordStateFor({ deviceId: 'phone', wordId: word.id })).lapses, 1);
+
+  // One offline batch of ratings: climbs to A2, then 6 misses in 10 drop it back exactly once.
+  const ratings = [...Array(5).fill('too_easy'), ...'mxmxmxmxmmm'.split('').map((c) => (c === 'm' ? 'too_hard' : 'easy'))];
+  const batch = await store.syncStudyEvents({
+    deviceId: 'kid',
+    events: ratings.map((rating, index) =>
+      event(`k${index}`, rating, new Date(Date.UTC(2026, 1, 1, 8, 0, index)).toISOString())
+    )
+  });
+  assert.equal(batch.accepted_event_ids.length, ratings.length);
+  assert.equal(batch.proficiency.level, 'A1');
+  const proficiency = await pool.query(`SELECT level, level_changed_at FROM user_proficiency WHERE device_id = 'kid'`);
+  assert.equal(proficiency.rows[0].level, 'A1');
+  assert.ok(proficiency.rows[0].level_changed_at);
+});
+
 async function resetSchema(pool) {
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
   await migrateDatabase({ pool });

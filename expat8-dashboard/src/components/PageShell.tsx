@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
 
-import Toolbar from './Toolbar';
-
 interface PageShellProps {
   title: string;
   actions?: ReactNode;
@@ -11,7 +9,11 @@ interface PageShellProps {
 export default function PageShell({ title, actions, children }: PageShellProps) {
   return (
     <>
-      <Toolbar title={title} actions={actions} />
+      <header className="toolbar">
+        <label htmlFor="sidebar-toggle" className="sidebar-toggle-btn" aria-label="Toggle navigation">&#9776;</label>
+        <h1 className="toolbar-title">{title}</h1>
+        {actions && <div className="toolbar-actions">{actions}</div>}
+      </header>
       <main className="page-content">{children}</main>
     </>
   );

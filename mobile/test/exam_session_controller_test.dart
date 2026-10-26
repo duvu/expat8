@@ -95,8 +95,7 @@ void main() {
     http.Response Function(http.Request request)? readinessResponse,
   }) async {
     final database = await LocalDatabase.open(
-      databaseName:
-          'exam_ctrl_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName: 'exam_ctrl_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = BackendApiClient(
       baseUrl: 'http://unused',
@@ -133,7 +132,8 @@ void main() {
     await ctrl.startSession(userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, 'Exams need an internet connection to load questions. Please try again when you are online.');
+    expect(ctrl.errorMessage,
+        'Exams need an internet connection to load questions. Please try again when you are online.');
     expect(ctrl.session, isNull);
     expect(startCalled, false);
   });
@@ -170,8 +170,7 @@ void main() {
 
     expect(ctrl.state, ExamState.idle);
 
-    await ctrl.startSession(
-        userSession: _session, language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.active);
     expect(ctrl.session?.sessionId, 'sess_1');
@@ -193,8 +192,7 @@ void main() {
         ));
     final ctrl = await _makeController(client);
 
-    await ctrl.startSession(
-        userSession: _session, language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
     expect(ctrl.errorMessage, isNotNull);
@@ -214,11 +212,11 @@ void main() {
     });
     final ctrl = await _makeController(client);
 
-    await ctrl.startSession(
-        userSession: _session, language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
 
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, 'Exams need an internet connection to load questions. Please try again when you are online.');
+    expect(ctrl.errorMessage,
+        'Exams need an internet connection to load questions. Please try again when you are online.');
   });
 
   test('startSession can recover after the backend becomes healthy', () async {
@@ -247,7 +245,8 @@ void main() {
     // First attempt: readiness probe fails.
     await ctrl.startSession(userSession: _session, language: 'en');
     expect(ctrl.state, ExamState.idle);
-    expect(ctrl.errorMessage, 'Exams need an internet connection to load questions. Please try again when you are online.');
+    expect(ctrl.errorMessage,
+        'Exams need an internet connection to load questions. Please try again when you are online.');
 
     // Second attempt: probe succeeds, start session should proceed normally.
     backendReady = true;
@@ -281,8 +280,7 @@ void main() {
           headers: {'content-type': 'application/json'},
         ));
     final ctrl = await _makeController(client);
-    await ctrl.startSession(
-        userSession: _session, language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
 
     expect(ctrl.hasAnsweredCurrent, false);
     ctrl.submitAnswer(2);
@@ -311,8 +309,7 @@ void main() {
           headers: {'content-type': 'application/json'},
         ));
     final ctrl = await _makeController(client);
-    await ctrl.startSession(
-        userSession: _session, language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
     ctrl.submitAnswer(1);
     ctrl.submitAnswer(3); // second call — ignored
     expect(ctrl.answers.length, 1);
@@ -333,8 +330,7 @@ void main() {
       );
     });
     final ctrl = await _makeController(client);
-    await ctrl.startSession(
-        userSession: _session, language: 'en');
+    await ctrl.startSession(userSession: _session, language: 'en');
     ctrl.submitAnswer(0);
     await ctrl.advance(userSession: _session);
     expect(ctrl.currentQuestionIndex, 1);
@@ -420,8 +416,7 @@ void main() {
       );
     });
     final database = await LocalDatabase.open(
-      databaseName:
-          'exam_persist_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName: 'exam_persist_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = BackendApiClient(
       baseUrl: 'http://unused',
@@ -449,11 +444,11 @@ void main() {
     expect(stored?.syncStatus, 'synced');
   });
 
-  test('submitSession marks attempt as pending before background sync completes',
+  test(
+      'submitSession marks attempt as pending before background sync completes',
       () async {
     final database = await LocalDatabase.open(
-      databaseName:
-          'exam_pending_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName: 'exam_pending_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final client = MockClient((req) async {
       if (req.url.path.endsWith('/start')) {
@@ -497,8 +492,7 @@ void main() {
   test('local attempt survives a backend failure with syncStatus pending',
       () async {
     final database = await LocalDatabase.open(
-      databaseName:
-          'exam_failure_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName: 'exam_failure_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final client = MockClient((req) async {
       if (req.url.path.endsWith('/start')) {

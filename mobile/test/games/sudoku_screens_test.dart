@@ -49,6 +49,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: GamesHubScreen(storage: InMemoryGameStorage())),
     );
+    // Math games are listed first; scroll to Sudoku.
+    await tester.scrollUntilVisible(find.text('Sudoku'), 200);
     expect(find.text('Sudoku'), findsOneWidget);
 
     await tester.tap(find.text('Sudoku'));

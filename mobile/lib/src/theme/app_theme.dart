@@ -99,31 +99,31 @@ class AppColors extends ThemeExtension<AppColors> {
   // ---- Predefined instances ----
 
   static const AppColors _light = AppColors(
-    statusSuccess: Color(0xFF2E7D32), // green 800
-    statusWarning: Color(0xFFE65100), // deep orange 900
-    statusError: Color(0xFFC62828),   // red 800
-    statusNeutral: Color(0xFF616161), // grey 700
-    subtleText: Color(0xFF757575),    // grey 600
-    ratingAgain: Color(0xFFB71C1C),   // red 900 (errorContainer bg is used in button style)
-    ratingEasy: Color(0xFF1B5E20),    // green 900
-    severityDebug: Color(0xFF78909C), // blue grey 400
-    severityInfo: Color(0xFF1565C0),  // blue 800
-    severityWarn: Color(0xFFE65100),  // deep orange 900
-    severityError: Color(0xFFC62828), // red 800
+    statusSuccess: Color(0xFF0F8A72), // Expat8 teal
+    statusWarning: Color(0xFFB7791F), // Expat8 amber
+    statusError: Color(0xFFC2414B), // Expat8 danger
+    statusNeutral: Color(0xFF64748B), // Expat8 muted ink
+    subtleText: Color(0xFF64748B), // Expat8 muted ink
+    ratingAgain: Color(0xFFC2414B), // Expat8 danger
+    ratingEasy: Color(0xFF0F8A72), // Expat8 teal
+    severityDebug: Color(0xFF94A3B8), // Expat8 subtle ink
+    severityInfo: Color(0xFF2672A8), // Expat8 info
+    severityWarn: Color(0xFFB7791F), // Expat8 amber
+    severityError: Color(0xFFC2414B), // Expat8 danger
   );
 
   static const AppColors _dark = AppColors(
-    statusSuccess: Color(0xFF81C784), // green 300
-    statusWarning: Color(0xFFFFB74D), // orange 300
-    statusError: Color(0xFFEF9A9A),   // red 200
-    statusNeutral: Color(0xFF9E9E9E), // grey 500
-    subtleText: Color(0xFF9E9E9E),    // grey 500
-    ratingAgain: Color(0xFFEF9A9A),   // red 200
-    ratingEasy: Color(0xFF81C784),    // green 300
-    severityDebug: Color(0xFF90A4AE), // blue grey 300
-    severityInfo: Color(0xFF64B5F6),  // blue 300
-    severityWarn: Color(0xFFFFB74D),  // orange 300
-    severityError: Color(0xFFEF9A9A), // red 200
+    statusSuccess: Color(0xFF34D399), // Expat8 teal dark
+    statusWarning: Color(0xFFF6C453), // Expat8 amber dark
+    statusError: Color(0xFFFB7185), // Expat8 danger dark
+    statusNeutral: Color(0xFFA8B4C5), // Expat8 muted ink dark
+    subtleText: Color(0xFFA8B4C5), // Expat8 muted ink dark
+    ratingAgain: Color(0xFFFB7185), // Expat8 danger dark
+    ratingEasy: Color(0xFF34D399), // Expat8 teal dark
+    severityDebug: Color(0xFF718096), // Expat8 subtle ink dark
+    severityInfo: Color(0xFF60A5FA), // Expat8 info dark
+    severityWarn: Color(0xFFF6C453), // Expat8 amber dark
+    severityError: Color(0xFFFB7185), // Expat8 danger dark
   );
 }
 
@@ -135,24 +135,51 @@ class AppColors extends ThemeExtension<AppColors> {
 /// darkTheme: AppTheme.dark(),
 /// ```
 abstract final class AppTheme {
-  static const Color _seedColor = Color(0xFF256D5A);
+  /// Brand anchors from the app icon: indigo field and the teal spark.
+  static const Color brandIndigo = Color(0xFF2A24AA);
+  static const Color brandSpark = Color(0xFF34D399);
 
   static ThemeData light() => _build(
-        ColorScheme.fromSeed(seedColor: _seedColor),
+        ColorScheme.fromSeed(
+            seedColor: brandIndigo, tertiary: const Color(0xFF0F8A72)),
         AppColors._light,
       );
 
   static ThemeData dark() => _build(
-        ColorScheme.fromSeed(seedColor: _seedColor, brightness: Brightness.dark),
+        ColorScheme.fromSeed(
+            seedColor: brandIndigo,
+            tertiary: brandSpark,
+            brightness: Brightness.dark),
         AppColors._dark,
       );
+
+  /// One colour per proficiency step (CEFR A1–C2, HSK 1–6): beginner green
+  /// through intermediate blue to advanced violet, so a level reads at a
+  /// glance everywhere it is shown.
+  static Color levelColor(String level) {
+    const ladder = [
+      Color(0xFF16A34A), // A1 / HSK1
+      Color(0xFF0D9488), // A2 / HSK2
+      Color(0xFF2563EB), // B1 / HSK3
+      Color(0xFF4F46E5), // B2 / HSK4
+      Color(0xFF7C3AED), // C1 / HSK5
+      Color(0xFFC026D3), // C2 / HSK6
+    ];
+    final normalized = level.trim().toUpperCase();
+    const cefr = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+    var index = cefr.indexOf(normalized);
+    if (index < 0) {
+      final hsk = RegExp(r'(\d)').firstMatch(normalized);
+      index = hsk == null ? 2 : (int.parse(hsk.group(1)!) - 1).clamp(0, 5);
+    }
+    return ladder[index];
+  }
 
   /// Shared look: flat tonal cards, generous touch targets (48dp), rounded
   /// inputs and buttons, and a clear title weight.
   static ThemeData _build(ColorScheme scheme, AppColors colors) {
     final base = ThemeData(colorScheme: scheme, useMaterial3: true);
     final text = base.textTheme;
-    const radius = BorderRadius.all(Radius.circular(20));
     const buttonShape = StadiumBorder();
     const minButton = Size(64, 48);
     return base.copyWith(
@@ -167,11 +194,23 @@ abstract final class AppTheme {
           color: scheme.onSurface,
         ),
       ),
+      textTheme: text.copyWith(
+        displaySmall: text.displaySmall
+            ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.5),
+        headlineSmall:
+            text.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        titleMedium: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      // Soft depth: a low, brand-tinted shadow instead of flat tonal cards.
       cardTheme: CardThemeData(
-        elevation: 0,
-        color: scheme.surfaceContainerLow,
+        elevation: 3,
+        shadowColor: scheme.primary.withValues(alpha: 0.18),
+        surfaceTintColor: Colors.transparent,
+        color: scheme.surfaceContainerLowest,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: const RoundedRectangleBorder(borderRadius: radius),
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(24))),
         clipBehavior: Clip.antiAlias,
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -182,7 +221,8 @@ abstract final class AppTheme {
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(minimumSize: minButton, shape: buttonShape),
+        style: OutlinedButton.styleFrom(
+            minimumSize: minButton, shape: buttonShape),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -198,7 +238,8 @@ abstract final class AppTheme {
           borderRadius: const BorderRadius.all(Radius.circular(16)),
           borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
       chipTheme: base.chipTheme.copyWith(
         shape: const StadiumBorder(),
@@ -206,11 +247,14 @@ abstract final class AppTheme {
         backgroundColor: scheme.surfaceContainerHigh,
       ),
       listTileTheme: const ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(16))),
         minVerticalPadding: 12,
       ),
-      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-      dividerTheme: DividerThemeData(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      snackBarTheme:
+          const SnackBarThemeData(behavior: SnackBarBehavior.floating),
+      dividerTheme:
+          DividerThemeData(color: scheme.outlineVariant.withValues(alpha: 0.6)),
     );
   }
 }

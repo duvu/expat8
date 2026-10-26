@@ -18,7 +18,8 @@ void main() {
         submittedTerm: 'stubborn',
         targetLanguage: 'en',
         status: SubmittedWordStatus.failed,
-        failureReason: 'Unable to generate a valid vocabulary item for this term.',
+        failureReason:
+            'Unable to generate a valid vocabulary item for this term.',
         createdAt: DateTime.utc(2026, 5, 19),
         updatedAt: DateTime.utc(2026, 5, 19),
       ),

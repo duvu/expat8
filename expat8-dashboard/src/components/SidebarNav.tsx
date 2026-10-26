@@ -36,6 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/analytics/study-events', label: 'Study Events' },
       { href: '/analytics/exam', label: 'Exam Analytics' },
+      { href: '/exam', label: 'Exam Results' },
       { href: '/analytics/speaking', label: 'Speaking' },
       { href: '/analytics/content', label: 'Content Coverage' },
     ],

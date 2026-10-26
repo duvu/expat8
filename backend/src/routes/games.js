@@ -1,6 +1,6 @@
 import express from 'express';
 import { GAME_MODES } from '../game_rounds.js';
-import { asyncHandler, clampLimit, resolveOptionalUserSession, resolveRequiredUserSession } from './helpers.js';
+import { asyncHandler, queryLimit, resolveOptionalUserSession, resolveRequiredUserSession } from './helpers.js';
 
 const MAX_ROUNDS_PER_REQUEST = 50;
 
@@ -50,7 +50,7 @@ export function createGamesRouter({ store }) {
         mode,
         weekStart: typeof request.query.week_start === 'string' ? request.query.week_start : null,
         userId: userSession.user.id,
-        limit: clampLimit(request.query.limit ?? 50, 1, 100)
+        limit: queryLimit(request.query.limit, 50, 100)
       });
       return response.json(leaderboard);
     })

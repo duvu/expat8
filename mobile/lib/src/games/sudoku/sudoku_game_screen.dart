@@ -8,6 +8,7 @@ import '../common/game_audio.dart';
 import 'sudoku_board_game.dart';
 import 'sudoku_champion_store.dart';
 import 'sudoku_game_controller.dart';
+import '../common/game_activity.dart';
 
 /// Plays one Sudoku game. Pauses when the app goes to the background and
 /// saves progress when the screen closes. Takes ownership of [controller]
@@ -31,7 +32,7 @@ class SudokuGameScreen extends StatefulWidget {
 }
 
 class _SudokuGameScreenState extends State<SudokuGameScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, GameActivityScope<SudokuGameScreen> {
   Timer? _ticker;
   bool _completionHandled = false;
   SudokuBoardGame? _boardGame;

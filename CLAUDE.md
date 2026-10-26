@@ -105,9 +105,12 @@ All `/v1/*` requests are protected by HMAC app credentials (see `contracts/api.m
 
 `WordStore` (`src/word_store.js`) is an in-memory store used by tests and as the dev/fallback implementation. `PostgresWordStore` (`src/postgres_word_store.js`) is the production store. Both implement the same interface — `createApp()` accepts either as `store`.
 
+Business rules shared by both stores live in `src/domain/*.js` (pure functions: study events, proficiency, learning cards, vocabulary, speaking, exam, articles, memorization, shadowing...). Per-domain store methods live in `src/stores/{memory,postgres}/*.js` and are mixed into the two store classes by `src/stores/mixin.js`. Put new rules in `domain/`, never duplicate them in both stores.
+
 ### Key Modules
 
-- `src/proficiency.js` — CEFR ladder logic; upgrades after 5× `too_easy`, downgrades after 5× `hard`
+- `src/proficiency.js` + `src/domain/proficiency_progress.js` — CEFR/HSK ladder; up after 5× consecutive `too_easy`, down after 5× consecutive `hard` or 6 `too_hard` in the last 10 ratings since the last change
+- `src/domain/srs.js` — SM-2 style scheduler; a word's state is replayed from all its events (late offline events converge). Mobile mirrors it in `lib/src/srs/srs_scheduler.dart`; `contracts/srs_vectors.json` pins both. `npm run rebuild:srs` recomputes all states
 - `src/app_credentials.js` — HMAC signing/verification, `InMemoryNonceCache`
 - `src/user_identity.js` — Password hashing, session tokens (stored as SHA256 hash server-side)
 - `src/generation_service.js` / `src/litellm_client.js` — LLM integration (not in the learning card request path)
@@ -138,6 +141,13 @@ Background: starts periodic inventory refresh, syncs word cache to backend.
 
 Cards are loaded exclusively via `POST /v1/learning/cards` with `card_mode: "new"`. The mobile app does **not** send exclusion lists — duplicate avoidance is backend-owned via `user_word_cache`. After rating a card, a study event is submitted to `POST /v1/study-events` (single event) or batched via `POST /v1/study-events/sync`.
 
+### Reviews (SRS, offline-first, shared family device)
+
+- Every rating schedules the word with `lib/src/srs/srs_scheduler.dart` (twin of `backend/src/domain/srs.js`); nothing is deleted on `easy`. `upsertWord` never resets an existing word's schedule.
+- Due review cards are active-recall exercises (`lib/src/review/review_exercise.dart`: choose meaning, listen, fill the blank, type the word), chosen once when the card is shown. Wrong = `too_hard`, slow/near miss = `hard`, right = `easy` (never `too_easy`).
+- Study events carry the local-only `ownerUserId`; the sync queue only uploads the signed-in account's events. Sign-in/out calls `rebuildScheduleForOwner` (replays that account's local events); `pullReviewStates` then applies `GET /v1/review/states` (cursor per account+language), skipping words with pending events.
+- Article reading: vocabulary terms are highlighted; "Add to review" makes the word due now (`addWordForReview`).
+
 ## API Design Invariants
 
 - `POST /v1/learning/cards` must never receive client-side exclusion fields (`exclude_server_word_ids`, `current_word_id`, etc.) — backend rejects with 400
@@ -148,4 +158,4 @@ Cards are loaded exclusively via `POST /v1/learning/cards` with `card_mode: "new
 
 ## Content Ingestion Pipeline
 
-Articles flow through statuses: `pending_processing` → `processing` → `pending_review` (admin content) or `processed` (user content). LLM enrichment happens in the worker, never in the request path. The `article_term_extractor.js` and `vocabulary_enrichment_adapter.js` modules handle extraction and LLM calls respectively.
+Articles flow through statuses: `pending_processing` → `processing` → `pending_review` (admin content) or `processed` (user content). LLM enrichment happens in the worker, never in the request path. `article_processing_pipeline.js` extracts terms and sentences; `vocabulary_enrichment_adapter.js` makes the LLM calls.

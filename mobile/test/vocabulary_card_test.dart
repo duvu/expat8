@@ -58,17 +58,20 @@ void main() {
   testWidgets('6.3 word card renders IPA and POS', (tester) async {
     await tester.pumpWidget(_wrap(VocabularyCardView(word: _wordCard())));
 
-    expect(find.text('/rɪˈlaɪəbl/'), findsOneWidget);
+    expect(
+        find.textContaining('/rɪˈlaɪəbl/', findRichText: true), findsOneWidget);
     expect(find.text('adjective'), findsOneWidget);
-    expect(find.text('IPA'), findsOneWidget);
-    expect(find.text('Vietnamese reading'), findsOneWidget);
+    expect(find.textContaining('IPA', findRichText: true), findsOneWidget);
+    expect(find.textContaining('Vietnamese reading', findRichText: true),
+        findsOneWidget);
   });
 
   testWidgets('6.3 phrase card does not render IPA or POS', (tester) async {
     await tester.pumpWidget(_wrap(VocabularyCardView(word: _phraseCard())));
 
-    expect(find.text('IPA'), findsNothing);
-    expect(find.text('Vietnamese reading'), findsNothing);
+    expect(find.textContaining('IPA', findRichText: true), findsNothing);
+    expect(find.textContaining('Vietnamese reading', findRichText: true),
+        findsNothing);
     // POS label row should not appear (empty string means isPhrase hides it)
     expect(find.text('adjective'), findsNothing);
   });

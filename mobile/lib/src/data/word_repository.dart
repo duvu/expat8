@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,7 +12,9 @@ import '../config.dart';
 import '../logging/logger.dart';
 import '../models/learning_progress.dart';
 import '../models/proficiency_state.dart';
+import '../models/review_state.dart';
 import '../models/study_event.dart';
+import '../models/study_level.dart';
 import '../models/submitted_word.dart';
 import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
@@ -27,7 +30,10 @@ class WordRepository {
     Uuid? uuid,
     AppConfig? config,
     SeedVocabularyLoader? seedLoader,
+    Random? random,
+    this.shuffleNewWords = true,
   })  : _uuid = uuid ?? const Uuid(),
+        _random = random ?? Random(),
         _logger = logger ?? const NoopLogger(),
         _seedLoader = seedLoader ?? const SeedVocabularyLoader();
 
@@ -38,6 +44,11 @@ class WordRepository {
   /// App logger, for features that record diagnostics (e.g. games).
   Logger get logger => _logger;
   final Uuid _uuid;
+  final Random _random;
+
+  /// Mix levels 80/20 and pick at random within a level. Off gives the
+  /// deterministic nearest-level, newest-first order (tests of other flows).
+  final bool shuffleNewWords;
   final SeedVocabularyLoader _seedLoader;
   String? _refillDeviceId;
   String _activeLanguage = 'en';
@@ -145,6 +156,7 @@ class WordRepository {
       deviceId: deviceId,
     );
     await database.saveUserSession(session);
+    await _switchScheduleOwner(session.userId);
     await _logger.info(
       category: AppLogCategory.auth,
       event: 'auth.register.success',
@@ -167,6 +179,7 @@ class WordRepository {
       deviceId: deviceId,
     );
     await database.saveUserSession(session);
+    await _switchScheduleOwner(session.userId);
     await _logger.info(
       category: AppLogCategory.auth,
       event: 'auth.sign_in.success',
@@ -187,6 +200,57 @@ class WordRepository {
       await apiClient.signOut(session: session);
     } finally {
       await database.clearUserSession();
+      await _switchScheduleOwner(null);
+    }
+  }
+
+  /// Makes the local schedule [userId]'s (null = signed out): claims events
+  /// recorded without an account for a signed-in user, then replays theirs.
+  Future<void> _switchScheduleOwner(String? userId) async {
+    if (userId != null) await database.claimUnownedEvents(userId);
+    await database.rebuildScheduleForOwner(userId);
+  }
+
+  static const _scheduleVersionKey = 'srs.schedule.version';
+
+  /// One-time upgrade of schedules written before the shared SRS scheduler:
+  /// replays the current account's local events (the server pull fills in
+  /// the rest on the next sync).
+  Future<void> upgradeLocalSchedule() async {
+    if (await database.getSetting(_scheduleVersionKey) == '1') return;
+    await _switchScheduleOwner((await database.loadUserSession())?.userId);
+    await database.setSetting(_scheduleVersionKey, '1');
+  }
+
+  /// Pulls the learner's SRS states changed since the last pull (all pages)
+  /// after queued events were uploaded: a new phone, a reinstall or another
+  /// device of the same learner catches up. Best effort; offline is fine.
+  Future<void> pullReviewStates({required String deviceId}) async {
+    final session = await database.loadUserSession();
+    final language = _activeLanguage;
+    final cursorKey =
+        'srs.pull.cursor.${session?.userId ?? 'anonymous'}.$language';
+    try {
+      ReviewStatesPage page;
+      do {
+        page = await apiClient.fetchReviewStates(
+          deviceId: deviceId,
+          language: language,
+          cursor: await database.getSetting(cursorKey),
+          sessionToken: session?.sessionToken,
+        );
+        await database.applyServerReviewStates(page.items,
+            ownerUserId: session?.userId);
+        final next = page.nextCursor;
+        if (next != null) await database.setSetting(cursorKey, next);
+      } while (page.hasMore);
+    } on Object catch (error) {
+      await _logger.warning(
+        category: AppLogCategory.sync,
+        event: 'review_states.pull_deferred',
+        message: 'Review states will be pulled on the next sync.',
+        context: {'error': '$error'},
+      );
     }
   }
 
@@ -282,7 +346,8 @@ class WordRepository {
         now: now,
       );
       await database.removeSubmittedWordQueueEntries(merged.localSubmissionId);
-      return (await database.getSubmittedWord(merged.localSubmissionId)) ?? merged;
+      return (await database.getSubmittedWord(merged.localSubmissionId)) ??
+          merged;
     } catch (error) {
       if (_isPermanentSyncFailure(error)) {
         final failed = localSubmission.copyWith(
@@ -291,7 +356,8 @@ class WordRepository {
           updatedAt: now,
         );
         await database.upsertSubmittedWord(failed);
-        await database.removeSubmittedWordQueueEntries(failed.localSubmissionId);
+        await database
+            .removeSubmittedWordQueueEntries(failed.localSubmissionId);
       } else {
         // Offline or server unavailable: keep it queued; syncPendingEvents
         // sends it once the backend is reachable again.
@@ -307,7 +373,8 @@ class WordRepository {
         );
       }
     }
-    return (await database.getSubmittedWord(localSubmission.localSubmissionId)) ??
+    return (await database
+            .getSubmittedWord(localSubmission.localSubmissionId)) ??
         localSubmission;
   }
 
@@ -335,10 +402,24 @@ class WordRepository {
     return (await getNewWordWithFallbackResult(language: language)).word;
   }
 
+  /// Picks the next new card. With a [level], local words closest to that level
+  /// win (instead of simply the newest). With [strictLevel] (the learner chose
+  /// the level for this session) and no local word at exactly that level, one
+  /// backend fetch for that level is attempted before settling for the nearest.
   Future<WordLookupResult> getNewWordWithFallbackResult({
     String language = 'en',
+    String? level,
+    String scale = 'cefr',
+    bool strictLevel = false,
   }) async {
-    final localWord = await database.nextNewWord(language: language);
+    final localWord = level == null
+        ? await database.nextNewWord(language: language)
+        : await _pickNewWordNearLevel(
+            language: language,
+            level: level,
+            scale: scale,
+            strictLevel: strictLevel,
+          );
     if (localWord != null) {
       await _logger.info(
         category: AppLogCategory.api,
@@ -400,6 +481,46 @@ class WordRepository {
     );
   }
 
+  Future<VocabularyWord?> _pickNewWordNearLevel({
+    required String language,
+    required String level,
+    required String scale,
+    required bool strictLevel,
+  }) async {
+    final wanted = normalizeStudyLevel(level, scale);
+    Future<VocabularyWord?> pick() async => pickWordNearLevel(
+          await database.newWordsForLanguage(language),
+          level: level,
+          scale: scale,
+          random: shuffleNewWords ? _random : null,
+          // A level the learner chose explicitly stays pure; otherwise 20% revisits lower levels.
+          lowerShare: strictLevel ? 0 : 0.2,
+        );
+    var word = await pick();
+    final atLevel =
+        word != null && normalizeStudyLevel(word.difficulty, scale) == wanted;
+    if (strictLevel && !atLevel) {
+      try {
+        final deviceId = _refillDeviceId ?? await getOrCreateDeviceId();
+        await refillLearningCards(
+          deviceId: deviceId,
+          limit: 20,
+          language: language,
+          level: wanted,
+        );
+        word = await pick();
+      } on Object catch (error) {
+        await _logger.warning(
+          category: AppLogCategory.api,
+          event: 'new_word.level_fetch.failed',
+          message: 'Could not fetch cards for the chosen level; using nearest.',
+          context: {'level': level, 'error': '$error'},
+        );
+      }
+    }
+    return word;
+  }
+
   Future<VocabularyWord?> getReviewWord(DateTime now,
       {String language = 'en'}) {
     return database.nextDueReviewWord(now, language: language);
@@ -425,7 +546,8 @@ class WordRepository {
 
   Future<WordLookupResult> getRecentReviewWordResult(DateTime now,
       {String language = 'en'}) async {
-    final recent = await database.recentlyLearnedReviewWord(now, language: language);
+    final recent =
+        await database.recentlyLearnedReviewWord(now, language: language);
     if (recent != null) {
       await _logger.debug(
         category: AppLogCategory.session,
@@ -477,6 +599,7 @@ class WordRepository {
     required String deviceId,
     int limit = 10,
     String language = 'en',
+    String? level,
   }) async {
     if (limit <= 0) return const [];
     final session = await database.loadUserSession();
@@ -490,6 +613,7 @@ class WordRepository {
         limit: batchLimit,
         targetLanguage: language,
         sessionToken: session?.sessionToken,
+        level: level,
       );
       if (batch.items.isEmpty) break;
       allItems.addAll(batch.items);
@@ -516,12 +640,7 @@ class WordRepository {
   }) async {
     final event = _createStudyEvent(word: word, rating: rating, now: now);
     await database.insertStudyEvent(event);
-    await _applyRatingLocalState(
-      word: word,
-      rating: rating,
-      now: now,
-      deviceId: deviceId,
-    );
+    await database.updateWordAfterRating(word: word, rating: rating, now: now);
     return _submitStudyEvent(
       event: event,
       rating: rating,
@@ -556,12 +675,8 @@ class WordRepository {
   }
 
   /// Records a practice answer (games, quick reviews) as a real study event:
-  /// queued for offline sync and applied to the local schedule, without the
-  /// card flow's side effects (an `easy` swipe removes the word locally).
-  ///
-  /// Correct new words start learning (review tomorrow); other correct
-  /// answers count as `easy` (review in 3 days); wrong answers as `hard`
-  /// (review tomorrow).
+  /// queued for offline sync and applied to the local SRS schedule. A correct
+  /// answer counts as `easy`, a wrong one as `hard`.
   Future<void> recordPracticeAnswer({
     required VocabularyWord word,
     required bool correct,
@@ -580,19 +695,8 @@ class WordRepository {
       language: word.language,
       source: source,
     ));
-    final (status, next) = switch ((correct, word.status)) {
-      (true, WordStatus.newWord) => (WordStatus.learning, const Duration(days: 1)),
-      (true, WordStatus.mastered) => (WordStatus.mastered, const Duration(days: 7)),
-      (true, _) => (WordStatus.review, const Duration(days: 3)),
-      (false, WordStatus.newWord) => (WordStatus.learning, const Duration(hours: 12)),
-      (false, _) => (WordStatus.review, const Duration(days: 1)),
-    };
-    await database.scheduleWordReview(
-      localId: word.localId,
-      status: status,
-      nextReviewAt: at.add(next),
-      now: at,
-    );
+    await database.applySrsRating(
+        localId: word.localId, rating: rating, now: at);
   }
 
   StudyEvent _createStudyEvent({
@@ -609,41 +713,6 @@ class WordRepository {
       syncStatus: SyncStatus.pending,
       language: word.language,
     );
-  }
-
-  Future<void> _applyRatingLocalState({
-    required VocabularyWord word,
-    required StudyRating rating,
-    required DateTime now,
-    required String deviceId,
-  }) async {
-    if (rating == StudyRating.easy) {
-      await database.deleteLocalWord(word.localId);
-      try {
-        await syncCacheInventory(deviceId: deviceId);
-      } catch (error) {
-        await _logger.warning(
-          category: AppLogCategory.sync,
-          event: 'cache_inventory.sync_deferred',
-          message: 'Cache inventory sync failed after easy deletion.',
-          context: {
-            'error': '$error',
-          },
-        );
-      }
-      await _logger.info(
-        category: AppLogCategory.session,
-        event: 'rating.easy.delete_local',
-        message: 'Easy-rated word removed from local cache.',
-        context: {
-          'local_id': word.localId,
-          'server_word_id': word.serverWordId,
-        },
-      );
-    } else {
-      await database.updateWordAfterRating(
-          word: word, rating: rating, now: now);
-    }
   }
 
   Future<ProficiencyState?> _submitStudyEvent({
@@ -809,49 +878,6 @@ class WordRepository {
     }());
   }
 
-  Future<void> markRememberedLowFrequency({
-    required VocabularyWord word,
-    required DateTime now,
-    required String deviceId,
-  }) async {
-    await database.markWordRememberedLowFrequency(word: word, now: now);
-    await _logger.info(
-      category: AppLogCategory.session,
-      event: 'gesture.remembered.local_state_updated',
-      message: 'Applied remembered gesture update locally.',
-      context: {
-        'word_id': word.serverWordId ?? word.localId,
-        'relearn_frequency_percent': 10,
-      },
-    );
-    _syncCacheInventoryInBackground(
-      deviceId: deviceId,
-      event: 'gesture.remembered.sync_deferred',
-      message: 'Deferred cache sync after remembered gesture.',
-    );
-  }
-
-  Future<void> markAsDifficultForRelearn({
-    required VocabularyWord word,
-    required DateTime now,
-    required String deviceId,
-  }) async {
-    await database.markWordDifficultForRelearn(word: word, now: now);
-    await _logger.info(
-      category: AppLogCategory.session,
-      event: 'gesture.difficult.local_state_updated',
-      message: 'Applied difficult gesture update locally.',
-      context: {
-        'word_id': word.serverWordId ?? word.localId,
-      },
-    );
-    _syncCacheInventoryInBackground(
-      deviceId: deviceId,
-      event: 'gesture.difficult.sync_deferred',
-      message: 'Deferred cache sync after difficult gesture.',
-    );
-  }
-
   void _syncCacheInventoryInBackground({
     required String deviceId,
     required String event,
@@ -869,6 +895,23 @@ class WordRepository {
         );
       }
     }());
+  }
+
+  /// Every word cached for [language] (distractors for review exercises).
+  Future<List<VocabularyWord>> cachedWords(String language) =>
+      database.wordsForLanguage(language);
+
+  /// Adds [word] (e.g. tapped while reading an article) to the learner's
+  /// reviews, due now. The device's cache inventory is updated in the
+  /// background so the server does not serve it again as a new card.
+  Future<void> addWordForReview(VocabularyWord word, {DateTime? now}) async {
+    await database.scheduleReviewNow(
+        word: word, now: (now ?? DateTime.now()).toUtc());
+    _syncCacheInventoryInBackground(
+      deviceId: await getOrCreateDeviceId(),
+      event: 'article.add_review.sync_deferred',
+      message: 'Deferred cache sync after adding a word from an article.',
+    );
   }
 
   /// Transitions a newly displayed [newWord] to [learning] status.
@@ -927,7 +970,9 @@ class WordRepository {
           final localAttemptId = payload['local_attempt_id'] as String?;
           final sessionId = payload['session_id'] as String?;
           final rawAnswers = payload['answers'] as List<dynamic>?;
-          if (localAttemptId == null || sessionId == null || rawAnswers == null) {
+          if (localAttemptId == null ||
+              sessionId == null ||
+              rawAnswers == null) {
             await _dropSyncEntry(entry, reason: 'malformed_payload');
             continue;
           }
@@ -1060,6 +1105,9 @@ class WordRepository {
           // study_event and other existing types.
           final session = await database.loadUserSession();
           final language = payload.remove('language') as String?;
+          // Local-only key: dueSyncEntries already kept other accounts'
+          // events back; signed-out events go to whoever signs in next.
+          payload.remove('owner_user_id');
           final result = await apiClient.syncStudyEvents(
             deviceId: deviceId,
             events: [payload],
@@ -1148,14 +1196,16 @@ class WordRepository {
     required SubmittedWord remoteSubmission,
   }) async {
     if (remoteSubmission.resolvedWord != null) {
-      final mergedWord = await _mergeResolvedWord(remoteSubmission.resolvedWord!);
+      final mergedWord =
+          await _mergeResolvedWord(remoteSubmission.resolvedWord!);
       await database.upsertWord(mergedWord);
     }
     final merged = remoteSubmission.copyWith(
       localSubmissionId: localSubmission.localSubmissionId,
     );
     await database.upsertSubmittedWord(merged);
-    return (await database.getSubmittedWord(localSubmission.localSubmissionId)) ??
+    return (await database
+            .getSubmittedWord(localSubmission.localSubmissionId)) ??
         merged;
   }
 
@@ -1169,7 +1219,8 @@ class WordRepository {
       return remoteWord;
     }
 
-    final preservedStatus = _strongerWordStatus(existing.status, remoteWord.status);
+    final preservedStatus =
+        _strongerWordStatus(existing.status, remoteWord.status);
 
     return remoteWord.copyWith(
       localId: existing.localId,
@@ -1187,7 +1238,8 @@ class WordRepository {
     required DateTime now,
   }) async {
     final resolvedWord = submission.resolvedWord;
-    if (submission.status != SubmittedWordStatus.ready || resolvedWord == null) {
+    if (submission.status != SubmittedWordStatus.ready ||
+        resolvedWord == null) {
       return;
     }
 

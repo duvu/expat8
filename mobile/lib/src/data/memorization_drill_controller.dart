@@ -236,8 +236,7 @@ class MemorizationDrillController {
   }) {
     final nowMs = now.millisecondsSinceEpoch;
     final reviewCount = (existing?.reviewCount ?? 0) + 1;
-    final easeFactor = _newEaseFactor(
-        existing?.easeFactor ?? 2.5, rating);
+    final easeFactor = _newEaseFactor(existing?.easeFactor ?? 2.5, rating);
     final intervalDays = _newInterval(
       currentInterval: existing?.intervalDays ?? 0.0,
       easeFactor: easeFactor,
@@ -247,8 +246,8 @@ class MemorizationDrillController {
         ? now.add(const Duration(minutes: 1)).millisecondsSinceEpoch
         : now
             .add(Duration(
-                milliseconds: (intervalDays * Duration.millisecondsPerDay)
-                    .round()))
+                milliseconds:
+                    (intervalDays * Duration.millisecondsPerDay).round()))
             .millisecondsSinceEpoch;
     final status = _newStatus(
       current: existing?.status ?? 'new',

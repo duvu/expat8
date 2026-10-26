@@ -24,7 +24,8 @@ class FakeAudioService implements ISpeakingAudioService {
   Future<MicPermissionStatus> requestMicPermission() async => _status;
 
   @override
-  Future<void> speakSample(String text, {String languageCode = 'en-US'}) async {}
+  Future<void> speakSample(String text,
+      {String languageCode = 'en-US'}) async {}
 
   @override
   Future<void> stopSample() async {}
@@ -114,7 +115,8 @@ void main() {
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'speaking_repository_test_${DateTime.now().microsecondsSinceEpoch}.db');
+          databaseName:
+              'speaking_repository_test_${DateTime.now().microsecondsSinceEpoch}.db');
       audio = FakeAudioService();
       files = FakeFileManager();
       repo = SpeakingRepository(
@@ -163,8 +165,7 @@ void main() {
       final queue = await db.dueSyncEntries(
         DateTime.now().toUtc().add(const Duration(minutes: 1)),
       );
-      final speaking =
-          queue.where((e) => e.type == 'speaking_event').toList();
+      final speaking = queue.where((e) => e.type == 'speaking_event').toList();
       expect(speaking, isNotEmpty);
       // Ensure localAudioPath is NOT in queued payload.
       for (final entry in speaking) {
@@ -235,8 +236,7 @@ void main() {
       final queue = await db.dueSyncEntries(
         DateTime.now().toUtc().add(const Duration(minutes: 1)),
       );
-      final speaking =
-          queue.where((e) => e.type == 'speaking_event').toList();
+      final speaking = queue.where((e) => e.type == 'speaking_event').toList();
       // speaking queue entries removed by deleteAllRecordings
       expect(speaking, isEmpty);
     });
@@ -250,7 +250,8 @@ void main() {
     setUp(() async {
       _drillTestCounter++;
       db = await LocalDatabase.open(
-          databaseName: 'drill_selection_test_${_drillTestCounter}_${DateTime.now().microsecondsSinceEpoch}.db');
+          databaseName:
+              'drill_selection_test_${_drillTestCounter}_${DateTime.now().microsecondsSinceEpoch}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),
@@ -308,7 +309,8 @@ void main() {
   group('SpeakingPromptEntity cache', () {
     test('cacheSpeakingPrompt upserts on conflict', () async {
       final db = await LocalDatabase.open(
-          databaseName: 'speaking_prompt_upsert_test_${DateTime.now().microsecondsSinceEpoch}.db');
+          databaseName:
+              'speaking_prompt_upsert_test_${DateTime.now().microsecondsSinceEpoch}.db');
       try {
         final now = DateTime.now().toUtc().millisecondsSinceEpoch;
         db.cacheSpeakingPrompt(SpeakingPromptEntity(
@@ -330,7 +332,8 @@ void main() {
 
     test('recentCachedPrompts returns most recently cached first', () async {
       final db = await LocalDatabase.open(
-          databaseName: 'speaking_prompt_recent_test_${DateTime.now().microsecondsSinceEpoch}.db');
+          databaseName:
+              'speaking_prompt_recent_test_${DateTime.now().microsecondsSinceEpoch}.db');
       try {
         final base = DateTime.utc(2026, 1, 1).millisecondsSinceEpoch;
         for (var i = 0; i < 3; i++) {
@@ -355,7 +358,8 @@ void main() {
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'loop_completed_test_${databaseCounter++}_${DateTime.now().microsecondsSinceEpoch}.db');
+          databaseName:
+              'loop_completed_test_${databaseCounter++}_${DateTime.now().microsecondsSinceEpoch}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),
@@ -382,7 +386,8 @@ void main() {
       expect(loopEvents.first.payload, contains('"prompts_count":5'));
     });
 
-    test('does not include local_audio_path in loop_completed payload', () async {
+    test('does not include local_audio_path in loop_completed payload',
+        () async {
       repo.postLoopCompletedEvent(durationMs: 60000, promptsCount: 3);
 
       final queue = await db.dueSyncEntries(
@@ -401,7 +406,8 @@ void main() {
 
     setUp(() async {
       db = await LocalDatabase.open(
-          databaseName: 'get_weekly_summary_test_${DateTime.now().microsecondsSinceEpoch}.db');
+          databaseName:
+              'get_weekly_summary_test_${DateTime.now().microsecondsSinceEpoch}.db');
       repo = SpeakingRepository(
         database: db,
         audioService: FakeAudioService(),
@@ -419,7 +425,8 @@ void main() {
 
       db.saveSpeakingAttempt(SpeakingAttemptEntity(
         attemptId: 'this-week',
-        occurredAtMs: monday.add(const Duration(days: 1)).millisecondsSinceEpoch,
+        occurredAtMs:
+            monday.add(const Duration(days: 1)).millisecondsSinceEpoch,
         durationMs: 4000,
         retryCount: 2,
         selfRating: 'clear',

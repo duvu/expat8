@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "start:worker": "node src/worker.js",
     "migrate": "node src/migrate.js",
+    "rebuild:srs": "node src/rebuild_srs_states.js",
     "test": "node --test",
     "lint": "eslint src/ test/",
     "format": "prettier --write \"src/**/*.js\" \"test/**/*.js\"",

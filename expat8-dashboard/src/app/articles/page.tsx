@@ -1,66 +1,42 @@
 import Link from 'next/link';
 
 import { listAdminArticles } from '@/lib/db';
+import { formatDateTime } from '@/lib/format';
+import { queryParam } from '@/lib/form';
+import { ARTICLE_STATUS_OPTIONS } from '@/lib/options';
+import DataTable from '@/components/DataTable';
+import FilterForm from '@/components/FilterForm';
 import PageShell from '@/components/PageShell';
+import Select from '@/components/Select';
+import StatusBadge from '@/components/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ArticlesPage({ searchParams }: { searchParams: Promise<{ status?: string }>; }) {
-  const params = await searchParams;
-  const status = params.status ?? null;
+export default async function ArticlesPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+  const status = queryParam((await searchParams).status);
   const articles = await listAdminArticles({ status });
 
   return (
-    <PageShell title="Articles" actions={<Link href="/articles/new" className="button">New article</Link>}>
+    <PageShell title="Articles" actions={<Link href="/articles/new" className="button primary">New article</Link>}>
       <section className="table-panel">
-        <form className="toolbar">
-          <label>
-            Status
-            <select name="status" defaultValue={status ?? ''}>
-              <option value="">All</option>
-              <option value="pending_processing">Pending processing</option>
-              <option value="processing">Processing</option>
-              <option value="pending_review">Pending review</option>
-              <option value="processed">Processed</option>
-              <option value="published">Published</option>
-              <option value="processing_failed">Failed</option>
-            </select>
-          </label>
-          <button type="submit">Filter</button>
-        </form>
+        <FilterForm>
+          <Select label="Status" name="status" options={ARTICLE_STATUS_OPTIONS} defaultValue={status ?? ''} emptyLabel="All" />
+        </FilterForm>
       </section>
 
       <section className="table-panel">
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Language</th>
-              <th>Status</th>
-              <th>Visibility</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {articles.length === 0 ? (
-              <tr>
-                <td colSpan={5}>
-                  <div className="empty-state">No articles found for the current filter.</div>
-                </td>
-              </tr>
-            ) : articles.map((article) => (
-              <tr key={article.id}>
-                <td data-label="Title">
-                  <Link href={`/articles/${article.id}`}>{article.title}</Link>
-                </td>
-                <td data-label="Language">{article.language}</td>
-                <td data-label="Status"><span className="badge" data-status={article.status}>{article.status}</span></td>
-                <td data-label="Visibility"><span className="badge" data-status={article.visibility}>{article.visibility}</span></td>
-                <td data-label="Updated">{new Date(article.updated_at).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={articles}
+          rowKey={(article) => article.id}
+          empty="No articles found for the current filter."
+          columns={[
+            { label: 'Title', render: (a) => <Link href={`/articles/${a.id}`}>{a.title}</Link> },
+            { label: 'Language', render: (a) => a.language },
+            { label: 'Status', render: (a) => <StatusBadge status={a.status} /> },
+            { label: 'Visibility', render: (a) => <StatusBadge status={a.visibility} /> },
+            { label: 'Updated', render: (a) => formatDateTime(a.updated_at) },
+          ]}
+        />
       </section>
     </PageShell>
   );

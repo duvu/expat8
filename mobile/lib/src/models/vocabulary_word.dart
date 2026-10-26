@@ -71,7 +71,8 @@ class VocabularyWord {
     final now = DateTime.now().toUtc();
     final spJson = json['speaking_prompt'] as Map<String, dynamic>?;
     return VocabularyWord(
-      localId: (json['local_id'] ?? json['server_word_id'] ?? json['term']) as String,
+      localId: (json['local_id'] ?? json['server_word_id'] ?? json['term'])
+          as String,
       serverWordId: json['server_word_id'] as String?,
       term: json['term'] as String,
       language: json['language'] as String,

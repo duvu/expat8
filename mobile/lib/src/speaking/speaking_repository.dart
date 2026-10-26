@@ -527,9 +527,9 @@ class SpeakingRepository {
       };
       if (rating != null) ratings[rating] = (ratings[rating] ?? 0) + 1;
     }
-    final loops =
-        int.tryParse(await _database.getSetting(_loopCountKey(weekStart)) ?? '') ??
-            0;
+    final loops = int.tryParse(
+            await _database.getSetting(_loopCountKey(weekStart)) ?? '') ??
+        0;
     return SpeakingWeeklySummary(
       spokenSentenceCount: attempts.length,
       retryCount: retries,
@@ -585,3 +585,10 @@ class SpeakingRepository {
     _database.enqueueSpeakingEvent(jsonEncode(payload));
   }
 }
+
+/// Text-to-speech locale for a learning language code.
+String ttsLanguageCode(String language) => switch (language) {
+      'zh' => 'zh-CN',
+      'vi' => 'vi-VN',
+      _ => 'en-US',
+    };

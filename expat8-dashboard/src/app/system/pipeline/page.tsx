@@ -1,69 +1,50 @@
-import { getPipelineHealth, getArticleStatusCounts, getProcessingJobStats, getGenerationRuns } from '@/lib/analytics';
+import { getPipelineHealth, getArticleStatusCounts, getGenerationRuns } from '@/lib/analytics';
+import { formatSeconds, truncate } from '@/lib/format';
+import ChartPanel from '@/components/ChartPanel';
+import DataTable from '@/components/DataTable';
 import PageShell from '@/components/PageShell';
-import KpiCard from '@/components/charts/KpiCard';
+import StatusBadge from '@/components/StatusBadge';
 import BarChart from '@/components/charts/BarChart';
+import KpiCard from '@/components/charts/KpiCard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PipelineMonitorPage() {
-  const [health, statusCounts, jobStats, generationRuns] = await Promise.all([
+  const [health, statusCounts, generationRuns] = await Promise.all([
     getPipelineHealth(),
     getArticleStatusCounts(),
-    getProcessingJobStats(),
     getGenerationRuns(),
   ]);
 
   return (
     <PageShell title="Pipeline Monitor">
       <section className="kpi-grid">
-        <KpiCard label="Queue Depth" value={health.queue_depth} danger={health.queue_depth > 50} />
-        <KpiCard label="Failed (24h)" value={health.failed_last_24h} danger={health.failed_last_24h > 0} />
-        <KpiCard label="P50 Duration" value={`${jobStats.p50_duration_s.toFixed(1)}s`} />
+        <KpiCard label="Queue Depth" value={health.queueDepth} danger={health.queueDepth > 50} />
+        <KpiCard label="Failed (24h)" value={health.failedLast24h} danger={health.failedLast24h > 0} />
+        <KpiCard label="P50 Duration (30d)" value={formatSeconds(health.p50Seconds)} />
       </section>
 
       <section className="analytics-grid">
-        <div className="chart-panel">
-          <div className="chart-panel-header">
-            <h2 className="chart-panel-title">Article Status Counts</h2>
-          </div>
-          <BarChart
-            data={statusCounts}
-            xKey="status"
-            series={[{ key: 'count', label: 'Articles', color: '#2563eb' }]}
-          />
-        </div>
+        <ChartPanel title="Article Status Counts">
+          <BarChart data={statusCounts} xKey="status" series={[{ key: 'count', label: 'Articles', color: '#2563eb' }]} />
+        </ChartPanel>
       </section>
 
       <section className="table-panel">
         <h2>Generation Runs</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Status</th>
-              <th>Requested</th>
-              <th>Inserted</th>
-              <th>Duration</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {generationRuns.length === 0 ? (
-              <tr>
-                <td colSpan={6}><div className="empty-state">No generation runs found.</div></td>
-              </tr>
-            ) : generationRuns.map((run) => (
-              <tr key={run.id}>
-                <td data-label="ID"><span title={run.id}>{run.id.slice(0, 8)}…</span></td>
-                <td data-label="Status"><span className="badge" data-status={run.status}>{run.status}</span></td>
-                <td data-label="Requested">{run.requested_count.toLocaleString()}</td>
-                <td data-label="Inserted">{run.inserted_count.toLocaleString()}</td>
-                <td data-label="Duration">{run.duration_s != null ? `${run.duration_s.toFixed(1)}s` : '—'}</td>
-                <td data-label="Error">{run.error ?? <span className="muted">—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={generationRuns}
+          rowKey={(run) => run.id}
+          empty="No generation runs found."
+          columns={[
+            { label: 'ID', render: (run) => <span title={run.id}>{truncate(run.id, 8)}</span> },
+            { label: 'Status', render: (run) => <StatusBadge status={run.status} /> },
+            { label: 'Requested', render: (run) => run.requested_count.toLocaleString() },
+            { label: 'Inserted', render: (run) => run.inserted_count.toLocaleString() },
+            { label: 'Duration', render: (run) => formatSeconds(run.duration_s) },
+            { label: 'Error', render: (run) => run.error ?? <span className="muted">—</span> },
+          ]}
+        />
       </section>
     </PageShell>
   );

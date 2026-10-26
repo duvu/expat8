@@ -1,25 +1,28 @@
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
-import { backendFetch } from '@/lib/backend';
+import { backendRequest } from '@/lib/backend';
+import { formText, optionalFormText } from '@/lib/form';
+import { VISIBILITY_OPTIONS } from '@/lib/options';
 import PageShell from '@/components/PageShell';
+import Select from '@/components/Select';
 
 async function createArticle(formData: FormData) {
   'use server';
 
-  const payload = {
-    title: String(formData.get('title') ?? '').trim(),
-    language: String(formData.get('language') ?? '').trim(),
-    raw_text: String(formData.get('raw_text') ?? '').trim(),
-    source_url: String(formData.get('source_url') ?? '').trim() || undefined,
-    visibility: String(formData.get('visibility') ?? 'private').trim()
-  };
-
-  await backendFetch('/v1/admin/articles', {
+  const article = await backendRequest<{ id: string }>('/v1/admin/articles', {
     method: 'POST',
-    body: payload
+    body: {
+      title: formText(formData, 'title'),
+      language: formText(formData, 'language'),
+      raw_text: formText(formData, 'raw_text'),
+      source_url: optionalFormText(formData, 'source_url'),
+      visibility: formText(formData, 'visibility') || 'private',
+    },
   });
 
-  revalidatePath('/');
+  revalidatePath('/articles');
+  redirect(`/articles/${article.id}`);
 }
 
 export default function NewArticlePage() {
@@ -38,18 +41,12 @@ export default function NewArticlePage() {
           Source URL
           <input name="source_url" type="url" />
         </label>
-        <label>
-          Visibility
-          <select name="visibility" defaultValue="private">
-            <option value="private">Private</option>
-            <option value="published">Published</option>
-          </select>
-        </label>
+        <Select label="Visibility" name="visibility" options={VISIBILITY_OPTIONS} defaultValue="private" />
         <label>
           Raw text
           <textarea name="raw_text" rows={18} required />
         </label>
-        <button type="submit">Submit article</button>
+        <button type="submit" className="primary">Submit article</button>
       </form>
     </PageShell>
   );

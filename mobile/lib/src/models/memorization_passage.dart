@@ -27,8 +27,7 @@ class MemorizationPassage {
       ownerUserId: json['owner_user_id'] as String?,
       rawText: json['raw_text'] as String?,
       segments: segmentsList
-          ?.map((s) =>
-              MemorizationSegment.fromJson(s as Map<String, dynamic>))
+          ?.map((s) => MemorizationSegment.fromJson(s as Map<String, dynamic>))
           .toList(),
     );
   }

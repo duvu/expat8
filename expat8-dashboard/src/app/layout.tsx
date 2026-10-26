@@ -4,8 +4,8 @@ import Sidebar from '@/components/Sidebar';
 import './globals.css';
 
 export const metadata = {
-  title: 'Expat8 Dashboard',
-  description: 'Content ingestion, vocabulary review, and operations dashboard'
+  title: 'Expat8 | Learn a little. Use it everywhere.',
+  description: 'Expat8 learning content, vocabulary review, and progress operations.'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

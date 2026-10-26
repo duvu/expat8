@@ -1185,6 +1185,28 @@ test('enrichment pipeline: handles missing ipa/translation fields gracefully (nu
   assert.equal(seg.viet_reading_text, null);
 });
 
+test('enrichment pipeline: accepts JSON wrapped in a markdown code fence', async () => {
+  const store = makeStore();
+  const passage = store.createPassage({ title: 'Fenced', language: 'en', rawText: LONG_TEXT, ownerUserId: 'u1' });
+  store.createSegments({ passageId: passage.id, segments: [{ position: 0, text: 'Hello world.' }] });
+  store.updatePassage({ passageId: passage.id, status: 'segmented' });
+
+  const mockLLM = {
+    async chatCompletion() {
+      // Gateway-routed models often ignore response_format and fence the JSON
+      const content = '```json\n' + JSON.stringify([{ ipa: '/həˈloʊ/', translation: 'Xin chào.', viet_reading: 'hơ-lâu' }]) + '\n```';
+      return { choices: [{ message: { content } }] };
+    }
+  };
+
+  const pipeline = new PassageEnrichmentPipeline({ store, liteLLMClient: mockLLM, logger: silentLogger() });
+  const result = await pipeline.processPassage({ passageId: passage.id });
+
+  assert.equal(result.success, true);
+  const [seg] = store.getSegmentsByPassage({ passageId: passage.id });
+  assert.equal(seg.translation_text, 'Xin chào.');
+});
+
 test('enrichment pipeline: handles length mismatch gracefully', async () => {
   const store = makeStore();
   const passage = store.createPassage({ title: 'Mismatch', language: 'en', rawText: LONG_TEXT, ownerUserId: 'u1' });

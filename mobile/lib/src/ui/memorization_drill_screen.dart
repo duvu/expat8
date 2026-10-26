@@ -63,8 +63,8 @@ class _MemorizationDrillScreenState extends State<MemorizationDrillScreen> {
       }
 
       // Load local progress.
-      final progress = widget.repository
-          .getPassageProgressLocalAll(widget.passage.id);
+      final progress =
+          widget.repository.getPassageProgressLocalAll(widget.passage.id);
 
       final controller = MemorizationDrillController(
         passageId: widget.passage.id,
@@ -115,8 +115,7 @@ class _MemorizationDrillScreenState extends State<MemorizationDrillScreen> {
                 preferredSize: const Size.fromHeight(4),
                 child: LinearProgressIndicator(
                   value: _controller!.totalSegments > 0
-                      ? _controller!.masteredCount /
-                          _controller!.totalSegments
+                      ? _controller!.masteredCount / _controller!.totalSegments
                       : 0,
                 ),
               )
@@ -223,8 +222,7 @@ class _ReadingPhaseView extends StatelessWidget {
               Text(
                 'Segment ${segment.position + 1}',
                 style: TextStyle(
-                    color: AppColors.of(context).subtleText,
-                    fontSize: 13),
+                    color: AppColors.of(context).subtleText, fontSize: 13),
               ),
             ],
           ),
@@ -306,7 +304,8 @@ class _FullRecallExerciseState extends State<_FullRecallExercise> {
                   .labelLarge
                   ?.copyWith(color: AppColors.of(context).subtleText)),
           const SizedBox(height: 8),
-          Text('Complete the segment:', style: Theme.of(context).textTheme.titleMedium),
+          Text('Complete the segment:',
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           // Prompt
           Container(
@@ -419,7 +418,8 @@ class _ClozeExerciseState extends State<_ClozeExercise> {
         items.add(_ClozeItem(text: words.sublist(cursor, start).join(' ')));
       }
       final end = (start + 2).clamp(0, words.length);
-      items.add(_ClozeItem(text: words.sublist(start, end).join(' '), isCloze: true));
+      items.add(
+          _ClozeItem(text: words.sublist(start, end).join(' '), isCloze: true));
       cursor = end;
     }
     if (cursor < words.length) {
@@ -502,14 +502,14 @@ class _ClozeChip extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
+          color: Theme.of(context)
+              .colorScheme
+              .primaryContainer
+              .withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(item.text,
-            style: Theme.of(context)
-                .textTheme
-                .bodyLarge
-                ?.copyWith(
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
                   height: 1.7,
                 )),
@@ -647,8 +647,8 @@ class _RatingButtons extends StatelessWidget {
         Expanded(
           child: FilledButton(
             onPressed: () => onRate(DrillRating.again),
-            style: FilledButton.styleFrom(
-                backgroundColor: appColors.ratingAgain),
+            style:
+                FilledButton.styleFrom(backgroundColor: appColors.ratingAgain),
             child: const Text('Again'),
           ),
         ),
@@ -663,8 +663,8 @@ class _RatingButtons extends StatelessWidget {
         Expanded(
           child: FilledButton(
             onPressed: () => onRate(DrillRating.easy),
-            style: FilledButton.styleFrom(
-                backgroundColor: appColors.ratingEasy),
+            style:
+                FilledButton.styleFrom(backgroundColor: appColors.ratingEasy),
             child: const Text('Easy'),
           ),
         ),
@@ -702,7 +702,8 @@ class _DrillCompleteView extends StatelessWidget {
             Icon(
               allMastered ? Icons.emoji_events : Icons.check_circle_outline,
               size: 72,
-              color: allMastered ? colorScheme.tertiary : appColors.statusSuccess,
+              color:
+                  allMastered ? colorScheme.tertiary : appColors.statusSuccess,
             ),
             const SizedBox(height: 24),
             Text(

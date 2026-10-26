@@ -7,6 +7,7 @@ import '../../models/vocabulary_word.dart';
 import 'question_generator.dart';
 import 'word_blaster_mode.dart';
 import 'word_pool.dart';
+import '../common/game_story.dart';
 
 enum WordBlasterPhase { ready, playing, reveal, waveBreak, paused, gameOver }
 
@@ -217,6 +218,10 @@ class WordBlasterSession extends ChangeNotifier {
 
   bool get isBossWave => wave % bossEvery == 0;
 
+  /// Every two waves open the next story chapter.
+  GameStoryChapter get chapter =>
+      GameStoryChapter.forLevel(1 + (wave - 1) ~/ 2);
+
   void start() {
     if (phase != WordBlasterPhase.ready) return;
     phase = WordBlasterPhase.playing;
@@ -274,8 +279,31 @@ class WordBlasterSession extends ChangeNotifier {
         if (isOver) break;
         _advanceMeteors(dt);
     }
-    notifyListeners();
+    // The Flame scene reads the session directly every frame; widgets only
+    // need a rebuild when something they show changed (not 60 times a second).
+    final ui = _uiState();
+    if (ui != _lastUiState) {
+      _lastUiState = ui;
+      notifyListeners();
+    }
   }
+
+  Object? _lastUiState;
+
+  Object _uiState() => (
+        phase,
+        score,
+        lives,
+        multiplier,
+        wave,
+        timeLeft.ceil(),
+        slowMotionLeft > 0,
+        shieldCharges,
+        question,
+        bossActive,
+        answered,
+        correctCount,
+      );
 
   void _tickTimers(double dt) {
     if (overheatLeft > 0) overheatLeft = max(0, overheatLeft - dt);

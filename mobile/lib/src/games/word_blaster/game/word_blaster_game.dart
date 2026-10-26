@@ -7,12 +7,16 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame/particles.dart';
 import 'package:flutter/animation.dart' show Curves;
-import 'package:flutter/material.dart' show ColorScheme, Icons, IconData;
+import 'package:flutter/material.dart'
+    show ColorScheme, Icons, IconData, HSLColor;
 import 'package:flutter/painting.dart'
     show TextPainter, TextSpan, TextStyle, FontWeight, TextDirection, TextAlign;
 
 import '../../common/game_audio.dart';
 import '../word_blaster_session.dart';
+import '../word_blaster_theme.dart';
+import '../../common/game_story.dart';
+import '../../common/game_story_scene.dart';
 
 /// Colours for the space scene; accents follow the app's colour scheme.
 class WordBlasterPalette {
@@ -46,12 +50,20 @@ class WordBlasterGame extends FlameGame {
     required this.palette,
     required this.audio,
     this.reducedMotion = false,
+    this.theme = WordBlasterTheme.space,
   });
 
   final WordBlasterSession session;
   WordBlasterPalette palette;
   final GameAudio audio;
   final bool reducedMotion;
+  final WordBlasterTheme theme;
+
+  bool get isEaster => theme == WordBlasterTheme.easter;
+
+  /// Current story chapter: scenery, cannon and projectiles follow it.
+  GameStoryChapter chapter = GameStoryChapter.one;
+  StoryStage get stage => GameStory.stage(theme, chapter);
 
   final Map<int, MeteorComponent> _meteors = {};
   PowerUpComponent? _powerUp;
@@ -67,7 +79,7 @@ class WordBlasterGame extends FlameGame {
   double get groundY => size.y * 0.84;
 
   @override
-  Color backgroundColor() => WordBlasterPalette.skyTop;
+  Color backgroundColor() => stage.skyTop;
 
   @override
   Future<void> onLoad() async {
@@ -164,7 +176,7 @@ class WordBlasterGame extends FlameGame {
       meteor.awaitingImpact = false;
       return;
     }
-    audio.play(GameSound.shoot, volume: 0.5);
+    audio.play(GameSound.shotFor(chapter), volume: 0.5);
     add(ProjectileComponent(
       from: cannon.muzzle,
       target: meteor,
@@ -187,13 +199,9 @@ class WordBlasterGame extends FlameGame {
     _burst(
       meteor.position,
       correct
-          ? [
-              WordBlasterPalette.correct,
-              palette.accent,
-              WordBlasterPalette.gold
-            ]
+          ? stage.shot.colors
           : [WordBlasterPalette.wrong, WordBlasterPalette.rockLight],
-      count: reducedMotion ? 10 : 26,
+      count: reducedMotion ? 10 : stage.shot.impactParticles,
     );
     meteor.explode();
     _meteors.remove(meteor.state.id);
@@ -267,17 +275,15 @@ class WordBlasterGame extends FlameGame {
           final angle = _random.nextDouble() * pi * 2;
           final v = base * (0.4 + _random.nextDouble());
           final color = colors[i % colors.length];
+          final paint = Paint(); // one per particle, recoloured each frame
           return AcceleratedParticle(
             speed: Vector2(cos(angle), sin(angle)) * v,
             acceleration: Vector2(cos(angle), sin(angle)) * -v * 1.1,
             child: ComputedParticle(
               renderer: (canvas, p) {
                 final r = size.x * 0.012 * (1 - p.progress);
-                canvas.drawCircle(
-                  Offset.zero,
-                  max(0.5, r),
-                  Paint()..color = color.withValues(alpha: 1 - p.progress),
-                );
+                paint.color = color.withValues(alpha: 1 - p.progress);
+                canvas.drawCircle(Offset.zero, max(0.5, r), paint);
               },
             ),
           );
@@ -326,6 +332,19 @@ class StarfieldComponent extends Component
   final int layers;
   final List<_Star> _stars = [];
   final Random _random = Random(42);
+  final Paint _dotPaint = Paint();
+  final Paint _streakPaint = Paint()..strokeCap = StrokeCap.round;
+
+  // The chapter's sky and landscape never move: record them once per
+  // (chapter, size) instead of rebuilding shaders and paths every frame.
+  Picture? _sky;
+  Picture? _ground;
+  (GameStoryChapter, Vector2)? _recordedFor;
+
+  // Shooting stars appear from chapter 3 on, more often in later chapters.
+  Offset? _streak;
+  double _streakAge = 0;
+  double _nextStreak = 2;
 
   @override
   Future<void> onLoad() async {
@@ -342,57 +361,86 @@ class StarfieldComponent extends Component
   }
 
   @override
+  void onRemove() {
+    _sky?.dispose();
+    _ground?.dispose();
+    _sky = _ground = null;
+    super.onRemove();
+  }
+
+  @override
   void update(double dt) {
     for (final star in _stars) {
       star.y += dt * (0.008 + star.layer * 0.012);
       if (star.y > 1) star.y -= 1;
       star.twinkle += dt * 2;
     }
+    final level = game.chapter.level;
+    if (_streak != null) {
+      _streakAge += dt;
+      if (_streakAge > 0.8) _streak = null;
+    } else if (level >= 3 && !game.reducedMotion) {
+      _nextStreak -= dt;
+      if (_nextStreak <= 0) {
+        _streak = Offset(
+            _random.nextDouble() * 0.8 + 0.1, _random.nextDouble() * 0.4);
+        _streakAge = 0;
+        _nextStreak = (7 - level) * (0.8 + _random.nextDouble());
+      }
+    }
+  }
+
+  void _record() {
+    final key = (game.chapter, game.size.clone());
+    if (_recordedFor == key && _sky != null) return;
+    _sky?.dispose();
+    _ground?.dispose();
+    final size = Size(game.size.x, game.size.y);
+    var recorder = PictureRecorder();
+    paintStorySky(Canvas(recorder), size, game.theme, game.chapter);
+    _sky = recorder.endRecording();
+    recorder = PictureRecorder();
+    paintStoryGround(Canvas(recorder), size, game.theme, game.chapter,
+        groundY: game.groundY / game.size.y);
+    _ground = recorder.endRecording();
+    _recordedFor = key;
   }
 
   @override
   void render(Canvas canvas) {
+    _record();
     final size = game.size;
-    final rect = Rect.fromLTWH(0, 0, size.x, size.y);
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = Gradient.linear(
-          Offset.zero,
-          Offset(0, size.y),
-          [WordBlasterPalette.skyTop, WordBlasterPalette.skyBottom],
-        ),
-    );
-    for (final star in _stars) {
-      final alpha = 0.35 + 0.25 * star.layer + 0.2 * sin(star.twinkle);
-      canvas.drawCircle(
-        Offset(star.x * size.x, star.y * size.y),
-        0.6 + star.layer * 0.6,
-        Paint()
-          ..color =
-              const Color(0xFFFFFFFF).withValues(alpha: alpha.clamp(0.1, 1.0)),
-      );
+    canvas.drawPicture(_sky!);
+    final dark = game.stage.dark;
+    for (var i = 0; i < _stars.length; i++) {
+      final star = _stars[i];
+      if (dark) {
+        final alpha = 0.35 + 0.25 * star.layer + 0.2 * sin(star.twinkle);
+        _dotPaint.color =
+            const Color(0xFFFFFFFF).withValues(alpha: alpha.clamp(0.1, 1.0));
+        canvas.drawCircle(Offset(star.x * size.x, star.y * size.y),
+            0.6 + star.layer * 0.6, _dotPaint);
+      } else {
+        final alpha = (0.45 + 0.3 * sin(star.twinkle)).clamp(0.15, 0.9);
+        _dotPaint.color = easterEggColors[i % easterEggColors.length]
+            .withValues(alpha: alpha);
+        canvas.drawCircle(Offset(star.x * size.x, star.y * size.y),
+            1.6 + star.layer * 1.2, _dotPaint);
+      }
     }
-    // Ground glow.
-    canvas.drawRect(
-      Rect.fromLTWH(0, game.groundY, size.x, size.y - game.groundY),
-      Paint()
-        ..shader = Gradient.linear(
-          Offset(0, game.groundY),
-          Offset(0, size.y),
-          [
-            game.palette.accentStrong.withValues(alpha: 0.28),
-            WordBlasterPalette.skyBottom
-          ],
-        ),
-    );
-    canvas.drawLine(
-      Offset(0, game.groundY),
-      Offset(size.x, game.groundY),
-      Paint()
-        ..color = game.palette.accent.withValues(alpha: 0.5)
-        ..strokeWidth = 1.5,
-    );
+    final streak = _streak;
+    if (streak != null) {
+      final head = Offset(streak.dx * size.x, streak.dy * size.y) +
+          const Offset(1, 0.45) * (_streakAge * size.x * 0.9);
+      _streakPaint
+        ..strokeWidth = 2
+        ..shader = Gradient.linear(head, head - const Offset(60, 27), [
+          const Color(0xFFFFFFFF).withValues(alpha: 1 - _streakAge / 0.8),
+          const Color(0x00FFFFFF),
+        ]);
+      canvas.drawLine(head, head - const Offset(60, 27), _streakPaint);
+    }
+    canvas.drawPicture(_ground!);
   }
 }
 
@@ -426,6 +474,8 @@ class MeteorComponent extends PositionComponent
   late final List<(Offset, double)> _craters;
   TextPainter? _text;
   double _textFontSize = 0;
+  late final Color _eggColor;
+  late final int _eggPattern;
 
   static final Random _random = Random();
 
@@ -442,6 +492,8 @@ class MeteorComponent extends PositionComponent
   @override
   Future<void> onLoad() async {
     _spin = (_random.nextDouble() - 0.5) * 0.3;
+    _eggColor = easterEggColors[_random.nextInt(easterEggColors.length)];
+    _eggPattern = _random.nextInt(4);
     _shape = List.generate(11, (i) {
       final a = i / 11 * pi * 2;
       final r = 0.86 + _random.nextDouble() * 0.14;
@@ -470,13 +522,21 @@ class MeteorComponent extends PositionComponent
     final fontSize = max(16.0, w * 0.042);
     final maxWidth = w * 0.36;
     _textFontSize = fontSize;
+    _text?.dispose();
     _text = layoutText(
       state.label,
       fontSize: fontSize,
-      color: WordBlasterPalette.text,
+      color: game.isEaster ? const Color(0xFF3B2A7A) : WordBlasterPalette.text,
       fontFamily: game.palette.fontFamily,
       maxWidth: maxWidth,
     );
+    if (game.isEaster) {
+      // Egg size follows the word: short words give small eggs, long words big ones.
+      final scale = eggScaleForLength(state.label.runes.length);
+      final width = max(w * 0.14 * scale, _text!.width + fontSize * 1.5);
+      size = Vector2(width, width * 1.22);
+      return;
+    }
     final width = max(w * 0.2, _text!.width + fontSize * 1.6);
     final height = max(w * 0.13, _text!.height + fontSize * 1.1);
     size = Vector2(width, height);
@@ -517,8 +577,159 @@ class MeteorComponent extends PositionComponent
     angle = angle.clamp(-0.18, 0.18);
   }
 
+  // The body (shell/rock, pattern, outline, reveal glow and tick) is recorded
+  // once into a Picture and replayed every frame; only the upright label is
+  // drawn live. Re-recorded when the size or reveal state changes.
+  Picture? _body;
+  Vector2? _bodySize;
+  bool _bodyRevealed = false;
+  final Paint _platePaint = Paint();
+  final Paint _fadePaint = Paint();
+
   @override
-  void render(Canvas canvas) {
+  void onRemove() {
+    _body?.dispose();
+    _body = null;
+    _text?.dispose();
+    super.onRemove();
+  }
+
+  Picture _ensureBody() {
+    final cached = _body;
+    if (cached != null && _bodyRevealed == _revealed && _bodySize == size) {
+      return cached;
+    }
+    cached?.dispose();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    if (game.isEaster) {
+      _paintEggBody(canvas);
+    } else {
+      _paintRockBody(canvas);
+    }
+    if (_revealed) _paintTick(canvas);
+    _bodyRevealed = _revealed;
+    _bodySize = size.clone();
+    return _body = recorder.endRecording();
+  }
+
+  Path _eggPath(Rect rect) {
+    final cx = rect.center.dx;
+    final w = rect.width;
+    final h = rect.height;
+    final top = rect.top;
+    final bottom = rect.bottom;
+    return Path()
+      ..moveTo(cx, top)
+      ..cubicTo(cx + 0.30 * w, top, cx + 0.5 * w, top + 0.30 * h, cx + 0.5 * w,
+          top + 0.62 * h)
+      ..cubicTo(cx + 0.5 * w, top + 0.85 * h, cx + 0.28 * w, bottom, cx, bottom)
+      ..cubicTo(cx - 0.28 * w, bottom, cx - 0.5 * w, top + 0.85 * h,
+          cx - 0.5 * w, top + 0.62 * h)
+      ..cubicTo(cx - 0.5 * w, top + 0.30 * h, cx - 0.30 * w, top, cx, top)
+      ..close();
+  }
+
+  void _paintEggBody(Canvas canvas) {
+    final rect = size.toRect();
+    final path = _eggPath(rect);
+    final hsl = HSLColor.fromColor(_eggColor);
+    final deep =
+        hsl.withLightness((hsl.lightness - 0.22).clamp(0.2, 0.8)).toColor();
+
+    if (_revealed) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = WordBlasterPalette.correct.withValues(alpha: 0.7)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+      );
+    }
+    // Soft drop shadow, then the shell.
+    canvas.drawPath(
+      path.shift(const Offset(0, 4)),
+      Paint()..color = const Color(0x14000000),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = Gradient.linear(
+          rect.topLeft,
+          rect.bottomRight,
+          [Color.lerp(_eggColor, const Color(0xFFFFFFFF), 0.35)!, _eggColor],
+        ),
+    );
+    // Pattern, clipped to the shell.
+    canvas.save();
+    canvas.clipPath(path);
+    final band = Paint()..color = deep.withValues(alpha: 0.75);
+    final white = Paint()..color = const Color(0xD9FFFFFF);
+    switch (_eggPattern) {
+      case 0: // stripes
+        canvas.drawRect(
+            Rect.fromLTWH(rect.left, rect.top + rect.height * 0.62, rect.width,
+                rect.height * 0.1),
+            band);
+        canvas.drawRect(
+            Rect.fromLTWH(rect.left, rect.top + rect.height * 0.78, rect.width,
+                rect.height * 0.06),
+            white);
+      case 1: // zigzag
+        final zig = Path()..moveTo(rect.left, rect.top + rect.height * 0.7);
+        final step = rect.width / 6;
+        for (var i = 0; i < 6; i++) {
+          zig.lineTo(rect.left + step * (i + 0.5),
+              rect.top + rect.height * (i.isEven ? 0.78 : 0.66));
+          zig.lineTo(rect.left + step * (i + 1), rect.top + rect.height * 0.7);
+        }
+        canvas.drawPath(
+            zig,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = rect.height * 0.045
+              ..color = deep.withValues(alpha: 0.85));
+      case 2: // dots
+        for (var i = 0; i < 7; i++) {
+          final dx = rect.left + rect.width * (0.18 + (i % 4) * 0.21);
+          final dy = rect.top + rect.height * (i < 4 ? 0.24 : 0.82);
+          canvas.drawCircle(Offset(dx, dy), rect.width * 0.045, white);
+        }
+      default: // wave band
+        final wave = Path()..moveTo(rect.left, rect.top + rect.height * 0.28);
+        for (var i = 0; i < 4; i++) {
+          wave.quadraticBezierTo(
+              rect.left + rect.width * (i + 0.5) / 4,
+              rect.top + rect.height * (i.isEven ? 0.2 : 0.36),
+              rect.left + rect.width * (i + 1) / 4,
+              rect.top + rect.height * 0.28);
+        }
+        canvas.drawPath(
+            wave,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = rect.height * 0.05
+              ..color = white.color);
+    }
+    canvas.restore();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = _revealed ? WordBlasterPalette.correct : deep,
+    );
+    // Shine.
+    canvas.drawOval(
+      Rect.fromCenter(
+          center: Offset(
+              rect.left + rect.width * 0.3, rect.top + rect.height * 0.28),
+          width: rect.width * 0.14,
+          height: rect.height * 0.22),
+      Paint()..color = const Color(0x8CFFFFFF),
+    );
+  }
+
+  void _paintRockBody(Canvas canvas) {
     final rect = size.toRect();
     final center = rect.center;
     final radiusX = size.x / 2;
@@ -530,13 +741,12 @@ class MeteorComponent extends PositionComponent
       i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
     }
     path.close();
-    final alpha = _fade.clamp(0.0, 1.0);
 
     if (_revealed) {
       canvas.drawPath(
         path,
         Paint()
-          ..color = WordBlasterPalette.correct.withValues(alpha: 0.55 * alpha)
+          ..color = WordBlasterPalette.correct.withValues(alpha: 0.55)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
       );
     }
@@ -547,13 +757,15 @@ class MeteorComponent extends PositionComponent
           rect.topLeft,
           rect.bottomRight,
           [
-            WordBlasterPalette.rockLight.withValues(alpha: alpha),
-            WordBlasterPalette.rock.withValues(alpha: alpha),
-            WordBlasterPalette.rockDark.withValues(alpha: alpha),
+            WordBlasterPalette.rockLight,
+            WordBlasterPalette.rock,
+            WordBlasterPalette.rockDark,
           ],
           [0, 0.55, 1],
         ),
     );
+    final crater = Paint()
+      ..color = WordBlasterPalette.rockDark.withValues(alpha: 0.45);
     for (final (offset, r) in _craters) {
       canvas.drawOval(
         Rect.fromCenter(
@@ -562,8 +774,7 @@ class MeteorComponent extends PositionComponent
           width: r * radiusX * 2,
           height: r * radiusY * 2,
         ),
-        Paint()
-          ..color = WordBlasterPalette.rockDark.withValues(alpha: 0.45 * alpha),
+        crater,
       );
     }
     canvas.drawPath(
@@ -572,14 +783,53 @@ class MeteorComponent extends PositionComponent
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..color = (_revealed ? WordBlasterPalette.correct : game.palette.accent)
-            .withValues(alpha: 0.9 * alpha),
+            .withValues(alpha: 0.9),
     );
+  }
+
+  void _paintTick(Canvas canvas) {
+    final rect = size.toRect();
+    final at = game.isEaster
+        ? Offset(rect.right - 4, rect.top + rect.height * 0.12)
+        : Offset(rect.right - 6, rect.top + 6);
+    canvas.drawCircle(
+        at, _textFontSize * 0.45, Paint()..color = WordBlasterPalette.correct);
+    final check = TextPainter(
+      text: TextSpan(
+        text: String.fromCharCode(Icons.check_rounded.codePoint),
+        style: TextStyle(
+          fontFamily: Icons.check_rounded.fontFamily,
+          package: Icons.check_rounded.fontPackage,
+          fontSize: _textFontSize * 0.7,
+          color: WordBlasterPalette.skyTop,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    check.paint(canvas, at - Offset(check.width / 2, check.height / 2));
+    check.dispose();
+  }
+
+  @override
+  void render(Canvas canvas) {
+    final alpha = _fade.clamp(0.0, 1.0);
+    final fading = alpha < 1;
+    if (fading) {
+      // Only during the short vanish/explode animation.
+      _fadePaint.color = Color.fromRGBO(0, 0, 0, alpha);
+      canvas.saveLayer(null, _fadePaint);
+    }
+    canvas.drawPicture(_ensureBody());
     final text = _text;
     if (text != null) {
+      final rect = size.toRect();
       canvas.save();
-      canvas.translate(center.dx, center.dy);
+      canvas.translate(rect.center.dx,
+          rect.center.dy + (game.isEaster ? rect.height * 0.04 : 0));
       canvas.rotate(-angle);
-      // Dark plate behind the label for contrast.
+      // Plate behind the label for contrast.
+      _platePaint.color =
+          game.isEaster ? const Color(0xE0FFFFFF) : const Color(0x730B1026);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
           Rect.fromCenter(
@@ -589,35 +839,12 @@ class MeteorComponent extends PositionComponent
           ),
           Radius.circular(_textFontSize * 0.4),
         ),
-        Paint()
-          ..color = const Color(0xFF0B1026).withValues(alpha: 0.45 * alpha),
+        _platePaint,
       );
       text.paint(canvas, Offset(-text.width / 2, -text.height / 2));
       canvas.restore();
     }
-    if (_revealed) {
-      canvas.drawCircle(
-        Offset(rect.right - 6, rect.top + 6),
-        _textFontSize * 0.45,
-        Paint()..color = WordBlasterPalette.correct,
-      );
-      final check = TextPainter(
-        text: TextSpan(
-          text: String.fromCharCode(Icons.check_rounded.codePoint),
-          style: TextStyle(
-            fontFamily: Icons.check_rounded.fontFamily,
-            package: Icons.check_rounded.fontPackage,
-            fontSize: _textFontSize * 0.7,
-            color: WordBlasterPalette.skyTop,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      check.paint(
-          canvas,
-          Offset(rect.right - 6 - check.width / 2,
-              rect.top + 6 - check.height / 2));
-    }
+    if (fading) canvas.restore();
   }
 }
 
@@ -664,8 +891,8 @@ class CannonComponent extends PositionComponent
     final baseR = w * 0.075;
     final barrelLength = w * 0.1 * (1 - 0.18 * _recoil);
     final barrelWidth = w * 0.035;
-    final heat =
-        Color.lerp(game.palette.accent, WordBlasterPalette.wrong, _overheat)!;
+    final stage = game.stage;
+    final heat = Color.lerp(stage.accent, WordBlasterPalette.wrong, _overheat)!;
 
     canvas.save();
     canvas.rotate(_aim + pi / 2);
@@ -675,25 +902,29 @@ class CannonComponent extends PositionComponent
             -barrelWidth / 2, -barrelLength, barrelWidth, barrelLength),
         Radius.circular(barrelWidth / 2),
       ),
-      Paint()..color = heat,
+      _barrelPaint..color = heat,
     );
     canvas.restore();
-    canvas.drawCircle(
-      Offset.zero,
-      baseR,
-      Paint()
-        ..shader = Gradient.radial(
-          Offset(-baseR * 0.3, -baseR * 0.3),
-          baseR * 1.2,
-          [game.palette.accent, game.palette.accentStrong],
-        ),
-    );
-    canvas.drawCircle(
-      Offset.zero,
-      baseR * 0.45,
-      Paint()..color = WordBlasterPalette.skyTop.withValues(alpha: 0.5),
-    );
+    if (_baseShaderRadius != baseR || _shaderChapter != game.chapter) {
+      _baseShaderRadius = baseR;
+      _shaderChapter = game.chapter;
+      _basePaint.shader = Gradient.radial(
+        Offset(-baseR * 0.3, -baseR * 0.3),
+        baseR * 1.2,
+        [stage.shot.colors.first, stage.accent, stage.horizon],
+        const [0, 0.5, 1],
+      );
+    }
+    canvas.drawCircle(Offset.zero, baseR, _basePaint);
+    canvas.drawCircle(Offset.zero, baseR * 0.45, _hubPaint);
   }
+
+  final Paint _barrelPaint = Paint();
+  final Paint _basePaint = Paint();
+  final Paint _hubPaint = Paint()
+    ..color = WordBlasterPalette.skyTop.withValues(alpha: 0.5);
+  double? _baseShaderRadius;
+  GameStoryChapter? _shaderChapter;
 }
 
 class ProjectileComponent extends Component
@@ -702,25 +933,19 @@ class ProjectileComponent extends Component
       {required this.from, required this.target, required this.onImpact})
       : super(priority: 15);
 
-  static const flightSeconds = 0.14;
+  static const flightSeconds = 0.16;
 
   final Vector2 from;
   final MeteorComponent target;
   final void Function() onImpact;
+  final Paint _paint = Paint();
   double _t = 0;
-  final List<Offset> _trail = [];
-
-  Vector2 get _to => target.position;
+  double _time = 0;
 
   @override
   void update(double dt) {
     _t += dt / flightSeconds;
-    final p = Vector2(
-      from.x + (_to.x - from.x) * min(1, _t),
-      from.y + (_to.y - from.y) * min(1, _t),
-    );
-    _trail.add(Offset(p.x, p.y));
-    if (_trail.length > 6) _trail.removeAt(0);
+    _time += dt;
     if (_t >= 1) {
       onImpact();
       removeFromParent();
@@ -729,14 +954,9 @@ class ProjectileComponent extends Component
 
   @override
   void render(Canvas canvas) {
-    for (var i = 0; i < _trail.length; i++) {
-      final a = (i + 1) / _trail.length;
-      canvas.drawCircle(
-        _trail[i],
-        game.size.x * 0.012 * a,
-        Paint()..color = WordBlasterPalette.gold.withValues(alpha: a),
-      );
-    }
+    final to = target.position;
+    paintStoryShot(canvas, Offset(from.x, from.y), Offset(to.x, to.y),
+        min(1, _t), game.stage.shot, game.size.x, _time, _paint);
   }
 }
 
@@ -834,23 +1054,40 @@ class PowerUpComponent extends PositionComponent
     final r = size.x / 2 * (1 + 0.06 * sin(_pulse));
     final c = Offset(size.x / 2, size.y / 2);
     final color = colorFor(state.kind);
-    canvas.drawCircle(
-        c, r * 1.25, Paint()..color = color.withValues(alpha: 0.25));
-    canvas.drawCircle(c, r, Paint()..color = color);
+    _paint.color = color.withValues(alpha: 0.25);
+    canvas.drawCircle(c, r * 1.25, _paint);
+    _paint.color = color;
+    canvas.drawCircle(c, r, _paint);
+    // Laid out once at the base radius; the pulse just scales it.
+    final baseR = size.x / 2;
     final icon = iconFor(state.kind);
-    final painter = TextPainter(
+    final painter = _icon ??= TextPainter(
       text: TextSpan(
         text: String.fromCharCode(icon.codePoint),
         style: TextStyle(
           fontFamily: icon.fontFamily,
           package: icon.fontPackage,
-          fontSize: r * 1.1,
+          fontSize: baseR * 1.1,
           color: WordBlasterPalette.skyTop,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    painter.paint(canvas, c - Offset(painter.width / 2, painter.height / 2));
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.scale(r / baseR);
+    painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
+    canvas.restore();
+  }
+
+  final Paint _paint = Paint();
+  TextPainter? _icon;
+
+  @override
+  void onRemove() {
+    _icon?.dispose();
+    _icon = null;
+    super.onRemove();
   }
 }
 
@@ -985,10 +1222,19 @@ class FloatingTextComponent extends PositionComponent
       fontFamily: game.palette.fontFamily,
       weight: FontWeight.w800,
     );
-    canvas.saveLayer(null,
-        Paint()..color = const Color(0xFFFFFFFF).withValues(alpha: alpha));
+    _layerPaint.color = const Color(0xFFFFFFFF).withValues(alpha: alpha);
+    canvas.saveLayer(null, _layerPaint);
     _painter!
         .paint(canvas, Offset(-_painter!.width / 2, -_painter!.height / 2));
     canvas.restore();
+  }
+
+  final Paint _layerPaint = Paint();
+
+  @override
+  void onRemove() {
+    _painter?.dispose();
+    _painter = null;
+    super.onRemove();
   }
 }

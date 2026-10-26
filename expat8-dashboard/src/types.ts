@@ -77,16 +77,9 @@ export type RecentStudyEvent = {
   occurred_at: string;
 };
 
-export type DashboardSummaryStats = {
-  total_users: number;
-  total_study_events: number;
-  active_last_7_days: number;
-  total_words: number;
-};
-
 export type SpeakingPrompt = {
   id: string;
-  word_sense_id: string;
+  word_sense_id: string | null;
   article_term_id: string | null;
   target_text: string | null;
   vi_hint: string | null;
@@ -134,3 +127,6 @@ export type MemorizationPassage = {
   updated_at: string;
   segments: MemorizationSegment[];
 };
+
+/** List view of a passage: no raw text, no segments. */
+export type MemorizationPassageSummary = Omit<MemorizationPassage, 'raw_text' | 'segments'>;

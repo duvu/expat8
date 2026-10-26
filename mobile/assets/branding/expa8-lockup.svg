@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 100" role="img" aria-labelledby="title desc">
+  <title id="title">Expat8</title>
+  <desc id="desc">The Expat8 layered-book mark with the Learn a little. Use it everywhere. wordmark.</desc>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B25A9"/>
+      <stop offset="0.52" stop-color="#3028B8"/>
+      <stop offset="1" stop-color="#1F1B9B"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(4 4) scale(.72)">
+    <rect width="128" height="128" rx="30" fill="url(#tile)"/>
+    <g fill="#D9D8FF">
+      <path d="M15 65c18-7 34-3 49 9v38c-15-12-31-15-49-9V65Z"/>
+      <path d="M113 65c-18-7-34-3-49 9v38c15-12 31-15 49-9V65Z"/>
+    </g>
+    <g fill="#F4F6FC">
+      <path d="M21 50c16-6 30-2 43 9v40c-13-11-27-15-43-9V50Z"/>
+      <path d="M107 50c-16-6-30-2-43 9v40c13-11 27-15 43-9V50Z"/>
+    </g>
+    <path d="M64 59v40" stroke="#C8C7F4" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M64 13c3 13 7 18 20 22-13 4-17 9-20 22-3-13-7-18-20-22 13-4 17-9 20-22Z" fill="#12CBA9"/>
+  </g>
+  <text x="112" y="52" fill="#211B58" font-family="Inter, Manrope, ui-sans-serif, system-ui, sans-serif" font-size="37" font-weight="750" letter-spacing="-1.2">Expat8</text>
+  <text x="114" y="76" fill="#62658B" font-family="Inter, Manrope, ui-sans-serif, system-ui, sans-serif" font-size="12.5" font-weight="500" letter-spacing=".15">Learn a little. Use it everywhere.</text>
+</svg>

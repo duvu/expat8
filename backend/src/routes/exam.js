@@ -1,10 +1,9 @@
 import express from 'express';
+import { CERTIFICATE_DISCLAIMER } from '../domain/exam.js';
 import { asyncHandler, resolveRequiredUserSession } from './helpers.js';
 
 const EXAM_PASS_THRESHOLD = 0.7;
 const EXAM_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-const CERTIFICATE_DISCLAIMER =
-  'This is an internal Expat8 completion certificate. It does not represent an official CEFR or HSK examination result.';
 
 export function createExamRouter({ store }) {
   const router = express.Router();
@@ -111,18 +110,7 @@ export function createExamRouter({ store }) {
     })
   );
 
-  // GET /v1/exam/certificate/:id  (PUBLIC — mounted separately in app.js)
-  // Returns a certificate record without PII.
-  router.get(
-    '/certificate/:id',
-    asyncHandler(async (request, response) => {
-      const cert = await store.getExamCertificate({ id: request.params.id });
-      if (!cert) {
-        return response.status(404).json({ error: 'not_found' });
-      }
-      return response.json(cert);
-    })
-  );
+  // GET /v1/exam/certificate/:id is public and served directly by app.js.
 
   return router;
 }

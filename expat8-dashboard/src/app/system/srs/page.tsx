@@ -1,39 +1,39 @@
-import { getSrsStatusDistribution, getSrsOverdueCount } from '@/lib/analytics';
+import { getSrsOverview } from '@/lib/analytics';
+import ChartPanel from '@/components/ChartPanel';
 import PageShell from '@/components/PageShell';
 import KpiCard from '@/components/charts/KpiCard';
 import PieChart from '@/components/charts/PieChart';
 
 export const dynamic = 'force-dynamic';
 
+// Statuses written by the backend SRS scheduler (backend/src/domain/srs.js); `completed` is the
+// pre-SRS name for words that left the review cycle and counts as mastered.
+const STATUS_SLICES = [
+  { statuses: ['learning'], name: 'Learning', color: '#d97706' },
+  { statuses: ['review'], name: 'Review', color: '#2563eb' },
+  { statuses: ['mastered', 'completed'], name: 'Mastered', color: '#059669' },
+];
+
 export default async function SrsBrowserPage() {
-  const [distribution, overdueData] = await Promise.all([
-    getSrsStatusDistribution(),
-    getSrsOverdueCount(),
-  ]);
-
-  const slices = [
-    { name: 'New', value: distribution.new ?? 0, color: '#94a3b8' },
-    { name: 'Learning', value: distribution.learning ?? 0, color: '#d97706' },
-    { name: 'Review', value: distribution.review ?? 0, color: '#2563eb' },
-    { name: 'Completed', value: distribution.completed ?? 0, color: '#059669' },
-  ];
-
+  const { byStatus, overdue } = await getSrsOverview();
+  const slices = STATUS_SLICES.map(({ statuses, name, color }) => ({
+    name,
+    color,
+    value: statuses.reduce((sum, status) => sum + (byStatus[status] ?? 0), 0),
+  }));
   const totalWordStates = slices.reduce((sum, s) => sum + s.value, 0);
 
   return (
     <PageShell title="SRS Browser">
       <section className="kpi-grid">
         <KpiCard label="Total Word States" value={totalWordStates} />
-        <KpiCard label="Overdue Count" value={overdueData.overdue_count} danger={overdueData.overdue_count > 0} />
+        <KpiCard label="Overdue Count" value={overdue} danger={overdue > 0} />
       </section>
 
       <section className="analytics-grid">
-        <div className="chart-panel">
-          <div className="chart-panel-header">
-            <h2 className="chart-panel-title">SRS Status Distribution</h2>
-          </div>
+        <ChartPanel title="SRS Status Distribution">
           <PieChart data={slices} donut />
-        </div>
+        </ChartPanel>
       </section>
     </PageShell>
   );

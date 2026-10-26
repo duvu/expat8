@@ -133,7 +133,8 @@ class LogSanitizer {
     final output = <String, Object?>{};
     for (final pair in input.entries) {
       final key = pair.key;
-      final normalizedKey = key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final normalizedKey =
+          key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
       if (_sensitiveKeys.contains(normalizedKey)) {
         output[key] = redacted;
       } else {

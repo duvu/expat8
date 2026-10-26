@@ -37,7 +37,8 @@ void main() {
 
     expect(find.text('reliable'), findsOneWidget);
     expect(find.text('dang tin cay'), findsOneWidget);
-    expect(find.text('/rɪˈlaɪəbl/'), findsOneWidget);
+    expect(
+        find.textContaining('/rɪˈlaɪəbl/', findRichText: true), findsOneWidget);
     expect(find.text('She is a reliable teammate.'), findsOneWidget);
   });
 
@@ -60,6 +61,69 @@ void main() {
     expect(find.text('Too Easy'), findsNothing);
     expect(find.text('Hard'), findsNothing);
     expect(find.text('Too Hard'), findsNothing);
+  });
+
+  testWidgets('level chip shows the session override and opens the picker',
+      (tester) async {
+    var tapped = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(
+            actions: [
+              ProficiencyLevelLabel(
+                scale: 'cefr',
+                level: 'B1',
+                studyLevel: 'C1',
+                onTap: () => tapped += 1,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Studying C1'), findsOneWidget);
+    expect(find.text('Level B1'), findsNothing);
+    await tester.tap(find.byKey(const Key('study-level-chip')));
+    expect(tapped, 1);
+  });
+
+  testWidgets(
+      'study level sheet lists levels, marks the learner level and returns the pick',
+      (tester) async {
+    String? picked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                picked = await showModalBottomSheet<String>(
+                  context: context,
+                  builder: (_) => const StudyLevelSheet(
+                    scale: 'cefr',
+                    ownLevel: 'B1',
+                    currentLevel: 'B1',
+                    options: ['A1', 'A2', 'B1', 'B2'],
+                  ),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.text('B1  ·  your level'), findsOneWidget);
+    expect(find.textContaining('only applies to this session'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('study-level-B2')));
+    await tester.pumpAndSettle();
+    expect(picked, 'B2');
   });
 
   testWidgets('renders HSK proficiency label for Chinese learning state',
@@ -97,7 +161,8 @@ void main() {
     // Compact chip in the app bar: current language plus a change affordance.
     expect(find.text('Chinese'), findsOneWidget);
     expect(find.byTooltip('Change learning language'), findsOneWidget);
-    expect(find.bySemanticsLabel('Learning language: Chinese. Change'), findsOneWidget);
+    expect(find.bySemanticsLabel('Learning language: Chinese. Change'),
+        findsOneWidget);
   });
 
   testWidgets('language selector opens choices and reports selection changes',
@@ -348,11 +413,9 @@ void main() {
       ),
     );
 
-    await tester.fling(
-        _gestureArea(), const Offset(-300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(-300, 0), 1200);
     await tester.pumpAndSettle();
-    await tester.fling(
-        _gestureArea(), const Offset(300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(300, 0), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 1);
@@ -381,11 +444,9 @@ void main() {
       ),
     );
 
-    await tester.fling(
-        _gestureArea(), const Offset(0, -320), 1200);
+    await tester.fling(_gestureArea(), const Offset(0, -320), 1200);
     await tester.pumpAndSettle();
-    await tester.fling(
-        _gestureArea(), const Offset(0, 320), 1200);
+    await tester.fling(_gestureArea(), const Offset(0, 320), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 0);
@@ -415,11 +476,9 @@ void main() {
       ),
     );
 
-    await tester.fling(
-        _gestureArea(), const Offset(-300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
-    await tester.fling(
-        _gestureArea(), const Offset(-300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
 
     expect(rightToLeftCount, 1);
@@ -427,8 +486,7 @@ void main() {
     firstGesture.complete();
     await tester.pumpAndSettle();
 
-    await tester.fling(
-        _gestureArea(), const Offset(-300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(-300, 0), 1200);
     await tester.pumpAndSettle();
 
     expect(rightToLeftCount, 2);
@@ -453,11 +511,9 @@ void main() {
       ),
     );
 
-    await tester.fling(
-        _gestureArea(), const Offset(-300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
-    await tester.fling(
-        _gestureArea(), const Offset(-300, 0), 1200);
+    await tester.fling(_gestureArea(), const Offset(-300, 0), 1200);
     await tester.pump();
 
     expect(rightToLeftCount, 2);
@@ -626,7 +682,9 @@ void main() {
     expect(find.text('No history yet'), findsOneWidget);
   });
 
-  testWidgets('learning progress stats screen shows an empty state before studying', (tester) async {
+  testWidgets(
+      'learning progress stats screen shows an empty state before studying',
+      (tester) async {
     final database = await LocalDatabase.open(
       databaseName:
           'learning_stats_screen_empty_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -643,7 +701,8 @@ void main() {
     expect(find.text('Learned'), findsNothing);
   });
 
-  testWidgets('learning history screen preserves learned order', (tester) async {
+  testWidgets('learning history screen preserves learned order',
+      (tester) async {
     final database = await LocalDatabase.open(
       databaseName:
           'learning_history_screen_order_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -662,8 +721,10 @@ void main() {
     );
     await database.upsertWord(first);
     await database.upsertWord(second);
-    await database.markWordLearned(word: first, now: DateTime.utc(2026, 5, 5, 1));
-    await database.markWordLearned(word: second, now: DateTime.utc(2026, 5, 5, 2));
+    await database.markWordLearned(
+        word: first, now: DateTime.utc(2026, 5, 5, 1));
+    await database.markWordLearned(
+        word: second, now: DateTime.utc(2026, 5, 5, 2));
 
     await tester.pumpWidget(
       MaterialApp(
@@ -705,7 +766,8 @@ void main() {
     await database.upsertWord(learned);
     await database.upsertWord(remembered);
     await database.upsertWord(difficult);
-    await database.markWordLearned(word: learned, now: DateTime.utc(2026, 5, 5, 1));
+    await database.markWordLearned(
+        word: learned, now: DateTime.utc(2026, 5, 5, 1));
     await database.markWordRememberedLowFrequency(
       word: remembered,
       now: DateTime.utc(2026, 5, 5, 2),
@@ -741,7 +803,8 @@ class _TestArticleRepository extends ArticleRepository {
         );
 
   @override
-  Future<List<ManagedArticle>> listArticles({required String sessionToken}) async {
+  Future<List<ManagedArticle>> listArticles(
+      {required String sessionToken}) async {
     return [
       ManagedArticle(
         id: 'article_1',
@@ -837,6 +900,9 @@ class _LearningScreenRepository extends WordRepository {
   @override
   Future<WordLookupResult> getNewWordWithFallbackResult({
     String language = 'en',
+    String? level,
+    String scale = 'cefr',
+    bool strictLevel = false,
   }) async {
     return const WordLookupResult(
       word: null,

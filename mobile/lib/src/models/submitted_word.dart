@@ -34,7 +34,8 @@ class SubmittedWord {
         json['resolution_type'] as String?,
       ),
       resolvedWord: json['resolved_word'] is Map<String, dynamic>
-          ? VocabularyWord.fromJson(json['resolved_word'] as Map<String, dynamic>)
+          ? VocabularyWord.fromJson(
+              json['resolved_word'] as Map<String, dynamic>)
           : null,
       createdAt:
           DateTime.tryParse(json['created_at'] as String? ?? '')?.toUtc() ??
@@ -61,7 +62,8 @@ class SubmittedWord {
   final DateTime? resolvedAt;
 
   bool get isTerminal =>
-      status == SubmittedWordStatus.ready || status == SubmittedWordStatus.failed;
+      status == SubmittedWordStatus.ready ||
+      status == SubmittedWordStatus.failed;
 
   SubmittedWord copyWith({
     String? localSubmissionId,
@@ -88,9 +90,8 @@ class SubmittedWord {
       status: status ?? this.status,
       failureReason:
           clearFailureReason ? null : failureReason ?? this.failureReason,
-      resolutionType: clearResolutionType
-          ? null
-          : resolutionType ?? this.resolutionType,
+      resolutionType:
+          clearResolutionType ? null : resolutionType ?? this.resolutionType,
       resolvedWord:
           clearResolvedWord ? null : resolvedWord ?? this.resolvedWord,
       createdAt: createdAt ?? this.createdAt,

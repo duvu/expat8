@@ -1,3 +1,4 @@
+import { extractJson } from './generation_service.js';
 import { normalizeTerm } from './normalize.js';
 import { normalizeDifficultyLevel } from './proficiency.js';
 import { normalizeSuggestionType, validateVocabularyItem } from './vocabulary_validator.js';
@@ -105,7 +106,7 @@ export class PassageSegmentationPipeline {
       throw new Error('Empty LLM response for segmentation');
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(extractJson(content));
     // Accept both { segments: [...] } and direct array
     const rawSegments = Array.isArray(parsed) ? parsed : (parsed.segments ?? []);
 

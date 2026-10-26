@@ -19,6 +19,67 @@ WordPool poolOf(List<VocabularyWord> words, {int seed = 1}) => (buildWordPool(
 
 void main() {
   group('word pool', () {
+    test(
+        'a chosen level is 50% that level and 50% lower levels, distractors span all',
+        () {
+      final words = [
+        for (var i = 0; i < 20; i++) vocab('a1w$i', 'nghĩa a1 $i', level: 'A1'),
+        for (var i = 0; i < 20; i++) vocab('a2w$i', 'nghĩa a2 $i', level: 'A2'),
+        for (var i = 0; i < 40; i++) vocab('b1w$i', 'nghĩa b1 $i', level: 'B1'),
+        for (var i = 0; i < 20; i++) vocab('c1w$i', 'nghĩa c1 $i', level: 'C1'),
+      ];
+      final result = buildWordPool(
+        words: words,
+        learnerLevelIndex: 0,
+        now: now,
+        random: Random(7),
+        levelIndex: 2, // B1
+      ) as WordPoolReady;
+      final byLevel = <String, int>{};
+      for (final w in result.pool.roundWords) {
+        byLevel[w.difficulty] = (byLevel[w.difficulty] ?? 0) + 1;
+      }
+      expect(result.pool.roundWords.length, 40);
+      expect(byLevel['B1'], 20);
+      expect((byLevel['A1'] ?? 0) + (byLevel['A2'] ?? 0), 20);
+      expect(byLevel.containsKey('C1'), isFalse);
+      expect(result.pool.allWords.length, 100);
+    });
+
+    test('the lowest chosen level has nothing below so it is all that level',
+        () {
+      final words = [
+        for (var i = 0; i < 20; i++) vocab('a1w$i', 'nghĩa a1 $i', level: 'A1'),
+        for (var i = 0; i < 20; i++) vocab('b1w$i', 'nghĩa b1 $i', level: 'B1'),
+      ];
+      final result = buildWordPool(
+        words: words,
+        learnerLevelIndex: 0,
+        now: now,
+        random: Random(2),
+        levelIndex: 0,
+      ) as WordPoolReady;
+      expect(result.pool.roundWords.length, 20);
+      expect(result.pool.roundWords.every((w) => w.difficulty == 'A1'), isTrue);
+    });
+
+    test('a chosen level with fewer than 12 words is insufficient', () {
+      final words = [
+        for (var i = 0; i < 4; i++) vocab('a1w$i', 'nghĩa a1 $i', level: 'A1'),
+        for (var i = 0; i < 5; i++) vocab('b2w$i', 'nghĩa b2 $i', level: 'B2'),
+        for (var i = 0; i < 10; i++) vocab('c1w$i', 'nghĩa c1 $i', level: 'C1'),
+      ];
+      final result = buildWordPool(
+        words: words,
+        learnerLevelIndex: 0,
+        now: now,
+        random: Random(1),
+        levelIndex: 3,
+      );
+      expect(result, isA<WordPoolInsufficient>());
+      expect((result as WordPoolInsufficient).available, 9);
+    });
+
     test('needs at least 12 usable words', () {
       final result = buildWordPool(
         words: sampleVocabulary().take(11).toList(),
@@ -177,6 +238,11 @@ void main() {
         mode: WordBlasterMode.classic,
         random: Random(1),
       );
+      // Warm up first: a cold JIT under the parallel test runner would
+      // measure the machine's load, not the generator.
+      for (var i = 0; i < 50; i++) {
+        generator.next(distractors: 4);
+      }
       final watch = Stopwatch()..start();
       for (var i = 0; i < 100; i++) {
         generator.next(distractors: 4);

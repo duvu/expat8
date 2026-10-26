@@ -1,6 +1,6 @@
 import express from 'express';
-import { toApiWord, toApiWorkplaceSentence } from '../word_store.js';
-import { asyncHandler, clampLimit, resolveOptionalUserSession, resolveRequiredUserSession } from './helpers.js';
+import { toApiWord, toApiWorkplaceSentence } from '../domain/vocabulary.js';
+import { asyncHandler, queryLimit, resolveOptionalUserSession, resolveRequiredUserSession } from './helpers.js';
 
 const unavailableSubmittedWordGenerationService = {
   async generateSubmittedWord() {
@@ -96,7 +96,7 @@ export function createUserRouter({ store, generationService, config, logArchiveS
       const items = await store.listUserSubmittedWords({
         deviceId,
         userId: userSession?.user.id ?? null,
-        limit: clampLimit(request.query.limit, 1, 100)
+        limit: queryLimit(request.query.limit, 50, 100)
       });
       return response.json({ items: items.map(toApiSubmittedWord) });
     })
@@ -105,7 +105,7 @@ export function createUserRouter({ store, generationService, config, logArchiveS
   router.get(
     '/words/recent',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit, 1, 1000);
+      const limit = queryLimit(request.query.limit, 200, 1000);
       const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
       const words = await store.recentWords({ targetLanguage, limit });
       response.json({ items: words.map(toApiWord) });
@@ -115,7 +115,7 @@ export function createUserRouter({ store, generationService, config, logArchiveS
   router.get(
     '/workplace-sentences/recent',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit, 1, 1000);
+      const limit = queryLimit(request.query.limit, 200, 1000);
       const targetLanguage = request.query.target_language ?? config.defaultTargetLanguage;
       const sentences = await store.recentWorkplaceSentences({ targetLanguage, limit });
       response.json({ items: sentences.map(toApiWorkplaceSentence) });

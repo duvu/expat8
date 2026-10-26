@@ -1,6 +1,6 @@
 import express from 'express';
 import { openArchiveReadStream } from '../log_archive_store.js';
-import { asyncHandler, clampLimit, hasAdminAccess } from './helpers.js';
+import { asyncHandler, queryLimit, hasAdminAccess } from './helpers.js';
 
 export function createAdminRouter({ store, config, logArchiveStore }) {
   const router = express.Router();
@@ -33,7 +33,7 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/articles',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit, 1, 100);
+      const limit = queryLimit(request.query.limit, 50, 100);
       const status = typeof request.query.status === 'string' ? request.query.status : null;
       const items = await store.listAdminArticles({ limit, status });
       return response.json({ items: items.map(toApiArticle) });
@@ -91,7 +91,7 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/review/vocabulary',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit, 1, 200);
+      const limit = queryLimit(request.query.limit, 100, 200);
       const status = typeof request.query.status === 'string' ? request.query.status : 'pending';
       const items = await store.listVocabularyReviewItems({ status, limit });
       return response.json({ items });
@@ -121,7 +121,7 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/speaking-prompts',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit ?? 100, 1, 200);
+      const limit = queryLimit(request.query.limit, 100, 200);
       const status = typeof request.query.status === 'string' ? request.query.status : null;
       const missingRequired = request.query.missing_required === 'true';
       const items = await store.listSpeakingPrompts({ status, missingRequired, limit });
@@ -202,7 +202,7 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/games/summary',
     asyncHandler(async (request, response) => {
-      const days = clampLimit(request.query.days ?? 30, 1, 180);
+      const days = queryLimit(request.query.days, 30, 180);
       return response.json(await store.getGamesSummary({ days }));
     })
   );
@@ -218,7 +218,7 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
   router.get(
     '/log-archives',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit ?? 100, 1, 200);
+      const limit = queryLimit(request.query.limit, 100, 200);
       const archives = await logArchiveStore.listArchives({ limit });
       return response.json({ items: archives.map(toApiLogArchive) });
     })

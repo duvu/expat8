@@ -60,3 +60,23 @@ test('builds HSK-oriented prompt for Chinese generation', async () => {
   assert.match(userPrompt, /Chinese does not use IPA/i);
   assert.match(userPrompt, /vietnamese_pronunciation MUST contain pinyin-style romanization/i);
 });
+
+test('aborts a hung gateway request after timeoutMs', async () => {
+  // AbortSignal.timeout() is unref'd; keep the event loop alive until it fires.
+  const keepAlive = setTimeout(() => {}, 1000);
+  const client = new LiteLLMClient({
+    baseUrl: 'http://litellm.local',
+    model: 'fake-model',
+    timeoutMs: 20,
+    fetchImpl: (_url, options) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason));
+      }),
+    logger: { debug() {}, error() {} }
+  });
+
+  await assert.rejects(client.chatCompletion({ messages: [{ role: 'user', content: 'hi' }] }), {
+    name: 'TimeoutError'
+  });
+  clearTimeout(keepAlive);
+});

@@ -78,6 +78,35 @@ void main() {
     expect(body.containsKey('exclude_server_word_id'), false);
   });
 
+  test('learning cards request carries the study-level override only when set',
+      () async {
+    final bodies = <Map<String, dynamic>>[];
+    final client = MockClient((request) async {
+      bodies.add(jsonDecode(request.body) as Map<String, dynamic>);
+      return http.Response(
+        jsonEncode({
+          'target_mix': {'new': 0, 'review': 0},
+          'actual_mix': {'new': 0, 'review': 0},
+          'items': <Object>[],
+        }),
+        200,
+      );
+    });
+    final apiClient = BackendApiClient(
+      baseUrl: 'https://example.test',
+      timeout: const Duration(seconds: 1),
+      appId: 'expat8-mobile-app',
+      appSecret: 'test-app-secret',
+      httpClient: client,
+    );
+
+    await apiClient.fetchLearningCards(deviceId: 'device_1');
+    await apiClient.fetchLearningCards(deviceId: 'device_1', level: 'B2');
+
+    expect(bodies[0].containsKey('level'), false);
+    expect(bodies[1]['level'], 'B2');
+  });
+
   test('uploads sanitized log archives with app credentials and metadata',
       () async {
     late http.Request captured;
@@ -267,7 +296,9 @@ void main() {
     expect(result.unknownServerWordIds, const ['missing_word']);
   });
 
-  test('creates submitted words with signed JSON body and parses immediate ready status', () async {
+  test(
+      'creates submitted words with signed JSON body and parses immediate ready status',
+      () async {
     late http.Request captured;
     final client = MockClient((request) async {
       captured = request;
@@ -329,11 +360,13 @@ void main() {
     expect(submission.localSubmissionId, 'local_submission_1');
     expect(submission.serverSubmissionId, 'submission_1');
     expect(submission.status, SubmittedWordStatus.ready);
-    expect(submission.resolutionType, SubmittedWordResolutionType.generatedWord);
+    expect(
+        submission.resolutionType, SubmittedWordResolutionType.generatedWord);
     expect(submission.resolvedWord?.serverWordId, 'word_1');
   });
 
-  test('fetches submitted words and parses ready resolved word payload', () async {
+  test('fetches submitted words and parses ready resolved word payload',
+      () async {
     late http.Request captured;
     final client = MockClient((request) async {
       captured = request;
@@ -390,7 +423,8 @@ void main() {
     expect(captured.url.queryParameters['device_id'], 'device_1');
     expect(items.single.serverSubmissionId, 'submission_1');
     expect(items.single.status, SubmittedWordStatus.ready);
-    expect(items.single.resolutionType, SubmittedWordResolutionType.existingWord);
+    expect(
+        items.single.resolutionType, SubmittedWordResolutionType.existingWord);
     expect(items.single.resolvedWord?.serverWordId, 'word_1');
   });
 

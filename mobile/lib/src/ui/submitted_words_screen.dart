@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/word_repository.dart';
 import '../models/submitted_word.dart';
+import '../widgets/brand_backdrop.dart';
 
 class SubmittedWordsScreen extends StatefulWidget {
   const SubmittedWordsScreen({
@@ -118,7 +119,8 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
+      body: BrandBackdrop(
+          child: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -224,7 +226,7 @@ class _SubmittedWordsScreenState extends State<SubmittedWordsScreen> {
               ..._items.map(_buildSubmissionCard),
           ],
         ),
-      ),
+      )),
     );
   }
 

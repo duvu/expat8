@@ -392,7 +392,8 @@ void main() {
 
   // ─── 4.4: Retry tap ──────────────────────────────────────────────────────
 
-  testWidgets('tapping Done on a pending offline result resets and pops the route',
+  testWidgets(
+      'tapping Done on a pending offline result resets and pops the route',
       (tester) async {
     // Backend never responds — submit remains unanswered, triggering timeout.
     final neverCompleter = Completer<http.Response>();

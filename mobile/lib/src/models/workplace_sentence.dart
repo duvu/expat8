@@ -20,7 +20,8 @@ class WorkplaceSentence {
   factory WorkplaceSentence.fromJson(Map<String, dynamic> json) {
     final now = DateTime.now().toUtc();
     return WorkplaceSentence(
-      localId: (json['local_id'] ?? json['sentence_id'] ?? json['text']) as String,
+      localId:
+          (json['local_id'] ?? json['sentence_id'] ?? json['text']) as String,
       serverSentenceId: json['sentence_id'] as String?,
       text: json['text'] as String,
       language: json['language'] as String,

@@ -18,7 +18,8 @@ class ProficiencyState {
 
   factory ProficiencyState.fromJson(Map<String, dynamic> json) {
     final resolvedLevel = (json['level'] ?? 'A1') as String;
-    final resolvedScale = (json['scale'] as String?) ?? _inferScaleFromLevel(resolvedLevel);
+    final resolvedScale =
+        (json['scale'] as String?) ?? _inferScaleFromLevel(resolvedLevel);
     return ProficiencyState(
       scale: resolvedScale,
       level: resolvedLevel,

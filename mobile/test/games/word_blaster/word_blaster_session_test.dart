@@ -42,6 +42,22 @@ void answerCorrectly(WordBlasterSession s) {
 }
 
 void main() {
+  test('frame updates only notify widgets when something visible changes', () {
+    final s = session();
+    spawnAll(s);
+    var notifications = 0;
+    s.addListener(() => notifications++);
+    for (var i = 0; i < 60; i++) {
+      s.update(1 / 60); // one second of falling meteors, nothing answered
+    }
+    expect(notifications, lessThan(5));
+
+    answerCorrectly(s);
+    final before = notifications;
+    s.update(1 / 60);
+    expect(notifications, greaterThanOrEqualTo(before));
+  });
+
   test('correct shots score, build combo and advance', () {
     final s = session();
     final first = s.question;

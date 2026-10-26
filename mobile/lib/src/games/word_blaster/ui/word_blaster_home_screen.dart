@@ -5,10 +5,14 @@ import '../../common/game_settings.dart';
 import '../word_blaster_context.dart';
 import '../word_blaster_mode.dart';
 import '../word_blaster_stats.dart';
+import '../word_blaster_theme.dart';
+import '../../common/game_story.dart';
+import '../../common/game_story_scene.dart';
 import '../word_pool.dart';
 import 'word_blaster_board_screen.dart';
 import 'word_blaster_play_screen.dart';
 import 'word_blaster_stats_screen.dart';
+import '../../../widgets/brand_backdrop.dart';
 
 /// Mode picker and entry to records/stats/settings for Word Blaster.
 class WordBlasterHomeScreen extends StatefulWidget {
@@ -25,6 +29,9 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
   Map<String, List<GameScore>> _board = const {};
   WordBlasterStats? _stats;
   WordBlasterMode? _lastMode;
+  int? _targetLevel; // null = Auto
+  WordBlasterTheme _theme = WordBlasterTheme.space;
+  GameStoryChapter _bestChapter = GameStoryChapter.one;
   bool _starting = false;
 
   @override
@@ -39,12 +46,29 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
     final board = await _ctx.scores.loadAll();
     final stats = await _ctx.stats.load();
     final last = await _ctx.lastMode();
+    final level = await _ctx.targetLevel();
+    final theme = await _ctx.theme();
+    final best = await _ctx.story.best(theme);
     if (!mounted) return;
     setState(() {
+      _theme = theme;
+      _bestChapter = best;
+      _targetLevel = level;
       _board = board;
       _stats = stats;
       _lastMode = last;
     });
+  }
+
+  Future<void> _setTheme(WordBlasterTheme theme) async {
+    setState(() => _theme = theme);
+    await _ctx.saveTheme(theme);
+    await _refresh();
+  }
+
+  Future<void> _setLevel(int? level) async {
+    setState(() => _targetLevel = level);
+    await _ctx.saveTargetLevel(level);
   }
 
   List<WordBlasterMode> get _orderedModes {
@@ -63,6 +87,7 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
         learnerLevelIndex: _ctx.learnerLevelIndex,
         now: DateTime.now().toUtc(),
         random: _ctx.randomFactory(),
+        levelIndex: _targetLevel,
       );
       if (!mounted) return;
       switch (result) {
@@ -73,8 +98,8 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
           if (!mounted) return;
           await Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) =>
-                  WordBlasterPlayScreen(context: _ctx, mode: mode, pool: pool),
+              builder: (_) => WordBlasterPlayScreen(
+                  context: _ctx, mode: mode, pool: pool, theme: _theme),
             ),
           );
       }
@@ -85,6 +110,26 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
   }
 
   Future<void> _showNotEnoughWords(int available, int required) {
+    final level = _targetLevel;
+    if (level != null) {
+      return showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: const Icon(Icons.layers_outlined),
+          title: const Text('Not enough words at this level'),
+          content: Text(
+            'Only $available words at or below ${_ctx.levelLabels[level]} on this '
+            'device (need $required). Pick another level or choose Auto.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
     return showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -140,10 +185,53 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: BrandBackdrop(
+          child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
           _Hero(stats: stats),
+          const SizedBox(height: 16),
+          Text('Level to shoot', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              ChoiceChip(
+                key: const ValueKey('word-blaster-level-auto'),
+                label: const Text('Auto'),
+                selected: _targetLevel == null,
+                onSelected: _starting ? null : (_) => _setLevel(null),
+              ),
+              for (var i = 0; i < _ctx.levelLabels.length; i++)
+                ChoiceChip(
+                  key: ValueKey('word-blaster-level-${_ctx.levelLabels[i]}'),
+                  label: Text(_ctx.levelLabels[i]),
+                  selected: _targetLevel == i,
+                  onSelected: _starting ? null : (_) => _setLevel(i),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text('Look', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SegmentedButton<WordBlasterTheme>(
+            key: const ValueKey('word-blaster-theme'),
+            showSelectedIcon: false,
+            segments: [
+              for (final t in WordBlasterTheme.values)
+                ButtonSegment(
+                  value: t,
+                  icon: Icon(t.icon),
+                  label: Text(t.title),
+                ),
+            ],
+            selected: {_theme},
+            onSelectionChanged:
+                _starting ? null : (selection) => _setTheme(selection.first),
+          ),
+          const SizedBox(height: 12),
+          StoryJourneyCard(theme: _theme, best: _bestChapter),
           const SizedBox(height: 16),
           Text('Choose a mode', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -166,7 +254,7 @@ class _WordBlasterHomeScreenState extends State<WordBlasterHomeScreen> {
             style: theme.textTheme.bodySmall,
           ),
         ],
-      ),
+      )),
     );
   }
 }

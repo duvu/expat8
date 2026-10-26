@@ -10,6 +10,9 @@ import 'src/data/local_database.dart';
 import 'src/data/memorization_repository.dart';
 import 'src/data/workplace_sentence_repository.dart';
 import 'src/data/word_repository.dart';
+import 'src/engagement/engagement_controller.dart';
+import 'src/engagement/engagement_repository.dart';
+import 'src/engagement/reminder_service.dart';
 import 'src/logging/logger.dart';
 import 'src/network/connectivity_monitor.dart';
 import 'src/session/learning_session_controller.dart';
@@ -22,6 +25,7 @@ import 'src/theme/app_theme.dart';
 import 'src/ui/learning_screen.dart';
 import 'src/update/update_banner.dart';
 import 'src/widgets/offline_banner.dart';
+import 'src/games/common/game_activity.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,6 +49,7 @@ Future<void> main() async {
     maxAge: config.logRetention,
   ));
   Timer.periodic(const Duration(minutes: 5), (_) {
+    if (GameActivity.isActive) return; // never hitch a running game
     unawaited(database.pruneLogs(
       maxEntries: config.logMaxEntries,
       maxAge: config.logRetention,
@@ -59,7 +64,8 @@ Future<void> main() async {
   );
   final articleRepository =
       ArticleRepository(apiClient: apiClient, localDb: database);
-  final memorizationRepository = MemorizationRepository(apiClient: apiClient, localDb: database);
+  final memorizationRepository =
+      MemorizationRepository(apiClient: apiClient, localDb: database);
   final repository = WordRepository(
     database: database,
     apiClient: apiClient,
@@ -84,6 +90,7 @@ Future<void> main() async {
     await repository.seedFromBundleIfEmpty(
       languages: config.supportedLearningLanguages,
     );
+    await repository.upgradeLocalSchedule();
     final deviceId = await repository.getOrCreateDeviceId();
     repository.initRefreshWorker(deviceId);
     unawaited(repository.syncCacheInventory(deviceId: deviceId));
@@ -94,6 +101,9 @@ Future<void> main() async {
     // exam results, and (for signed-in users) memorization drill progress.
     Future<void> syncOfflineData() async {
       await repository.syncPendingEvents(deviceId: deviceId);
+      // Then catch up on reviews studied elsewhere (server SRS is the truth
+      // once this device's events are uploaded).
+      await repository.pullReviewStates(deviceId: deviceId);
       final session = await repository.loadUserSession();
       if (session == null) return;
       try {
@@ -112,6 +122,7 @@ Future<void> main() async {
 
     unawaited(syncOfflineData());
     Timer.periodic(const Duration(minutes: 3), (_) {
+      if (GameActivity.isActive) return; // never hitch a running game
       unawaited(syncOfflineData());
     });
     onAppResumeSyncEvents = () {
@@ -184,14 +195,20 @@ Future<void> main() async {
   });
   unawaited(connectivityMonitor.start());
 
+  final engagement = EngagementController(
+    repository: EngagementRepository(database: database),
+    reminders: LocalNotificationReminderScheduler(),
+  );
+
   runApp(LanguageLearningApp(
-      controller: controller,
-      articleRepository: articleRepository,
-      memorizationRepository: memorizationRepository,
-      workplaceSentenceRepository: workplaceSentenceRepository,
-      contentPackSyncService: contentPackSyncService,
-      speakingRepository: speakingRepository,
-      shadowingRepository: shadowingRepository,
+    controller: controller,
+    engagement: engagement,
+    articleRepository: articleRepository,
+    memorizationRepository: memorizationRepository,
+    workplaceSentenceRepository: workplaceSentenceRepository,
+    contentPackSyncService: contentPackSyncService,
+    speakingRepository: speakingRepository,
+    shadowingRepository: shadowingRepository,
     speakingPromptSyncService: speakingPromptSyncService,
     onResumeSyncEvents: onAppResumeSyncEvents,
     connectivityMonitor: connectivityMonitor,
@@ -205,6 +222,7 @@ class LanguageLearningApp extends StatefulWidget {
     required this.memorizationRepository,
     required this.workplaceSentenceRepository,
     required this.contentPackSyncService,
+    this.engagement,
     this.speakingRepository,
     this.shadowingRepository,
     this.speakingPromptSyncService,
@@ -218,6 +236,7 @@ class LanguageLearningApp extends StatefulWidget {
   final MemorizationRepository memorizationRepository;
   final WorkplaceSentenceRepository workplaceSentenceRepository;
   final ContentPackSyncService contentPackSyncService;
+  final EngagementController? engagement;
   final SpeakingRepository? speakingRepository;
   final ShadowingRepository? shadowingRepository;
   final SpeakingPromptSyncService? speakingPromptSyncService;
@@ -276,6 +295,7 @@ class _LanguageLearningAppState extends State<LanguageLearningApp>
           workplaceSentenceRepository: widget.workplaceSentenceRepository,
           speakingRepository: widget.speakingRepository,
           shadowingRepository: widget.shadowingRepository,
+          engagement: widget.engagement,
         ),
       ),
     );

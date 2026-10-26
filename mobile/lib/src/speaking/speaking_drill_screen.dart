@@ -242,8 +242,7 @@ class _DrillPromptCardState extends State<_DrillPromptCard> {
     }
     if (status != MicPermissionStatus.granted) return;
     setState(() => _phase = _DrillPhase.recording);
-    final id =
-        await widget.repository.startDrillRecording(promptId: _promptId);
+    final id = await widget.repository.startDrillRecording(promptId: _promptId);
     setState(() => _attemptId = id);
   }
 
@@ -312,8 +311,7 @@ class _DrillPromptCardState extends State<_DrillPromptCard> {
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        launchUrl(Uri.parse('app-settings:')),
+                    onPressed: () => launchUrl(Uri.parse('app-settings:')),
                     icon: const Icon(Icons.settings_outlined),
                     label: const Text('Open Settings'),
                   ),
@@ -343,8 +341,8 @@ class _DrillPromptCardState extends State<_DrillPromptCard> {
           onPressed: _onStop,
           icon: const Icon(Icons.stop),
           label: const Text('Stop'),
-          style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error),
+          style:
+              FilledButton.styleFrom(backgroundColor: theme.colorScheme.error),
         ),
       _DrillPhase.recorded => Column(
           crossAxisAlignment: CrossAxisAlignment.start,

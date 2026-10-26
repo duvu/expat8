@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { WordStore } from '../src/word_store.js';
 import {
-  WordStore,
   normalizeSpeakingEvent,
   isSpeakingEvent,
   SPEAKING_EVENT_TYPES,
-  toApiSpeakingPrompt,
-  toApiWorkplaceSentence
-} from '../src/word_store.js';
+  toApiSpeakingPrompt
+} from '../src/domain/speaking.js';
+import { toApiWorkplaceSentence } from '../src/domain/vocabulary.js';
 
 test('prevents duplicate words by language and normalized term', () => {
   const store = new WordStore({ seed: false });
@@ -170,7 +170,10 @@ test('stores repeated study attempts and projects the latest word state', () => 
 
   assert.equal(store.studyEventsByClientId.size, 2);
   assert.equal(state.last_rating, 'easy');
-  assert.equal(state.status, 'completed');
+  // hard (1 day) then easy (6 days): the word stays in review instead of being dropped.
+  assert.equal(state.status, 'review');
+  assert.equal(state.review_count, 2);
+  assert.equal(state.next_review_at, '2026-05-10T10:35:00.000Z');
 });
 
 test('replaces cached word inventory and caps it at 1000 known ids', () => {
@@ -250,6 +253,43 @@ test('levels down after five consecutive hard ratings without dropping below A1'
       assert.equal(result.proficiency.previous_level, 'A2');
     }
   }
+});
+
+test('many wrong answers move the learner down one level, then the window restarts', () => {
+  const store = new WordStore({ seed: false });
+  let sequence = 0;
+  const rate = (rating) =>
+    store.recordStudyEvent({
+      deviceId: 'device_kid',
+      event: {
+        client_event_id: `evt_miss_${(sequence += 1)}`,
+        server_word_id: 'word_1',
+        rating,
+        occurred_at: new Date(Date.UTC(2026, 4, 4, 10, 0, sequence)).toISOString()
+      }
+    }).proficiency;
+
+  for (let index = 0; index < 10; index += 1) {
+    rate('too_easy');
+  }
+  assert.equal(rate('easy').level, 'B1');
+
+  // 5 misses out of 10 is not enough.
+  const mixed = ['too_hard', 'easy', 'too_hard', 'easy', 'too_hard', 'easy', 'too_hard', 'easy', 'too_hard'];
+  for (const rating of mixed) {
+    assert.equal(rate(rating).level_changed, false);
+  }
+  // The 6th miss in the last 10 drops B1 → A2.
+  const dropped = rate('too_hard');
+  assert.equal(dropped.level_changed, true);
+  assert.equal(dropped.previous_level, 'B1');
+  assert.equal(dropped.level, 'A2');
+  assert.match(dropped.triggered_by, /6 of last 10 too_hard/);
+
+  // Old misses no longer count: one more miss right after the drop keeps A2.
+  const after = rate('too_hard');
+  assert.equal(after.level_changed, false);
+  assert.equal(after.level, 'A2');
 });
 
 test('does not advance beyond C2', () => {
@@ -890,7 +930,7 @@ function wordInput(overrides = {}) {
 }
 
 test('routeStudyEvents rejects invalid events but surfaces storage failures', async () => {
-  const { routeStudyEvents, isEventDataError } = await import('../src/word_store.js');
+  const { routeStudyEvents, isEventDataError } = await import('../src/domain/study_events.js');
   const event = {
     client_event_id: 'evt_route_1',
     server_word_id: 'word_1',

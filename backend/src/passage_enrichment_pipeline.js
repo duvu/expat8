@@ -1,3 +1,5 @@
+import { extractJson } from './generation_service.js';
+
 const ENRICHMENT_SYSTEM_PROMPT = `You are a language learning assistant specializing in English phonetics and Vietnamese translation.
 Given a list of English text segments, produce IPA transcription, Vietnamese translation, and Vietnamese phonetic reading for each segment.
 
@@ -104,7 +106,7 @@ export class PassageEnrichmentPipeline {
       throw new Error('Empty LLM response for enrichment');
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(extractJson(content));
     // Accept both direct array or { enrichments: [...] } / { segments: [...] }
     const rawItems = Array.isArray(parsed)
       ? parsed

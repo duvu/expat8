@@ -5,7 +5,8 @@ import '../models/release_info.dart';
 import '../theme/app_theme.dart';
 
 /// Compile-time version code from --dart-define=APP_VERSION_CODE=<int>.
-const int kAppVersionCode = int.fromEnvironment('APP_VERSION_CODE', defaultValue: 1);
+const int kAppVersionCode =
+    int.fromEnvironment('APP_VERSION_CODE', defaultValue: 1);
 
 /// Compile-time version name from --dart-define=APP_VERSION_NAME=<string>.
 const String kAppVersionName =
@@ -140,8 +141,8 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(Icons.check_circle_outline, size: 64,
-            color: appColors.statusSuccess),
+        Icon(Icons.check_circle_outline,
+            size: 64, color: appColors.statusSuccess),
         const SizedBox(height: 16),
         Text(
           'App is up to date',
@@ -165,8 +166,8 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(Icons.system_update_outlined, size: 64,
-            color: theme.colorScheme.primary),
+        Icon(Icons.system_update_outlined,
+            size: 64, color: theme.colorScheme.primary),
         const SizedBox(height: 16),
         Text(
           'Update available',
@@ -180,8 +181,7 @@ class _UpgradeCheckScreenState extends State<UpgradeCheckScreen> {
           style: const TextStyle(fontWeight: FontWeight.w500),
         ),
         const SizedBox(height: 4),
-        Text('Size: $sizeMB MB',
-            style: TextStyle(color: appColors.subtleText)),
+        Text('Size: $sizeMB MB', style: TextStyle(color: appColors.subtleText)),
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: _downloadAndInstall,

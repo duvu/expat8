@@ -151,7 +151,8 @@ void main() {
     expect(find.text('What does the highlighted phrase mean?'), findsNothing);
   });
 
-  testWidgets('7.3 sentence_context question shows sentence with highlighted term',
+  testWidgets(
+      '7.3 sentence_context question shows sentence with highlighted term',
       (tester) async {
     final client = MockClient((req) async {
       return http.Response(
@@ -189,8 +190,7 @@ void main() {
     // find.textContaining() only matches Text widgets; use a predicate for RichText.
     expect(
       find.byWidgetPredicate((w) =>
-          w is RichText &&
-          w.text.toPlainText().contains('He told a joke to')),
+          w is RichText && w.text.toPlainText().contains('He told a joke to')),
       findsOneWidget,
     );
     expect(find.text('What does the highlighted phrase mean?'), findsOneWidget);

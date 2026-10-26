@@ -1,3 +1,5 @@
+import 'vocabulary_word.dart';
+
 DateTime _parseUtcDate(dynamic value) {
   if (value is String) {
     return DateTime.tryParse(value)?.toUtc() ?? DateTime.now().toUtc();
@@ -10,6 +12,7 @@ class ManagedArticle {
     required this.id,
     required this.title,
     this.sourceUrl,
+    this.rawText,
     required this.language,
     required this.visibility,
     required this.status,
@@ -23,6 +26,7 @@ class ManagedArticle {
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       sourceUrl: json['source_url'] as String?,
+      rawText: json['raw_text'] as String?,
       language: json['language'] as String? ?? '',
       visibility: json['visibility'] as String? ?? 'private',
       status: json['status'] as String? ?? 'pending_processing',
@@ -35,6 +39,7 @@ class ManagedArticle {
   final String id;
   final String title;
   final String? sourceUrl;
+  final String? rawText;
   final String language;
   final String visibility;
   final String status;
@@ -67,14 +72,14 @@ class ArticleVocabularyItem {
     required this.status,
     this.classification,
     this.suggestionType,
+    this.wordJson,
   });
 
   factory ArticleVocabularyItem.fromJson(Map<String, dynamic> json) {
     return ArticleVocabularyItem(
       termId: json['term_id'] as String? ?? '',
-      displayTerm: json['display_term'] as String? ??
-          json['term'] as String? ??
-          '',
+      displayTerm:
+          json['display_term'] as String? ?? json['term'] as String? ?? '',
       wordSenseId: json['word_sense_id'] as String?,
       meaningVi: json['meaning_vi'] as String? ?? '',
       partOfSpeech: json['part_of_speech'] as String?,
@@ -83,6 +88,7 @@ class ArticleVocabularyItem {
       status: json['status'] as String? ?? 'pending_review',
       classification: json['classification'] as String?,
       suggestionType: json['suggestion_type'] as String?,
+      wordJson: json['word'] as Map<String, dynamic>?,
     );
   }
 
@@ -97,6 +103,14 @@ class ArticleVocabularyItem {
   final String? classification;
   final String? suggestionType;
 
+  /// The study word behind this term (learning-card shape), kept raw so the
+  /// offline article cache round-trips it unchanged.
+  final Map<String, dynamic>? wordJson;
+
+  /// The word to add to the learner's reviews, when the term has one.
+  VocabularyWord? get word =>
+      wordJson == null ? null : VocabularyWord.fromJson(wordJson!);
+
   Map<String, dynamic> toJson() => {
         'term_id': termId,
         'display_term': displayTerm,
@@ -108,6 +122,7 @@ class ArticleVocabularyItem {
         'status': status,
         'classification': classification,
         'suggestion_type': suggestionType,
+        'word': wordJson,
       };
 }
 

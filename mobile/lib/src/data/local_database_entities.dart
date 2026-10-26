@@ -25,6 +25,10 @@ class LocalWordEntity {
     this.explanation = '',
     this.learningState = '',
     this.learningStateAtMs,
+    this.srsIntervalDays = 0,
+    this.srsEase = 2.5,
+    this.srsReps = 0,
+    this.srsLapses = 0,
   });
 
   int id;
@@ -67,6 +71,13 @@ class LocalWordEntity {
 
   @Index()
   int? learningStateAtMs;
+
+  // Spaced-repetition memory (see srs/srs_scheduler.dart); mirrors the
+  // server's user_word_states for the signed-in learner.
+  double srsIntervalDays;
+  double srsEase;
+  int srsReps;
+  int srsLapses;
 }
 
 @Entity()
@@ -135,6 +146,7 @@ class StudyEventEntity {
     required this.rating,
     required this.occurredAtMs,
     required this.syncStatus,
+    this.ownerUserId,
   });
 
   int id;
@@ -149,6 +161,11 @@ class StudyEventEntity {
 
   @Index()
   String syncStatus;
+
+  /// Account that studied (null = signed out). A shared family device only
+  /// uploads an event under its owner's session.
+  @Index()
+  String? ownerUserId;
 }
 
 @Entity()

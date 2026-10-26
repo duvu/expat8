@@ -1,5 +1,5 @@
 import express from 'express';
-import { asyncHandler, clampLimit, resolveOptionalUserSession } from './helpers.js';
+import { asyncHandler, queryLimit, resolveOptionalUserSession } from './helpers.js';
 
 export function createContentPacksRouter({ store, config }) {
   const router = express.Router();
@@ -14,7 +14,7 @@ export function createContentPacksRouter({ store, config }) {
       const language = request.query.language ?? request.query.target_language ?? config.defaultTargetLanguage;
       const afterVersion =
         request.query.after_version == null ? null : Number.parseInt(request.query.after_version, 10);
-      const limit = clampLimit(request.query.limit, 1, 200);
+      const limit = queryLimit(request.query.limit, 100, 200);
       const items = await store.listContentPacks({
         language,
         afterVersion: Number.isNaN(afterVersion) ? null : afterVersion,

@@ -33,10 +33,7 @@ class MemorizationRepository {
 
   /// Returns all cached passages (instant, no network).
   List<MemorizationPassage> listPassagesCached() {
-    return localDb!
-        .getAllPassages()
-        .map(_passageEntityToModel)
-        .toList();
+    return localDb!.getAllPassages().map(_passageEntityToModel).toList();
   }
 
   /// Fetches passage list from backend, upserts into local cache, returns
@@ -290,11 +287,13 @@ class MemorizationRepository {
               'interval_days': e.intervalDays,
               if (e.lastReviewedAtMs != null)
                 'last_reviewed_at': DateTime.fromMillisecondsSinceEpoch(
-                        e.lastReviewedAtMs!, isUtc: true)
+                        e.lastReviewedAtMs!,
+                        isUtc: true)
                     .toIso8601String(),
               if (e.nextReviewAtMs != null)
                 'next_review_at': DateTime.fromMillisecondsSinceEpoch(
-                        e.nextReviewAtMs!, isUtc: true)
+                        e.nextReviewAtMs!,
+                        isUtc: true)
                     .toIso8601String(),
             })
         .toList();

@@ -1,9 +1,12 @@
+import { CRAWLER_ADMIN_ID } from './content_crawler.js';
+
 export class ArticleProcessingWorker {
   constructor({ store, pipeline, logger = console, maxAttempts = 3 }) {
     this.store = store;
     this.pipeline = pipeline;
     this.logger = logger;
     this.maxAttempts = Math.max(1, maxAttempts);
+    this.lastBacklogCount = 0;
   }
 
   async runOnce() {
@@ -13,7 +16,11 @@ export class ArticleProcessingWorker {
 
     if (typeof this.store.countPendingArticleJobs === 'function') {
       const pendingCount = await this.store.countPendingArticleJobs();
-      this.logger.info?.('article_processing_backlog', { pending_count: pendingCount });
+      // The worker ticks every second; only log when the backlog is non-empty or just drained.
+      if (pendingCount > 0 || this.lastBacklogCount > 0) {
+        this.logger.info?.('article_processing_backlog', { pending_count: pendingCount });
+      }
+      this.lastBacklogCount = pendingCount;
     }
 
     const job = await this.store.claimNextArticleProcessingJob();
@@ -32,6 +39,9 @@ export class ArticleProcessingWorker {
         status: terminalStatus,
         errorMessage: result.success ? null : result.classification
       });
+      if (result.success) {
+        await this.#publishCrawledArticle(job.article_id);
+      }
       this.logger.info?.('article_processing_job_completed', {
         job_id: job.id,
         article_id: job.article_id,
@@ -42,7 +52,8 @@ export class ArticleProcessingWorker {
       });
       return { processed: 1 };
     } catch (error) {
-      const shouldRetry = Number(job.attempt_count ?? 0) < this.maxAttempts;
+      // An LLM outage says nothing about the article, so it never uses up the retry budget.
+      const shouldRetry = error?.name === 'LlmUnavailableError' || Number(job.attempt_count ?? 0) < this.maxAttempts;
       await this.store.completeArticleProcessingJob({
         jobId: job.id,
         status: shouldRetry ? 'pending_processing' : 'dead_lettered',
@@ -62,6 +73,13 @@ export class ArticleProcessingWorker {
         retry_scheduled: shouldRetry,
         dead_lettered: shouldRetry ? 0 : 1
       };
+    }
+  }
+
+  async #publishCrawledArticle(articleId) {
+    const article = await this.store.getArticleById({ articleId });
+    if (article?.created_by_admin_id === CRAWLER_ADMIN_ID) {
+      await this.store.publishArticle({ articleId });
     }
   }
 }

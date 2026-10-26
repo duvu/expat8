@@ -1,51 +1,48 @@
 import Link from 'next/link';
 
+import { filterLogArchives, formatBytes, formatDateTime, summarizeLogArchives } from '@/lib/ops';
+import { LOG_ARCHIVE_LIMIT_MAX, loadLogArchives } from '@/lib/ops-data';
+import ActionForm from '@/components/ActionForm';
+import DataTable from '@/components/DataTable';
+import FilterForm from '@/components/FilterForm';
 import PageShell from '@/components/PageShell';
-import { formatBytes, formatDateTime, filterLogArchives, summarizeLogArchives } from '@/lib/ops';
-import { loadLogArchives } from '@/lib/ops-data';
+import { RetentionBadge } from '@/components/StatusBadge';
 import { deleteExpiredArchivesAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-export default async function OpsLogsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; source?: string; state?: string; from?: string; to?: string; user?: string }>;
-}) {
-  const params = await searchParams;
-  const archivesResult = await loadLogArchives({ limit: 500 });
-  const archives = filterLogArchives(archivesResult.items, params);
-  const stats = summarizeLogArchives(archivesResult.items);
-  const sources = Array.from(new Set(archivesResult.items.map((archive) => archive.source_label ?? 'mobile'))).sort();
-  const expiredIds = archivesResult.items
-    .filter((a) => a.retention_state === 'expired')
-    .map((a) => a.id);
+type Filters = { q?: string; source?: string; state?: string; from?: string; to?: string; user?: string; error?: string };
 
-  async function handleDeleteExpired() {
-    'use server';
-    await deleteExpiredArchivesAction(expiredIds);
-  }
+export default async function OpsLogsPage({ searchParams }: { searchParams: Promise<Filters> }) {
+  const params = await searchParams;
+  const { items, error } = await loadLogArchives();
+  const archives = filterLogArchives(items, params);
+  const stats = summarizeLogArchives(items);
+  const sources = Array.from(new Set(items.map((archive) => archive.source_label ?? 'mobile'))).sort();
 
   return (
     <PageShell title="Log Archives" actions={<Link href="/ops" className="button secondary">Ops home</Link>}>
+      {params.error && <div className="empty-state error-state">{params.error}</div>}
+
       <section className="table-panel">
         <div className="ops-stats-bar">
-          <span><strong>{stats.activeCount + stats.expiredCount}</strong> total</span>
+          <span><strong>{items.length}</strong> total{items.length >= LOG_ARCHIVE_LIMIT_MAX ? ' (latest only)' : ''}</span>
           <span><strong>{formatBytes(stats.totalBytes)}</strong> stored</span>
           <span><strong>{stats.activeCount}</strong> active</span>
           <span><strong>{stats.expiredCount}</strong> expired</span>
-          {expiredIds.length > 0 && (
-            <form action={handleDeleteExpired} style={{ display: 'inline', marginLeft: 'auto' }}>
-              <button type="submit" className="button danger small">
-                Delete all expired ({expiredIds.length})
-              </button>
-            </form>
+          {stats.expiredCount > 0 && (
+            <ActionForm
+              action={deleteExpiredArchivesAction}
+              label={`Delete all expired (${stats.expiredCount})`}
+              buttonClassName="danger small"
+              confirm={`Permanently delete ${stats.expiredCount} expired log archive(s)?`}
+            />
           )}
         </div>
       </section>
 
       <section className="table-panel">
-        <form className="ops-filters" method="GET">
+        <FilterForm>
           <label>
             Search
             <input name="q" defaultValue={params.q ?? ''} placeholder="File, device, app, retention" />
@@ -58,9 +55,7 @@ export default async function OpsLogsPage({
             Source
             <select name="source" defaultValue={params.source ?? 'all'}>
               <option value="all">All</option>
-              {sources.map((source) => (
-                <option key={source} value={source}>{source}</option>
-              ))}
+              {sources.map((source) => <option key={source} value={source}>{source}</option>)}
             </select>
           </label>
           <label>
@@ -79,48 +74,26 @@ export default async function OpsLogsPage({
             To
             <input name="to" type="date" defaultValue={params.to ?? ''} />
           </label>
-          <button type="submit">Filter</button>
-        </form>
+        </FilterForm>
       </section>
 
       <section className="table-panel">
-        {archivesResult.error ? (
-          <div className="empty-state error-state">{archivesResult.error}</div>
-        ) : archives.length === 0 ? (
-          <div className="empty-state">
-            No uploaded log archives matched the current filters.
-          </div>
+        {error ? (
+          <div className="empty-state error-state">{error}</div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Uploaded</th>
-                <th>Size</th>
-                <th>Source</th>
-                <th>Device</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {archives.map((archive) => (
-                <tr key={archive.id}>
-                  <td data-label="File">
-                    <Link href={`/ops/logs/${archive.id}`}>{archive.file_name}</Link>
-                  </td>
-                  <td data-label="Uploaded">{formatDateTime(archive.uploaded_at)}</td>
-                  <td data-label="Size">{formatBytes(archive.size_bytes)}</td>
-                  <td data-label="Source">{archive.source_label ?? 'mobile'}</td>
-                  <td data-label="Device">{archive.source_device_id ?? '—'}</td>
-                  <td data-label="Status">
-                    <span className="badge" data-status={archive.retention_state === 'active' ? 'published' : 'failed'}>
-                      {archive.retention_state}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            rows={archives}
+            rowKey={(archive) => archive.id}
+            empty="No uploaded log archives matched the current filters."
+            columns={[
+              { label: 'File', render: (a) => <Link href={`/ops/logs/${a.id}`}>{a.file_name}</Link> },
+              { label: 'Uploaded', render: (a) => formatDateTime(a.uploaded_at) },
+              { label: 'Size', render: (a) => formatBytes(a.size_bytes) },
+              { label: 'Source', render: (a) => a.source_label ?? 'mobile' },
+              { label: 'Device', render: (a) => a.source_device_id ?? '—' },
+              { label: 'Status', render: (a) => <RetentionBadge state={a.retention_state} /> },
+            ]}
+          />
         )}
       </section>
     </PageShell>

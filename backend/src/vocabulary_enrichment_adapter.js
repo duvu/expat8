@@ -79,6 +79,10 @@ export class VocabularyEnrichmentAdapter {
           .filter((item) => item !== null)
       };
     } catch (error) {
+      // A downed gateway must requeue the article, not turn it into stub suggestions.
+      if (error?.name === 'LlmUnavailableError') {
+        throw error;
+      }
       return {
         ok: false,
         classification: 'ai_request_failed',
@@ -114,6 +118,10 @@ export class VocabularyEnrichmentAdapter {
           .filter((item) => item !== null)
       };
     } catch (error) {
+      // A downed gateway must requeue the article, not turn it into stub suggestions.
+      if (error?.name === 'LlmUnavailableError') {
+        throw error;
+      }
       return {
         ok: false,
         classification: 'ai_request_failed',

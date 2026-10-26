@@ -7,6 +7,46 @@ import { NonceStorageUnavailableError } from '../src/app_credentials.js';
 import { WordStore } from '../src/word_store.js';
 import { loadTestConfig, signedFetchOptions } from './support/app_credential_helpers.js';
 
+test('learning cards honour an optional session study-level override', async (t) => {
+  const store = new WordStore({ seed: false });
+  for (const [level, count] of [['A1', 30], ['B1', 30], ['C1', 30]]) {
+    for (let index = 0; index < count; index += 1) {
+      store.insertWord(wordInput({ term: `${level} term ${index}`, difficulty: level }));
+    }
+  }
+  const server = http.createServer(createApp({ store, generationService: null, config: loadTestConfig() }));
+  await listen(server);
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const levelsOf = (batch) => batch.items.map((item) => item.difficulty);
+
+  // No override: the learner's own level (new devices start at A1).
+  const own = await postLearningCards(baseUrl, { device_id: 'anonymous_level_a', target_language: 'en', limit: 10 });
+  assert.equal(own.level, 'A1');
+  assert.ok(levelsOf(own).filter((level) => level === 'A1').length >= 6);
+
+  // Override for this request only; the learner's stored level is untouched.
+  const override = await postLearningCards(baseUrl, {
+    device_id: 'anonymous_level_a',
+    target_language: 'en',
+    limit: 10,
+    level: 'c1'
+  });
+  assert.equal(override.level, 'C1');
+  assert.ok(levelsOf(override).filter((level) => level === 'C1').length >= 6);
+  assert.equal(store.getProficiency({ deviceId: 'anonymous_level_a', language: 'en' }).level, 'A1');
+
+  const invalid = await fetch(
+    `${baseUrl}/v1/learning/cards`,
+    signedFetchOptions(`${baseUrl}/v1/learning/cards`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ device_id: 'anonymous_level_a', target_language: 'en', level: 'HSK3' })
+    })
+  );
+  assert.equal(invalid.status, 400);
+});
+
 test('serves unified learning cards, recent words, and idempotent sync', async (t) => {
   const store = new WordStore({ seed: false });
   for (let index = 0; index < 120; index += 1) {
@@ -851,10 +891,7 @@ test('registers, signs in, signs out, and associates signed-in learning with use
       authorization: `Bearer ${signedIn.session_token}`
     }
   );
-  assert.deepEqual(
-    first.items.map((item) => item.server_word_id),
-    ['word_identity_b', 'word_identity_a']
-  );
+  assert.deepEqual(first.items.map((item) => item.server_word_id).sort(), ['word_identity_a', 'word_identity_b']);
 
   const event = await fetchJson(`${baseUrl}/v1/study-events`, {
     method: 'POST',
@@ -867,7 +904,8 @@ test('registers, signs in, signs out, and associates signed-in learning with use
       client_event_id: 'evt_identity_1',
       word_id: first.items[0].server_word_id,
       rating: 'easy',
-      occurred_at: '2026-05-04T16:00:00.000Z'
+      // Just studied: not due yet, so it is neither a new card nor a review card.
+      occurred_at: new Date().toISOString()
     })
   });
   assert.equal(event.success, true);
@@ -1415,12 +1453,23 @@ test('allows authenticated users to create and read own articles', async (t) => 
   });
 
   assert.equal(created.status, 'pending_processing');
+  const second = await fetchJson(`${baseUrl}/v1/articles`, {
+    method: 'POST',
+    headers: {
+      ...bearerHeaders(register.session_token),
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ title: 'My second upload', language: 'en', raw_text: 'Another article.' })
+  });
+  // No ?limit= must mean "the default page", not a single item (regression: the app saw 1 article).
   const listed = await fetchJson(`${baseUrl}/v1/articles`, {
     method: 'GET',
     headers: bearerHeaders(register.session_token)
   });
-  assert.equal(listed.items.length, 1);
-  assert.equal(listed.items[0].id, created.id);
+  assert.deepEqual(
+    listed.items.map((item) => item.id).sort(),
+    [created.id, second.id].sort()
+  );
 
   const detail = await fetchJson(`${baseUrl}/v1/articles/${created.id}`, {
     method: 'GET',
@@ -1428,6 +1477,8 @@ test('allows authenticated users to create and read own articles', async (t) => 
   });
   assert.equal(detail.id, created.id);
   assert.equal(detail.visibility, 'private');
+  assert.equal(typeof detail.raw_text, 'string');
+  assert.equal('raw_text' in listed.items[0], false);
 });
 
 test('supports admin article workflow with admin token guard', async (t) => {
@@ -1568,6 +1619,8 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
     })
   });
 
+  // A study word for one of the terms: the app can add it to the learner's reviews from the article.
+  const { word: studyWord } = store.insertWord(wordInput({ id: 'word_private_term', term: 'Private Term' }));
   const privateArticle = store.createArticle({
     userId: owner.user_id,
     title: 'Private article',
@@ -1617,6 +1670,8 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   assert.equal(ownerVocabulary.items.length, 1);
   assert.equal(ownerVocabulary.items[0].classification, 'article_keyword');
   assert.equal(ownerVocabulary.items[0].suggestion_type, 'word');
+  assert.equal(ownerVocabulary.items[0].word.server_word_id, studyWord.id);
+  assert.equal(ownerVocabulary.items[0].word.meaning_vi, 'dinh danh');
 
   const viewerVocabulary = await fetchJson(`${baseUrl}/v1/articles/${publishedArticle.id}/vocabulary`, {
     method: 'GET',
@@ -1626,6 +1681,8 @@ test('exposes article vocabulary and soft deletion rules', async (t) => {
   assert.equal(viewerVocabulary.items.length, 1);
   assert.equal(viewerVocabulary.items[0].classification, 'article_phrase');
   assert.equal(viewerVocabulary.items[0].suggestion_type, 'phrase');
+  // Publishing bridged the approved term into the study pool.
+  assert.equal(viewerVocabulary.items[0].word.term, 'published term');
   assert.deepEqual(viewerVocabulary.items[0].speaking_prompt, {
     id: 'prompt_published_term',
     word_sense_id: publishedSenseId,

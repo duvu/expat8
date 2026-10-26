@@ -25,7 +25,8 @@ class ArticleRepository {
     return '$key.${session?.userId ?? 'anonymous'}';
   }
 
-  Future<List<ManagedArticle>> listArticles({required String sessionToken}) async =>
+  Future<List<ManagedArticle>> listArticles(
+          {required String sessionToken}) async =>
       (await loadArticles(sessionToken: sessionToken)).data;
 
   Future<CachedResult<List<ManagedArticle>>> loadArticles({
@@ -77,7 +78,8 @@ class ArticleRepository {
       return article;
     } on Object {
       final cached = await _read(_articleKey(articleId));
-      if (cached is Map<String, dynamic>) return ManagedArticle.fromJson(cached);
+      if (cached is Map<String, dynamic>)
+        return ManagedArticle.fromJson(cached);
       final list = await _read(_listKey);
       if (list is List) {
         for (final a in list.whereType<Map<String, dynamic>>()) {

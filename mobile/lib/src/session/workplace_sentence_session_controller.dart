@@ -6,6 +6,7 @@ import '../config.dart';
 import '../data/workplace_sentence_repository.dart';
 import '../logging/logger.dart';
 import '../models/workplace_sentence.dart';
+import '../games/common/game_activity.dart';
 
 class WorkplaceSentenceSessionController extends ChangeNotifier {
   WorkplaceSentenceSessionController({
@@ -166,6 +167,7 @@ class WorkplaceSentenceSessionController extends ChangeNotifier {
   void _startInventoryTimer() {
     _inventoryTimer?.cancel();
     _inventoryTimer = Timer.periodic(_inventoryTopUpInterval, (_) {
+      if (GameActivity.isActive) return; // never hitch a running game
       unawaited(_triggerInventoryTopUp());
     });
   }

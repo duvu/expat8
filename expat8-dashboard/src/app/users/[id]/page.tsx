@@ -1,11 +1,25 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { getUserDetail, getUserProficiency, getUserStudyStats } from '@/lib/db';
-import { getUserSpeakingStats, getUserExamHistory, getUserSrsStates } from '@/lib/analytics';
+import { getUserDetail, getUserProficiency, getUserStudyStats, listExamResults } from '@/lib/db';
+import { getUserSpeakingStats, getUserSrsStates } from '@/lib/analytics';
+import { formatDate, formatDateTime } from '@/lib/format';
+import DataTable from '@/components/DataTable';
 import PageShell from '@/components/PageShell';
+import StatusBadge from '@/components/StatusBadge';
 import KpiCard from '@/components/charts/KpiCard';
 
 export const dynamic = 'force-dynamic';
+
+const TABS = [
+  { key: 'study', label: 'Study Events' },
+  { key: 'speaking', label: 'Speaking' },
+  { key: 'srs', label: 'SRS States' },
+  { key: 'exams', label: 'Exams' },
+] as const;
+
+const SRS_ROW_LIMIT = 100;
+const dash = <span className="muted">—</span>;
 
 export default async function UserDetailPage({
   params,
@@ -17,233 +31,154 @@ export default async function UserDetailPage({
   const { id } = await params;
   const { tab = 'study' } = await searchParams;
 
-  const [detail, proficiency, studyStats, speakingStats, examHistory, srsStates] = await Promise.all([
-    getUserDetail(id),
-    getUserProficiency(id),
-    getUserStudyStats(id),
-    getUserSpeakingStats(id),
-    getUserExamHistory(id),
-    getUserSrsStates(id),
-  ]);
-
+  const [detail, proficiency] = await Promise.all([getUserDetail(id), getUserProficiency(id)]);
   if (!detail) {
     notFound();
   }
 
-  const tabs = [
-    { key: 'study', label: 'Study Events' },
-    { key: 'speaking', label: 'Speaking' },
-    { key: 'srs', label: 'SRS States' },
-    { key: 'exams', label: 'Exams' },
-  ];
-
   return (
     <PageShell title={detail.display_name ?? detail.identifier}>
-      {/* Profile header */}
       <section className="table-panel">
         <h2>Profile</h2>
         <dl className="article-meta">
-          <div>
-            <dt>Identifier</dt>
-            <dd>{detail.identifier}</dd>
-          </div>
-          <div>
-            <dt>Display Name</dt>
-            <dd>{detail.display_name ?? <span className="muted">—</span>}</dd>
-          </div>
-          <div>
-            <dt>Signed Up</dt>
-            <dd>{new Date(detail.created_at).toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>Sessions</dt>
-            <dd>{detail.session_count.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>Cached Words</dt>
-            <dd>{detail.cached_word_count.toLocaleString()}</dd>
-          </div>
+          <div><dt>Identifier</dt><dd>{detail.identifier}</dd></div>
+          <div><dt>Display Name</dt><dd>{detail.display_name ?? dash}</dd></div>
+          <div><dt>Signed Up</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
+          <div><dt>Sessions</dt><dd>{detail.session_count.toLocaleString()}</dd></div>
+          <div><dt>Cached Words</dt><dd>{detail.cached_word_count.toLocaleString()}</dd></div>
         </dl>
       </section>
 
-      {/* Proficiency */}
       {proficiency.length > 0 && (
         <section className="table-panel">
           <h2>Proficiency</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Language</th>
-                <th>Level</th>
-                <th>Last Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {proficiency.map((p) => (
-                <tr key={p.language}>
-                  <td data-label="Language">{p.language}</td>
-                  <td data-label="Level">{p.level}</td>
-                  <td data-label="Last Updated">{new Date(p.updated_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataTable
+            rows={proficiency}
+            rowKey={(p) => p.language}
+            empty="No proficiency data."
+            columns={[
+              { label: 'Language', render: (p) => p.language },
+              { label: 'Level', render: (p) => p.level },
+              { label: 'Last Updated', render: (p) => formatDate(p.updated_at) },
+            ]}
+          />
         </section>
       )}
 
-      {/* Tab bar */}
       <nav className="tab-bar">
-        {tabs.map(({ key, label }) => (
-          <a
-            key={key}
-            href={`/users/${id}?tab=${key}`}
-            className={tab === key ? 'active' : ''}
-          >
+        {TABS.map(({ key, label }) => (
+          <Link key={key} href={`/users/${id}?tab=${key}`} aria-current={tab === key ? 'page' : undefined}>
             {label}
-          </a>
+          </Link>
         ))}
       </nav>
 
-      {/* Study Events Tab */}
-      {tab === 'study' && (
-        <>
-          <section className="kpi-grid">
-            {studyStats.breakdown.map((b) => (
-              <KpiCard key={b.rating} label={b.rating} value={b.count} />
-            ))}
-          </section>
-
-          <section className="table-panel">
-            <h2>Recent Activity (last 20)</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Word ID / Local ID</th>
-                  <th>Rating</th>
-                  <th>Occurred At</th>
-                </tr>
-              </thead>
-              <tbody>
-                {studyStats.recentEvents.length === 0 ? (
-                  <tr><td colSpan={3}><div className="empty-state">No recent activity.</div></td></tr>
-                ) : studyStats.recentEvents.map((e) => (
-                  <tr key={e.id}>
-                    <td data-label="Word ID">{e.word_id ?? e.local_word_id ?? <span className="muted">—</span>}</td>
-                    <td data-label="Rating">{e.rating}</td>
-                    <td data-label="Occurred At">{e.occurred_at}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        </>
-      )}
-
-      {/* Speaking Tab */}
-      {tab === 'speaking' && (
-        <>
-          <section className="kpi-grid">
-            <KpiCard label="Total Speaking Events" value={speakingStats.totalEvents} />
-            <KpiCard label="Drills Completed" value={speakingStats.drillsCompleted} />
-            <KpiCard label="Last Speaking" value={speakingStats.lastSpeakingAt
-              ? new Date(speakingStats.lastSpeakingAt).toLocaleDateString()
-              : '—'} />
-          </section>
-          <section className="table-panel">
-            <h2>Self-Rating Breakdown</h2>
-            <table>
-              <thead><tr><th>Rating</th><th>Count</th></tr></thead>
-              <tbody>
-                {speakingStats.selfRatingDistribution.length === 0 ? (
-                  <tr><td colSpan={2}><div className="empty-state">No speaking events.</div></td></tr>
-                ) : speakingStats.selfRatingDistribution.map((r) => (
-                  <tr key={r.rating}>
-                    <td data-label="Rating">{r.rating || '(none)'}</td>
-                    <td data-label="Count">{r.count.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        </>
-      )}
-
-      {/* SRS States Tab */}
-      {tab === 'srs' && (
-        <section className="table-panel">
-          <h2>SRS Word States ({srsStates.length.toLocaleString()} words)</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Term</th>
-                <th>Status</th>
-                <th>Reviews</th>
-                <th>Ease Factor</th>
-                <th>Next Review</th>
-              </tr>
-            </thead>
-            <tbody>
-              {srsStates.length === 0 ? (
-                <tr><td colSpan={5}><div className="empty-state">No SRS data.</div></td></tr>
-              ) : srsStates.slice(0, 100).map((s) => (
-                <tr key={s.word_id}>
-                  <td data-label="Term">{s.term ?? s.word_id.slice(0, 12)}</td>
-                  <td data-label="Status"><span className="badge" data-status={s.status}>{s.status}</span></td>
-                  <td data-label="Reviews">{s.review_count}</td>
-                  <td data-label="Ease">{s.ease_factor?.toFixed(2) ?? '—'}</td>
-                  <td data-label="Next Review">
-                    {s.next_review_at ? new Date(s.next_review_at).toLocaleDateString() : '—'}
-                  </td>
-                </tr>
-              ))}
-              {srsStates.length > 100 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--muted)', padding: '8px' }}>Showing first 100 of {srsStates.length}</td></tr>
-              )}
-            </tbody>
-          </table>
-        </section>
-      )}
-
-      {/* Exams Tab */}
-      {tab === 'exams' && (
-        <section className="table-panel">
-          <h2>Exam History</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Topic</th>
-                <th>Language</th>
-                <th>Score</th>
-                <th>Result</th>
-                <th>Date</th>
-                <th>Certificate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {examHistory.length === 0 ? (
-                <tr><td colSpan={6}><div className="empty-state">No exam attempts.</div></td></tr>
-              ) : examHistory.map((e) => (
-                <tr key={e.id}>
-                  <td data-label="Topic">{e.topic}</td>
-                  <td data-label="Language">{e.language}</td>
-                  <td data-label="Score">{e.score_pct.toFixed(1)}%</td>
-                  <td data-label="Result">
-                    <span className="badge" data-status={e.passed ? 'published' : 'processing_failed'}>
-                      {e.passed ? 'Passed' : 'Failed'}
-                    </span>
-                  </td>
-                  <td data-label="Date">{new Date(e.created_at).toLocaleDateString()}</td>
-                  <td data-label="Certificate">
-                    {e.certificate_id
-                      ? <a href={`/api/certificate/${e.certificate_id}`} target="_blank" rel="noreferrer">View</a>
-                      : <span className="muted">—</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+      {tab === 'study' && <StudyTab userId={id} />}
+      {tab === 'speaking' && <SpeakingTab userId={id} />}
+      {tab === 'srs' && <SrsTab userId={id} />}
+      {tab === 'exams' && <ExamsTab userId={id} />}
     </PageShell>
+  );
+}
+
+// Each tab loads only its own data.
+
+async function StudyTab({ userId }: { userId: string }) {
+  const { breakdown, recentEvents } = await getUserStudyStats(userId);
+  return (
+    <>
+      <section className="kpi-grid">
+        {breakdown.map((b) => <KpiCard key={b.rating} label={b.rating} value={b.count} />)}
+      </section>
+      <section className="table-panel">
+        <h2>Recent Activity (last 20)</h2>
+        <DataTable
+          rows={recentEvents}
+          rowKey={(e) => e.id}
+          empty="No recent activity."
+          columns={[
+            { label: 'Word ID / Local ID', render: (e) => e.word_id ?? e.local_word_id ?? dash },
+            { label: 'Rating', render: (e) => e.rating },
+            { label: 'Occurred At', render: (e) => formatDateTime(e.occurred_at) },
+          ]}
+        />
+      </section>
+    </>
+  );
+}
+
+async function SpeakingTab({ userId }: { userId: string }) {
+  const stats = await getUserSpeakingStats(userId);
+  return (
+    <>
+      <section className="kpi-grid">
+        <KpiCard label="Total Speaking Events" value={stats.totalEvents} />
+        <KpiCard label="Drills Completed" value={stats.drillsCompleted} />
+        <KpiCard label="Last Speaking" value={formatDate(stats.lastSpeakingAt)} />
+      </section>
+      <section className="table-panel">
+        <h2>Self-Rating Breakdown</h2>
+        <DataTable
+          rows={stats.selfRatingDistribution}
+          rowKey={(r) => r.rating}
+          empty="No speaking events."
+          columns={[
+            { label: 'Rating', render: (r) => r.rating || '(none)' },
+            { label: 'Count', render: (r) => r.count.toLocaleString() },
+          ]}
+        />
+      </section>
+    </>
+  );
+}
+
+async function SrsTab({ userId }: { userId: string }) {
+  const states = await getUserSrsStates(userId);
+  return (
+    <section className="table-panel">
+      <h2>SRS Word States ({states.length.toLocaleString()} words)</h2>
+      <DataTable
+        rows={states.slice(0, SRS_ROW_LIMIT)}
+        rowKey={(s) => s.word_id}
+        empty="No SRS data."
+        columns={[
+          { label: 'Term', render: (s) => s.term ?? s.word_id.slice(0, 12) },
+          { label: 'Status', render: (s) => <StatusBadge status={s.status} /> },
+          { label: 'Reviews', render: (s) => s.review_count },
+          { label: 'Ease Factor', render: (s) => (s.ease_factor != null ? Number(s.ease_factor).toFixed(2) : '—') },
+          { label: 'Next Review', render: (s) => formatDate(s.next_review_at) },
+        ]}
+      />
+      {states.length > SRS_ROW_LIMIT && (
+        <p className="muted table-footnote">Showing first {SRS_ROW_LIMIT} of {states.length}</p>
+      )}
+    </section>
+  );
+}
+
+async function ExamsTab({ userId }: { userId: string }) {
+  const exams = await listExamResults({ userId, limit: 500 });
+  return (
+    <section className="table-panel">
+      <h2>Exam History</h2>
+      <DataTable
+        rows={exams}
+        rowKey={(e) => e.id}
+        empty="No exam attempts."
+        columns={[
+          { label: 'Topic', render: (e) => e.topic },
+          { label: 'Language', render: (e) => e.language },
+          { label: 'Score', render: (e) => `${Number(e.score_pct).toFixed(1)}%` },
+          { label: 'Result', render: (e) => <StatusBadge status={e.passed ? 'published' : 'failed'} label={e.passed ? 'Passed' : 'Failed'} /> },
+          { label: 'Date', render: (e) => formatDate(e.created_at) },
+          {
+            label: 'Certificate',
+            render: (e) => e.certificate_id
+              ? <a href={`/api/certificate/${e.certificate_id}`} target="_blank" rel="noreferrer">View</a>
+              : dash,
+          },
+        ]}
+      />
+    </section>
   );
 }

@@ -1,16 +1,13 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useTransition } from 'react';
+import { Suspense, useTransition } from 'react';
 
 import { type TimeRange, TIME_RANGE_LABELS } from '@/lib/time-range';
 
-export type { TimeRange } from '@/lib/time-range';
-export { TIME_RANGE_LABELS, parseTimeRange, rangeToInterval } from '@/lib/time-range';
-
 type Props = { current: TimeRange };
 
-export default function TimeRangeSelector({ current }: Props) {
+function TimeRangeButtons({ current }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -35,5 +32,14 @@ export default function TimeRangeSelector({ current }: Props) {
         </button>
       ))}
     </div>
+  );
+}
+
+/** useSearchParams needs a Suspense boundary; it lives here so pages don't repeat it. */
+export default function TimeRangeSelector(props: Props) {
+  return (
+    <Suspense>
+      <TimeRangeButtons {...props} />
+    </Suspense>
   );
 }

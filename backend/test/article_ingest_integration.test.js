@@ -205,3 +205,40 @@ test('content pack listing: in-memory store returns empty list (Postgres-only fe
   assert.ok(Array.isArray(packs), 'listContentPacks returns an array');
   assert.equal(packs.length, 0, 'in-memory store starts with no content packs');
 });
+
+test('article ingest: admin-created article from other admins stays hidden until published', async () => {
+  const store = new WordStore({ seed: false });
+  const article = store.createAdminArticle({
+    adminUserId: 'human-admin',
+    title: 'Admin Article',
+    language: 'en',
+    rawText: 'Resilience is a key trait for modern engineering teams under pressure.',
+    visibility: 'private'
+  });
+  const pipeline = new ArticleProcessingPipeline({ store, suggestionAdapter: makeSuggestionAdapter('resilience') });
+  await new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 }).runOnce();
+
+  assert.equal(store.getArticleById({ articleId: article.id }).status, 'pending_review');
+  assert.deepEqual(store.listArticles({ userId: 'reader' }), []);
+  assert.equal(store.getArticleByIdForUser({ articleId: article.id, userId: 'reader' }), null);
+
+  store.publishArticle({ articleId: article.id });
+  assert.deepEqual(store.listArticles({ userId: 'reader' }).map((item) => item.id), [article.id]);
+  assert.equal(store.getArticleByIdForUser({ articleId: article.id, userId: 'reader' })?.id, article.id);
+});
+
+test('article ingest: crawler article is published automatically after processing', async () => {
+  const store = new WordStore({ seed: false });
+  const article = store.createAdminArticle({
+    adminUserId: 'content-crawler',
+    title: 'Crawled Article',
+    language: 'en',
+    rawText: 'Resilience is a key trait for modern engineering teams under pressure.',
+    visibility: 'private'
+  });
+  const pipeline = new ArticleProcessingPipeline({ store, suggestionAdapter: makeSuggestionAdapter('resilience') });
+  await new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 }).runOnce();
+
+  assert.equal(store.getArticleById({ articleId: article.id }).status, 'published');
+  assert.deepEqual(store.listArticles({ userId: 'reader' }).map((item) => item.id), [article.id]);
+});

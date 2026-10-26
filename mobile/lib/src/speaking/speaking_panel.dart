@@ -35,8 +35,7 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
 
   SpeakingPrompt? get _prompt => widget.word.speakingPrompt;
 
-  String get _targetText =>
-      _prompt?.targetText ?? widget.word.example;
+  String get _targetText => _prompt?.targetText ?? widget.word.example;
 
   String? get _viHint => _prompt?.viHint ?? widget.word.exampleVi;
 
@@ -197,8 +196,7 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
                 backgroundColor: theme.colorScheme.error),
           ),
         ],
-        if (_phase == _PanelPhase.recorded ||
-            _phase == _PanelPhase.rated) ...[
+        if (_phase == _PanelPhase.recorded || _phase == _PanelPhase.rated) ...[
           Row(
             children: [
               IconButton(
@@ -216,8 +214,7 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
           ),
           if (_phase == _PanelPhase.recorded) ...[
             const SizedBox(height: 8),
-            Text('How did that feel?',
-                style: theme.textTheme.labelLarge),
+            Text('How did that feel?', style: theme.textTheme.labelLarge),
             const SizedBox(height: 6),
             _ratingRow(),
           ],
@@ -262,8 +259,8 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
   Widget _permDeniedBanner(ThemeData theme) {
     return Text(
       'Microphone access is required to record. Enable it in Settings.',
-      style: theme.textTheme.bodySmall
-          ?.copyWith(color: theme.colorScheme.error),
+      style:
+          theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
     );
   }
 }

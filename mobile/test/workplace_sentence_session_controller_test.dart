@@ -18,10 +18,13 @@ void main() {
       database: database,
       apiClient: _FailingSentenceApiClient(),
       seedLoader: _StubSentenceSeedLoader({
-        'en': [_sentence('offline_seed_1', createdAt: DateTime.utc(2026, 5, 16, 0))],
+        'en': [
+          _sentence('offline_seed_1', createdAt: DateTime.utc(2026, 5, 16, 0))
+        ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
 
@@ -30,7 +33,8 @@ void main() {
     expect(controller.statusMessage, isNull);
   });
 
-  test('showNextSentence continues through local bundle while refill fails', () async {
+  test('showNextSentence continues through local bundle while refill fails',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
           'workplace_sentence_controller_next_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -45,7 +49,8 @@ void main() {
         ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
     final firstId = controller.currentSentence?.localId;
@@ -56,7 +61,9 @@ void main() {
     expect(controller.currentSentence?.localId, isNot(firstId));
   });
 
-  test('showNextSentence falls back to learned sentences after unseen pool is exhausted', () async {
+  test(
+      'showNextSentence falls back to learned sentences after unseen pool is exhausted',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
           'workplace_sentence_controller_rotation_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -71,7 +78,8 @@ void main() {
         ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
     final firstId = controller.currentSentence?.localId;
@@ -104,7 +112,8 @@ void main() {
         ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
     final before = controller.currentSentence?.localId;
@@ -134,7 +143,8 @@ void main() {
         ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
     final before = controller.currentSentence?.localId;
@@ -160,7 +170,8 @@ void main() {
         ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
     final before = controller.currentSentence?.localId;
@@ -187,7 +198,8 @@ void main() {
         ],
       }),
     );
-    final controller = WorkplaceSentenceSessionController(repository: repository);
+    final controller =
+        WorkplaceSentenceSessionController(repository: repository);
 
     await controller.loadInitial();
     final before = controller.currentSentence?.localId;

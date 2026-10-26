@@ -1,16 +1,7 @@
 import { createStore } from './runtime.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
-import { ArticleProcessingWorker } from './article_processing_worker.js';
-import { SubmittedWordWorker } from './submitted_word_worker.js';
-import { PassageSegmentationWorker } from './passage_segmentation_worker.js';
-import { PassageEnrichmentWorker } from './passage_enrichment_worker.js';
-import { LiteLLMClient } from './litellm_client.js';
-import { VocabularyEnrichmentAdapter } from './vocabulary_enrichment_adapter.js';
-import { ArticleProcessingPipeline } from './article_processing_pipeline.js';
-import { PassageSegmentationPipeline } from './passage_segmentation_pipeline.js';
-import { PassageEnrichmentPipeline } from './passage_enrichment_pipeline.js';
-import { VocabularyGenerationService } from './generation_service.js';
+import { createWorkerRunner } from './worker_runner.js';
 
 const config = loadConfig();
 const logger = createLogger({
@@ -19,120 +10,25 @@ const logger = createLogger({
   component: 'article_worker'
 });
 const store = createStore({ config, logger });
-const liteLLMClient = new LiteLLMClient({
-  baseUrl: config.liteLLMBaseUrl,
-  apiKey: config.liteLLMApiKey,
-  model: config.liteLLMModel,
-  logger: logger.child({ component: 'litellm_client' })
-});
-const enrichmentAdapter = new VocabularyEnrichmentAdapter({
-  liteLLMClient,
-  logger: logger.child({ component: 'vocabulary_enrichment_adapter' })
-});
-const generationService = new VocabularyGenerationService({
-  liteLLMClient,
-  store,
-  logger: logger.child({ component: 'generation_service' })
-});
-const pipeline = new ArticleProcessingPipeline({
-  store,
-  suggestionAdapter: enrichmentAdapter,
-  logger: logger.child({ component: 'article_processing_pipeline' })
-});
-const worker = new ArticleProcessingWorker({
-  store,
-  pipeline,
-  logger,
-  maxAttempts: Number.parseInt(process.env.ARTICLE_WORKER_MAX_ATTEMPTS ?? '3', 10)
-});
-const submittedWordWorker = new SubmittedWordWorker({
-  store,
-  generationService,
-  logger: logger.child({ component: 'submitted_word_worker' }),
-  maxAttempts: Number.parseInt(process.env.ARTICLE_WORKER_MAX_ATTEMPTS ?? '3', 10),
-  sourceLanguage: config.defaultSourceLanguage
-});
-const passageSegmentationPipeline = new PassageSegmentationPipeline({
-  store,
-  liteLLMClient,
-  suggestionAdapter: enrichmentAdapter,
-  logger: logger.child({ component: 'passage_segmentation_pipeline' })
-});
-const passageSegmentationWorker = new PassageSegmentationWorker({
-  store,
-  pipeline: passageSegmentationPipeline,
-  logger: logger.child({ component: 'passage_segmentation_worker' }),
-  maxAttempts: Number.parseInt(process.env.ARTICLE_WORKER_MAX_ATTEMPTS ?? '3', 10)
-});
-const passageEnrichmentPipeline = new PassageEnrichmentPipeline({
-  store,
-  liteLLMClient,
-  logger: logger.child({ component: 'passage_enrichment_pipeline' })
-});
-const passageEnrichmentWorker = new PassageEnrichmentWorker({
-  store,
-  pipeline: passageEnrichmentPipeline,
-  logger: logger.child({ component: 'passage_enrichment_worker' }),
-  maxAttempts: Number.parseInt(process.env.ARTICLE_WORKER_MAX_ATTEMPTS ?? '3', 10)
-});
-
-const intervalMs = Number.parseInt(process.env.ARTICLE_WORKER_INTERVAL_MS ?? '1000', 10);
+const runner = createWorkerRunner({ config, store, logger });
 
 let isShuttingDown = false;
-let tickInProgress = false;
 
-function handleShutdown(signal) {
+async function handleShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   logger.info?.('article_worker_shutdown_requested', { signal });
-  if (!tickInProgress) {
-    logger.info?.('article_worker_shutdown_clean');
-    process.exit(0);
-  }
   const drainTimeout = setTimeout(() => {
     logger.warn?.('article_worker_drain_timeout', { signal });
     process.exit(1);
   }, 10_000);
   drainTimeout.unref();
+  await runner.stop();
+  logger.info?.('article_worker_shutdown_clean');
+  process.exit(0);
 }
 
 process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 process.on('SIGINT', () => handleShutdown('SIGINT'));
 
-async function tick() {
-  // A tick can outlast the interval (LLM calls), so never run two at once.
-  if (isShuttingDown || tickInProgress) return;
-  tickInProgress = true;
-  try {
-    await worker.runOnce();
-  } catch (error) {
-    logger.error?.('article_worker_tick_failed', { error });
-  }
-
-  try {
-    await passageSegmentationWorker.runOnce();
-  } catch (error) {
-    logger.error?.('passage_segmentation_worker_tick_failed', { error });
-  }
-
-  try {
-    await passageEnrichmentWorker.runOnce();
-  } catch (error) {
-    logger.error?.('passage_enrichment_worker_tick_failed', { error });
-  }
-
-  try {
-    await submittedWordWorker.runOnce();
-  } catch (error) {
-    logger.error?.('submitted_word_worker_tick_failed', { error });
-  }
-  tickInProgress = false;
-  if (isShuttingDown) {
-    logger.info?.('article_worker_shutdown_clean');
-    process.exit(0);
-  }
-}
-
-logger.info?.('article_worker_started', { interval_ms: intervalMs });
-setInterval(tick, intervalMs);
-void tick();
+runner.start();

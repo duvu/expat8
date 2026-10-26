@@ -288,7 +288,9 @@ backend/src/
 ├─ log_archive_store.js           — Sanitized mobile log archive storage
 ├─ release_store.js               — Release storage abstraction
 ├─ postgres_release_store.js      — PostgreSQL release store
-├─ database.js, logger.js, ids.js, normalize.js, store_utils.js
+├─ database.js, logger.js, ids.js, normalize.js
+├─ domain/ — business rules shared by both stores (pure functions)
+├─ stores/ — per-domain store methods (memory/, postgres/) + mixin.js
 └─ routes/                        — auth, articles, admin, learning, study-events,
                                    proficiency, content-packs, speaking, exam,
                                    user, releases, memorization

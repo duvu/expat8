@@ -15,6 +15,7 @@ import { createArticlesRouter } from './routes/articles.js';
 import { createGamesRouter } from './routes/games.js';
 import { createSpeakingRouter } from './routes/speaking.js';
 import { createProficiencyRouter } from './routes/proficiency.js';
+import { createReviewRouter } from './routes/review.js';
 import { createStudyEventsRouter } from './routes/study_events.js';
 import { createContentPacksRouter } from './routes/content_packs.js';
 import { createUserRouter } from './routes/user.js';
@@ -188,6 +189,7 @@ function createV1Router({
   router.use('/speaking', createSpeakingRouter({ store, config }));
   router.use('/games', createGamesRouter({ store }));
   router.use('/proficiency', createProficiencyRouter({ store, config }));
+  router.use('/review', createReviewRouter({ store, config }));
   router.use('/study-events', createStudyEventsRouter({ store, config, rateLimiters }));
   router.use('/content-packs', createContentPacksRouter({ store, config }));
   router.use('/memorization', createMemorizationRouter({ store, config }));

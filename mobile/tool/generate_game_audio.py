@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthesizes the game sound effects in assets/audio/.
+"""Synthesizes the game sound effects in assets/audio/ (music: generate_stage_audio.py).
 
 All sounds are generated from scratch by this script (no third-party
 samples), so they carry no licensing obligations. Re-run after tweaking:
@@ -73,9 +73,9 @@ def note(semitones_from_a4):
     return 440.0 * 2 ** (semitones_from_a4 / 12)
 
 
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    write("shoot.wav", tone(lambda p: 1400 - 900 * p, 0.09, 0.35, "square", release=0.8))
     write("hit.wav", mix(
         tone(lambda p: 180 - 120 * p, 0.22, 0.6, "sine", noise=0.55, release=0.9),
         tone(lambda p: note(15) + 200 * p, 0.12, 0.25, "triangle"),
@@ -100,18 +100,7 @@ def main():
         tone(lambda p, f=note(s): f, 0.11, 0.4, "triangle", release=0.4) for s in (0, 4, 7, 12, 16, 19, 24)
     ]))
 
-    # 16-second background loop: bass + arpeggio in A minor, quiet.
-    bars = [(-12, [0, 3, 7, 12]), (-16, [-4, 0, 3, 8]), (-19, [-7, -3, 0, 5]), (-14, [-2, 2, 5, 10])]
-    loop = []
-    for _ in range(2):
-        for bass, chord in bars:
-            bass_track = tone(lambda p, f=note(bass - 12): f, 2.0, 0.22, "triangle", attack=0.02, release=0.2)
-            arp = []
-            for k in range(16):
-                f = note(chord[k % 4] + (12 if k % 8 >= 4 else 0))
-                arp.extend(tone(lambda p, f=f: f, 0.125, 0.12, "square", attack=0.002, release=0.7))
-            loop.extend(mix(bass_track, arp))
-    write("music_loop.wav", loop)
+    # Shots, the level-up jingle and all music come from generate_stage_audio.py.
 
 
 if __name__ == "__main__":

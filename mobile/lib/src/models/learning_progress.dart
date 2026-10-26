@@ -37,7 +37,8 @@ class LearningItemSnapshot {
     );
   }
 
-  factory LearningItemSnapshot.fromWorkplaceSentence(WorkplaceSentence sentence) {
+  factory LearningItemSnapshot.fromWorkplaceSentence(
+      WorkplaceSentence sentence) {
     final tags = <String>[
       sentence.language.toUpperCase(),
     ];

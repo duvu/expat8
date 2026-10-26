@@ -8,11 +8,14 @@ import '../config.dart';
 import '../data/word_repository.dart';
 import '../logging/logger.dart';
 import '../models/proficiency_state.dart';
+import '../models/study_level.dart';
 import '../models/study_event.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
+import '../review/review_exercise.dart';
 import '../telemetry.dart';
 import 'card_selection.dart';
+import '../games/common/game_activity.dart';
 
 class LearningSessionController extends ChangeNotifier {
   LearningSessionController({
@@ -21,10 +24,12 @@ class LearningSessionController extends ChangeNotifier {
     TelemetrySink? telemetry,
     Logger? logger,
     AppConfig? config,
+    Random? random,
   })  : _selectionWindow = selectionWindow ?? CardSelectionWindow(),
         _telemetry = telemetry ?? DebugTelemetrySink(),
         _logger = logger ?? const NoopLogger(),
-        _config = config ?? AppConfig.fromEnvironment() {
+        _config = config ?? AppConfig.fromEnvironment(),
+        _random = random ?? Random() {
     _activeLearningLanguage = _config.defaultLearningLanguage;
   }
 
@@ -34,7 +39,11 @@ class LearningSessionController extends ChangeNotifier {
   final Logger _logger;
   final AppConfig _config;
   late String _activeLearningLanguage;
-  final Random _fitbRandom = Random.secure();
+  final Random _random;
+
+  /// The active-recall exercise for the current review card; null for new
+  /// words, or when no exercise fits and the plain card is shown.
+  ReviewExercise? currentExercise;
 
   VocabularyWord? currentWord;
   CardKind? currentCardKind;
@@ -59,6 +68,43 @@ class LearningSessionController extends ChangeNotifier {
 
   String get activeLearningLanguage => _activeLearningLanguage;
 
+  /// Level the learner picked for this session, or null to study at their own
+  /// level. Deliberately not persisted: every launch starts at the learner's level.
+  String? _studyLevelOverride;
+
+  /// Level new cards are centred on: the session override, else the learner's level.
+  String get studyLevel => _studyLevelOverride ?? proficiency.level;
+
+  bool get isStudyLevelOverridden =>
+      _studyLevelOverride != null && _studyLevelOverride != proficiency.level;
+
+  List<String> get studyLevelOptions => studyLevelsForScale(proficiency.scale);
+
+  /// Switches the level new cards are drawn from for the rest of this session.
+  /// Passing null (or the learner's own level) returns to the default.
+  Future<void> setStudyLevel(String? level) async {
+    final normalized = normalizeStudyLevel(level, proficiency.scale);
+    final next = normalized == null || normalized == proficiency.level
+        ? null
+        : normalized;
+    if (next == _studyLevelOverride) {
+      return;
+    }
+    _studyLevelOverride = next;
+    notifyListeners();
+    await _logger.info(
+      category: AppLogCategory.session,
+      event: 'session.study_level.changed',
+      message: 'Learner changed the study level for this session.',
+      context: {
+        'study_level': studyLevel,
+        'proficiency_level': proficiency.level,
+        'overridden': next != null,
+      },
+    );
+    await showNewWord();
+  }
+
   List<String> get supportedLearningLanguages =>
       _config.supportedLearningLanguages;
 
@@ -70,6 +116,8 @@ class LearningSessionController extends ChangeNotifier {
       return;
     }
     _activeLearningLanguage = language;
+    // Level scales differ per language (CEFR vs HSK), so the override cannot carry over.
+    _studyLevelOverride = null;
     repository.setActiveLanguage(language);
     notifyListeners();
     _deviceId ??= await repository.getOrCreateDeviceId();
@@ -405,6 +453,14 @@ class LearningSessionController extends ChangeNotifier {
       _showWord(
         word,
         actualKind,
+        exercise: word != null && actualKind == CardKind.review
+            ? buildReviewExercise(
+                word,
+                await repository.cachedWords(_activeLearningLanguage),
+                random: _random,
+                canListen: _config.speakingFoundationEnabled,
+              )
+            : null,
         emptyMessage: selected.message ?? emptyMessage,
       );
       didShowWord = true;
@@ -444,6 +500,9 @@ class LearningSessionController extends ChangeNotifier {
   }) async {
     final result = await repository.getNewWordWithFallbackResult(
       language: _activeLearningLanguage,
+      level: studyLevel,
+      scale: proficiency.scale,
+      strictLevel: isStudyLevelOverridden,
     );
     _trackNewWordLookup(result);
     if (result.word != null) {
@@ -492,6 +551,9 @@ class LearningSessionController extends ChangeNotifier {
     await _logSelectionFallback(from: CardKind.review, to: CardKind.newWord);
     final newWordResult = await repository.getNewWordWithFallbackResult(
       language: _activeLearningLanguage,
+      level: studyLevel,
+      scale: proficiency.scale,
+      strictLevel: isStudyLevelOverridden,
     );
     _trackNewWordLookup(newWordResult);
     if (newWordResult.word != null) {
@@ -532,8 +594,10 @@ class LearningSessionController extends ChangeNotifier {
   void _showWord(
     VocabularyWord? word,
     CardKind? actualKind, {
+    ReviewExercise? exercise,
     required String emptyMessage,
   }) {
+    currentExercise = exercise;
     if (word == null) {
       currentWord = null;
       currentCardKind = null;
@@ -663,6 +727,7 @@ class LearningSessionController extends ChangeNotifier {
   void _startInventoryTimer() {
     _inventoryTimer?.cancel();
     _inventoryTimer = Timer.periodic(_inventoryTopUpInterval, (_) {
+      if (GameActivity.isActive) return; // never hitch a running game
       _runInventoryTopUp();
     });
   }
@@ -934,60 +999,45 @@ class LearningSessionController extends ChangeNotifier {
         return '${action.failureLabel} failed. Server returned ${error.statusCode}.';
       }
     }
-      return '${action.failureLabel} failed. Check connection and try again.';
+    return '${action.failureLabel} failed. Check connection and try again.';
   }
 
-  /// Returns true when [word] meets all FITB eligibility conditions:
-  /// - Review card (or a cached review/mastered word without `cardType`)
-  /// - Non-empty example with at least 8 words
-  /// - Term appears in the example (case-insensitive)
-  /// - entry_type is word, phrase, or idiom
-  /// - For phrase/idiom: blank_word is non-null and non-empty
-  bool canFitb(VocabularyWord word, {CardKind? cardKind}) {
-    final isReviewCard = cardKind == CardKind.review ||
-        (cardKind == null &&
-            (word.cardType == LearningCardType.review ||
-                (word.cardType == null &&
-                    (word.status == WordStatus.review ||
-                        word.status == WordStatus.mastered))));
-    if (!isReviewCard) return false;
-    if (word.example.isEmpty) return false;
-    if (word.example.split(' ').length < 8) return false;
-    if (!word.example.toLowerCase().contains(word.term.toLowerCase())) {
-      return false;
-    }
-    if (!const ['word', 'phrase', 'idiom'].contains(word.entryType)) {
-      return false;
-    }
-    if (word.entryType != 'word') {
-      final bw = word.blankWord;
-      if (bw == null || bw.isEmpty) return false;
-    }
-    return true;
-  }
-
-  /// Returns true when [word] is eligible for FITB and random chance selects
-  /// FITB mode. The 0.59 threshold gives ~50% FITB share of total session
-  /// cards (accounting for the 85% review-card ratio).
-  bool shouldShowFitb(VocabularyWord word, {CardKind? cardKind}) {
-    final eligible = canFitb(word, cardKind: cardKind);
-    final roll = eligible ? _fitbRandom.nextDouble() : null;
-    final showFitb = eligible && roll! < 0.59;
-    _safeLog(
-      _logger.info(
+  /// Records the learner's answer to [currentExercise] as a study rating
+  /// (wrong = forgotten, slow or nearly right = hard, right = easy) and
+  /// returns it. The card stays on screen until [nextCard].
+  Future<StudyRating?> answerReview({
+    required bool correct,
+    required Duration elapsed,
+    bool nearMiss = false,
+  }) async {
+    final word = currentWord;
+    if (word == null) return null;
+    final rating = gradeReviewAnswer(
+        correct: correct, elapsed: elapsed, nearMiss: nearMiss);
+    final language = _activeLearningLanguage;
+    try {
+      _deviceId ??= await repository.getOrCreateDeviceId();
+      final updated = await repository.recordRating(
+        word: word,
+        rating: rating,
+        now: DateTime.now().toUtc(),
+        deviceId: _deviceId!,
+      );
+      if (updated != null) _applyGestureProficiency(updated, language);
+      _telemetry.track(TelemetryEvent.studyRatingSubmitted, {
+        'rating': rating.apiValue,
+        'word_id': word.serverWordId ?? word.localId,
+        'exercise': currentExercise?.kind.name,
+      });
+    } catch (error) {
+      await _logger.warning(
         category: AppLogCategory.session,
-        event: 'session.fitb.decision',
-        message: 'Evaluated FITB eligibility for current card.',
-        context: {
-          'word_id': word.serverWordId ?? word.localId,
-          'card_kind': cardKind?.name,
-          'eligible': eligible,
-          'roll': roll,
-          'show_fitb': showFitb,
-        },
-      ),
-    );
-    return showFitb;
+        event: 'session.review_answer.failed',
+        message: 'Review answer could not be recorded.',
+        context: {'error': '$error'},
+      );
+    }
+    return rating;
   }
 }
 

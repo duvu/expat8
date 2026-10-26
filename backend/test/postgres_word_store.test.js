@@ -448,20 +448,23 @@ class FakePool {
       const key = row.user_id ? `user:${row.user_id}:${row.word_id}` : `device:${row.device_id}:${row.word_id}`;
       const existing = this.userWordStates.get(key);
       if (existing) {
-        Object.assign(existing, {
-          device_id: row.device_id,
-          language: row.language,
-          status: row.status,
-          last_rating: row.last_rating,
-          last_studied_at: row.last_studied_at,
-          next_review_at: row.next_review_at,
-          review_count: existing.review_count + 1,
-          updated_at: row.updated_at
-        });
+        const { id: _id, user_id: _user, word_id: _word, ...replayed } = row;
+        Object.assign(existing, replayed);
         return { rows: [] };
       }
       this.userWordStates.set(key, row);
       return { rows: [] };
+    }
+
+    if (normalizedSql.startsWith('SELECT rating, occurred_at, client_event_id FROM study_events')) {
+      const byUser = normalizedSql.includes('WHERE user_id = $1');
+      return {
+        rows: [...this.studyEvents.values()].filter(
+          (event) =>
+            event.word_id === params[1] &&
+            (byUser ? event.user_id === params[0] : event.device_id === params[0] && event.user_id === null)
+        )
+      };
     }
 
     if (
@@ -790,8 +793,23 @@ function studyEventRowFromParams(params) {
 }
 
 function wordStateRowFromParams(params) {
-  const [id, user_id, device_id, word_id, language, status, last_rating, last_studied_at, next_review_at, updated_at] =
-    params;
+  const [
+    id,
+    user_id,
+    device_id,
+    word_id,
+    language,
+    status,
+    last_rating,
+    last_studied_at,
+    next_review_at,
+    ease_factor,
+    interval_days,
+    reps,
+    lapses,
+    review_count,
+    updated_at
+  ] = params;
   return {
     id,
     user_id,
@@ -802,7 +820,11 @@ function wordStateRowFromParams(params) {
     last_rating,
     last_studied_at,
     next_review_at,
-    review_count: 1,
+    ease_factor,
+    interval_days,
+    reps,
+    lapses,
+    review_count,
     updated_at
   };
 }

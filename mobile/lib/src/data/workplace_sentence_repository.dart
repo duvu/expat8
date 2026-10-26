@@ -53,7 +53,8 @@ class WorkplaceSentenceRepository {
   Future<int> seedFromBundleIfEmpty({required List<String> languages}) async {
     var totalLoaded = 0;
     for (final language in languages) {
-      final existing = await database.countWorkplaceSentences(language: language);
+      final existing =
+          await database.countWorkplaceSentences(language: language);
       if (existing > 0) continue;
       final seed = await _seedLoader.loadForLanguage(language);
       if (seed.isEmpty) continue;
@@ -82,7 +83,8 @@ class WorkplaceSentenceRepository {
     if (unseen != null) {
       return unseen;
     }
-    return database.randomWorkplaceSentence(language: language, random: _random);
+    return database.randomWorkplaceSentence(
+        language: language, random: _random);
   }
 
   Future<void> markSentenceSeen({
@@ -123,7 +125,8 @@ class WorkplaceSentenceRepository {
 
   Future<int> topUpInventoryIfNeeded() async {
     final language = _activeLanguage;
-    final unseen = await database.countUnseenWorkplaceSentences(language: language);
+    final unseen =
+        await database.countUnseenWorkplaceSentences(language: language);
     if (unseen >= _refillThreshold) {
       return 0;
     }

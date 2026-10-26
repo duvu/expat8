@@ -136,7 +136,7 @@ export function parseVocabularyJson(raw) {
   }
 }
 
-function extractJson(raw) {
+export function extractJson(raw) {
   const trimmed = String(raw).trim();
   if (trimmed.startsWith('```')) {
     return trimmed

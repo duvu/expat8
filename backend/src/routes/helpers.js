@@ -41,12 +41,10 @@ export async function resolveRequiredUserSession({ request, response, store }) {
   return session;
 }
 
-export function clampLimit(raw, min, max) {
-  const parsed = Number.parseInt(raw ?? `${min}`, 10);
-  if (Number.isNaN(parsed)) {
-    return min;
-  }
-  return Math.max(min, Math.min(max, parsed));
+/** Parses a `?limit=`-style query value: missing or invalid → `fallback`, then clamped to [1, max]. */
+export function queryLimit(raw, fallback, max) {
+  const parsed = Number.parseInt(raw, 10);
+  return Math.max(1, Math.min(max, Number.isNaN(parsed) ? fallback : parsed));
 }
 
 export function hasAdminAccess({ request, config }) {

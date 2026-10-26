@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/data/local_database.dart';
@@ -8,13 +9,49 @@ import 'package:expat8_language_app/src/logging/logger.dart';
 import 'package:expat8_language_app/src/models/learning_progress.dart';
 import 'package:expat8_language_app/src/models/proficiency_state.dart';
 import 'package:expat8_language_app/src/models/user_session.dart';
+import 'package:expat8_language_app/src/models/study_event.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
-import 'package:expat8_language_app/src/session/card_selection.dart';
 import 'package:expat8_language_app/src/session/learning_session_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+      'study level override shows words of that level and resets on language change',
+      () async {
+    final repository = await _repository(_ControllerApiClient());
+    // Two fresh words per level: a shown word is marked as learning in the
+    // background, so returning to a level must bring a new word of it.
+    for (final id in ['a1_word', 'a1_word_2']) {
+      await repository.database.upsertWord(_word(id));
+    }
+    for (final id in ['b2_word', 'b2_word_2']) {
+      await repository.database.upsertWord(
+          _wordAt(id, DateTime.utc(2026, 1, 1)).copyWith(difficulty: 'B2'));
+    }
+    final controller = LearningSessionController(repository: repository);
+    await controller.loadInitial();
+
+    // Default: the learner's own level (A1) wins.
+    expect(controller.studyLevel, 'A1');
+    expect(controller.isStudyLevelOverridden, false);
+    expect(controller.currentWord?.difficulty, 'A1');
+
+    await controller.setStudyLevel('B2');
+    expect(controller.studyLevel, 'B2');
+    expect(controller.isStudyLevelOverridden, true);
+    expect(controller.currentWord?.difficulty, 'B2');
+
+    // Picking the learner's own level clears the override.
+    await controller.setStudyLevel('A1');
+    expect(controller.isStudyLevelOverridden, false);
+    expect(controller.currentWord?.difficulty, 'A1');
+
+    await controller.setStudyLevel('B2');
+    await controller.setActiveLearningLanguage('zh');
+    expect(controller.isStudyLevelOverridden, false);
+  });
 
   test('registration success exposes feedback and active user', () async {
     final controller = LearningSessionController(
@@ -300,6 +337,7 @@ void main() {
     }
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(),
       ),
@@ -330,6 +368,7 @@ void main() {
     await database.upsertWord(_word('startup_local_word'));
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(
           proficiencyFuture: Completer<ProficiencyState>().future,
@@ -357,6 +396,7 @@ void main() {
     );
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(
           cacheInventoryFuture: Completer<CacheInventoryResult>().future,
@@ -392,6 +432,7 @@ void main() {
     );
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(),
         logger: logger,
@@ -446,6 +487,7 @@ void main() {
     );
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(),
       ),
@@ -472,7 +514,8 @@ void main() {
           _wordAt('threshold_100_$i', base.add(Duration(seconds: i))));
     }
     final apiClient = _ControllerApiClient();
-    final repository = WordRepository(database: database, apiClient: apiClient);
+    final repository = WordRepository(
+        database: database, apiClient: apiClient, shuffleNewWords: false);
 
     await repository.topUpInventoryIfNeeded();
 
@@ -492,7 +535,8 @@ void main() {
           _wordAt('threshold_99_$i', base.add(Duration(seconds: i))));
     }
     final apiClient = _ControllerApiClient();
-    final repository = WordRepository(database: database, apiClient: apiClient);
+    final repository = WordRepository(
+        database: database, apiClient: apiClient, shuffleNewWords: false);
 
     await repository.topUpInventoryIfNeeded();
 
@@ -514,7 +558,8 @@ void main() {
           _wordAt('threshold_200_$i', base.add(Duration(seconds: i))));
     }
     final apiClient = _ControllerApiClient();
-    final repository = WordRepository(database: database, apiClient: apiClient);
+    final repository = WordRepository(
+        database: database, apiClient: apiClient, shuffleNewWords: false);
     // total = 200, which is below the old vocabPoolFullSize of 1000,
     // but with the new condition only unstudied count matters.
 
@@ -541,7 +586,8 @@ void main() {
     }
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
-      repository: WordRepository(database: database, apiClient: apiClient),
+      repository: WordRepository(
+          database: database, apiClient: apiClient, shuffleNewWords: false),
     );
 
     await controller.showNewWord();
@@ -565,7 +611,8 @@ void main() {
       fetchLearningCardsError: TimeoutException('network timeout'),
     );
     final controller = LearningSessionController(
-      repository: WordRepository(database: database, apiClient: apiClient),
+      repository: WordRepository(
+          database: database, apiClient: apiClient, shuffleNewWords: false),
     );
 
     // Should show the local word even though refill fails.
@@ -593,7 +640,8 @@ void main() {
     );
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
-      repository: WordRepository(database: database, apiClient: apiClient),
+      repository: WordRepository(
+          database: database, apiClient: apiClient, shuffleNewWords: false),
     );
 
     await controller.showNewWord();
@@ -606,8 +654,12 @@ void main() {
 
     expect(controller.currentWord?.localId, 'older_word');
     expect(apiClient.submittedEvents.single['rating'], 'too_easy');
-    final notMastered = await database.randomNotMasteredWord();
-    expect(notMastered?.localId, 'older_word');
+    // Known words come back in 4 days instead of being dropped for good.
+    final remembered = (await database.wordsForLanguage('en'))
+        .singleWhere((w) => w.localId == 'remembered_word');
+    expect(remembered.status, WordStatus.review);
+    expect(
+        remembered.nextReviewAt!.difference(remembered.lastSeenAt!).inDays, 4);
   });
 
   test('difficult swipe records too_hard event and advances locally', () async {
@@ -622,7 +674,8 @@ void main() {
     );
     final apiClient = _ControllerApiClient();
     final controller = LearningSessionController(
-      repository: WordRepository(database: database, apiClient: apiClient),
+      repository: WordRepository(
+          database: database, apiClient: apiClient, shuffleNewWords: false),
     );
 
     await controller.showNewWord();
@@ -649,6 +702,7 @@ void main() {
     await database.upsertWord(_word('gesture_proficiency_word'));
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(
           submitProficiency: const ProficiencyState(
@@ -686,6 +740,7 @@ void main() {
     );
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(
           submitStudyEventError: TimeoutException('offline'),
@@ -718,11 +773,12 @@ void main() {
     );
     final base = DateTime.utc(2026, 5, 5);
     for (var i = 0; i < 5; i++) {
-      await database.upsertWord(
-          _wordAt('rtl_word_$i', base.add(Duration(seconds: i))));
+      await database
+          .upsertWord(_wordAt('rtl_word_$i', base.add(Duration(seconds: i))));
     }
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(),
       ),
@@ -755,6 +811,7 @@ void main() {
         word: word, now: DateTime.utc(2026, 5, 5));
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(),
       ),
@@ -776,9 +833,11 @@ void main() {
     );
     final base = DateTime.utc(2026, 5, 5);
     await database.upsertWord(_wordAt('history_word_1', base));
-    await database.upsertWord(_wordAt('history_word_2', base.add(const Duration(seconds: 1))));
+    await database.upsertWord(
+        _wordAt('history_word_2', base.add(const Duration(seconds: 1))));
     final controller = LearningSessionController(
       repository: WordRepository(
+        shuffleNewWords: false,
         database: database,
         apiClient: _ControllerApiClient(),
       ),
@@ -796,7 +855,8 @@ void main() {
     expect(history[1].snapshot.localId, second.localId);
   });
 
-  test('progress totals reflect learned remembered and difficult states', () async {
+  test('progress totals reflect learned remembered and difficult states',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
           'learning_totals_${DateTime.now().microsecondsSinceEpoch}.db',
@@ -820,106 +880,45 @@ void main() {
     expect(totals.total, 3);
   });
 
-  // canFitb tests — only depend on the VocabularyWord passed in, no async I/O
-  group('canFitb', () {
-    late LearningSessionController controller;
-
-    setUp(() async {
-      controller = LearningSessionController(
-        repository: await _repository(_ControllerApiClient()),
-      );
-    });
-
-    VocabularyWord _reviewWord({
-      String term = 'reliable',
-      String example =
-          'She is a very reliable and trustworthy teammate at work.',
-      String entryType = 'word',
-      String? blankWord,
-    }) {
-      final now = DateTime.utc(2026, 5, 12);
-      return VocabularyWord(
-        localId: 'w1',
-        term: term,
-        language: 'en',
-        meaningVi: 'đáng tin cậy',
-        partOfSpeech: 'adjective',
-        ipa: '/rɪˈlaɪəbl/',
-        vietnamesePronunciation: 'ri-lai-uh-bol',
-        example: example,
-        exampleVi: 'Cô ấy là một đồng đội đáng tin cậy.',
-        difficulty: 'B1',
-        topics: const ['work'],
-        status: WordStatus.review,
-        createdAt: now,
-        updatedAt: now,
-        cardType: LearningCardType.review,
-        entryType: entryType,
-        explanation: '',
-        blankWord: blankWord,
-      );
+  test('a due review is an exercise; a wrong answer is recorded as forgotten',
+      () async {
+    final apiClient = _ControllerApiClient();
+    final repository = await _repository(apiClient);
+    final database = repository.database;
+    final past = DateTime.now().toUtc().subtract(const Duration(days: 3));
+    for (final term in ['river', 'apple', 'brave', 'quiet', 'lemon']) {
+      await database
+          .upsertWord(_wordAt(term, past).copyWith(meaningVi: 'nghĩa $term'));
     }
+    // Studied three days ago, due again now.
+    await database.updateWordAfterRating(
+        word: _word('lemon'), rating: StudyRating.easy, now: past);
+    final controller =
+        LearningSessionController(repository: repository, random: Random(3));
 
-    test('10.1a returns false for a new card', () {
-      final word = _reviewWord().copyWith(cardType: LearningCardType.newCard);
-      expect(controller.canFitb(word), false);
-    });
+    await controller.showRecentReview();
+    expect(controller.currentWord?.localId, 'lemon');
+    final exercise = controller.currentExercise!;
+    expect(exercise.word.localId, 'lemon');
 
-    test('10.1b returns false when example has fewer than 8 words', () {
-      final word = _reviewWord(example: 'She is reliable here.');
-      expect(controller.canFitb(word), false);
-    });
+    final rating = await controller.answerReview(
+        correct: false, elapsed: const Duration(seconds: 4));
+    expect(rating, StudyRating.tooHard);
+    expect(apiClient.submittedEvents.single['rating'], 'too_hard');
+    final relearn = await database.nextDueReviewWord(
+        DateTime.now().toUtc().add(const Duration(minutes: 11)));
+    expect(relearn?.localId, 'lemon');
+    expect(relearn?.status, WordStatus.learning);
+  });
 
-    test('10.1c returns false when example does not contain the term', () {
-      final word = _reviewWord(
-        term: 'diligent',
-        example: 'She is a very reliable and trustworthy teammate at work.',
-      );
-      expect(controller.canFitb(word), false);
-    });
-
-    test('10.1d returns false for phrase with null blankWord', () {
-      final word = _reviewWord(
-        entryType: 'phrase',
-        term: 'break the ice',
-        example: 'He told a joke to break the ice at the meeting today.',
-        blankWord: null,
-      );
-      expect(controller.canFitb(word), false);
-    });
-
-    test('10.1e returns false for idiom with empty blankWord', () {
-      final word = _reviewWord(
-        entryType: 'idiom',
-        term: 'break the ice',
-        example: 'He told a joke to break the ice at the meeting today.',
-        blankWord: '',
-      );
-      expect(controller.canFitb(word), false);
-    });
-
-    test('10.1f returns true for a local review word with null cardType', () {
-      final word = _reviewWord().copyWith(cardType: null);
-      expect(controller.canFitb(word), true);
-    });
-
-    test('10.1g returns true for a phrase with non-null blankWord', () {
-      final word = _reviewWord(
-        entryType: 'phrase',
-        term: 'break the ice',
-        example: 'He told a joke to break the ice at the meeting today.',
-        blankWord: 'break the ice',
-      );
-      expect(controller.canFitb(word), true);
-    });
-
-    test(
-        '10.1h returns true for a review selection even when cached status is learning',
-        () {
-      final word = _reviewWord().copyWith(status: WordStatus.learning);
-      expect(controller.canFitb(word, cardKind: CardKind.review), true);
-      expect(controller.canFitb(word, cardKind: CardKind.newWord), false);
-    });
+  test('new words are shown as plain cards, not exercises', () async {
+    final repository = await _repository(_ControllerApiClient());
+    await repository.database
+        .upsertWord(_wordAt('fresh', DateTime.utc(2026, 5, 5)));
+    final controller = LearningSessionController(repository: repository);
+    await controller.showNewWord();
+    expect(controller.currentWord?.localId, 'fresh');
+    expect(controller.currentExercise, isNull);
   });
 }
 
@@ -930,7 +929,8 @@ Future<WordRepository> _repository(_ControllerApiClient apiClient) async {
     databaseName:
         'learning_session_controller_${DateTime.now().microsecondsSinceEpoch}_${_databaseCounter++}.db',
   );
-  return WordRepository(database: database, apiClient: apiClient);
+  return WordRepository(
+      database: database, apiClient: apiClient, shuffleNewWords: false);
 }
 
 class _ControllerApiClient extends BackendApiClient {
@@ -968,6 +968,7 @@ class _ControllerApiClient extends BackendApiClient {
     int limit = 20,
     String targetLanguage = 'en',
     String? sessionToken,
+    String? level,
   }) async {
     fetchLearningCardsCallCount += 1;
     final error = fetchLearningCardsError;

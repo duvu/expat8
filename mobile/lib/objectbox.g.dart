@@ -112,7 +112,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(3, 8516035737042230106),
     name: 'LocalWordEntity',
-    lastPropertyId: const obx_int.IdUid(22, 2815687485679262804),
+    lastPropertyId: const obx_int.IdUid(26, 4856451176321584888),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -255,6 +255,30 @@ final _entities = <obx_int.ModelEntity>[
         flags: 8,
         indexId: const obx_int.IdUid(38, 3998636556806580351),
       ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(23, 9047976435277654671),
+        name: 'srsIntervalDays',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(24, 7859599346865535294),
+        name: 'srsEase',
+        type: 8,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(25, 6430896552632990484),
+        name: 'srsReps',
+        type: 6,
+        flags: 0,
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(26, 4856451176321584888),
+        name: 'srsLapses',
+        type: 6,
+        flags: 0,
+      ),
     ],
     relations: <obx_int.ModelRelation>[],
     backlinks: <obx_int.ModelBacklink>[],
@@ -262,7 +286,7 @@ final _entities = <obx_int.ModelEntity>[
   obx_int.ModelEntity(
     id: const obx_int.IdUid(4, 5597746502529587288),
     name: 'StudyEventEntity',
-    lastPropertyId: const obx_int.IdUid(7, 3549979123076235846),
+    lastPropertyId: const obx_int.IdUid(8, 7147704860662712816),
     flags: 0,
     properties: <obx_int.ModelProperty>[
       obx_int.ModelProperty(
@@ -308,6 +332,13 @@ final _entities = <obx_int.ModelEntity>[
         type: 9,
         flags: 2048,
         indexId: const obx_int.IdUid(12, 5120231743551883184),
+      ),
+      obx_int.ModelProperty(
+        id: const obx_int.IdUid(8, 7147704860662712816),
+        name: 'ownerUserId',
+        type: 9,
+        flags: 2048,
+        indexId: const obx_int.IdUid(69, 7374776007522317225),
       ),
     ],
     relations: <obx_int.ModelRelation>[],
@@ -1354,7 +1385,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
   final model = obx_int.ModelInfo(
     entities: _entities,
     lastEntityId: const obx_int.IdUid(17, 6807144932603146302),
-    lastIndexId: const obx_int.IdUid(68, 2861126091142590988),
+    lastIndexId: const obx_int.IdUid(69, 7374776007522317225),
     lastRelationId: const obx_int.IdUid(0, 0),
     lastSequenceId: const obx_int.IdUid(0, 0),
     retiredEntityUids: const [],
@@ -1380,9 +1411,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final categoryOffset = fbb.writeString(object.category);
         final eventOffset = fbb.writeString(object.event);
         final messageOffset = fbb.writeString(object.message);
-        final traceIdOffset = object.traceId == null
-            ? null
-            : fbb.writeString(object.traceId!);
+        final traceIdOffset =
+            object.traceId == null ? null : fbb.writeString(object.traceId!);
         final contextJsonOffset = fbb.writeString(object.contextJson);
         fbb.startTable(9);
         fbb.addInt64(0, object.id);
@@ -1516,7 +1546,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final entryTypeOffset = fbb.writeString(object.entryType);
         final explanationOffset = fbb.writeString(object.explanation);
         final learningStateOffset = fbb.writeString(object.learningState);
-        fbb.startTable(23);
+        fbb.startTable(27);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, localIdOffset);
         fbb.addOffset(2, serverWordIdOffset);
@@ -1539,6 +1569,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addOffset(19, explanationOffset);
         fbb.addOffset(20, learningStateOffset);
         fbb.addInt64(21, object.learningStateAtMs);
+        fbb.addFloat64(22, object.srsIntervalDays);
+        fbb.addFloat64(23, object.srsEase);
+        fbb.addInt64(24, object.srsReps);
+        fbb.addInt64(25, object.srsLapses);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -1626,6 +1660,30 @@ obx_int.ModelDefinition getObjectBoxModel() {
           rootOffset,
           46,
         );
+        final srsIntervalDaysParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          48,
+          0,
+        );
+        final srsEaseParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          50,
+          0,
+        );
+        final srsRepsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          52,
+          0,
+        );
+        final srsLapsesParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          54,
+          0,
+        );
         final object = LocalWordEntity(
           id: idParam,
           localId: localIdParam,
@@ -1649,6 +1707,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
           explanation: explanationParam,
           learningState: learningStateParam,
           learningStateAtMs: learningStateAtMsParam,
+          srsIntervalDays: srsIntervalDaysParam,
+          srsEase: srsEaseParam,
+          srsReps: srsRepsParam,
+          srsLapses: srsLapsesParam,
         );
 
         return object;
@@ -1670,7 +1732,10 @@ obx_int.ModelDefinition getObjectBoxModel() {
             : fbb.writeString(object.serverWordId!);
         final ratingOffset = fbb.writeString(object.rating);
         final syncStatusOffset = fbb.writeString(object.syncStatus);
-        fbb.startTable(8);
+        final ownerUserIdOffset = object.ownerUserId == null
+            ? null
+            : fbb.writeString(object.ownerUserId!);
+        fbb.startTable(9);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, clientEventIdOffset);
         fbb.addOffset(2, localWordIdOffset);
@@ -1678,6 +1743,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
         fbb.addOffset(4, ratingOffset);
         fbb.addInt64(5, object.occurredAtMs);
         fbb.addOffset(6, syncStatusOffset);
+        fbb.addOffset(7, ownerUserIdOffset);
         fbb.finish(fbb.endTable());
         return object.id;
       },
@@ -1711,6 +1777,9 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final syncStatusParam = const fb.StringReader(
           asciiOptimization: true,
         ).vTableGet(buffer, rootOffset, 16, '');
+        final ownerUserIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 18);
         final object = StudyEventEntity(
           id: idParam,
           clientEventId: clientEventIdParam,
@@ -1719,6 +1788,7 @@ obx_int.ModelDefinition getObjectBoxModel() {
           rating: ratingParam,
           occurredAtMs: occurredAtMsParam,
           syncStatus: syncStatusParam,
+          ownerUserId: ownerUserIdParam,
         );
 
         return object;
@@ -1800,9 +1870,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
       },
       objectToFB: (SpeakingAttemptEntity object, fb.Builder fbb) {
         final attemptIdOffset = fbb.writeString(object.attemptId);
-        final promptIdOffset = object.promptId == null
-            ? null
-            : fbb.writeString(object.promptId!);
+        final promptIdOffset =
+            object.promptId == null ? null : fbb.writeString(object.promptId!);
         final serverWordIdOffset = object.serverWordId == null
             ? null
             : fbb.writeString(object.serverWordId!);
@@ -1906,9 +1975,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final targetTextOffset = object.targetText == null
             ? null
             : fbb.writeString(object.targetText!);
-        final viHintOffset = object.viHint == null
-            ? null
-            : fbb.writeString(object.viHint!);
+        final viHintOffset =
+            object.viHint == null ? null : fbb.writeString(object.viHint!);
         final targetPhraseOffset = object.targetPhrase == null
             ? null
             : fbb.writeString(object.targetPhrase!);
@@ -1921,9 +1989,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final difficultyOffset = object.difficulty == null
             ? null
             : fbb.writeString(object.difficulty!);
-        final topicOffset = object.topic == null
-            ? null
-            : fbb.writeString(object.topic!);
+        final topicOffset =
+            object.topic == null ? null : fbb.writeString(object.topic!);
         fbb.startTable(13);
         fbb.addInt64(0, object.id);
         fbb.addOffset(1, promptIdOffset);
@@ -2121,138 +2188,137 @@ obx_int.ModelDefinition getObjectBoxModel() {
     ),
     LocalWorkplaceSentenceEntity:
         obx_int.EntityDefinition<LocalWorkplaceSentenceEntity>(
-          model: _entities[8],
-          toOneRelations: (LocalWorkplaceSentenceEntity object) => [],
-          toManyRelations: (LocalWorkplaceSentenceEntity object) => {},
-          getId: (LocalWorkplaceSentenceEntity object) => object.id,
-          setId: (LocalWorkplaceSentenceEntity object, int id) {
-            object.id = id;
-          },
-          objectToFB: (LocalWorkplaceSentenceEntity object, fb.Builder fbb) {
-            final localIdOffset = fbb.writeString(object.localId);
-            final serverSentenceIdOffset = object.serverSentenceId == null
-                ? null
-                : fbb.writeString(object.serverSentenceId!);
-            final textOffset = fbb.writeString(object.text);
-            final languageOffset = fbb.writeString(object.language);
-            final meaningViOffset = fbb.writeString(object.meaningVi);
-            final topicOffset = object.topic == null
-                ? null
-                : fbb.writeString(object.topic!);
-            final sourceTitleOffset = object.sourceTitle == null
-                ? null
-                : fbb.writeString(object.sourceTitle!);
-            final generationSourceOffset = fbb.writeString(
-              object.generationSource,
-            );
-            final statusOffset = fbb.writeString(object.status);
-            final learningStateOffset = fbb.writeString(object.learningState);
-            fbb.startTable(17);
-            fbb.addInt64(0, object.id);
-            fbb.addOffset(1, localIdOffset);
-            fbb.addOffset(2, serverSentenceIdOffset);
-            fbb.addOffset(3, textOffset);
-            fbb.addOffset(4, languageOffset);
-            fbb.addOffset(5, meaningViOffset);
-            fbb.addOffset(6, topicOffset);
-            fbb.addOffset(7, sourceTitleOffset);
-            fbb.addOffset(8, generationSourceOffset);
-            fbb.addInt64(9, object.isBundled);
-            fbb.addOffset(10, statusOffset);
-            fbb.addInt64(11, object.lastSeenAtMs);
-            fbb.addInt64(12, object.createdAtMs);
-            fbb.addInt64(13, object.updatedAtMs);
-            fbb.addOffset(14, learningStateOffset);
-            fbb.addInt64(15, object.learningStateAtMs);
-            fbb.finish(fbb.endTable());
-            return object.id;
-          },
-          objectFromFB: (obx.Store store, ByteData fbData) {
-            final buffer = fb.BufferContext(fbData);
-            final rootOffset = buffer.derefObject(0);
-            final idParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              4,
-              0,
-            );
-            final localIdParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 6, '');
-            final serverSentenceIdParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGetNullable(buffer, rootOffset, 8);
-            final textParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 10, '');
-            final languageParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 12, '');
-            final meaningViParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 14, '');
-            final topicParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGetNullable(buffer, rootOffset, 16);
-            final sourceTitleParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGetNullable(buffer, rootOffset, 18);
-            final generationSourceParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 20, '');
-            final isBundledParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              22,
-              0,
-            );
-            final statusParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 24, '');
-            final lastSeenAtMsParam = const fb.Int64Reader().vTableGetNullable(
-              buffer,
-              rootOffset,
-              26,
-            );
-            final createdAtMsParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              28,
-              0,
-            );
-            final updatedAtMsParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              30,
-              0,
-            );
-            final learningStateParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 32, '');
-            final learningStateAtMsParam = const fb.Int64Reader()
-                .vTableGetNullable(buffer, rootOffset, 34);
-            final object = LocalWorkplaceSentenceEntity(
-              id: idParam,
-              localId: localIdParam,
-              serverSentenceId: serverSentenceIdParam,
-              text: textParam,
-              language: languageParam,
-              meaningVi: meaningViParam,
-              topic: topicParam,
-              sourceTitle: sourceTitleParam,
-              generationSource: generationSourceParam,
-              isBundled: isBundledParam,
-              status: statusParam,
-              lastSeenAtMs: lastSeenAtMsParam,
-              createdAtMs: createdAtMsParam,
-              updatedAtMs: updatedAtMsParam,
-              learningState: learningStateParam,
-              learningStateAtMs: learningStateAtMsParam,
-            );
+      model: _entities[8],
+      toOneRelations: (LocalWorkplaceSentenceEntity object) => [],
+      toManyRelations: (LocalWorkplaceSentenceEntity object) => {},
+      getId: (LocalWorkplaceSentenceEntity object) => object.id,
+      setId: (LocalWorkplaceSentenceEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LocalWorkplaceSentenceEntity object, fb.Builder fbb) {
+        final localIdOffset = fbb.writeString(object.localId);
+        final serverSentenceIdOffset = object.serverSentenceId == null
+            ? null
+            : fbb.writeString(object.serverSentenceId!);
+        final textOffset = fbb.writeString(object.text);
+        final languageOffset = fbb.writeString(object.language);
+        final meaningViOffset = fbb.writeString(object.meaningVi);
+        final topicOffset =
+            object.topic == null ? null : fbb.writeString(object.topic!);
+        final sourceTitleOffset = object.sourceTitle == null
+            ? null
+            : fbb.writeString(object.sourceTitle!);
+        final generationSourceOffset = fbb.writeString(
+          object.generationSource,
+        );
+        final statusOffset = fbb.writeString(object.status);
+        final learningStateOffset = fbb.writeString(object.learningState);
+        fbb.startTable(17);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, localIdOffset);
+        fbb.addOffset(2, serverSentenceIdOffset);
+        fbb.addOffset(3, textOffset);
+        fbb.addOffset(4, languageOffset);
+        fbb.addOffset(5, meaningViOffset);
+        fbb.addOffset(6, topicOffset);
+        fbb.addOffset(7, sourceTitleOffset);
+        fbb.addOffset(8, generationSourceOffset);
+        fbb.addInt64(9, object.isBundled);
+        fbb.addOffset(10, statusOffset);
+        fbb.addInt64(11, object.lastSeenAtMs);
+        fbb.addInt64(12, object.createdAtMs);
+        fbb.addInt64(13, object.updatedAtMs);
+        fbb.addOffset(14, learningStateOffset);
+        fbb.addInt64(15, object.learningStateAtMs);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final localIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final serverSentenceIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 8);
+        final textParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final languageParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 12, '');
+        final meaningViParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 14, '');
+        final topicParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 16);
+        final sourceTitleParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGetNullable(buffer, rootOffset, 18);
+        final generationSourceParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 20, '');
+        final isBundledParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          22,
+          0,
+        );
+        final statusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 24, '');
+        final lastSeenAtMsParam = const fb.Int64Reader().vTableGetNullable(
+          buffer,
+          rootOffset,
+          26,
+        );
+        final createdAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          28,
+          0,
+        );
+        final updatedAtMsParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          30,
+          0,
+        );
+        final learningStateParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 32, '');
+        final learningStateAtMsParam =
+            const fb.Int64Reader().vTableGetNullable(buffer, rootOffset, 34);
+        final object = LocalWorkplaceSentenceEntity(
+          id: idParam,
+          localId: localIdParam,
+          serverSentenceId: serverSentenceIdParam,
+          text: textParam,
+          language: languageParam,
+          meaningVi: meaningViParam,
+          topic: topicParam,
+          sourceTitle: sourceTitleParam,
+          generationSource: generationSourceParam,
+          isBundled: isBundledParam,
+          status: statusParam,
+          lastSeenAtMs: lastSeenAtMsParam,
+          createdAtMs: createdAtMsParam,
+          updatedAtMs: updatedAtMsParam,
+          learningState: learningStateParam,
+          learningStateAtMs: learningStateAtMsParam,
+        );
 
-            return object;
-          },
-        ),
+        return object;
+      },
+    ),
     LearningHistoryEntity: obx_int.EntityDefinition<LearningHistoryEntity>(
       model: _entities[9],
       toOneRelations: (LearningHistoryEntity object) => [],
@@ -2524,9 +2590,8 @@ obx_int.ModelDefinition getObjectBoxModel() {
         final segmentIdOffset = fbb.writeString(object.segmentId);
         final passageIdOffset = fbb.writeString(object.passageId);
         final textOffset = fbb.writeString(object.text);
-        final ipaTextOffset = object.ipaText == null
-            ? null
-            : fbb.writeString(object.ipaText!);
+        final ipaTextOffset =
+            object.ipaText == null ? null : fbb.writeString(object.ipaText!);
         final translationTextOffset = object.translationText == null
             ? null
             : fbb.writeString(object.translationText!);
@@ -2618,93 +2683,93 @@ obx_int.ModelDefinition getObjectBoxModel() {
     ),
     LocalSegmentProgressEntity:
         obx_int.EntityDefinition<LocalSegmentProgressEntity>(
-          model: _entities[13],
-          toOneRelations: (LocalSegmentProgressEntity object) => [],
-          toManyRelations: (LocalSegmentProgressEntity object) => {},
-          getId: (LocalSegmentProgressEntity object) => object.id,
-          setId: (LocalSegmentProgressEntity object, int id) {
-            object.id = id;
-          },
-          objectToFB: (LocalSegmentProgressEntity object, fb.Builder fbb) {
-            final segmentIdOffset = fbb.writeString(object.segmentId);
-            final passageIdOffset = fbb.writeString(object.passageId);
-            final statusOffset = fbb.writeString(object.status);
-            fbb.startTable(11);
-            fbb.addInt64(0, object.id);
-            fbb.addOffset(1, segmentIdOffset);
-            fbb.addOffset(2, passageIdOffset);
-            fbb.addOffset(3, statusOffset);
-            fbb.addInt64(4, object.reviewCount);
-            fbb.addFloat64(5, object.easeFactor);
-            fbb.addFloat64(6, object.intervalDays);
-            fbb.addInt64(7, object.lastReviewedAtMs);
-            fbb.addInt64(8, object.nextReviewAtMs);
-            fbb.addInt64(9, object.isDirty);
-            fbb.finish(fbb.endTable());
-            return object.id;
-          },
-          objectFromFB: (obx.Store store, ByteData fbData) {
-            final buffer = fb.BufferContext(fbData);
-            final rootOffset = buffer.derefObject(0);
-            final idParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              4,
-              0,
-            );
-            final segmentIdParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 6, '');
-            final passageIdParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 8, '');
-            final statusParam = const fb.StringReader(
-              asciiOptimization: true,
-            ).vTableGet(buffer, rootOffset, 10, '');
-            final reviewCountParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              12,
-              0,
-            );
-            final easeFactorParam = const fb.Float64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              14,
-              0,
-            );
-            final intervalDaysParam = const fb.Float64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              16,
-              0,
-            );
-            final lastReviewedAtMsParam = const fb.Int64Reader()
-                .vTableGetNullable(buffer, rootOffset, 18);
-            final nextReviewAtMsParam = const fb.Int64Reader()
-                .vTableGetNullable(buffer, rootOffset, 20);
-            final isDirtyParam = const fb.Int64Reader().vTableGet(
-              buffer,
-              rootOffset,
-              22,
-              0,
-            );
-            final object = LocalSegmentProgressEntity(
-              id: idParam,
-              segmentId: segmentIdParam,
-              passageId: passageIdParam,
-              status: statusParam,
-              reviewCount: reviewCountParam,
-              easeFactor: easeFactorParam,
-              intervalDays: intervalDaysParam,
-              lastReviewedAtMs: lastReviewedAtMsParam,
-              nextReviewAtMs: nextReviewAtMsParam,
-              isDirty: isDirtyParam,
-            );
+      model: _entities[13],
+      toOneRelations: (LocalSegmentProgressEntity object) => [],
+      toManyRelations: (LocalSegmentProgressEntity object) => {},
+      getId: (LocalSegmentProgressEntity object) => object.id,
+      setId: (LocalSegmentProgressEntity object, int id) {
+        object.id = id;
+      },
+      objectToFB: (LocalSegmentProgressEntity object, fb.Builder fbb) {
+        final segmentIdOffset = fbb.writeString(object.segmentId);
+        final passageIdOffset = fbb.writeString(object.passageId);
+        final statusOffset = fbb.writeString(object.status);
+        fbb.startTable(11);
+        fbb.addInt64(0, object.id);
+        fbb.addOffset(1, segmentIdOffset);
+        fbb.addOffset(2, passageIdOffset);
+        fbb.addOffset(3, statusOffset);
+        fbb.addInt64(4, object.reviewCount);
+        fbb.addFloat64(5, object.easeFactor);
+        fbb.addFloat64(6, object.intervalDays);
+        fbb.addInt64(7, object.lastReviewedAtMs);
+        fbb.addInt64(8, object.nextReviewAtMs);
+        fbb.addInt64(9, object.isDirty);
+        fbb.finish(fbb.endTable());
+        return object.id;
+      },
+      objectFromFB: (obx.Store store, ByteData fbData) {
+        final buffer = fb.BufferContext(fbData);
+        final rootOffset = buffer.derefObject(0);
+        final idParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          4,
+          0,
+        );
+        final segmentIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 6, '');
+        final passageIdParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 8, '');
+        final statusParam = const fb.StringReader(
+          asciiOptimization: true,
+        ).vTableGet(buffer, rootOffset, 10, '');
+        final reviewCountParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          12,
+          0,
+        );
+        final easeFactorParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          14,
+          0,
+        );
+        final intervalDaysParam = const fb.Float64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          16,
+          0,
+        );
+        final lastReviewedAtMsParam =
+            const fb.Int64Reader().vTableGetNullable(buffer, rootOffset, 18);
+        final nextReviewAtMsParam =
+            const fb.Int64Reader().vTableGetNullable(buffer, rootOffset, 20);
+        final isDirtyParam = const fb.Int64Reader().vTableGet(
+          buffer,
+          rootOffset,
+          22,
+          0,
+        );
+        final object = LocalSegmentProgressEntity(
+          id: idParam,
+          segmentId: segmentIdParam,
+          passageId: passageIdParam,
+          status: statusParam,
+          reviewCount: reviewCountParam,
+          easeFactor: easeFactorParam,
+          intervalDays: intervalDaysParam,
+          lastReviewedAtMs: lastReviewedAtMsParam,
+          nextReviewAtMs: nextReviewAtMsParam,
+          isDirty: isDirtyParam,
+        );
 
-            return object;
-          },
-        ),
+        return object;
+      },
+    ),
     ShadowingProgressEntity: obx_int.EntityDefinition<ShadowingProgressEntity>(
       model: _entities[14],
       toOneRelations: (ShadowingProgressEntity object) => [],
@@ -3171,6 +3236,26 @@ class LocalWordEntity_ {
   static final learningStateAtMs = obx.QueryIntegerProperty<LocalWordEntity>(
     _entities[2].properties[21],
   );
+
+  /// See [LocalWordEntity.srsIntervalDays].
+  static final srsIntervalDays = obx.QueryDoubleProperty<LocalWordEntity>(
+    _entities[2].properties[22],
+  );
+
+  /// See [LocalWordEntity.srsEase].
+  static final srsEase = obx.QueryDoubleProperty<LocalWordEntity>(
+    _entities[2].properties[23],
+  );
+
+  /// See [LocalWordEntity.srsReps].
+  static final srsReps = obx.QueryIntegerProperty<LocalWordEntity>(
+    _entities[2].properties[24],
+  );
+
+  /// See [LocalWordEntity.srsLapses].
+  static final srsLapses = obx.QueryIntegerProperty<LocalWordEntity>(
+    _entities[2].properties[25],
+  );
 }
 
 /// [StudyEventEntity] entity fields to define ObjectBox queries.
@@ -3208,6 +3293,11 @@ class StudyEventEntity_ {
   /// See [StudyEventEntity.syncStatus].
   static final syncStatus = obx.QueryStringProperty<StudyEventEntity>(
     _entities[3].properties[6],
+  );
+
+  /// See [StudyEventEntity.ownerUserId].
+  static final ownerUserId = obx.QueryStringProperty<StudyEventEntity>(
+    _entities[3].properties[7],
   );
 }
 
@@ -3443,8 +3533,8 @@ class LocalWorkplaceSentenceEntity_ {
   /// See [LocalWorkplaceSentenceEntity.serverSentenceId].
   static final serverSentenceId =
       obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[2],
-      );
+    _entities[8].properties[2],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.text].
   static final text = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
@@ -3459,8 +3549,8 @@ class LocalWorkplaceSentenceEntity_ {
   /// See [LocalWorkplaceSentenceEntity.meaningVi].
   static final meaningVi =
       obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[5],
-      );
+    _entities[8].properties[5],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.topic].
   static final topic = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
@@ -3470,20 +3560,20 @@ class LocalWorkplaceSentenceEntity_ {
   /// See [LocalWorkplaceSentenceEntity.sourceTitle].
   static final sourceTitle =
       obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[7],
-      );
+    _entities[8].properties[7],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.generationSource].
   static final generationSource =
       obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[8],
-      );
+    _entities[8].properties[8],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.isBundled].
   static final isBundled =
       obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[9],
-      );
+    _entities[8].properties[9],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.status].
   static final status = obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
@@ -3493,32 +3583,32 @@ class LocalWorkplaceSentenceEntity_ {
   /// See [LocalWorkplaceSentenceEntity.lastSeenAtMs].
   static final lastSeenAtMs =
       obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[11],
-      );
+    _entities[8].properties[11],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.createdAtMs].
   static final createdAtMs =
       obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[12],
-      );
+    _entities[8].properties[12],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.updatedAtMs].
   static final updatedAtMs =
       obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[13],
-      );
+    _entities[8].properties[13],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.learningState].
   static final learningState =
       obx.QueryStringProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[14],
-      );
+    _entities[8].properties[14],
+  );
 
   /// See [LocalWorkplaceSentenceEntity.learningStateAtMs].
   static final learningStateAtMs =
       obx.QueryIntegerProperty<LocalWorkplaceSentenceEntity>(
-        _entities[8].properties[15],
-      );
+    _entities[8].properties[15],
+  );
 }
 
 /// [LearningHistoryEntity] entity fields to define ObjectBox queries.
@@ -3745,8 +3835,8 @@ class LocalSegmentProgressEntity_ {
   /// See [LocalSegmentProgressEntity.reviewCount].
   static final reviewCount =
       obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
-        _entities[13].properties[4],
-      );
+    _entities[13].properties[4],
+  );
 
   /// See [LocalSegmentProgressEntity.easeFactor].
   static final easeFactor = obx.QueryDoubleProperty<LocalSegmentProgressEntity>(
@@ -3756,20 +3846,20 @@ class LocalSegmentProgressEntity_ {
   /// See [LocalSegmentProgressEntity.intervalDays].
   static final intervalDays =
       obx.QueryDoubleProperty<LocalSegmentProgressEntity>(
-        _entities[13].properties[6],
-      );
+    _entities[13].properties[6],
+  );
 
   /// See [LocalSegmentProgressEntity.lastReviewedAtMs].
   static final lastReviewedAtMs =
       obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
-        _entities[13].properties[7],
-      );
+    _entities[13].properties[7],
+  );
 
   /// See [LocalSegmentProgressEntity.nextReviewAtMs].
   static final nextReviewAtMs =
       obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
-        _entities[13].properties[8],
-      );
+    _entities[13].properties[8],
+  );
 
   /// See [LocalSegmentProgressEntity.isDirty].
   static final isDirty = obx.QueryIntegerProperty<LocalSegmentProgressEntity>(
@@ -3792,8 +3882,8 @@ class ShadowingProgressEntity_ {
   /// See [ShadowingProgressEntity.lastPositionMs].
   static final lastPositionMs =
       obx.QueryIntegerProperty<ShadowingProgressEntity>(
-        _entities[14].properties[2],
-      );
+    _entities[14].properties[2],
+  );
 
   /// See [ShadowingProgressEntity.playbackRate].
   static final playbackRate = obx.QueryDoubleProperty<ShadowingProgressEntity>(
@@ -3803,8 +3893,8 @@ class ShadowingProgressEntity_ {
   /// See [ShadowingProgressEntity.lastOpenedAtMs].
   static final lastOpenedAtMs =
       obx.QueryIntegerProperty<ShadowingProgressEntity>(
-        _entities[14].properties[4],
-      );
+    _entities[14].properties[4],
+  );
 }
 
 /// [ShadowingSegmentEntity] entity fields to define ObjectBox queries.
@@ -3905,8 +3995,8 @@ class ShadowingVideoEntity_ {
   /// See [ShadowingVideoEntity.transcriptLanguage].
   static final transcriptLanguage =
       obx.QueryStringProperty<ShadowingVideoEntity>(
-        _entities[16].properties[11],
-      );
+    _entities[16].properties[11],
+  );
 
   /// See [ShadowingVideoEntity.transcriptSource].
   static final transcriptSource = obx.QueryStringProperty<ShadowingVideoEntity>(
@@ -3921,8 +4011,8 @@ class ShadowingVideoEntity_ {
   /// See [ShadowingVideoEntity.initialPlaybackRate].
   static final initialPlaybackRate =
       obx.QueryDoubleProperty<ShadowingVideoEntity>(
-        _entities[16].properties[14],
-      );
+    _entities[16].properties[14],
+  );
 
   /// See [ShadowingVideoEntity.seekBackMs].
   static final seekBackMs = obx.QueryIntegerProperty<ShadowingVideoEntity>(

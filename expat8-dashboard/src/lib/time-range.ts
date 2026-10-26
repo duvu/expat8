@@ -7,11 +7,14 @@ export const TIME_RANGE_LABELS: Record<TimeRange, string> = {
   'all': 'All time',
 };
 
+const TIME_RANGE_DAYS: Record<TimeRange, number> = { '7d': 7, '30d': 30, '90d': 90, 'all': 3650 };
+
 export function parseTimeRange(value: string | null | undefined): TimeRange {
-  if (value === '7d' || value === '30d' || value === '90d' || value === 'all') return value;
-  return '30d';
+  return value != null && Object.hasOwn(TIME_RANGE_DAYS, value) ? (value as TimeRange) : '30d';
 }
 
-export function rangeToInterval(range: TimeRange): string {
-  return range === '7d' ? '7 days' : range === '30d' ? '30 days' : range === '90d' ? '90 days' : '10 years';
+/** Parses `?range=` and returns both the selected range and its length in days. */
+export function resolveTimeRange(value: string | null | undefined) {
+  const range = parseTimeRange(value);
+  return { range, days: TIME_RANGE_DAYS[range] };
 }

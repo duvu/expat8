@@ -1,26 +1,30 @@
 import Link from 'next/link';
 
 import { listExamResults } from '@/lib/db';
+import { formatDateTime } from '@/lib/format';
+import { queryParam } from '@/lib/form';
+import DataTable from '@/components/DataTable';
+import FilterForm from '@/components/FilterForm';
 import PageShell from '@/components/PageShell';
+import StatusBadge from '@/components/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ExamResultsPage({
-  searchParams
+  searchParams,
 }: {
   searchParams: Promise<{ user?: string; topic?: string; language?: string }>;
 }) {
   const params = await searchParams;
-  const userId = params.user ?? null;
-  const topic = params.topic ?? null;
-  const language = params.language ?? null;
-
+  const userId = queryParam(params.user);
+  const topic = queryParam(params.topic);
+  const language = queryParam(params.language);
   const results = await listExamResults({ userId, topic, language });
 
   return (
     <PageShell title="Exam Results">
       <section className="table-panel">
-        <form className="toolbar">
+        <FilterForm>
           <label>
             User ID
             <input name="user" defaultValue={userId ?? ''} placeholder="Filter by user ID" />
@@ -33,53 +37,30 @@ export default async function ExamResultsPage({
             Language
             <input name="language" defaultValue={language ?? ''} placeholder="Filter by language" />
           </label>
-          <button type="submit">Filter</button>
-        </form>
+        </FilterForm>
       </section>
 
       <section className="table-panel">
-        <table>
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Topic</th>
-              <th>Language</th>
-              <th>Difficulty</th>
-              <th>Score</th>
-              <th>Result</th>
-              <th>Date</th>
-              <th>Certificate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.length === 0 ? (
-              <tr>
-                <td colSpan={8}>
-                  <div className="empty-state">No exam attempts found for the current filter.</div>
-                </td>
-              </tr>
-            ) : results.map((r) => (
-              <tr key={r.id}>
-                <td data-label="User">{r.user_id}</td>
-                <td data-label="Topic">{r.topic}</td>
-                <td data-label="Language">{r.language}</td>
-                <td data-label="Difficulty">{r.difficulty_level ?? '—'}</td>
-                <td data-label="Score">{r.correct_count}/{r.total_questions} ({Math.round(r.score_pct)}%)</td>
-                <td data-label="Result">
-                  <span className="badge" data-status={r.passed ? 'published' : 'processing_failed'}>
-                    {r.passed ? 'Pass' : 'Fail'}
-                  </span>
-                </td>
-                <td data-label="Date">{new Date(r.created_at).toLocaleString()}</td>
-                <td data-label="Certificate">
-                  {r.certificate_id
-                    ? <Link href={`/exam/certificate/${r.certificate_id}`}>{r.certificate_id.slice(0, 8)}…</Link>
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          rows={results}
+          rowKey={(r) => r.id}
+          empty="No exam attempts found for the current filter."
+          columns={[
+            { label: 'User', render: (r) => <Link href={`/users/${r.user_id}`}>{r.user_id}</Link> },
+            { label: 'Topic', render: (r) => r.topic },
+            { label: 'Language', render: (r) => r.language },
+            { label: 'Difficulty', render: (r) => r.difficulty_level ?? '—' },
+            { label: 'Score', render: (r) => `${r.correct_count}/${r.total_questions} (${Math.round(r.score_pct)}%)` },
+            { label: 'Result', render: (r) => <StatusBadge status={r.passed ? 'published' : 'failed'} label={r.passed ? 'Pass' : 'Fail'} /> },
+            { label: 'Date', render: (r) => formatDateTime(r.created_at) },
+            {
+              label: 'Certificate',
+              render: (r) => r.certificate_id
+                ? <a href={`/api/certificate/${r.certificate_id}`} target="_blank" rel="noreferrer">{r.certificate_id.slice(0, 8)}…</a>
+                : '—',
+            },
+          ]}
+        />
       </section>
     </PageShell>
   );

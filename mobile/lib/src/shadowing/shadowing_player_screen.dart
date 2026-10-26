@@ -126,8 +126,7 @@ class _ShadowingPlayerScreenState extends State<ShadowingPlayerScreen> {
   }
 
   Future<void> _seekBack() async {
-    final seekBackSec =
-        widget.video.playbackDefaults.seekBackMs / 1000.0;
+    final seekBackSec = widget.video.playbackDefaults.seekBackMs / 1000.0;
     final state = await _ytController.currentTime;
     final target = (state - seekBackSec).clamp(0.0, double.infinity);
     await _ytController.seekTo(seconds: target, allowSeekAhead: true);
@@ -163,8 +162,7 @@ class _ShadowingPlayerScreenState extends State<ShadowingPlayerScreen> {
 
   Future<void> _saveProgress() async {
     try {
-      final posMs =
-          ((await _ytController.currentTime) * 1000).round();
+      final posMs = ((await _ytController.currentTime) * 1000).round();
       widget.repository.saveProgress(
         entryId: widget.video.id,
         lastPositionMs: posMs,

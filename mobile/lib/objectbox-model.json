@@ -86,7 +86,7 @@
     },
     {
       "id": "3:8516035737042230106",
-      "lastPropertyId": "22:2815687485679262804",
+      "lastPropertyId": "26:4856451176321584888",
       "name": "LocalWordEntity",
       "properties": [
         {
@@ -215,13 +215,33 @@
           "indexId": "38:3998636556806580351",
           "type": 6,
           "flags": 8
+        },
+        {
+          "id": "23:9047976435277654671",
+          "name": "srsIntervalDays",
+          "type": 8
+        },
+        {
+          "id": "24:7859599346865535294",
+          "name": "srsEase",
+          "type": 8
+        },
+        {
+          "id": "25:6430896552632990484",
+          "name": "srsReps",
+          "type": 6
+        },
+        {
+          "id": "26:4856451176321584888",
+          "name": "srsLapses",
+          "type": 6
         }
       ],
       "relations": []
     },
     {
       "id": "4:5597746502529587288",
-      "lastPropertyId": "7:3549979123076235846",
+      "lastPropertyId": "8:7147704860662712816",
       "name": "StudyEventEntity",
       "properties": [
         {
@@ -261,6 +281,13 @@
           "id": "7:3549979123076235846",
           "name": "syncStatus",
           "indexId": "12:5120231743551883184",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "8:7147704860662712816",
+          "name": "ownerUserId",
+          "indexId": "69:7374776007522317225",
           "type": 9,
           "flags": 2048
         }
@@ -1174,7 +1201,7 @@
     }
   ],
   "lastEntityId": "17:6807144932603146302",
-  "lastIndexId": "68:2861126091142590988",
+  "lastIndexId": "69:7374776007522317225",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,

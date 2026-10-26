@@ -110,7 +110,8 @@ class _UpdateBanner extends StatelessWidget {
               child: const Text('Download'),
             ),
             IconButton(
-              icon: Icon(Icons.close, size: 16, color: colors.onPrimaryContainer),
+              icon:
+                  Icon(Icons.close, size: 16, color: colors.onPrimaryContainer),
               onPressed: onDismiss,
               tooltip: 'Dismiss',
               padding: EdgeInsets.zero,

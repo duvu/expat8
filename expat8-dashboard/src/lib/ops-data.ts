@@ -1,4 +1,4 @@
-import { backendFetch } from './backend';
+import { backendFetch, readErrorMessage } from './backend';
 import { getAdminConfig } from './config';
 
 export type SpeakingLoopHealth = {
@@ -49,269 +49,110 @@ export type LogArchiveRecord = {
   source_label: string | null;
   retention_expires_at: string;
   retention_state: 'active' | 'expired';
-  content_url: string;
-  download_url: string;
 };
 
 export type HealthProbe = {
   ok: boolean;
-  status: number;
-  checkedAt: string;
-  label: string;
   detail: string;
 };
 
-export type OpsOverview = {
-  checkedAt: string;
-  live: HealthProbe;
-  ready: HealthProbe;
-  archives: LogArchiveRecord[];
-  archivesError: string | null;
-  loopHealth: SpeakingLoopHealth | null;
-  loopHealthError: string | null;
-  pipelineHealth: ContentPipelineHealth | null;
-  pipelineHealthError: string | null;
-  games: GamesSummary | null;
-  gamesError: string | null;
-};
+/** Result of a backend read: `data` is null when missing (404) or on error. */
+export type LoadResult<T> = { data: T | null; error: string | null };
 
-export async function loadOpsOverview({ limit = 200 } = {}): Promise<OpsOverview> {
+/** Backend `GET /v1/admin/log-archives` caps `limit` at 200. */
+export const LOG_ARCHIVE_LIMIT_MAX = 200;
+
+export async function loadOpsOverview() {
   const checkedAt = new Date().toISOString();
-  const [live, ready, archivesResult, loopHealthResult, pipelineHealthResult, gamesResult] = await Promise.all([
-    probeHealth('/health', 'Backend live', checkedAt),
-    probeHealth('/health/ready', 'Backend ready', checkedAt),
-    loadLogArchives({ limit }),
+  const [live, ready, archives, loopHealth, pipelineHealth, games] = await Promise.all([
+    probeHealth('/health'),
+    probeHealth('/health/ready'),
+    loadLogArchives(),
     loadSpeakingLoopHealth(),
     loadContentPipelineHealth(),
     loadGamesSummary(),
   ]);
-
-  return {
-    checkedAt,
-    live,
-    ready,
-    archives: archivesResult.items,
-    archivesError: archivesResult.error,
-    loopHealth: loopHealthResult.data,
-    loopHealthError: loopHealthResult.error,
-    pipelineHealth: pipelineHealthResult.data,
-    games: gamesResult.data,
-    gamesError: gamesResult.error,
-    pipelineHealthError: pipelineHealthResult.error,
-  };
+  return { checkedAt, live, ready, archives, loopHealth, pipelineHealth, games };
 }
 
-export async function loadLogArchives({ limit = 200 } = {}): Promise<{
-  items: LogArchiveRecord[];
-  error: string | null;
-}> {
-  try {
-    ensureDashboardCredentials();
-    const response = await backendFetch(`/v1/admin/log-archives?limit=${limit}`);
-    if (!response.ok) {
-      return {
-        items: [],
-        error: await readErrorMessage(response, 'Unable to load log archives'),
-      };
-    }
-
-    const payload = await response.json() as { items?: LogArchiveRecord[] };
-    const config = getAdminConfig();
-    return {
-      items: (payload.items ?? []).map((archive) => normalizeArchiveUrls(archive, config.backendBaseUrl)),
-      error: null,
-    };
-  } catch (error) {
-    return {
-      items: [],
-      error: error instanceof Error ? error.message : 'Unable to load log archives',
-    };
-  }
+export async function loadLogArchives(): Promise<{ items: LogArchiveRecord[]; error: string | null }> {
+  const { data, error } = await loadJson<{ items?: LogArchiveRecord[] }>(
+    `/v1/admin/log-archives?limit=${LOG_ARCHIVE_LIMIT_MAX}`,
+    'Unable to load log archives'
+  );
+  return { items: data?.items ?? [], error };
 }
 
-export async function loadSpeakingLoopHealth(): Promise<{
-  data: SpeakingLoopHealth | null;
-  error: string | null;
-}> {
-  try {
-    ensureDashboardCredentials();
-    const response = await backendFetch('/v1/admin/speaking/weekly-health');
-    if (!response.ok) {
-      return {
-        data: null,
-        error: await readErrorMessage(response, 'Unable to load loop health'),
-      };
-    }
-    return { data: await response.json() as SpeakingLoopHealth, error: null };
-  } catch (error) {
-    return {
-      data: null,
-      error: error instanceof Error ? error.message : 'Unable to load loop health',
-    };
-  }
+export function loadSpeakingLoopHealth() {
+  return loadJson<SpeakingLoopHealth>('/v1/admin/speaking/weekly-health', 'Unable to load loop health');
 }
 
-export async function loadContentPipelineHealth(): Promise<{
-  data: ContentPipelineHealth | null;
-  error: string | null;
-}> {
-  try {
-    ensureDashboardCredentials();
-    const response = await backendFetch('/v1/admin/content-pipeline/health');
-    if (!response.ok) {
-      return {
-        data: null,
-        error: await readErrorMessage(response, 'Unable to load content pipeline health'),
-      };
-    }
-    return { data: await response.json() as ContentPipelineHealth, error: null };
-  } catch (error) {
-    return {
-      data: null,
-      error: error instanceof Error ? error.message : 'Unable to load content pipeline health',
-    };
-  }
+export function loadContentPipelineHealth() {
+  return loadJson<ContentPipelineHealth>('/v1/admin/content-pipeline/health', 'Unable to load content pipeline health');
 }
 
-export async function loadGamesSummary(days = 30): Promise<{
-  data: GamesSummary | null;
-  error: string | null;
-}> {
-  try {
-    ensureDashboardCredentials();
-    const response = await backendFetch(`/v1/admin/games/summary?days=${days}`);
-    if (!response.ok) {
-      return {
-        data: null,
-        error: await readErrorMessage(response, 'Unable to load game analytics'),
-      };
-    }
-    return { data: (await response.json()) as GamesSummary, error: null };
-  } catch (error) {
-    return {
-      data: null,
-      error: error instanceof Error ? error.message : 'Unable to load game analytics',
-    };
-  }
+export function loadGamesSummary(days = 30) {
+  return loadJson<GamesSummary>(`/v1/admin/games/summary?days=${days}`, 'Unable to load game analytics');
 }
 
-export async function loadLogArchive(id: string): Promise<{
-  archive: LogArchiveRecord | null;
-  error: string | null;
-}> {
-  try {
-    ensureDashboardCredentials();
-    const response = await backendFetch(`/v1/admin/log-archives/${id}`);
-    if (response.status === 404) {
-      return { archive: null, error: null };
-    }
-    if (!response.ok) {
-      return {
-        archive: null,
-        error: await readErrorMessage(response, 'Unable to load log archive'),
-      };
-    }
-
-    const config = getAdminConfig();
-    return {
-      archive: normalizeArchiveUrls(await response.json() as LogArchiveRecord, config.backendBaseUrl),
-      error: null,
-    };
-  } catch (error) {
-    return {
-      archive: null,
-      error: error instanceof Error ? error.message : 'Unable to load log archive',
-    };
-  }
+export function loadLogArchive(id: string) {
+  return loadJson<LogArchiveRecord>(`/v1/admin/log-archives/${encodeURIComponent(id)}`, 'Unable to load log archive');
 }
 
-export async function loadLogArchiveContent(id: string): Promise<{
-  content: string | null;
-  error: string | null;
-}> {
-  try {
-    ensureDashboardCredentials();
-    const response = await backendFetch(`/v1/admin/log-archives/${id}/content`);
-    if (response.status === 404) {
-      return { content: null, error: null };
-    }
-    if (!response.ok) {
-      return {
-        content: null,
-        error: await readErrorMessage(response, 'Unable to load log archive content'),
-      };
-    }
-
-    return {
-      content: await response.text(),
-      error: null,
-    };
-  } catch (error) {
-    return {
-      content: null,
-      error: error instanceof Error ? error.message : 'Unable to load log archive content',
-    };
-  }
+export function loadLogArchiveContent(id: string) {
+  return load(
+    `/v1/admin/log-archives/${encodeURIComponent(id)}/content`,
+    'Unable to load log archive content',
+    (response) => response.text()
+  );
 }
 
 export async function deleteLogArchive(id: string): Promise<{ error: string | null }> {
   try {
-    ensureDashboardCredentials();
-    const response = await backendFetch(`/v1/admin/log-archives/${id}`, { method: 'DELETE' });
-    if (!response.ok) {
-      return { error: await readErrorMessage(response, 'Unable to delete log archive') };
+    const response = await backendFetch(`/v1/admin/log-archives/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    return { error: response.ok ? null : await readErrorMessage(response, 'Unable to delete log archive') };
+  } catch (error) {
+    return { error: errorMessage(error, 'Unable to delete log archive') };
+  }
+}
+
+/** Streams an archive download through the dashboard (the backend URL needs signed headers). */
+export function fetchLogArchiveDownload(id: string) {
+  return backendFetch(`/v1/admin/log-archives/${encodeURIComponent(id)}/download`);
+}
+
+function loadJson<T>(path: string, fallback: string): Promise<LoadResult<T>> {
+  return load(path, fallback, (response) => response.json() as Promise<T>);
+}
+
+async function load<T>(path: string, fallback: string, parse: (response: Response) => Promise<T>): Promise<LoadResult<T>> {
+  try {
+    const response = await backendFetch(path);
+    if (response.status === 404) {
+      return { data: null, error: null };
     }
-    return { error: null };
+    if (!response.ok) {
+      return { data: null, error: await readErrorMessage(response, fallback) };
+    }
+    return { data: await parse(response), error: null };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Unable to delete log archive' };
+    return { data: null, error: errorMessage(error, fallback) };
   }
 }
 
-async function probeHealth(path: string, label: string, checkedAt: string): Promise<HealthProbe> {
-  const config = getAdminConfig();
-  const url = new URL(path, config.backendBaseUrl);
-
+async function probeHealth(path: '/health' | '/health/ready'): Promise<HealthProbe> {
   try {
-    const response = await fetch(url, { cache: 'no-store' });
+    const response = await fetch(new URL(path, getAdminConfig().backendBaseUrl), { cache: 'no-store' });
     const payload = await response.json().catch(() => ({})) as { db?: string; error?: string };
-    return {
-      ok: response.ok,
-      status: response.status,
-      checkedAt,
-      label,
-      detail: response.ok ? (path === '/health' ? 'Reachable' : payload.db ?? 'ok') : payload.db ?? payload.error ?? `HTTP ${response.status}`,
-    };
+    if (response.ok) {
+      return { ok: true, detail: path === '/health' ? 'Reachable' : payload.db ?? 'ok' };
+    }
+    return { ok: false, detail: payload.db ?? payload.error ?? `HTTP ${response.status}` };
   } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      checkedAt,
-      label,
-      detail: error instanceof Error ? error.message : 'Request failed',
-    };
+    return { ok: false, detail: errorMessage(error, 'Request failed') };
   }
 }
 
-function ensureDashboardCredentials() {
-  const config = getAdminConfig();
-  if (!config.appId || !config.appSecret) {
-    throw new Error('Missing dashboard backend credentials: APP_CREDENTIAL_APP_ID and APP_CREDENTIAL_SECRET are required');
-  }
-}
-
-function normalizeArchiveUrls(archive: LogArchiveRecord, backendBaseUrl: string): LogArchiveRecord {
-  return {
-    ...archive,
-    content_url: new URL(archive.content_url, backendBaseUrl).toString(),
-    download_url: new URL(archive.download_url, backendBaseUrl).toString(),
-  };
-}
-
-async function readErrorMessage(response: Response, fallback: string) {
-  try {
-    const body = await response.json() as { error?: string; message?: string };
-    return body.message ?? body.error ?? fallback;
-  } catch (_error) {
-    return fallback;
-  }
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }

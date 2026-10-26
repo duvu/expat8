@@ -51,7 +51,7 @@ export class SubmittedWordWorker {
       });
       return { processed: 1 };
     } catch (error) {
-      const shouldRetry = Number(job.attempt_count ?? 0) < this.maxAttempts;
+      const shouldRetry = error?.name === 'LlmUnavailableError' || Number(job.attempt_count ?? 0) < this.maxAttempts;
       const errorMessage = `${error?.message ?? error}`;
       if (shouldRetry) {
         await this.store.retrySubmittedWordJob?.({ jobId: job.id, errorMessage });

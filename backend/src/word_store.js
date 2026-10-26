@@ -1,32 +1,10 @@
-import crypto from 'node:crypto';
-
 import { createId } from './ids.js';
 import { normalizeTerm } from './normalize.js';
-import {
-  decrementLevel,
-  getDefaultProficiencyLevel,
-  getProficiencyProfile,
-  incrementLevel,
-  isProgressionRating,
-  normalizeDifficultyLevel,
-  requireStudyRating
-} from './proficiency.js';
-import { statusForRating, nextReviewForRating, normalizeWeekStart } from './store_utils.js';
+import { getDefaultProficiencyLevel, requireStudyRating } from './proficiency.js';
 import { seedWords } from './seed_data.js';
 import { normalizeSuggestionType } from './vocabulary_validator.js';
 import { normalizeSentenceText } from './workplace_sentence_validator.js';
-import {
-  InvalidGameRoundError,
-  buildGamesSummary,
-  gameWeekEnd,
-  gameWeekStart,
-  isGameSource,
-  isPlausibleGameRound,
-  leaderboardName,
-  normalizeEventSource,
-  normalizeGameRound,
-  rankLeaderboard
-} from './game_rounds.js';
+import { isGameSource, normalizeEventSource } from './game_rounds.js';
 import {
   DuplicateUserError,
   InvalidCredentialsError,
@@ -37,22 +15,43 @@ import {
   requireRegistrationInput,
   verifyPasswordSync
 } from './user_identity.js';
-import { normalizeResolvedShadowingVideo } from './shadowing_videos.js';
+import {
+  ADMIN_ARTICLE_PATCH_FIELDS,
+  buildArticle,
+  isArticleReadableBy,
+  staleArticleJobCutoff
+} from './domain/articles.js';
+import { composeLearningCards, newCardWordIds } from './domain/learning_cards.js';
+import { replaySrsState } from './domain/srs.js';
+import { isAfterReviewCursor } from './domain/review_states.js';
+import { clampLimit } from './domain/pagination.js';
+import { planLevelChange, toProficiencyResponse } from './domain/proficiency_progress.js';
+import { toApiSpeakingPrompt } from './domain/speaking.js';
+import { resolveEventKey, routeStudyEventsSync, toSyncResponse } from './domain/study_events.js';
+import { buildSubmittedWord, normalizeSubmittedTerm, submittedWordFailureReason } from './domain/submitted_words.js';
+import {
+  articleItemRequiresReview,
+  bridgedWordInput,
+  buildWordRecord,
+  passageRequiresReview,
+  pickTermSample,
+  reviewStatuses,
+  senseFieldsFromItem,
+  tallyWordLevels,
+  toApiWord
+} from './domain/vocabulary.js';
+import { MAX_CACHED_WORD_IDS, distinctWordIds } from './domain/word_cache.js';
+import { mixinMethods } from './stores/mixin.js';
+import { MemoryExamMethods } from './stores/memory/exam.js';
+import { MemoryGameMethods } from './stores/memory/games.js';
+import { MemoryMemorizationMethods, deletePassageVocabularyLinks } from './stores/memory/memorization.js';
+import { MemoryShadowingMethods } from './stores/memory/shadowing.js';
+import { MemorySpeakingMethods } from './stores/memory/speaking.js';
 
-export const SPEAKING_EVENT_TYPES = [
-  'speaking_prompt_viewed',
-  'speaking_sample_played',
-  'speaking_recorded',
-  'speaking_retried',
-  'speaking_self_rated_clear',
-  'speaking_self_rated_hesitated',
-  'speaking_self_rated_could_not_say',
-  'speaking_drill_completed',
-  'loop_completed'
-];
-
-export const SPEAKING_SELF_RATINGS = ['clear', 'hesitated', 'could_not_say'];
-
+/**
+ * In-memory store used by tests and local development. Implements the same
+ * interface as PostgresWordStore; shared business rules live in `domain/`.
+ */
 export class WordStore {
   constructor({ seed = true, strictAttemptId = false } = {}) {
     this.strictAttemptId = strictAttemptId;
@@ -75,6 +74,7 @@ export class WordStore {
     this.usersByIdentifier = new Map();
     this.userSessionsByTokenHash = new Map();
     this.generationRuns = [];
+    this.crawledUrls = new Map();
     this.generationLocks = new Map();
     this.cachedWordIdsByOwner = new Map();
     this.wordStatesByOwnerWord = new Map();
@@ -101,41 +101,21 @@ export class WordStore {
   }
 
   insertWord(input) {
-    const normalizedTerm = normalizeTerm(input.term);
-    const existing = [...this.words.values()].find(
-      (word) => word.language === input.language && word.normalized_term === normalizedTerm
-    );
+    const existing = this.#findWord(input.language, normalizeTerm(input.term));
     if (existing) {
       return { word: existing, inserted: false };
     }
-    const now = new Date().toISOString();
-    const word = {
-      id: input.id ?? createId('word'),
-      term: input.term,
-      normalized_term: normalizedTerm,
-      language: input.language,
-      meaning_vi: input.meaning_vi,
-      part_of_speech: input.part_of_speech ?? null,
-      ipa: input.ipa ?? '',
-      vietnamese_pronunciation: input.vietnamese_pronunciation ?? '',
-      example: input.example ?? '',
-      example_vi: input.example_vi ?? '',
-      difficulty: normalizeDifficultyLevel(input.difficulty) ?? input.difficulty,
-      topics: input.topics ?? [],
-      entry_type: input.entry_type ?? 'word',
-      blank_word: input.blank_word ?? null,
-      explanation: input.explanation ?? '',
-      generation_source: input.generation_source ?? 'seed',
-      created_at: input.created_at ?? now,
-      updated_at: input.updated_at ?? now
-    };
+    const word = buildWordRecord(input);
     this.words.set(word.id, word);
     return { word, inserted: true };
   }
 
+  #findWord(language, normalizedTerm) {
+    return [...this.words.values()].find((word) => word.language === language && word.normalized_term === normalizedTerm);
+  }
+
   recentWords({ targetLanguage = 'en', limit = 1000 }) {
-    return [...this.words.values()]
-      .filter((word) => word.language === targetLanguage)
+    return this.#wordsInLanguage(targetLanguage)
       .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, Math.min(limit, 1000));
   }
@@ -167,7 +147,45 @@ export class WordStore {
   }
 
   countUsableWords({ targetLanguage = 'en' } = {}) {
-    return [...this.words.values()].filter((word) => word.language === targetLanguage).length;
+    return this.#wordsInLanguage(targetLanguage).length;
+  }
+
+  hasCrawledUrl({ url }) {
+    return this.crawledUrls.has(url);
+  }
+
+  recordCrawledUrl({ url, feedUrl = null, status, reason = null, level = null, quality = null, articleId = null }) {
+    this.crawledUrls.set(url, {
+      url,
+      feed_url: feedUrl,
+      status,
+      reason,
+      cefr_level: level,
+      quality,
+      article_id: articleId,
+      created_at: new Date().toISOString()
+    });
+  }
+
+  /** Progress of the curated collection: articles queued so far and when the latest was queued. */
+  curatedStats() {
+    const queued = [...this.crawledUrls.values()].filter(
+      (row) => row.status === 'queued' && String(row.feed_url ?? '').startsWith('curated:')
+    );
+    const lastQueuedAt = queued.map((row) => row.created_at).sort().at(-1) ?? null;
+    return { queued: queued.length, lastQueuedAt };
+  }
+
+  countWordsByLevel({ targetLanguage = 'en' } = {}) {
+    return tallyWordLevels(this.#wordsInLanguage(targetLanguage), targetLanguage);
+  }
+
+  sampleWordTerms({ targetLanguage = 'en', level = null, limit = 150 } = {}) {
+    return pickTermSample(this.#wordsInLanguage(targetLanguage), { targetLanguage, level, limit });
+  }
+
+  #wordsInLanguage(language) {
+    return [...this.words.values()].filter((word) => word.language === language);
   }
 
   recordGenerationRun(input) {
@@ -218,30 +236,15 @@ export class WordStore {
   }
 
   replaceCachedWordIds({ deviceId, userId = null, wordIds = [], observedAt = new Date().toISOString() }) {
-    const known = [];
-    const unknown = [];
-    const seen = new Set();
-    for (const wordId of wordIds) {
-      if (typeof wordId !== 'string' || wordId.length === 0 || seen.has(wordId)) {
-        continue;
-      }
-      seen.add(wordId);
-      if (!this.words.has(wordId)) {
-        unknown.push(wordId);
-        continue;
-      }
-      if (known.length < 1000) {
-        known.push(wordId);
-      }
-    }
-    const key = this.#ownerKey({ deviceId, userId });
-    this.cachedWordIdsByOwner.set(key, {
+    const ids = distinctWordIds(wordIds);
+    const known = ids.filter((wordId) => this.words.has(wordId)).slice(0, MAX_CACHED_WORD_IDS);
+    this.cachedWordIdsByOwner.set(this.#ownerKey({ deviceId, userId }), {
       wordIds: new Set(known),
       observed_at: observedAt
     });
     return {
       stored_count: known.length,
-      unknown_server_word_ids: unknown
+      unknown_server_word_ids: ids.filter((wordId) => !this.words.has(wordId))
     };
   }
 
@@ -251,24 +254,15 @@ export class WordStore {
       wordIds: new Set(),
       observed_at: observedAt
     };
-    const unknown = [];
-    const seen = new Set();
+    const ids = distinctWordIds(wordIds);
     let storedCount = 0;
-
-    for (const wordId of wordIds) {
-      if (typeof wordId !== 'string' || wordId.length === 0 || seen.has(wordId)) {
-        continue;
-      }
-      seen.add(wordId);
-      if (!this.words.has(wordId)) {
-        unknown.push(wordId);
-        continue;
-      }
-      if (existing.wordIds.size < 1000 || existing.wordIds.has(wordId)) {
+    for (const wordId of ids.filter((id) => this.words.has(id))) {
+      if (existing.wordIds.size < MAX_CACHED_WORD_IDS || existing.wordIds.has(wordId)) {
         existing.wordIds.add(wordId);
         storedCount += 1;
       }
     }
+    const unknown = ids.filter((wordId) => !this.words.has(wordId));
 
     existing.observed_at = observedAt;
     this.cachedWordIdsByOwner.set(key, existing);
@@ -283,8 +277,7 @@ export class WordStore {
   }
 
   async createUserSubmittedWord({ deviceId, userId = null, term, language, generationService = null }) {
-    const submittedTerm = String(term ?? '').trim();
-    const normalizedTerm = normalizeTerm(submittedTerm);
+    const { submittedTerm, normalizedTerm } = normalizeSubmittedTerm(term);
     const now = new Date().toISOString();
     const ownerSubmissions = this.#submittedWordsForOwner({ deviceId, userId })
       .filter((submission) => submission.language === language && submission.normalized_term === normalizedTerm)
@@ -300,90 +293,32 @@ export class WordStore {
       return { submission: this.#hydrateUserSubmittedWord(ready), created: false };
     }
 
-    const existingWord = [...this.words.values()].find(
-      (word) => word.language === language && word.normalized_term === normalizedTerm
-    );
-    if (existingWord) {
-      const submission = {
-        id: createId('submitted_word'),
-        user_id: userId,
-        device_id: deviceId,
-        submitted_term: submittedTerm,
-        normalized_term: normalizedTerm,
-        language,
-        status: 'ready',
-        failure_reason: null,
-        resolution_type: 'existing_word',
-        resolved_word_id: existingWord.id,
-        created_at: now,
-        updated_at: now,
-        resolved_at: now
-      };
+    const save = (fields) => {
+      const submission = buildSubmittedWord({ deviceId, userId, submittedTerm, normalizedTerm, language, now, ...fields });
       this.userSubmittedWordsById.set(submission.id, submission);
-      return { submission: this.#hydrateUserSubmittedWord(submission), created: false };
+      return submission;
+    };
+    const respond = (submission, created) => ({ submission: this.#hydrateUserSubmittedWord(submission), created });
+
+    const existingWord = this.#findWord(language, normalizedTerm);
+    if (existingWord) {
+      return respond(save({ status: 'ready', resolutionType: 'existing_word', resolvedWordId: existingWord.id }), false);
     }
 
     if (generationService?.generateSubmittedWord) {
       try {
-        const result = await generationService.generateSubmittedWord({
+        const generated = await generationService.generateSubmittedWord({
           targetLanguage: language,
           term: submittedTerm
         });
-        const submission = {
-          id: createId('submitted_word'),
-          user_id: userId,
-          device_id: deviceId,
-          submitted_term: submittedTerm,
-          normalized_term: normalizedTerm,
-          language,
-          status: 'ready',
-          failure_reason: null,
-          resolution_type: result.resolutionType ?? 'generated_word',
-          resolved_word_id: result.word.id,
-          created_at: now,
-          updated_at: now,
-          resolved_at: now
-        };
-        this.userSubmittedWordsById.set(submission.id, submission);
-        return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+        const resolutionType = generated.resolutionType ?? 'generated_word';
+        return respond(save({ status: 'ready', resolutionType, resolvedWordId: generated.word.id }), true);
       } catch (error) {
-        const submission = {
-          id: createId('submitted_word'),
-          user_id: userId,
-          device_id: deviceId,
-          submitted_term: submittedTerm,
-          normalized_term: normalizedTerm,
-          language,
-          status: 'failed',
-          failure_reason: submittedWordFailureReason(error),
-          resolution_type: null,
-          resolved_word_id: null,
-          created_at: now,
-          updated_at: now,
-          resolved_at: null
-        };
-        this.userSubmittedWordsById.set(submission.id, submission);
-        return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+        return respond(save({ status: 'failed', failureReason: submittedWordFailureReason(error) }), true);
       }
     }
 
-    const submission = {
-      id: createId('submitted_word'),
-      user_id: userId,
-      device_id: deviceId,
-      submitted_term: submittedTerm,
-      normalized_term: normalizedTerm,
-      language,
-      status: 'queued',
-      failure_reason: null,
-      resolution_type: null,
-      resolved_word_id: null,
-      created_at: now,
-      updated_at: now,
-      resolved_at: null
-    };
-    this.userSubmittedWordsById.set(submission.id, submission);
-
+    const submission = save({ status: 'queued' });
     const job = {
       id: createId('submitted_word_job'),
       submission_id: submission.id,
@@ -397,14 +332,13 @@ export class WordStore {
       updated_at: now
     };
     this.userSubmittedWordJobsById.set(job.id, job);
-
-    return { submission: this.#hydrateUserSubmittedWord(submission), created: true };
+    return respond(submission, true);
   }
 
   listUserSubmittedWords({ deviceId, userId = null, limit = 50 }) {
     return this.#submittedWordsForOwner({ deviceId, userId })
       .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
-      .slice(0, Math.max(1, Math.min(limit, 100)))
+      .slice(0, clampLimit(limit, 100))
       .map((submission) => this.#hydrateUserSubmittedWord(submission));
   }
 
@@ -498,256 +432,56 @@ export class WordStore {
     return this.wordStatesByOwnerWord.get(this.#wordStateKey({ deviceId, userId, wordId })) ?? null;
   }
 
-  learningCards({ deviceId, userId = null, targetLanguage = 'en', limit = 10, now = new Date().toISOString() }) {
-    const cappedLimit = Math.max(1, Math.min(limit, 100));
+  /** The owner's states for `language` changed after `cursor`, oldest first, each with its word. */
+  listWordStatesSince({ deviceId, userId = null, language, cursor = null, limit }) {
+    const ownerKey = this.#ownerKey({ deviceId, userId });
+    return [...this.wordStatesByOwnerWord.values()]
+      .filter(
+        (state) =>
+          this.#ownerKeyFromState(state) === ownerKey &&
+          state.language === language &&
+          isAfterReviewCursor(state, cursor)
+      )
+      .sort((left, right) => left.updated_at.localeCompare(right.updated_at) || left.id.localeCompare(right.id))
+      .slice(0, limit)
+      .map((state) => ({ state, word: this.words.get(state.word_id) ?? null }));
+  }
+
+  learningCards({
+    deviceId,
+    userId = null,
+    targetLanguage = 'en',
+    limit = 10,
+    level: levelOverride = null,
+    now = new Date().toISOString()
+  }) {
     const ownerKeys = this.#selectionOwnerKeys({ deviceId, userId });
-    const cachedWordIds = this.#cachedWordIdsForOwnerKeys(ownerKeys);
-
-    // Collect all states for this owner+language
-    const allStates = [...this.wordStatesByOwnerWord.entries()]
-      .filter(([key, state]) => ownerKeys.has(this.#ownerKeyFromState(state)) && key.includes(':word:'))
-      .filter(([, state]) => state.language === targetLanguage);
-
-    const stateWordIds = new Set(allStates.map(([, state]) => state.word_id));
-
-    // Due review items: next_review_at is set and <= now
-    const targetReview = Math.floor(cappedLimit * 0.85);
-    const dueStates = allStates
-      .filter(([, state]) => state.next_review_at && state.next_review_at <= now)
-      .sort(([, a], [, b]) => a.next_review_at.localeCompare(b.next_review_at));
-
-    const reviewCards = dueStates
-      .slice(0, targetReview)
-      .map(([, state]) => {
-        const word = this.words.get(state.word_id);
-        return word ? { word, cardType: 'review', selectionReason: 'srs_due' } : null;
-      })
-      .filter(Boolean);
-
-    const newCount = cappedLimit - reviewCards.length;
-    const newCandidates = [...this.words.values()]
-      .filter((word) => word.language === targetLanguage)
-      .filter((word) => !cachedWordIds.has(word.id))
-      .filter((word) => !stateWordIds.has(word.id))
-      .sort((left, right) => bCompareCreated(left, right));
-
-    const newCards = newCandidates
-      .slice(0, newCount)
-      .map((word) => ({ word, cardType: 'new', selectionReason: 'new_available' }));
-
-    const cards = [...reviewCards, ...newCards];
-    this.addCachedWordIds({
-      deviceId,
-      userId,
-      wordIds: newCards.map((card) => card.word.id),
-      observedAt: now
+    const states = [...this.wordStatesByOwnerWord.values()].filter(
+      (state) => ownerKeys.has(this.#ownerKeyFromState(state)) && state.language === targetLanguage
+    );
+    const batch = composeLearningCards({
+      wordById: this.words,
+      candidateWords: this.#wordsInLanguage(targetLanguage),
+      states,
+      cachedWordIds: this.#cachedWordIdsForOwnerKeys(ownerKeys),
+      level: levelOverride ?? this.getProficiency({ deviceId, userId, language: targetLanguage }).level,
+      language: targetLanguage,
+      limit,
+      now
     });
-
-    return {
-      items: cards,
-      target_mix: { new: cappedLimit - targetReview, review: targetReview },
-      actual_mix: { new: newCards.length, review: reviewCards.length }
-    };
+    this.addCachedWordIds({ deviceId, userId, wordIds: newCardWordIds(batch), observedAt: now });
+    return batch;
   }
 
   syncStudyEvents({ deviceId, events, language = 'en', userId = null }) {
-    const accepted = [];
-    const duplicates = [];
-    const rejected = [];
-    let latestProficiency = this.getProficiency({ deviceId, userId, language });
-
-    const orderedEvents = [...events].sort(compareEventsForProjection);
-
-    for (const event of orderedEvents) {
-      const eventKey = resolveEventKey(event);
-      if (isSpeakingEvent(event)) {
-        if (!eventKey || !event.occurred_at) {
-          rejected.push({
-            client_event_id: event.client_event_id ?? null,
-            event_id: event.event_id ?? null,
-            reason: 'missing_required_field'
-          });
-          continue;
-        }
-        try {
-          const result = this.recordSpeakingEvent({ deviceId, userId, event, language });
-          if (result.idempotent) {
-            duplicates.push(eventKey);
-          } else {
-            accepted.push(eventKey);
-          }
-        } catch (error) {
-          rejected.push({
-            client_event_id: event.client_event_id ?? null,
-            event_id: event.event_id ?? null,
-            reason: error.message === 'forbidden_audio_field' ? 'forbidden_audio_field' : 'invalid_speaking_event'
-          });
-        }
-        continue;
-      }
-      if (isUnknownSpeakingEvent(event)) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: 'invalid_speaking_event_type'
-        });
-        continue;
-      }
-      if (!eventKey || !event.rating || !event.occurred_at) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: 'missing_required_field'
-        });
-        continue;
-      }
-      try {
-        const result = this.recordStudyEvent({ deviceId, userId, event, language });
-        latestProficiency = result.proficiency;
-        if (result.idempotent) {
-          duplicates.push(eventKey);
-        } else {
-          accepted.push(eventKey);
-        }
-      } catch (error) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
-        });
-      }
-    }
-
-    this.logger?.info?.('sync_study_events_completed', {
-      device_id: deviceId,
-      accepted_count: accepted.length,
-      duplicate_count: duplicates.length,
-      rejected_count: rejected.length
-    });
-
-    return {
-      accepted_event_ids: accepted,
-      duplicates,
-      rejected_events: rejected,
-      proficiency: latestProficiency
-    };
-  }
-
-  recordSpeakingEvent({ deviceId, event, language = 'en', userId = null }) {
-    const eventKey = resolveEventKey(event);
-    if (!eventKey) {
-      throw new Error('missing_event_id');
-    }
-    const normalized = normalizeSpeakingEvent({ deviceId, event, language, userId, strict: this.strictAttemptId });
-    const existing = this.speakingEventsByKey.get(eventKey);
-    if (existing) {
-      return { eventId: existing.id, idempotent: true };
-    }
-    const stored = {
-      id: createId('speaking_event'),
-      ...normalized,
-      event_id: event.event_id ?? eventKey,
-      client_event_id: event.client_event_id ?? eventKey,
-      received_at: new Date().toISOString()
-    };
-    this.speakingEventsByKey.set(eventKey, stored);
-    return { eventId: stored.id, idempotent: false };
-  }
-
-  getSpeakingSummary({ deviceId, language = 'en', userId = null, weekStart = null }) {
-    const start = normalizeWeekStart(weekStart);
-    const allEvents = [...this.speakingEventsByKey.values()]
-      .filter((event) => event.language === language)
-      .filter((event) => (userId ? event.user_id === userId : event.device_id === deviceId && !event.user_id));
-    const weekEvents = allEvents.filter((event) => event.occurred_at >= start);
-    const firstRecordingEvent =
-      allEvents
-        .filter((e) => e.event_type === 'speaking_recorded')
-        .sort((a, b) => String(a.occurred_at).localeCompare(String(b.occurred_at)))[0] ?? null;
-    return buildSpeakingSummary({
-      deviceId,
-      userId,
-      language,
-      weekStart: start,
-      events: weekEvents,
-      firstRecordingAt: firstRecordingEvent?.occurred_at ?? null
-    });
-  }
-
-  recordGameRounds({ deviceId, userId = null, rounds }) {
-    const accepted = [];
-    const duplicates = [];
-    const rejected = [];
-    for (const raw of rounds) {
-      let round;
-      try {
-        round = normalizeGameRound(raw);
-      } catch (error) {
-        if (!(error instanceof InvalidGameRoundError)) throw error;
-        rejected.push({ client_round_id: raw?.client_round_id ?? null, reason: error.reason });
-        continue;
-      }
-      if (this.gameRoundsByClientId.has(round.client_round_id)) {
-        duplicates.push(round.client_round_id);
-        continue;
-      }
-      this.gameRoundsByClientId.set(round.client_round_id, {
-        id: createId('game_round'),
-        ...round,
-        device_id: deviceId,
-        user_id: userId,
-        leaderboard_eligible: isPlausibleGameRound(round),
-        received_at: new Date().toISOString()
-      });
-      accepted.push(round.client_round_id);
-    }
-    return { accepted_round_ids: accepted, duplicates, rejected_rounds: rejected };
-  }
-
-  getGameLeaderboard({ game, mode, weekStart = null, userId = null, limit = 50 }) {
-    const start = gameWeekStart(weekStart);
-    const end = gameWeekEnd(start);
-    const rows = [...this.gameRoundsByClientId.values()]
-      .filter(
-        (r) =>
-          r.game === game &&
-          r.mode === mode &&
-          r.user_id &&
-          r.leaderboard_eligible &&
-          r.completed_at >= start &&
-          r.completed_at < end
-      )
-      .map((r) => ({ ...r, display_name: leaderboardName(this.usersById.get(r.user_id)) }));
-    return { game, mode, week_start: start, ...rankLeaderboard(rows, { limit, userId }) };
-  }
-
-  getGamesSummary({ days = 30, now = new Date() } = {}) {
-    const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
-    const rounds = [...this.gameRoundsByClientId.values()].filter((r) => r.completed_at >= since);
-    const reviewEvents = [...this.studyEventsByClientId.values()].filter(
-      (e) => isGameSource(e.source) && e.occurred_at >= since
+    return toSyncResponse(
+      routeStudyEventsSync({
+        events,
+        initialProficiency: this.getProficiency({ deviceId, userId, language }),
+        recordSpeakingEvent: (event) => this.recordSpeakingEvent({ deviceId, userId, event, language }),
+        recordStudyEvent: (event) => this.recordStudyEvent({ deviceId, userId, event, language })
+      })
     );
-    return buildGamesSummary({ rounds, gameReviewCount: reviewEvents.length, days });
-  }
-
-  getSpeakingLoopHealthSummary({ weekStart = null } = {}) {
-    const start = normalizeWeekStart(weekStart);
-    const allEvents = [...this.speakingEventsByKey.values()];
-    const weekEvents = allEvents.filter((e) => e.occurred_at >= start);
-    const loopCompletionCount = weekEvents.filter((e) => e.event_type === 'loop_completed').length;
-    const drillSessionCount = weekEvents.filter((e) => e.event_type === 'speaking_drill_completed').length;
-
-    const latestPrompt = [...this.speakingPromptsById.values()].filter((p) => p.status === 'approved')
-      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0] ?? null;
-    const latestPassage = this.listPublishedPassages()[0] ?? null;
-
-    return {
-      week_start: start.slice(0, 10),
-      loop_completion_count: loopCompletionCount,
-      drill_session_count: drillSessionCount,
-      latest_approved_prompt_at: latestPrompt?.updated_at ?? null,
-      latest_published_passage_at: latestPassage?.created_at ?? null,
-    };
   }
 
   getContentPipelineHealth() {
@@ -809,7 +543,13 @@ export class WordStore {
     // Practice games review words but never move the CEFR/HSK ladder.
     const levelChange = isGameSource(storedEvent.source)
       ? null
-      : this.#applyProficiencyChange({ deviceId, userId: storedEvent.user_id, language, rating });
+      : this.#applyProficiencyChange({
+          deviceId,
+          userId: storedEvent.user_id,
+          language,
+          rating,
+          occurredAt: storedEvent.occurred_at
+        });
 
     return {
       eventId: storedEvent.id,
@@ -825,23 +565,6 @@ export class WordStore {
 
   getProficiency({ deviceId, language = 'en', userId = null }) {
     return this.#buildProficiencyResponse({ deviceId, userId, language });
-  }
-
-  countConsecutiveRatings({ deviceId, rating, userId = null }) {
-    const recentEvents = this.#recentEvents({ deviceId, userId });
-    let count = 0;
-    for (const event of recentEvents) {
-      if (event.rating === rating) {
-        count += 1;
-      } else {
-        break;
-      }
-    }
-    return count;
-  }
-
-  getLastRatingType({ deviceId, userId = null }) {
-    return this.#recentEvents({ deviceId, userId })[0]?.rating ?? null;
   }
 
   registerUser({ identifier, password, displayName = null, deviceId = null }) {
@@ -1028,54 +751,31 @@ export class WordStore {
     return { claimed, duplicatesRemoved };
   }
 
-  #applyProficiencyChange({ deviceId, userId = null, language, rating }) {
+  #applyProficiencyChange({ deviceId, userId = null, language, rating, occurredAt }) {
     const proficiency = this.#getOrCreateProficiency({ deviceId, userId, language });
-    const consecutiveCount = this.countConsecutiveRatings({ deviceId, userId, rating });
-    if (!isProgressionRating(rating) || consecutiveCount === 0 || consecutiveCount % 5 !== 0) {
-      return null;
+    const change = planLevelChange({
+      rating,
+      recentEvents: this.#recentEvents({ deviceId, userId }),
+      levelChangedAt: proficiency.level_changed_at ?? null,
+      currentLevel: proficiency.level,
+      language
+    });
+    if (change) {
+      proficiency.level = change.nextLevel;
+      proficiency.level_changed_at = occurredAt;
+      proficiency.updated_at = new Date().toISOString();
     }
-
-    const previousLevel = proficiency.level;
-    const nextLevel =
-      rating === 'too_easy' ? incrementLevel(previousLevel, { language }) : decrementLevel(previousLevel, { language });
-
-    proficiency.level = nextLevel;
-    proficiency.updated_at = new Date().toISOString();
-    return {
-      levelChanged: nextLevel !== previousLevel,
-      previousLevel,
-      triggeredBy: `${consecutiveCount}x consecutive ${rating}`
-    };
+    return change;
   }
 
-  #buildProficiencyResponse({
-    deviceId,
-    userId = null,
-    language = 'en',
-    levelChanged = false,
-    previousLevel = null,
-    triggeredBy = null
-  } = {}) {
-    const proficiency = this.#getOrCreateProficiency({ deviceId, userId, language });
-    const currentRatingType = this.getLastRatingType({ deviceId, userId });
-    const consecutiveCount = currentRatingType
-      ? this.countConsecutiveRatings({ deviceId, userId, rating: currentRatingType })
-      : 0;
-    const profile = getProficiencyProfile({ language });
-
-    return {
-      scale: profile.scale,
-      level: proficiency.level,
-      level_index: profile.levels.indexOf(proficiency.level),
-      level_changed: levelChanged,
-      previous_level: previousLevel,
-      triggered_by: triggeredBy,
-      consecutive_count: levelChanged ? 0 : consecutiveCount,
-      consecutive_rating_type: levelChanged ? null : currentRatingType,
-      user_id: userId,
+  #buildProficiencyResponse({ deviceId, userId = null, language = 'en', ...levelChange }) {
+    return toProficiencyResponse({
+      proficiency: this.#getOrCreateProficiency({ deviceId, userId, language }),
+      recentEvents: this.#recentEvents({ deviceId, userId }),
+      userId,
       language,
-      last_updated: proficiency.updated_at
-    };
+      ...levelChange
+    });
   }
 
   #getOrCreateProficiency({ deviceId, userId = null, language }) {
@@ -1117,22 +817,12 @@ export class WordStore {
   }
 
   createArticle({ userId, title, sourceUrl = null, language, rawText, visibility = 'private' }) {
-    const now = new Date().toISOString();
-    const article = {
-      id: createId('article'),
-      owner_user_id: userId,
-      created_by_admin_id: null,
-      title,
-      source_url: sourceUrl,
-      language,
-      raw_text: rawText,
-      cleaned_text: null,
-      visibility,
-      status: 'pending_processing',
-      processing_error: null,
-      created_at: now,
-      updated_at: now
-    };
+    return this.#insertArticle(
+      buildArticle({ ownerUserId: userId, adminUserId: null, title, sourceUrl, language, rawText, visibility })
+    );
+  }
+
+  #insertArticle(article) {
     this.articlesById.set(article.id, article);
     this.enqueueArticleProcessingJob({ articleId: article.id });
     return article;
@@ -1140,14 +830,14 @@ export class WordStore {
 
   listArticles({ userId, limit = 50 }) {
     return [...this.articlesById.values()]
-      .filter((article) => article.owner_user_id === userId && article.status !== 'deleted')
+      .filter((article) => isArticleReadableBy(article, userId))
       .sort((left, right) => right.created_at.localeCompare(left.created_at))
-      .slice(0, Math.max(1, Math.min(limit, 100)));
+      .slice(0, clampLimit(limit, 100));
   }
 
   getArticleByIdForUser({ articleId, userId }) {
     const article = this.articlesById.get(articleId);
-    if (!article || article.owner_user_id !== userId || article.status === 'deleted') {
+    if (!article || !isArticleReadableBy(article, userId)) {
       return null;
     }
     return article;
@@ -1158,32 +848,16 @@ export class WordStore {
   }
 
   createAdminArticle({ adminUserId = null, title, sourceUrl = null, language, rawText, visibility = 'published' }) {
-    const now = new Date().toISOString();
-    const article = {
-      id: createId('article'),
-      owner_user_id: null,
-      created_by_admin_id: adminUserId,
-      title,
-      source_url: sourceUrl,
-      language,
-      raw_text: rawText,
-      cleaned_text: null,
-      visibility,
-      status: 'pending_processing',
-      processing_error: null,
-      created_at: now,
-      updated_at: now
-    };
-    this.articlesById.set(article.id, article);
-    this.enqueueArticleProcessingJob({ articleId: article.id });
-    return article;
+    return this.#insertArticle(
+      buildArticle({ ownerUserId: null, adminUserId, title, sourceUrl, language, rawText, visibility })
+    );
   }
 
   listAdminArticles({ limit = 50, status = null }) {
     return [...this.articlesById.values()]
       .filter((article) => (status ? article.status === status : true))
       .sort((left, right) => right.created_at.localeCompare(left.created_at))
-      .slice(0, Math.max(1, Math.min(limit, 100)));
+      .slice(0, clampLimit(limit, 100));
   }
 
   reprocessArticle({ articleId }) {
@@ -1265,10 +939,12 @@ export class WordStore {
           return [];
         }
         const speakingPrompt = this.#approvedSpeakingPromptForSense(sense.id);
+        const word = this.#findWord(term.language, term.normalized_term);
         return [
           {
             term_id: term.id,
             display_term: term.display_term,
+            word: word ? toApiWord(word) : null,
             word_sense_id: sense.id,
             meaning_vi: sense.meaning_vi,
             part_of_speech: sense.part_of_speech,
@@ -1313,7 +989,7 @@ export class WordStore {
       return null;
     }
 
-    for (const field of ['title', 'language', 'visibility', 'status']) {
+    for (const field of ADMIN_ARTICLE_PATCH_FIELDS) {
       if (patch[field] !== undefined) {
         article[field] = patch[field];
       }
@@ -1330,7 +1006,7 @@ export class WordStore {
     return [...this.vocabularyReviewItemsById.values()]
       .filter((item) => (status ? item.status === status : true))
       .sort((left, right) => right.created_at.localeCompare(left.created_at))
-      .slice(0, Math.max(1, Math.min(limit, 200)));
+      .slice(0, clampLimit(limit, 200));
   }
 
   reviewVocabularyItem({ itemId, status, reviewNote = null, reviewerUserId = null }) {
@@ -1354,51 +1030,13 @@ export class WordStore {
     return item;
   }
 
-  listSpeakingPrompts({ status = null, missingRequired = false, limit = 100 } = {}) {
-    return [...this.speakingPromptsById.values()]
-      .filter((prompt) => (status ? prompt.status === status : true))
-      .filter((prompt) => (missingRequired ? isPromptMissingRequiredFields(prompt) : true))
-      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
-      .slice(0, Math.max(1, Math.min(limit, 200)));
-  }
-
-  createSpeakingPrompt(input) {
-    const now = new Date().toISOString();
-    const prompt = normalizeSpeakingPromptInput({
-      ...input,
-      id: input.id ?? createId('speaking_prompt'),
-      status: input.status ?? 'pending_review',
-      created_at: now,
-      updated_at: now
-    });
-    this.speakingPromptsById.set(prompt.id, prompt);
-    return prompt;
-  }
-
-  updateSpeakingPrompt({ promptId, patch, reviewerUserId = null }) {
-    const existing = this.speakingPromptsById.get(promptId);
-    if (!existing) {
-      return null;
-    }
-    const now = new Date().toISOString();
-    const updated = normalizeSpeakingPromptInput({
-      ...existing,
-      ...patch,
-      reviewer_user_id: patch.status ? reviewerUserId : existing.reviewer_user_id,
-      reviewed_at: patch.status ? now : existing.reviewed_at,
-      updated_at: now
-    });
-    this.speakingPromptsById.set(updated.id, updated);
-    return updated;
-  }
-
   listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
     return [...this.contentPacksById.values()]
       .filter((pack) => pack.status === 'published')
       .filter((pack) => pack.language === language)
       .filter((pack) => (afterVersion == null ? true : pack.version > afterVersion))
       .sort((left, right) => right.version - left.version)
-      .slice(0, Math.max(1, Math.min(limit, 200)));
+      .slice(0, clampLimit(limit, 200));
   }
 
   getContentPackById({ id }) {
@@ -1431,8 +1069,13 @@ export class WordStore {
   }
 
   claimNextArticleProcessingJob() {
+    // Jobs left in 'processing' by a worker that died (deploy/restart) are reclaimed after a timeout.
+    const staleBefore = staleArticleJobCutoff();
     const job = [...this.articleProcessingJobsById.values()]
-      .filter((item) => item.status === 'pending_processing')
+      .filter(
+        (item) =>
+          item.status === 'pending_processing' || (item.status === 'processing' && item.started_at < staleBefore)
+      )
       .sort((left, right) => left.queued_at.localeCompare(right.queued_at))[0];
     if (!job) {
       return null;
@@ -1492,58 +1135,14 @@ export class WordStore {
         continue;
       }
       seen.add(dedupeKey);
-      // Stubs (fallback suggestions) are never auto-approved even for user articles
-      const requiresReview = Boolean(article.created_by_admin_id) || Boolean(item.isStub);
-      let term = [...this.termsById.values()].find(
-        (entry) => entry.language === item.language && entry.normalized_term === normalized
-      );
-      if (!term) {
-        term = {
-          id: createId('term'),
-          language: item.language,
-          display_term: item.term,
-          normalized_term: normalized,
-          lemma: null,
-          created_at: now
-        };
-        this.termsById.set(term.id, term);
-      }
-
-      const sense = {
-        id: createId('sense'),
-        term_id: term.id,
-        part_of_speech: item.part_of_speech ?? null,
-        meaning_vi: item.meaning_vi,
-        short_definition: item.short_definition ?? null,
-        pronunciation: item.vietnamese_pronunciation,
-        ipa: item.ipa ?? null,
-        pinyin: item.pinyin ?? null,
-        level_scale: item.level_scale ?? 'cefr',
-        level: item.level ?? item.difficulty ?? 'A1',
-        quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
-        status: requiresReview ? 'pending_review' : 'approved',
-        created_at: now,
-        updated_at: now
-      };
-      this.wordSensesById.set(sense.id, sense);
-
-      // Bridge approved sense into the words pool so learningCards can serve it
-      if (!requiresReview) {
-        this.insertWord({
-          term: item.term,
-          language: item.language,
-          meaning_vi: item.meaning_vi ?? '',
-          part_of_speech: item.part_of_speech ?? null,
-          ipa: item.ipa ?? '',
-          vietnamese_pronunciation: item.vietnamese_pronunciation ?? '',
-          example: item.example ?? '',
-          example_vi: '',
-          difficulty: item.level ?? item.difficulty ?? 'A1',
-          topics: [],
-          generation_source: 'article_vocabulary'
-        });
-      }
-
+      const { term, sense, reviewItem } = this.#persistExtractedTerm({
+        item,
+        normalized,
+        requiresReview: articleItemRequiresReview(article, item),
+        reviewArticleId: articleId,
+        bridgedWord: { example: item.example ?? '', topics: [], generationSource: 'article_vocabulary' },
+        now
+      });
       const articleTerm = {
         id: createId('article_term'),
         article_id: articleId,
@@ -1560,21 +1159,118 @@ export class WordStore {
         created_at: now
       };
       this.articleTermsById.set(articleTerm.id, articleTerm);
-
-      const reviewItem = {
-        id: createId('review_item'),
-        word_sense_id: sense.id,
-        article_id: articleId,
-        status: requiresReview ? 'pending' : 'approved',
-        reviewer_user_id: null,
-        review_note: null,
-        reviewed_at: requiresReview ? null : now,
-        created_at: now,
-        updated_at: now
-      };
-      this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
       persisted.push({ term, sense, articleTerm, reviewItem });
     }
+    return { count: persisted.length, items: persisted };
+  }
+
+  /**
+   * Stores the term, a new sense and its review item for an extracted
+   * vocabulary item; approved items are also bridged into the words pool.
+   */
+  #persistExtractedTerm({ item, normalized, requiresReview, reviewArticleId, bridgedWord, now }) {
+    const { senseStatus, reviewStatus, reviewedAt } = reviewStatuses(requiresReview, now);
+    let term = [...this.termsById.values()].find(
+      (entry) => entry.language === item.language && entry.normalized_term === normalized
+    );
+    if (!term) {
+      term = {
+        id: createId('term'),
+        language: item.language,
+        display_term: item.term,
+        normalized_term: normalized,
+        lemma: null,
+        created_at: now
+      };
+      this.termsById.set(term.id, term);
+    }
+
+    const sense = {
+      id: createId('sense'),
+      term_id: term.id,
+      ...senseFieldsFromItem(item),
+      status: senseStatus,
+      created_at: now,
+      updated_at: now
+    };
+    this.wordSensesById.set(sense.id, sense);
+
+    if (!requiresReview) {
+      this.insertWord(bridgedWordInput(item, bridgedWord));
+    }
+
+    const reviewItem = {
+      id: createId('review_item'),
+      word_sense_id: sense.id,
+      article_id: reviewArticleId,
+      status: reviewStatus,
+      reviewer_user_id: null,
+      review_note: null,
+      reviewed_at: reviewedAt,
+      created_at: now,
+      updated_at: now
+    };
+    this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
+    return { term, sense, reviewItem };
+  }
+
+  persistPassageVocabulary({ passageId, items = [] }) {
+    const now = new Date().toISOString();
+    const passage = this.memorizationPassagesById.get(passageId);
+    if (!passage) {
+      throw new Error('passage_not_found');
+    }
+
+    deletePassageVocabularyLinks(this, passageId);
+
+    const persisted = [];
+    const seen = new Set();
+    const requiresReview = passageRequiresReview(passage);
+    for (const item of items) {
+      const segment = this.memorizationSegmentsById.get(item.segment_id);
+      if (!segment || segment.passage_id !== passageId) {
+        continue;
+      }
+      const normalized = normalizeTerm(item.term);
+      if (!normalized) {
+        continue;
+      }
+      const dedupeKey = `${item.segment_id}:${item.language}:${normalized}`;
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+
+      const { term, sense, reviewItem } = this.#persistExtractedTerm({
+        item,
+        normalized,
+        requiresReview,
+        reviewArticleId: null,
+        bridgedWord: {
+          example: item.example ?? segment.text,
+          topics: ['memorization'],
+          generationSource: 'memorization_passage_vocabulary'
+        },
+        now
+      });
+      const segmentTerm = {
+        id: createId('segment_term'),
+        passage_id: passageId,
+        segment_id: item.segment_id,
+        term_id: term.id,
+        word_sense_id: sense.id,
+        surface_text: item.term,
+        sentence_context: item.example ?? segment.text,
+        frequency: Number(item.frequency ?? 1),
+        extraction_confidence: Number(item.confidence ?? 0.5),
+        classification: item.classification ?? null,
+        suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term),
+        created_at: now
+      };
+      this.memorizationSegmentTermsById.set(segmentTerm.id, segmentTerm);
+      persisted.push({ term, sense, segmentTerm, reviewItem });
+    }
+
     return { count: persisted.length, items: persisted };
   }
 
@@ -1648,398 +1344,30 @@ export class WordStore {
     }
   }
 
-  // ─── Exam methods ────────────────────────────────────────────────────────
-
-  /**
-   * Returns distinct, normalized topics for which the user has studied at
-   * least one word in the given language, sorted alphabetically.
-   */
-  examTopics({ userId, language = 'en' }) {
-    const topicsSet = new Set();
-    for (const state of this.wordStatesByOwnerWord.values()) {
-      if (state.user_id !== userId || state.language !== language) {
-        continue;
-      }
-      const word = this.words.get(state.word_id);
-      if (!word) {
-        continue;
-      }
-      for (const t of word.topics ?? []) {
-        const norm = String(t).trim().toLowerCase();
-        if (norm) {
-          topicsSet.add(norm);
-        }
-      }
-    }
-    return [...topicsSet].sort();
-  }
-
-  /**
-   * Generates a new exam session with MCQ questions.
-   * Returns { error: 'INSUFFICIENT_WORDS', found } when fewer than 5 source
-   * words exist for the requested language, otherwise returns the full session
-   * payload.
-   */
-  startExamSession({ userId, language = 'en', now = new Date().toISOString(), sessionTtlMs = 7200000 }) {
-    // Collect studied words for the active language.
-    const sourceWords = [];
-    const seenWordIds = new Set();
-    for (const state of this.wordStatesByOwnerWord.values()) {
-      if (state.user_id !== userId || state.language !== language) {
-        continue;
-      }
-      if (seenWordIds.has(state.word_id)) {
-        continue;
-      }
-      const word = this.words.get(state.word_id);
-      if (!word) {
-        continue;
-      }
-      sourceWords.push(word);
-      seenWordIds.add(word.id);
-    }
-
-    if (sourceWords.length < 5) {
-      return { error: 'INSUFFICIENT_WORDS', found: sourceWords.length };
-    }
-
-    // Cap at 20 questions (shuffle before slicing for variety)
-    const shuffled = shuffleArray([...sourceWords]);
-    const selected = shuffled.slice(0, 20);
-
-    // Build distractor pool: same language, not a source word in this session
-    const sourceIds = new Set(selected.map((w) => w.id));
-    const allSameLang = [...this.words.values()].filter((w) => w.language === language && !sourceIds.has(w.id));
-
-    const sessionId = createId('exam_sess');
-    const expiresAt = new Date(new Date(now).getTime() + sessionTtlMs).toISOString();
-    const session = {
-      id: sessionId,
-      user_id: userId,
-      topic: 'language',
-      language,
-      difficulty_level: null,
-      created_at: now,
-      expires_at: expiresAt,
-      submitted_at: null
-    };
-    this.examSessionsById.set(sessionId, session);
-
-    const questions = [];
-    for (let i = 0; i < selected.length; i++) {
-      const src = selected[i];
-      const distractors = selectDistractors({ source: src, pool: allSameLang, count: 3 });
-      // Build choices: correct answer + distractors, then shuffle
-      const correctMeaning = src.meaning_vi ?? src.term;
-      const choicesRaw = [correctMeaning, ...distractors.map((d) => d.meaning_vi ?? d.term)];
-      const { choices, correctIndex } = shuffleChoices(choicesRaw);
-
-      // Assign question_type: 50/50 sentence_context if example is non-empty
-      const hasExample = src.example && src.example.trim() !== '';
-      const questionType = hasExample && Math.random() < 0.5 ? 'sentence_context' : 'meaning_choice';
-
-      const question = {
-        id: createId('exam_q'),
-        session_id: sessionId,
-        word_id: src.id,
-        prompt_word: src.term,
-        choices_json: JSON.stringify(choices),
-        correct_index: correctIndex,
-        ordinal: i,
-        created_at: now,
-        question_type: questionType,
-        sentence: questionType === 'sentence_context' ? src.example : null,
-        highlight: questionType === 'sentence_context' ? src.term : null
-      };
-      questions.push(question);
-    }
-    this.examQuestionsBySessionId.set(sessionId, questions);
-
-    return {
-      session_id: sessionId,
-      topic: 'language',
-      language,
-      question_count: questions.length,
-      expires_at: expiresAt,
-      questions: questions.map((q) => {
-        const item = {
-          question_id: q.id,
-          ordinal: q.ordinal,
-          prompt_word: q.prompt_word,
-          choices: JSON.parse(q.choices_json),
-          question_type: q.question_type
-        };
-        if (q.question_type === 'sentence_context') {
-          item.sentence = q.sentence;
-          item.highlight = q.highlight;
-        }
-        return item;
-      })
-    };
-  }
-
-  /**
-   * Submits answers for an exam session.
-   * Returns error objects for known failure modes, or the full result payload.
-   *
-   * When [localAttemptId] is provided and the session has already been
-   * submitted with the same id, the call is treated as an idempotent retry
-   * and the existing attempt data is returned instead of ALREADY_SUBMITTED.
-   */
-  submitExamSession({
-    sessionId,
-    userId,
-    answers,
-    localAttemptId = null,
-    now = new Date().toISOString(),
-    passPct = 70,
-    disclaimer = ''
-  }) {
-    const session = this.examSessionsById.get(sessionId);
-    if (!session) {
-      return { error: 'NOT_FOUND' };
-    }
-    if (session.submitted_at) {
-      // Idempotent retry: if the caller provided the same local_attempt_id
-      // that was recorded on first submission, return the existing result.
-      if (localAttemptId !== null && session.local_attempt_id === localAttemptId) {
-        const existing = this.examAttemptsBySessionId.get(sessionId);
-        if (existing) {
-          const certId = existing.certificate_id ?? null;
-          return {
-            attempt_id: existing.id,
-            session_id: sessionId,
-            topic: existing.topic,
-            language: existing.language,
-            difficulty_level: existing.difficulty_level,
-            total_questions: existing.total_questions,
-            correct_count: existing.correct_count,
-            score_pct: existing.score_pct,
-            passed: existing.passed === 1,
-            certificate_id: certId,
-            created_at: existing.created_at
-          };
-        }
-      }
-      return { error: 'ALREADY_SUBMITTED' };
-    }
-    if (now > session.expires_at) {
-      return { error: 'SESSION_EXPIRED' };
-    }
-    const questions = this.examQuestionsBySessionId.get(sessionId) ?? [];
-    if (answers.length !== questions.length) {
-      return { error: 'ANSWER_COUNT_MISMATCH', expected: questions.length, received: answers.length };
-    }
-
-    // Score
-    let correctCount = 0;
-    for (let i = 0; i < questions.length; i++) {
-      if (Number(answers[i]) === questions[i].correct_index) {
-        correctCount += 1;
-      }
-    }
-    const totalQuestions = questions.length;
-    const scorePct = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
-    const passed = scorePct >= passPct;
-
-    // Mark submitted
-    session.submitted_at = now;
-    if (localAttemptId !== null) {
-      session.local_attempt_id = localAttemptId;
-    }
-
-    const attemptId = createId('exam_att');
-    const attempt = {
-      id: attemptId,
-      session_id: sessionId,
-      user_id: userId,
-      topic: session.topic,
-      language: session.language,
-      difficulty_level: session.difficulty_level,
-      total_questions: totalQuestions,
-      correct_count: correctCount,
-      score_pct: scorePct,
-      passed: passed ? 1 : 0,
-      created_at: now
-    };
-    this.examAttemptsById.set(attemptId, attempt);
-    this.examAttemptsBySessionId.set(sessionId, attempt);
-
-    let certificateId = null;
-    if (passed) {
-      certificateId = crypto.randomUUID();
-      const cert = {
-        id: certificateId,
-        attempt_id: attemptId,
-        user_id: userId,
-        topic: session.topic,
-        language: session.language,
-        difficulty_level: session.difficulty_level,
-        score_pct: scorePct,
-        issued_at: now,
-        disclaimer
-      };
-      this.examCertificatesById.set(certificateId, cert);
-    }
-
-    return {
-      attempt_id: attemptId,
-      session_id: sessionId,
-      topic: session.topic,
-      language: session.language,
-      difficulty_level: session.difficulty_level,
-      total_questions: totalQuestions,
-      correct_count: correctCount,
-      score_pct: scorePct,
-      passed,
-      certificate_id: certificateId,
-      created_at: now
-    };
-  }
-
-  /**
-   * Returns paginated exam attempt history for a user, newest first.
-   */
-  getExamResults({ userId, page = 1, limit = 20 }) {
-    const all = [...this.examAttemptsById.values()]
-      .filter((a) => a.user_id === userId)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-    const total = all.length;
-    const offset = (page - 1) * limit;
-    const items = all.slice(offset, offset + limit).map((a) => {
-      const cert = [...this.examCertificatesById.values()].find((c) => c.attempt_id === a.id);
-      return {
-        attempt_id: a.id,
-        topic: a.topic,
-        language: a.language,
-        difficulty_level: a.difficulty_level,
-        score_pct: a.score_pct,
-        passed: a.passed === 1,
-        created_at: a.created_at,
-        certificate_id: cert?.id ?? null
-      };
-    });
-
-    return { items, total, page, limit };
-  }
-
-  /**
-   * Returns a certificate by ID without user PII.
-   * This is the public-facing endpoint response.
-   */
-  getExamCertificate({ id }) {
-    const cert = this.examCertificatesById.get(id);
-    if (!cert) {
-      return null;
-    }
-    return {
-      certificate_id: cert.id,
-      topic: cert.topic,
-      language: cert.language,
-      difficulty_level: cert.difficulty_level,
-      score_pct: cert.score_pct,
-      issued_at: cert.issued_at,
-      disclaimer: cert.disclaimer
-    };
-  }
-
-  createShadowingVideoEntry({ deviceId = null, userId = null, resolvedVideo, entryType = 'saved', visibility = 'private' }) {
-    const normalized = normalizeResolvedShadowingVideo(resolvedVideo);
-    const now = new Date().toISOString();
-    const providerKey = `${normalized.sourceType}:${normalized.providerVideoId}`;
-    let video = this.shadowingVideosById.get(this.shadowingVideoIdByProviderKey.get(providerKey));
-
-    if (!video) {
-      video = {
-        id: createId('shadow_video'),
-        source_type: normalized.sourceType,
-        provider_video_id: normalized.providerVideoId,
-        source_url: normalized.sourceUrl,
-        title: normalized.title,
-        channel_title: normalized.channelTitle,
-        thumbnail_url: normalized.thumbnailUrl,
-        duration_seconds: normalized.durationSeconds,
-        transcript_language: normalized.transcriptLanguage,
-        transcript_source: normalized.transcriptSource,
-        default_playback_rate: normalized.defaultPlaybackRate,
-        default_seek_back_ms: normalized.defaultSeekBackMs,
-        created_at: now,
-        updated_at: now
-      };
-      this.shadowingVideosById.set(video.id, video);
-      this.shadowingVideoIdByProviderKey.set(providerKey, video.id);
-      this.shadowingVideoSegmentsByVideoId.set(
-        video.id,
-        normalized.segments.map((segment) => ({
-          id: createId('shadow_seg'),
-          video_id: video.id,
-          position: segment.position,
-          start_ms: segment.start_ms,
-          end_ms: segment.end_ms,
-          text: segment.text,
-          created_at: now
-        }))
-      );
-    }
-
-    const existing = this.#findShadowingVideoEntry({ videoId: video.id, deviceId, userId, entryType });
-    if (existing) {
-      return { entry: this.#hydrateShadowingVideoEntry(existing), created: false };
-    }
-
-    const entry = {
-      id: createId('shadow_entry'),
-      video_id: video.id,
-      entry_type: entryType,
-      visibility: visibility ?? (entryType === 'curated' ? 'published' : 'private'),
-      owner_user_id: entryType === 'saved' ? userId : null,
-      owner_device_id: entryType === 'saved' && !userId ? deviceId : null,
-      created_at: now,
-      updated_at: now
-    };
-    this.shadowingVideoEntriesById.set(entry.id, entry);
-    return { entry: this.#hydrateShadowingVideoEntry(entry), created: true };
-  }
-
-  listShadowingVideoEntries({ deviceId, userId = null, limit = 50 }) {
-    return [...this.shadowingVideoEntriesById.values()]
-      .filter((entry) => this.#isShadowingEntryVisibleToOwner(entry, { deviceId, userId }))
-      .sort(compareShadowingEntries)
-      .slice(0, Math.max(1, Math.min(limit, 100)))
-      .map((entry) => this.#hydrateShadowingVideoEntry(entry));
-  }
-
-  getShadowingVideoEntryDetail({ entryId }) {
-    const entry = this.shadowingVideoEntriesById.get(entryId);
-    if (!entry) {
-      return null;
-    }
-    const hydrated = this.#hydrateShadowingVideoEntry(entry);
-    return {
-      ...hydrated,
-      segments: (this.shadowingVideoSegmentsByVideoId.get(entry.video_id) ?? []).map((segment) => ({ ...segment }))
-    };
-  }
-
+  // Rebuilds the owner's SRS state for the word from all its events (see PostgresWordStore).
   #upsertWordState({ deviceId, userId = null, language, event }) {
     if (!event.word_id) {
       return;
     }
-    const occurredAt = new Date(event.occurred_at);
-    const nextReviewAt = nextReviewForRating(event.rating, occurredAt);
-    const state = {
+    const events = [...this.studyEventsByClientId.values()].filter(
+      (candidate) =>
+        candidate.word_id === event.word_id &&
+        (userId ? candidate.user_id === userId : candidate.device_id === deviceId && !candidate.user_id)
+    );
+    const state = replaySrsState(events);
+    if (!state) {
+      return;
+    }
+    const key = this.#wordStateKey({ deviceId, userId, wordId: event.word_id });
+    this.wordStatesByOwnerWord.set(key, {
+      id: this.wordStatesByOwnerWord.get(key)?.id ?? createId('word_state'),
       user_id: userId,
       device_id: deviceId,
       word_id: event.word_id,
       language,
-      status: statusForRating(event.rating),
-      last_rating: event.rating,
-      last_studied_at: event.occurred_at,
-      next_review_at: nextReviewAt?.toISOString() ?? null,
+      ...state,
       updated_at: new Date().toISOString()
-    };
-    this.wordStatesByOwnerWord.set(this.#wordStateKey({ deviceId, userId, wordId: event.word_id }), state);
+    });
   }
 
   #ownerKey({ deviceId, userId = null }) {
@@ -2083,772 +1411,12 @@ export class WordStore {
     };
   }
 
-  #findShadowingVideoEntry({ videoId, deviceId = null, userId = null, entryType = 'saved' }) {
-    return [...this.shadowingVideoEntriesById.values()].find((entry) => {
-      if (entry.video_id !== videoId || entry.entry_type !== entryType) {
-        return false;
-      }
-      if (entryType === 'curated') {
-        return true;
-      }
-      if (userId) {
-        return entry.owner_user_id === userId;
-      }
-      return !entry.owner_user_id && entry.owner_device_id === deviceId;
-    });
-  }
-
-  #isShadowingEntryVisibleToOwner(entry, { deviceId, userId = null }) {
-    if (entry.entry_type === 'curated') {
-      return entry.visibility === 'published';
-    }
-    if (userId) {
-      return entry.owner_user_id === userId;
-    }
-    return !entry.owner_user_id && entry.owner_device_id === deviceId;
-  }
-
-  #hydrateShadowingVideoEntry(entry) {
-    const video = this.shadowingVideosById.get(entry.video_id);
-    if (!video) {
-      return null;
-    }
-    return {
-      ...entry,
-      source_type: video.source_type,
-      provider_video_id: video.provider_video_id,
-      source_url: video.source_url,
-      title: video.title,
-      channel_title: video.channel_title,
-      thumbnail_url: video.thumbnail_url,
-      duration_seconds: video.duration_seconds,
-      transcript_language: video.transcript_language,
-      transcript_source: video.transcript_source,
-      default_playback_rate: video.default_playback_rate,
-      default_seek_back_ms: video.default_seek_back_ms,
-      segment_count: (this.shadowingVideoSegmentsByVideoId.get(entry.video_id) ?? []).length
-    };
-  }
-
   #wordStateKey({ deviceId, userId = null, wordId }) {
     return `${this.#ownerKey({ deviceId, userId })}:word:${wordId}`;
   }
-
-  // ─── Memorization Passages ───────────────────────────────────────────
-
-  createPassage({ title, language, rawText, ownerType = 'user', ownerUserId = null, visibility = 'private' }) {
-    const now = new Date().toISOString();
-    const passage = {
-      id: createId('passage'),
-      title,
-      language,
-      raw_text: rawText,
-      owner_type: ownerType,
-      owner_user_id: ownerUserId,
-      visibility,
-      status: 'pending_segmentation',
-      enrichment_status: 'none',
-      processing_error: null,
-      segment_count: 0,
-      attempt_count: 0,
-      enrichment_attempt_count: 0,
-      created_at: now,
-      updated_at: now
-    };
-    this.memorizationPassagesById.set(passage.id, passage);
-    return passage;
-  }
-
-  getPassage({ passageId }) {
-    return this.memorizationPassagesById.get(passageId) ?? null;
-  }
-
-  listPassages({ userId = null, status = null, ownerType = null } = {}) {
-    let passages = [...this.memorizationPassagesById.values()];
-    if (status) {
-      passages = passages.filter((p) => p.status === status);
-    }
-    if (ownerType) {
-      passages = passages.filter((p) => p.owner_type === ownerType);
-    }
-    if (userId) {
-      // User sees: own passages + published passages
-      passages = passages.filter(
-        (p) => p.owner_user_id === userId || p.visibility === 'published'
-      );
-    }
-    return passages.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }
-
-  listPublishedPassages() {
-    return [...this.memorizationPassagesById.values()]
-      .filter((p) => p.visibility === 'published' && p.status === 'published')
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }
-
-  listAdminPassages({ status = null } = {}) {
-    let passages = [...this.memorizationPassagesById.values()];
-    if (status) {
-      passages = passages.filter((p) => p.status === status);
-    }
-    return passages.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }
-
-  updatePassage({ passageId, ...updates }) {
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (!passage) return null;
-    const allowed = ['title', 'language', 'visibility', 'status', 'enrichment_status', 'processing_error', 'segment_count', 'attempt_count', 'enrichment_attempt_count'];
-    for (const key of allowed) {
-      if (updates[key] !== undefined) {
-        passage[key] = updates[key];
-      }
-    }
-    passage.updated_at = new Date().toISOString();
-    return passage;
-  }
-
-  deletePassage({ passageId }) {
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (!passage) return false;
-    this.#deletePassageVocabularyLinks(passageId);
-    // Delete associated segments and progress
-    for (const [id, seg] of this.memorizationSegmentsById) {
-      if (seg.passage_id === passageId) {
-        // Delete progress for this segment
-        for (const [pid, prog] of this.memorizationSegmentProgressById) {
-          if (prog.segment_id === id) {
-            this.memorizationSegmentProgressById.delete(pid);
-          }
-        }
-        this.memorizationSegmentsById.delete(id);
-      }
-    }
-    this.memorizationPassagesById.delete(passageId);
-    return true;
-  }
-
-  persistPassageVocabulary({ passageId, items = [] }) {
-    const now = new Date().toISOString();
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (!passage) {
-      throw new Error('passage_not_found');
-    }
-
-    this.#deletePassageVocabularyLinks(passageId);
-
-    const persisted = [];
-    const seen = new Set();
-    const requiresReview = passage.owner_type !== 'user';
-    for (const item of items) {
-      const segment = this.memorizationSegmentsById.get(item.segment_id);
-      if (!segment || segment.passage_id !== passageId) {
-        continue;
-      }
-      const normalized = normalizeTerm(item.term);
-      if (!normalized) {
-        continue;
-      }
-      const dedupeKey = `${item.segment_id}:${item.language}:${normalized}`;
-      if (seen.has(dedupeKey)) {
-        continue;
-      }
-      seen.add(dedupeKey);
-
-      let term = [...this.termsById.values()].find(
-        (entry) => entry.language === item.language && entry.normalized_term === normalized
-      );
-      if (!term) {
-        term = {
-          id: createId('term'),
-          language: item.language,
-          display_term: item.term,
-          normalized_term: normalized,
-          lemma: null,
-          created_at: now
-        };
-        this.termsById.set(term.id, term);
-      }
-
-      const sense = {
-        id: createId('sense'),
-        term_id: term.id,
-        part_of_speech: item.part_of_speech ?? null,
-        meaning_vi: item.meaning_vi,
-        short_definition: item.short_definition ?? null,
-        pronunciation: item.vietnamese_pronunciation,
-        ipa: item.ipa ?? null,
-        pinyin: item.pinyin ?? null,
-        level_scale: item.level_scale ?? 'cefr',
-        level: item.level ?? item.difficulty ?? 'A1',
-        quality_score: Number(item.quality_score ?? item.confidence ?? 0.5),
-        status: requiresReview ? 'pending_review' : 'approved',
-        created_at: now,
-        updated_at: now
-      };
-      this.wordSensesById.set(sense.id, sense);
-
-      if (!requiresReview) {
-        this.insertWord({
-          term: item.term,
-          language: item.language,
-          meaning_vi: item.meaning_vi ?? '',
-          part_of_speech: item.part_of_speech ?? null,
-          ipa: item.ipa ?? '',
-          vietnamese_pronunciation: item.vietnamese_pronunciation ?? '',
-          example: item.example ?? segment.text,
-          example_vi: '',
-          difficulty: item.level ?? item.difficulty ?? 'A1',
-          topics: ['memorization'],
-          generation_source: 'memorization_passage_vocabulary'
-        });
-      }
-
-      const segmentTerm = {
-        id: createId('segment_term'),
-        passage_id: passageId,
-        segment_id: item.segment_id,
-        term_id: term.id,
-        word_sense_id: sense.id,
-        surface_text: item.term,
-        sentence_context: item.example ?? segment.text,
-        frequency: Number(item.frequency ?? 1),
-        extraction_confidence: Number(item.confidence ?? 0.5),
-        classification: item.classification ?? null,
-        suggestion_type: normalizeSuggestionType(item.suggestion_type, item.term),
-        created_at: now
-      };
-      this.memorizationSegmentTermsById.set(segmentTerm.id, segmentTerm);
-
-      const reviewItem = {
-        id: createId('review_item'),
-        word_sense_id: sense.id,
-        article_id: null,
-        status: requiresReview ? 'pending' : 'approved',
-        reviewer_user_id: null,
-        review_note: null,
-        reviewed_at: requiresReview ? null : now,
-        created_at: now,
-        updated_at: now
-      };
-      this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
-      persisted.push({ term, sense, segmentTerm, reviewItem });
-    }
-
-    return { count: persisted.length, items: persisted };
-  }
-
-  // ─── Memorization Segments ──────────────────────────────────────────
-
-  createSegments({ passageId, segments }) {
-    const now = new Date().toISOString();
-    const created = [];
-    for (const seg of segments) {
-      const segment = {
-        id: createId('segment'),
-        passage_id: passageId,
-        position: seg.position,
-        text: seg.text,
-        word_count: seg.text.split(/\s+/).length,
-        ipa_text: null,
-        translation_text: null,
-        translation_language: null,
-        viet_reading_text: null,
-        created_at: now
-      };
-      this.memorizationSegmentsById.set(segment.id, segment);
-      created.push(segment);
-    }
-    // Update passage segment_count
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (passage) {
-      passage.segment_count = created.length;
-      passage.updated_at = now;
-    }
-    return created;
-  }
-
-  getSegmentsByPassage({ passageId }) {
-    return [...this.memorizationSegmentsById.values()]
-      .filter((s) => s.passage_id === passageId)
-      .sort((a, b) => a.position - b.position);
-  }
-
-  updateSegment({ segmentId, text, position }) {
-    const segment = this.memorizationSegmentsById.get(segmentId);
-    if (!segment) return null;
-    if (text !== undefined) {
-      segment.text = text;
-      segment.word_count = text.split(/\s+/).length;
-    }
-    if (position !== undefined) {
-      segment.position = position;
-    }
-    return segment;
-  }
-
-  splitSegment({ segmentId, splitAt }) {
-    const segment = this.memorizationSegmentsById.get(segmentId);
-    if (!segment) return null;
-    const index = Number(splitAt);
-    if (!Number.isInteger(index) || index <= 0 || index >= segment.text.length) {
-      return null;
-    }
-
-    const leftText = segment.text.slice(0, index).trim();
-    const rightText = segment.text.slice(index).trim();
-    if (!leftText || !rightText) {
-      return null;
-    }
-
-    const now = new Date().toISOString();
-    const originalPosition = segment.position;
-    for (const other of this.memorizationSegmentsById.values()) {
-      if (other.passage_id === segment.passage_id && other.position > originalPosition) {
-        other.position += 1;
-      }
-    }
-
-    segment.text = leftText;
-    segment.word_count = countWords(leftText);
-    const newSegment = {
-      id: createId('segment'),
-      passage_id: segment.passage_id,
-      position: originalPosition + 1,
-      text: rightText,
-      word_count: countWords(rightText),
-      created_at: now
-    };
-    this.memorizationSegmentsById.set(newSegment.id, newSegment);
-    this.#refreshPassageSegmentCount(segment.passage_id);
-    return this.getSegmentsByPassage({ passageId: segment.passage_id });
-  }
-
-  mergeSegments({ segmentId, nextSegmentId }) {
-    const segment = this.memorizationSegmentsById.get(segmentId);
-    const next = this.memorizationSegmentsById.get(nextSegmentId);
-    if (!segment || !next || segment.passage_id !== next.passage_id) {
-      return null;
-    }
-    if (next.position !== segment.position + 1) {
-      return null;
-    }
-
-    segment.text = `${segment.text.trim()} ${next.text.trim()}`.trim();
-    segment.word_count = countWords(segment.text);
-    this.memorizationSegmentsById.delete(next.id);
-    for (const progress of this.memorizationSegmentProgressById.values()) {
-      if (progress.segment_id === next.id) {
-        progress.segment_id = segment.id;
-      }
-    }
-    for (const link of this.memorizationSegmentTermsById.values()) {
-      if (link.segment_id === next.id) {
-        link.segment_id = segment.id;
-      }
-    }
-    for (const other of this.memorizationSegmentsById.values()) {
-      if (other.passage_id === segment.passage_id && other.position > next.position) {
-        other.position -= 1;
-      }
-    }
-    this.#refreshPassageSegmentCount(segment.passage_id);
-    return this.getSegmentsByPassage({ passageId: segment.passage_id });
-  }
-
-  deleteSegmentsByPassage({ passageId }) {
-    this.#deletePassageVocabularyLinks(passageId);
-    for (const [id, seg] of this.memorizationSegmentsById) {
-      if (seg.passage_id === passageId) {
-        // Delete progress for this segment
-        for (const [pid, prog] of this.memorizationSegmentProgressById) {
-          if (prog.segment_id === id) {
-            this.memorizationSegmentProgressById.delete(pid);
-          }
-        }
-        this.memorizationSegmentsById.delete(id);
-      }
-    }
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (passage) {
-      passage.segment_count = 0;
-      passage.updated_at = new Date().toISOString();
-    }
-  }
-
-  #refreshPassageSegmentCount(passageId) {
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (passage) {
-      passage.segment_count = this.getSegmentsByPassage({ passageId }).length;
-      passage.updated_at = new Date().toISOString();
-    }
-  }
-
-  #deletePassageVocabularyLinks(passageId) {
-    const oldSenseIds = [];
-    for (const [id, link] of this.memorizationSegmentTermsById) {
-      if (link.passage_id === passageId) {
-        if (link.word_sense_id) oldSenseIds.push(link.word_sense_id);
-        this.memorizationSegmentTermsById.delete(id);
-      }
-    }
-    if (oldSenseIds.length === 0) {
-      return;
-    }
-    const oldSenseIdSet = new Set(oldSenseIds);
-    for (const [id, item] of this.vocabularyReviewItemsById) {
-      if (oldSenseIdSet.has(item.word_sense_id)) {
-        this.vocabularyReviewItemsById.delete(id);
-      }
-    }
-    for (const id of oldSenseIdSet) {
-      this.wordSensesById.delete(id);
-    }
-  }
-
-  // ─── Memorization Segment Progress ──────────────────────────────────
-
-  upsertSegmentProgress({ userId, segmentId, status, reviewCount, easeFactor, lastReviewedAt, nextReviewAt }) {
-    // Find existing by user+segment
-    const existing = [...this.memorizationSegmentProgressById.values()].find(
-      (p) => p.user_id === userId && p.segment_id === segmentId
-    );
-    const now = new Date().toISOString();
-    if (existing) {
-      if (status !== undefined) existing.status = status;
-      if (reviewCount !== undefined) existing.review_count = reviewCount;
-      if (easeFactor !== undefined) existing.ease_factor = easeFactor;
-      if (lastReviewedAt !== undefined) existing.last_reviewed_at = lastReviewedAt;
-      if (nextReviewAt !== undefined) existing.next_review_at = nextReviewAt;
-      existing.updated_at = now;
-      return existing;
-    }
-    const progress = {
-      id: createId('segprog'),
-      user_id: userId,
-      segment_id: segmentId,
-      status: status ?? 'new',
-      review_count: reviewCount ?? 0,
-      ease_factor: easeFactor ?? 2.5,
-      last_reviewed_at: lastReviewedAt ?? null,
-      next_review_at: nextReviewAt ?? null,
-      created_at: now,
-      updated_at: now
-    };
-    this.memorizationSegmentProgressById.set(progress.id, progress);
-    return progress;
-  }
-
-  getSegmentProgress({ userId, passageId }) {
-    const segmentIds = new Set(
-      this.getSegmentsByPassage({ passageId }).map((s) => s.id)
-    );
-    return [...this.memorizationSegmentProgressById.values()].filter(
-      (p) => p.user_id === userId && segmentIds.has(p.segment_id)
-    );
-  }
-
-  getPassageProgress({ userId, passageId }) {
-    const segments = this.getSegmentsByPassage({ passageId });
-    if (segments.length === 0) return { total: 0, mastered: 0, reviewing: 0, learning: 0, newCount: 0, percentage: 0 };
-    const progress = this.getSegmentProgress({ userId, passageId });
-    const progressBySegment = new Map(progress.map((p) => [p.segment_id, p]));
-    let mastered = 0, reviewing = 0, learning = 0, newCount = 0;
-    for (const seg of segments) {
-      const p = progressBySegment.get(seg.id);
-      if (!p || p.status === 'new') newCount++;
-      else if (p.status === 'mastered') mastered++;
-      else if (p.status === 'review') reviewing++;
-      else learning++;
-    }
-    const percentage = Math.round(((mastered + reviewing) / segments.length) * 100);
-    return { total: segments.length, mastered, reviewing, learning, newCount, percentage };
-  }
-
-  claimNextPendingPassage() {
-    for (const passage of this.memorizationPassagesById.values()) {
-      if (passage.status === 'pending_segmentation') {
-        passage.status = 'segmenting';
-        passage.updated_at = new Date().toISOString();
-        return passage;
-      }
-    }
-    return null;
-  }
-
-  updateSegmentEnrichment({ segmentId, ipa_text, translation_text, translation_language, viet_reading_text }) {
-    const segment = this.memorizationSegmentsById.get(segmentId);
-    if (!segment) return null;
-    segment.ipa_text = ipa_text ?? null;
-    segment.translation_text = translation_text ?? null;
-    segment.translation_language = translation_language ?? null;
-    segment.viet_reading_text = viet_reading_text ?? null;
-    return segment;
-  }
-
-  updatePassageEnrichmentStatus({ passageId, enrichmentStatus, enrichment_attempt_count }) {
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (!passage) return null;
-    passage.enrichment_status = enrichmentStatus;
-    if (enrichment_attempt_count !== undefined) {
-      passage.enrichment_attempt_count = enrichment_attempt_count;
-    }
-    passage.updated_at = new Date().toISOString();
-    return passage;
-  }
-
-  claimNextPendingEnrichment() {
-    for (const passage of this.memorizationPassagesById.values()) {
-      if (passage.enrichment_status === 'pending') {
-        passage.enrichment_status = 'enriching';
-        passage.updated_at = new Date().toISOString();
-        return passage;
-      }
-    }
-    return null;
-  }
-
-  retryPassage({ passageId }) {
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (!passage) return { error: 'not_found' };
-    if (passage.status !== 'failed') return { error: 'passage_not_failed' };
-    passage.status = 'pending_segmentation';
-    passage.processing_error = null;
-    passage.attempt_count = 0;
-    passage.updated_at = new Date().toISOString();
-    return { passage };
-  }
-
-  retryPassageEnrichment({ passageId }) {
-    const passage = this.memorizationPassagesById.get(passageId);
-    if (!passage) return { error: 'not_found' };
-    if (passage.enrichment_status !== 'failed') return { error: 'enrichment_not_failed' };
-    const segmentCount = [...this.memorizationSegmentsById.values()].filter(
-      (s) => s.passage_id === passageId
-    ).length;
-    if (segmentCount === 0) return { error: 'passage_has_no_segments' };
-    passage.enrichment_status = 'pending';
-    passage.enrichment_attempt_count = 0;
-    passage.updated_at = new Date().toISOString();
-    return { passage };
-  }
 }
 
-export function submittedWordFailureReason(error) {
-  const message = error?.message ?? error;
-  return String(message || 'generation_failed');
-}
-
-function bCompareCreated(left, right) {
-  return right.created_at.localeCompare(left.created_at);
-}
-
-export function resolveEventKey(event) {
-  if (event?.event_id && typeof event.event_id === 'string') {
-    return event.event_id;
-  }
-  if (event?.client_event_id && typeof event.client_event_id === 'string') {
-    return event.client_event_id;
-  }
-  return null;
-}
-
-export function compareEventsForProjection(left, right) {
-  const occurred = String(left.occurred_at ?? '').localeCompare(String(right.occurred_at ?? ''));
-  if (occurred !== 0) {
-    return occurred;
-  }
-  const received = String(left.received_at ?? '').localeCompare(String(right.received_at ?? ''));
-  if (received !== 0) {
-    return received;
-  }
-  return resolveEventKey(left)?.localeCompare(resolveEventKey(right) ?? '') ?? -1;
-}
-
-export function isSpeakingEvent(event) {
-  return SPEAKING_EVENT_TYPES.includes(event?.event_type);
-}
-
-export function isUnknownSpeakingEvent(event) {
-  return typeof event?.event_type === 'string' && event.event_type.startsWith('speaking_') && !isSpeakingEvent(event);
-}
-
-/**
- * Shared event-routing loop used by both WordStore and PostgresWordStore.
- *
- * @param {object} opts
- * @param {Array}    opts.events
- * @param {Function} opts.recordSpeakingEvent - async (event) => { idempotent: bool }
- * @param {Function} opts.recordStudyEvent    - async (event) => { idempotent: bool, proficiency }
- * @param {*}        opts.initialProficiency
- * @returns {Promise<{ accepted, duplicates, rejected, latestProficiency }>}
- */
-export async function routeStudyEvents({ events, recordSpeakingEvent, recordStudyEvent, initialProficiency }) {
-  const accepted = [];
-  const duplicates = [];
-  const rejected = [];
-  let latestProficiency = initialProficiency;
-
-  const orderedEvents = [...events].sort(compareEventsForProjection);
-
-  for (const event of orderedEvents) {
-    const eventKey = resolveEventKey(event);
-    if (isSpeakingEvent(event)) {
-      if (!eventKey || !event.occurred_at) {
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: 'missing_required_field'
-        });
-        continue;
-      }
-      try {
-        const result = await recordSpeakingEvent(event);
-        if (result.idempotent) {
-          duplicates.push(eventKey);
-        } else {
-          accepted.push(eventKey);
-        }
-      } catch (error) {
-        if (!isEventDataError(error)) {
-          throw error;
-        }
-        rejected.push({
-          client_event_id: event.client_event_id ?? null,
-          event_id: event.event_id ?? null,
-          reason: error.message === 'forbidden_audio_field' ? 'forbidden_audio_field' : 'invalid_speaking_event'
-        });
-      }
-      continue;
-    }
-    if (isUnknownSpeakingEvent(event)) {
-      rejected.push({
-        client_event_id: event.client_event_id ?? null,
-        event_id: event.event_id ?? null,
-        reason: 'invalid_speaking_event_type'
-      });
-      continue;
-    }
-    if (!eventKey || !event.rating || !event.occurred_at) {
-      rejected.push({
-        client_event_id: event.client_event_id ?? null,
-        event_id: event.event_id ?? null,
-        reason: 'missing_required_field'
-      });
-      continue;
-    }
-    try {
-      const result = await recordStudyEvent(event);
-      latestProficiency = result.proficiency;
-      if (result.idempotent) {
-        duplicates.push(eventKey);
-      } else {
-        accepted.push(eventKey);
-      }
-    } catch (error) {
-      if (!isEventDataError(error)) {
-        throw error;
-      }
-      rejected.push({
-        client_event_id: event.client_event_id ?? null,
-        event_id: event.event_id ?? null,
-        reason: error.name === 'InvalidStudyRatingError' ? 'invalid_rating' : 'invalid_event'
-      });
-    }
-  }
-
-  return { accepted, duplicates, rejected, latestProficiency };
-}
-
-const EVENT_VALIDATION_MESSAGES = new Set([
-  'missing_event_id',
-  'missing_required_field',
-  'invalid_speaking_event',
-  'invalid_speaking_event_type',
-  'invalid_self_rating',
-  'forbidden_audio_field'
-]);
-
-// Only problems with the submitted event become `rejected_events`, which
-// clients treat as permanent. Storage failures (connection loss, schema drift,
-// constraint mismatches) propagate as 5xx so the client keeps the event queued
-// and retries after the server is fixed.
-export function isEventDataError(error) {
-  if (error?.name === 'InvalidStudyRatingError' || EVENT_VALIDATION_MESSAGES.has(error?.message)) {
-    return true;
-  }
-  const code = typeof error?.code === 'string' ? error.code : '';
-  // 22xxx: invalid input value (e.g. malformed timestamp); 23503: unknown referenced row.
-  return code.startsWith('22') || code === '23503';
-}
-
-export function normalizeSpeakingEvent({ deviceId, event, language = 'en', userId = null, strict = false }) {
-  if (!isSpeakingEvent(event)) {
-    throw new Error('invalid_speaking_event_type');
-  }
-  if (containsForbiddenAudioField(event)) {
-    throw new Error('forbidden_audio_field');
-  }
-  const speaking = event.speaking ?? {};
-  const attemptId = normalizeOptionalText(speaking.attempt_id ?? event.attempt_id) ?? null;
-  if ((strict && !attemptId) || !event.occurred_at) {
-    throw new Error('missing_required_field');
-  }
-  const selfRating = normalizeOptionalText(speaking.self_rating ?? event.self_rating);
-  if (selfRating && !SPEAKING_SELF_RATINGS.includes(selfRating)) {
-    throw new Error('invalid_self_rating');
-  }
-  const durationMs = normalizeOptionalInteger(speaking.duration_ms ?? event.duration_ms);
-  const retryCount = normalizeOptionalInteger(speaking.retry_count ?? event.retry_count) ?? 0;
-  if ((durationMs !== null && durationMs < 0) || retryCount < 0) {
-    throw new Error('invalid_speaking_event');
-  }
-
-  // drill_completed-specific fields
-  let promptsAttempted = null;
-  let promptsCompleted = null;
-  let totalDurationMs = null;
-  if (event.event_type === 'speaking_drill_completed') {
-    promptsAttempted = normalizeOptionalInteger(speaking.prompts_attempted ?? event.prompts_attempted);
-    promptsCompleted = normalizeOptionalInteger(speaking.prompts_completed ?? event.prompts_completed);
-    totalDurationMs = normalizeOptionalInteger(speaking.total_duration_ms ?? event.total_duration_ms);
-    if (promptsAttempted === null || totalDurationMs === null) {
-      throw new Error('missing_required_field');
-    }
-    if (promptsAttempted < 0 || totalDurationMs < 0) {
-      throw new Error('invalid_speaking_event');
-    }
-  }
-
-  let promptsCount = null;
-  if (event.event_type === 'loop_completed') {
-    promptsCount = normalizeOptionalInteger(speaking.prompts_count ?? event.prompts_count);
-    if (durationMs === null || promptsCount === null) {
-      throw new Error('missing_required_field');
-    }
-    if (durationMs < 0 || promptsCount < 0) {
-      throw new Error('invalid_speaking_event');
-    }
-  }
-
-  return {
-    device_id: deviceId,
-    user_id: userId,
-    event_type: event.event_type,
-    attempt_id: attemptId,
-    prompt_id: normalizeOptionalText(speaking.prompt_id ?? event.prompt_id),
-    word_sense_id: normalizeOptionalText(speaking.word_sense_id ?? event.word_sense_id),
-    server_word_id: normalizeOptionalText(speaking.server_word_id ?? event.server_word_id),
-    duration_ms: durationMs,
-    retry_count: retryCount,
-    prompts_attempted: promptsAttempted,
-    prompts_completed: promptsCompleted,
-    total_duration_ms: totalDurationMs,
-    prompts_count: promptsCount,
-    self_rating: selfRating,
-    language: normalizeOptionalText(event.language) ?? language,
-    occurred_at: event.occurred_at
-  };
-}
+mixinMethods(WordStore, MemorySpeakingMethods, MemoryGameMethods, MemoryExamMethods, MemoryShadowingMethods, MemoryMemorizationMethods);
 
 function buildPipelineHealthSection({ pendingCount, failedCount, processedAtValues }) {
   const validProcessedAtValues = processedAtValues.filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)));
@@ -2857,225 +1425,4 @@ function buildPipelineHealthSection({ pendingCount, failedCount, processedAtValu
     failed_count: failedCount,
     last_processed_at: validProcessedAtValues[0] ?? null
   };
-}
-
-export function toApiSpeakingPrompt(prompt) {
-  if (!prompt) {
-    return null;
-  }
-  return {
-    id: prompt.id,
-    word_sense_id: prompt.word_sense_id ?? null,
-    target_text: prompt.target_text,
-    vi_hint: prompt.vi_hint,
-    target_phrase: prompt.target_phrase,
-    pronunciation_tip_vi: prompt.pronunciation_tip_vi,
-    common_mistake_vi: prompt.common_mistake_vi,
-    difficulty: prompt.difficulty,
-    topic: prompt.topic
-  };
-}
-
-export function toApiWorkplaceSentence(sentence) {
-  return {
-    sentence_id: sentence.id,
-    text: sentence.text,
-    language: sentence.language,
-    meaning_vi: sentence.meaning_vi,
-    topic: sentence.topic ?? null,
-    source_article_id: sentence.source_article_id ?? null,
-    source_title: sentence.source_title ?? null,
-    generation_source: sentence.generation_source ?? 'article_workplace_sentence',
-    created_at: sentence.created_at
-  };
-}
-
-export function toApiWord(word) {
-  const result = {
-    server_word_id: word.id,
-    term: word.term,
-    language: word.language,
-    meaning_vi: word.meaning_vi,
-    part_of_speech: word.part_of_speech,
-    ipa: word.ipa,
-    vietnamese_pronunciation: word.vietnamese_pronunciation,
-    example: word.example,
-    example_vi: word.example_vi,
-    difficulty: word.difficulty,
-    topics: word.topics,
-    entry_type: word.entry_type ?? 'word',
-    blank_word: word.blank_word ?? null,
-    explanation: word.explanation ?? '',
-    created_at: word.created_at
-  };
-  if (word.speaking_prompt) {
-    result.speaking_prompt = toApiSpeakingPrompt(word.speaking_prompt);
-  }
-  return result;
-}
-
-function buildSpeakingSummary({ deviceId, userId = null, language, weekStart, events, firstRecordingAt = null }) {
-  const selfRatingCounts = { clear: 0, hesitated: 0, could_not_say: 0 };
-  let spokenSentenceCount = 0;
-  let retryCount = 0;
-  let approximateDurationMs = 0;
-  let latestActivityAt = null;
-  let drillSessionsCompleted = 0;
-  let loopCompletionCount = 0;
-  for (const event of events) {
-    if (event.event_type === 'speaking_recorded') {
-      spokenSentenceCount += 1;
-      approximateDurationMs += Number(event.duration_ms ?? 0);
-    }
-    if (event.event_type === 'speaking_retried') {
-      retryCount += 1;
-    }
-    if (event.event_type === 'speaking_drill_completed') {
-      drillSessionsCompleted += 1;
-    }
-    if (event.event_type === 'loop_completed') {
-      loopCompletionCount += 1;
-    }
-    if (event.self_rating && selfRatingCounts[event.self_rating] !== undefined) {
-      selfRatingCounts[event.self_rating] += 1;
-    }
-    if (!latestActivityAt || event.occurred_at > latestActivityAt) {
-      latestActivityAt = event.occurred_at;
-    }
-  }
-  const retryRate = spokenSentenceCount > 0 ? retryCount / spokenSentenceCount : 0;
-  return {
-    device_id: deviceId,
-    user_id: userId,
-    language,
-    week_start: weekStart.slice(0, 10),
-    spoken_sentence_count: spokenSentenceCount,
-    recording_count: spokenSentenceCount,
-    retry_count: retryCount,
-    retry_rate: retryRate,
-    drill_sessions_completed: drillSessionsCompleted,
-    loop_completion_count: loopCompletionCount,
-    approximate_duration_ms: approximateDurationMs,
-    self_rating_counts: selfRatingCounts,
-    first_recording_at: firstRecordingAt ?? null,
-    latest_activity_at: latestActivityAt
-  };
-}
-
-function containsForbiddenAudioField(value) {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  for (const [key, nested] of Object.entries(value)) {
-    const normalized = key.toLowerCase();
-    if (
-      [
-        'audio',
-        'audio_bytes',
-        'audio_base64',
-        'audio_blob',
-        'local_audio_path',
-        'local_file_path',
-        'file_path'
-      ].includes(normalized)
-    ) {
-      return true;
-    }
-    if (typeof nested === 'object' && containsForbiddenAudioField(nested)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function normalizeOptionalText(value) {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  const text = String(value).trim();
-  return text ? text : null;
-}
-
-function normalizeOptionalInteger(value) {
-  if (value === undefined || value === null || value === '') {
-    return null;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-export function isPromptMissingRequiredFields(prompt) {
-  if (!prompt) {
-    return true;
-  }
-  const text = typeof prompt.target_text === 'string' ? prompt.target_text.trim() : '';
-  const hint = typeof prompt.vi_hint === 'string' ? prompt.vi_hint.trim() : '';
-  return !text || !hint;
-}
-
-export function normalizeSpeakingPromptInput(input) {
-  return {
-    id: input.id,
-    word_sense_id: input.word_sense_id ?? null,
-    article_term_id: input.article_term_id ?? null,
-    target_text: input.target_text ?? null,
-    vi_hint: input.vi_hint ?? null,
-    target_phrase: input.target_phrase ?? null,
-    pronunciation_tip_vi: input.pronunciation_tip_vi ?? null,
-    common_mistake_vi: input.common_mistake_vi ?? null,
-    difficulty: input.difficulty ?? null,
-    topic: input.topic ?? null,
-    status: input.status ?? 'pending_review',
-    reviewer_user_id: input.reviewer_user_id ?? null,
-    reviewed_at: input.reviewed_at ?? null,
-    created_at: input.created_at,
-    updated_at: input.updated_at
-  };
-}
-
-// ─── Exam helpers ───────────────────────────────────────────────────────────
-
-const DIFFICULTY_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'HSK1', 'HSK2', 'HSK3', 'HSK4', 'HSK5', 'HSK6', 'HSK7'];
-
-export function selectDistractors({ source, pool, count = 3 }) {
-  const srcIdx = DIFFICULTY_ORDER.indexOf(source.difficulty ?? '');
-  // Try same difficulty ±1 first
-  const nearPool =
-    srcIdx >= 0
-      ? pool.filter((w) => {
-          const idx = DIFFICULTY_ORDER.indexOf(w.difficulty ?? '');
-          return idx >= 0 && Math.abs(idx - srcIdx) <= 1;
-        })
-      : [];
-  const candidates = nearPool.length >= count ? nearPool : pool;
-  // Shuffle and take `count`
-  const shuffled = shuffleArray([...candidates]);
-  return shuffled.slice(0, count);
-}
-
-export function shuffleArray(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-export function shuffleChoices(choices) {
-  const indexed = choices.map((c, i) => ({ c, i }));
-  const shuffled = shuffleArray(indexed);
-  const correctIndex = shuffled.findIndex((item) => item.i === 0); // original index 0 = correct
-  return { choices: shuffled.map((item) => item.c), correctIndex };
-}
-
-function countWords(text) {
-  return String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
-}
-
-function compareShadowingEntries(left, right) {
-  if (left.entry_type !== right.entry_type) {
-    return left.entry_type === 'curated' ? -1 : 1;
-  }
-  return right.updated_at.localeCompare(left.updated_at);
 }

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Expat8 mark</title>
+  <desc id="desc">Layered open pages with a mint spark on a royal-indigo field.</desc>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B25A9"/>
+      <stop offset="0.52" stop-color="#3028B8"/>
+      <stop offset="1" stop-color="#1F1B9B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="38%" r="60%">
+      <stop offset="0" stop-color="#5146E5" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#5146E5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="url(#tile)"/>
+  <rect width="128" height="128" rx="30" fill="url(#glow)"/>
+  <g fill="#D9D8FF">
+    <path d="M15 65c18-7 34-3 49 9v38c-15-12-31-15-49-9V65Z"/>
+    <path d="M113 65c-18-7-34-3-49 9v38c15-12 31-15 49-9V65Z"/>
+  </g>
+  <g fill="#F4F6FC">
+    <path d="M21 50c16-6 30-2 43 9v40c-13-11-27-15-43-9V50Z"/>
+    <path d="M107 50c-16-6-30-2-43 9v40c13-11 27-15 43-9V50Z"/>
+  </g>
+  <path d="M64 59v40" stroke="#C8C7F4" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M64 13c3 13 7 18 20 22-13 4-17 9-20 22-3-13-7-18-20-22 13-4 17-9 20-22Z" fill="#12CBA9"/>
+</svg>

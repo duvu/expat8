@@ -77,8 +77,8 @@ ShadowingVideo _makeVideo({
     sourceUrl: 'https://www.youtube.com/watch?v=abc123',
     title: title,
     segmentCount: segmentCount,
-    playbackDefaults:
-        const ShadowingPlaybackDefaults(initialPlaybackRate: 1.0, seekBackMs: 3000),
+    playbackDefaults: const ShadowingPlaybackDefaults(
+        initialPlaybackRate: 1.0, seekBackMs: 3000),
     createdAt: DateTime(2024),
     updatedAt: DateTime(2024),
     segments: segments,
@@ -183,7 +183,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('No transcript available for this video. Please try another.'),
+        find.text(
+            'No transcript available for this video. Please try another.'),
         findsOneWidget,
       );
     });
@@ -216,8 +217,7 @@ void main() {
     testWidgets('Video Shadowing tile hidden when onShadowing is null',
         (tester) async {
       await tester.pumpWidget(_buildDrawer());
-      final scaffoldState =
-          tester.state<ScaffoldState>(find.byType(Scaffold));
+      final scaffoldState = tester.state<ScaffoldState>(find.byType(Scaffold));
       scaffoldState.openDrawer();
       await tester.pumpAndSettle();
 
@@ -227,8 +227,7 @@ void main() {
     testWidgets('Video Shadowing tile visible when onShadowing provided',
         (tester) async {
       await tester.pumpWidget(_buildDrawer(onShadowing: () {}));
-      final scaffoldState =
-          tester.state<ScaffoldState>(find.byType(Scaffold));
+      final scaffoldState = tester.state<ScaffoldState>(find.byType(Scaffold));
       scaffoldState.openDrawer();
       await tester.pumpAndSettle();
 

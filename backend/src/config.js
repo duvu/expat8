@@ -6,6 +6,7 @@ export function loadConfig(env = process.env) {
     liteLLMBaseUrl: env.LITELLM_BASE_URL,
     liteLLMApiKey: env.LITELLM_API_KEY ?? '',
     liteLLMModel: env.LITELLM_MODEL ?? 'gpt-4o-mini',
+    liteLLMTimeoutMs: Number.parseInt(env.LITELLM_TIMEOUT_MS ?? '120000', 10),
     defaultSourceLanguage: env.DEFAULT_SOURCE_LANGUAGE ?? 'vi',
     defaultTargetLanguage: env.DEFAULT_TARGET_LANGUAGE ?? 'en',
     newWordTimeoutSeconds: Number.parseInt(env.NEW_WORD_TIMEOUT_SECONDS ?? '5', 10),
@@ -37,10 +38,31 @@ export function loadConfig(env = process.env) {
     vocabDailyGenerationHourUtc: Number.parseInt(env.VOCAB_DAILY_GENERATION_HOUR_UTC ?? '0', 10),
     vocabGenerationBatchSize: Number.parseInt(env.VOCAB_GENERATION_BATCH_SIZE ?? '100', 10),
     vocabSchedulerLockTtlSeconds: Number.parseInt(env.VOCAB_SCHEDULER_LOCK_TTL_SECONDS ?? '120', 10),
+    vocabLevelTargets: parseLevelTargets(env.VOCAB_LEVEL_TARGETS ?? 'A1:200,A2:250,B1:300,B2:300,C1:200'),
+    vocabMaxBackoffSeconds: Number.parseInt(env.VOCAB_MAX_BACKOFF_SECONDS ?? '1800', 10),
+    // OmniRoute throttling shared by every LLM caller in the process.
+    llmMinIntervalMs: Number.parseInt(env.LLM_MIN_INTERVAL_MS ?? '3000', 10),
+    llmMaxConcurrent: Number.parseInt(env.LLM_MAX_CONCURRENT ?? '1', 10),
+    llmMaxRetries: Number.parseInt(env.LLM_MAX_RETRIES ?? '4', 10),
+    llmBackoffBaseMs: Number.parseInt(env.LLM_BACKOFF_BASE_MS ?? '15000', 10),
+    llmMaxRequestsPerHour: Number.parseInt(env.LLM_MAX_REQUESTS_PER_HOUR ?? '120', 10),
+    // Requests per hour kept free for user-facing work (submitted words) before background jobs pause.
+    llmReservedRequestsPerHour: Number.parseInt(env.LLM_RESERVED_REQUESTS_PER_HOUR ?? '30', 10),
+    crawlerEnabled: parseBoolean(env.CRAWLER_ENABLED ?? 'true'),
+    crawlerIntervalMinutes: Number.parseInt(env.CRAWLER_INTERVAL_MINUTES ?? '180', 10),
+    crawlerMaxArticlesPerRun: Number.parseInt(env.CRAWLER_MAX_ARTICLES_PER_RUN ?? '3', 10),
+    crawlerMinArticleQuality: Number.parseInt(env.CRAWLER_MIN_ARTICLE_QUALITY ?? '3', 10),
+    crawlerFeeds: parseCrawlerFeeds(env.CRAWLER_FEEDS),
+    // Curated collection (speeches, biographies, history): backfill first, then one article per interval.
+    curatedEnabled: parseBoolean(env.CURATED_ENABLED ?? 'true'),
+    curatedInitialCount: Number.parseInt(env.CURATED_INITIAL_COUNT ?? '20', 10),
+    curatedBackfillIntervalMinutes: Number.parseInt(env.CURATED_BACKFILL_INTERVAL_MINUTES ?? '15', 10),
+    curatedIntervalDays: Number.parseInt(env.CURATED_INTERVAL_DAYS ?? '7', 10),
     authRateLimitRegister: Number.parseInt(env.AUTH_RATE_LIMIT_REGISTER ?? '10', 10),
     authRateLimitSignIn: Number.parseInt(env.AUTH_RATE_LIMIT_SIGN_IN ?? '20', 10),
     authRateLimitIp: Number.parseInt(env.AUTH_RATE_LIMIT_IP ?? '60', 10),
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
+    embeddedWorker: parseBoolean(env.EMBEDDED_WORKER ?? 'false'),
     migrateOnStart: parseBoolean(env.MIGRATE_ON_START ?? 'false'),
     dbPoolMax: Number.parseInt(env.DB_POOL_MAX ?? '10', 10),
     dbIdleTimeoutMs: Number.parseInt(env.DB_IDLE_TIMEOUT_MS ?? '10000', 10),
@@ -121,4 +143,36 @@ function parseTrustProxy(value) {
     return Number.parseInt(trimmed, 10);
   }
   return trimmed;
+}
+
+/** "A1:200,B1:300" -> { A1: 200, B1: 300 }; malformed entries are ignored. */
+function parseLevelTargets(raw) {
+  const targets = {};
+  for (const entry of String(raw).split(',')) {
+    const [level, count] = entry.split(':').map((part) => part.trim());
+    const parsed = Number.parseInt(count, 10);
+    if (level && Number.isFinite(parsed) && parsed >= 0) {
+      targets[level.toUpperCase()] = parsed;
+    }
+  }
+  return targets;
+}
+
+const DEFAULT_CRAWLER_FEEDS = [
+  'https://www.newsinlevels.com/feed/',
+  'https://feeds.bbci.co.uk/news/technology/rss.xml',
+  'https://feeds.npr.org/1001/rss.xml',
+  'https://www.sciencedaily.com/rss/top/science.xml',
+  'https://www.theguardian.com/world/rss'
+];
+
+/** Comma-separated feed URLs (English). Set CRAWLER_FEEDS= (empty) to disable all feeds. */
+function parseCrawlerFeeds(raw) {
+  if (raw === undefined) {
+    return DEFAULT_CRAWLER_FEEDS;
+  }
+  return String(raw)
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean);
 }

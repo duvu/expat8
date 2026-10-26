@@ -23,3 +23,6 @@ openspec/
 .wolf/daemon.log
 *.log
 docs/*_logs_*.txt
+
+# Cloudflare API token (local only)
+cloudflare.key

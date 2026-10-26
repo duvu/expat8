@@ -1,16 +1,20 @@
 import 'dart:math';
 
+import '../../data/local_database.dart';
 import '../../api/backend_api_client.dart' show GameLeaderboard;
 import '../../data/word_repository.dart';
 import '../../logging/logger.dart';
+import '../../models/study_level.dart';
 import '../../models/vocabulary_word.dart';
 import '../common/game_audio.dart';
 import '../common/game_score_store.dart';
 import '../common/game_settings.dart';
+import '../common/game_story.dart';
 import '../game_storage.dart';
 import 'word_blaster_learning.dart';
 import 'word_blaster_mode.dart';
 import 'word_blaster_stats.dart';
+import 'word_blaster_theme.dart';
 
 /// Everything Word Blaster screens need, built once by the games hub.
 class WordBlasterContext {
@@ -58,10 +62,21 @@ class WordBlasterContext {
   late final GameScoreStore scores =
       GameScoreStore(storage, gameId: 'word_blaster');
   late final WordBlasterStatsStore stats = WordBlasterStatsStore(storage);
+  late final GameStoryProgress story = GameStoryProgress(storage);
+
+  /// Drives one round through the story chapters in [theme].
+  GameStoryDriver storyDriver(WordBlasterTheme theme) =>
+      GameStoryDriver(audio: audio, theme: theme, progress: story);
   late final WordBlasterLearning learning =
       WordBlasterLearning(repository: repository, logger: logger);
 
   static const _lastModeKey = 'games.word_blaster.last_mode';
+  static const _lastLevelKey = 'games.word_blaster.target_level';
+  static const _themeKey = 'games.word_blaster.theme';
+
+  /// Level labels the player can pick to shoot (CEFR or HSK for [language]).
+  List<String> get levelLabels =>
+      studyLevelsForScale(language == 'zh' ? 'hsk' : 'cefr');
 
   Future<List<VocabularyWord>> loadWords() =>
       _loadWords?.call() ?? repository.database.wordsForLanguage(language);
@@ -81,6 +96,23 @@ class WordBlasterContext {
     final name = await storage.read(_lastModeKey);
     return name == null ? null : WordBlasterMode.fromName(name);
   }
+
+  /// Level index the player chose to shoot; null = automatic (adaptive mix).
+  Future<int?> targetLevel() async {
+    final index = int.tryParse(await storage.read(_lastLevelKey) ?? '');
+    return index != null && index >= 0 && index < levelLabels.length
+        ? index
+        : null;
+  }
+
+  Future<WordBlasterTheme> theme() async =>
+      WordBlasterTheme.fromName(await storage.read(_themeKey));
+
+  Future<void> saveTheme(WordBlasterTheme theme) =>
+      storage.write(_themeKey, theme.name);
+
+  Future<void> saveTargetLevel(int? index) =>
+      storage.write(_lastLevelKey, index?.toString() ?? 'auto');
 
   Future<void> saveLastMode(WordBlasterMode mode) =>
       storage.write(_lastModeKey, mode.name);

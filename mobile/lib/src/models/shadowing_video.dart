@@ -152,9 +152,8 @@ class ShadowingVideo {
           clearChannelTitle ? null : channelTitle ?? this.channelTitle,
       thumbnailUrl:
           clearThumbnailUrl ? null : thumbnailUrl ?? this.thumbnailUrl,
-      durationSeconds: clearDurationSeconds
-          ? null
-          : durationSeconds ?? this.durationSeconds,
+      durationSeconds:
+          clearDurationSeconds ? null : durationSeconds ?? this.durationSeconds,
       transcriptLanguage: clearTranscriptLanguage
           ? null
           : transcriptLanguage ?? this.transcriptLanguage,

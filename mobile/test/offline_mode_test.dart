@@ -24,8 +24,7 @@ void main() {
   test('learning works with no backend: seed, study, rate, queue for sync',
       () async {
     final database = await LocalDatabase.open(
-      databaseName:
-          'offline_mode_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName: 'offline_mode_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     addTearDown(database.close);
     final repository =

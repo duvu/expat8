@@ -614,6 +614,633 @@
       ],
       "occurrences": 1,
       "last_seen": "2026-09-28T00:00:00Z"
+    },
+    {
+      "id": "bug-039",
+      "timestamp": "2026-09-29T02:10:00Z",
+      "error_message": "deployment-guide migrate command ran through pgbouncer (transaction pooling) while migrations take a session-level pg_advisory_lock",
+      "file": "docs/deployment-guide.md",
+      "root_cause": "DATABASE_URL points at pgbouncer in transaction mode; session advisory locks are not safe there",
+      "fix": "Documented running migrate with DATABASE_URL direct to postgres:5432 (deploy.md, deployment-guide.md, troubleshooting stuck lock)",
+      "tags": [
+        "migrations",
+        "pgbouncer",
+        "advisory-lock",
+        "ops"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-29T02:10:00Z"
+    },
+    {
+      "id": "bug-040",
+      "timestamp": "2026-09-29T02:10:00Z",
+      "error_message": "backup.sh left .partial dump file when pg_dump failed",
+      "file": "scripts/ops/backup.sh",
+      "root_cause": "set -e exit without cleanup",
+      "fix": "trap ERR removes $dump.partial; explicit rm on verification failure",
+      "tags": [
+        "backup",
+        "bash",
+        "ops"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-29T02:10:00Z"
+    },
+    {
+      "id": "bug-041",
+      "timestamp": "2026-09-29T02:10:00Z",
+      "error_message": "OPEN RISK: app credential failures return 400 and mobile drops queued sync events on 400 (clock skew >300s loses unsynced study history)",
+      "file": "backend/src/app.js",
+      "root_cause": "appCredentialGuard uses badRequest(); mobile _isPermanentSyncFailure treats 400 as permanent",
+      "fix": "Not fixed yet; documented in docs/ops/README.md known risks (proposal: return 401)",
+      "tags": [
+        "auth",
+        "sync",
+        "data-loss",
+        "open"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-29T02:10:00Z"
+    },
+    {
+      "id": "bug-042",
+      "timestamp": "2026-09-29T03:40:00Z",
+      "error_message": "caddy validate: the scheme ws:// is only supported in browsers (reverse_proxy ws://mq:8883)",
+      "file": "remote:/root/deployment/server2/Caddyfile",
+      "root_cause": "Host Caddyfile replaced with new inode; single-file bind mount kept serving an older valid copy, so host copy drifted and contained invalid ws:// upstream that would break caddy on recreate",
+      "fix": "Changed to reverse_proxy mq:8883 matching running config, validated in container, wrote file in place and recreated caddy",
+      "tags": [
+        "caddy",
+        "bind-mount",
+        "vps",
+        "netmaker"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-29T03:40:00Z"
+    },
+    {
+      "id": "bug-043",
+      "timestamp": "2026-09-29T04:00:00Z",
+      "error_message": "ERR_MODULE_NOT_FOUND: Cannot find package 'bcryptjs' imported from /app/bin/cli/settings-store.mjs (omniroute reset-password.mjs)",
+      "file": "docker image diegosouzapw/omniroute:3.8.50",
+      "root_cause": "Upstream image ships bin/reset-password.mjs without bcryptjs dependency",
+      "fix": "Login with old password (container env INITIAL_PASSWORD), GET /api/auth/csrf, PATCH /api/settings {currentPassword,newPassword} with x-omniroute-csrf header",
+      "tags": [
+        "omniroute",
+        "password",
+        "vps"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-29T04:00:00Z"
+    },
+    {
+      "id": "bug-044",
+      "timestamp": "2026-09-29T06:14:26.814297+00:00",
+      "error_message": "expat8 LLM calls go to dead LiteLLM 10.113.213.1:5003 (removed); LLM fetch had no timeout; passage pipelines JSON.parse fails on ```json fenced output",
+      "file": "backend/src/litellm_client.js",
+      "root_cause": "LiteLLM replaced by OmniRoute on VPS; client lacked AbortSignal; passage pipelines skipped extractJson",
+      "fix": "LITELLM_TIMEOUT_MS + AbortSignal.timeout on all gateway fetches; extractJson exported and used in passage segmentation/enrichment; test for timeout needs a ref'd keepAlive timer since AbortSignal.timeout is unref'd",
+      "tags": [
+        "litellm",
+        "omniroute",
+        "timeout",
+        "json",
+        "worker"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-09-29T06:14:26.814297+00:00"
+    },
+    {
+      "id": "bug-045",
+      "timestamp": "2026-10-25T07:41:06.558990Z",
+      "error_message": "Level B1 user receives only A1 words; pool stuck at ~320 words",
+      "file": "backend/src/postgres_word_store.js, backend/src/vocabulary_pool_scheduler.js",
+      "root_cause": "learningCards ignored user proficiency (sorted by created_at). Scheduler always generated default level A1 with empty avoidTerms -> LLM returned the same A1 words, all duplicates, inserted 0 every minute (pool min 1000 never reached).",
+      "fix": "selectNewCardsByLevel (60% level/20% below/20% above, nearest fallback); per-level targets + avoidTerms sample + exponential backoff in scheduler; shared LlmRateLimiter; crawler feeds articles into pipeline.",
+      "tags": [
+        "proficiency",
+        "scheduler",
+        "llm",
+        "dedupe"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-25T07:41:06.558990Z"
+    },
+    {
+      "id": "bug-046",
+      "timestamp": "2026-10-25T07:41:06.558990Z",
+      "error_message": "log line had \"level\":\"B2\" instead of info",
+      "file": "backend/src/vocabulary_pool_scheduler.js",
+      "root_cause": "logger meta field named `level` overrides the log level field",
+      "fix": "renamed to cefr_level",
+      "tags": [
+        "logger"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-25T07:41:06.558990Z"
+    },
+    {
+      "id": "bug-047",
+      "timestamp": "2026-10-26T14:04:22.494366Z",
+      "error_message": "No articles visible in app although crawler/pipeline process them (39 processed, all private, owner NULL)",
+      "file": "backend/src/content_crawler.js",
+      "root_cause": "Crawler created ownerless private articles via createArticle; worker marks non-admin articles 'processed'; listArticles only matches owner_user_id so nobody could read them",
+      "fix": "Crawler uses createAdminArticle(adminUserId 'content-crawler', private) -> pending_review -> admin publish; listArticles/getArticleByIdForUser also return visibility=published AND status=published",
+      "tags": [
+        "articles",
+        "crawler",
+        "visibility",
+        "pending_review"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T14:04:22.494366Z"
+    },
+    {
+      "id": "bug-048",
+      "timestamp": "2026-10-26T15:12:27.923076+00:00",
+      "error_message": "Word Blaster stutters after playing a while",
+      "file": "mobile/lib/src/games/common/game_audio.dart",
+      "root_cause": "FlameAudio.play created+released a native AudioPlayer per sound (several per answer); session notified listeners every frame rebuilding HUD/prompt; per-frame Paint/Shader/TextPainter allocations (backgrounds, meteors, tick icon, power-up icon, particles) -> GC churn",
+      "fix": "AudioPool per sound (preloaded, disposed when leaving hub); session notifies only on UI-visible state change; meteor body and static backdrop recorded to Pictures; reused Paints; cached icon painters; dispose TextPainters/Pictures onRemove",
+      "tags": [
+        "performance",
+        "flame",
+        "audio",
+        "jank",
+        "word_blaster"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T15:12:27.923076+00:00"
+    },
+    {
+      "id": "bug-049",
+      "timestamp": "2026-10-26T15:34:12.702793+00:00",
+      "error_message": "Flaky: learning_session_controller_test 'study level override...' (a1_word vs b2_word) and order-dependent controller tests",
+      "file": "mobile/test/learning_session_controller_test.dart",
+      "root_cause": "Shown new words are marked learning asynchronously (markWordAsLearning), so returning to a level found no new word and fell back to randomNotMasteredWord; plus new-word pick became random (80/20) so newest-first expectations broke",
+      "fix": "Test expects a fresh word of the chosen level (2 words per level); WordRepository gained injectable Random + shuffleNewWords flag (tests of other flows use false); word_repository_test covers both 80% and 20% branches deterministically",
+      "tags": [
+        "flaky-test",
+        "word-selection",
+        "async"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T15:34:12.702793+00:00"
+    },
+    {
+      "id": "bug-050",
+      "timestamp": "2026-10-26T16:08:54.370138+00:00",
+      "error_message": "Games still lag after a few minutes (v1.3.8/1.4.0)",
+      "file": "mobile/lib/src/data/local_database.dart",
+      "root_cause": "pruneLogs every 5 min loaded all log rows and removed one per transaction on the UI isolate; one ObjectBox put per log line; large JSON decoded on UI isolate; 3-min sync/top-up ran mid-game",
+      "fix": "Native query+bulk remove in Store.runAsync worker; buffered logs via putManyAsync; addBatch/addWorkplaceSentenceBatch in runAsync worker; Isolate.run JSON decode for bodies >16KB; GameActivity skips periodic work during a round",
+      "tags": [
+        "performance",
+        "jank",
+        "objectbox",
+        "isolate"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:08:54.370138+00:00"
+    },
+    {
+      "id": "bug-051",
+      "timestamp": "2026-10-26T16:08:54.370138+00:00",
+      "error_message": "Two app instances could be opened",
+      "file": "mobile/android/app/src/main/AndroidManifest.xml",
+      "root_cause": "launchMode singleTop + taskAffinity=\"\" let launcher/installer 'Open' start a new task and a second Flutter engine (ObjectBox opened twice)",
+      "fix": "launchMode singleTask, default task affinity; no DB attach fallback (user rejected)",
+      "tags": [
+        "android",
+        "single-instance"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:08:54.370138+00:00"
+    },
+    {
+      "id": "bug-052",
+      "timestamp": "2026-10-26T16:08:54.370138+00:00",
+      "error_message": "ArgumentError: colors must have length 2 if colorStops is omitted (story scenes)",
+      "file": "mobile/lib/src/games/common/game_story_scene.dart",
+      "root_cause": "dart:ui Gradient with 3 colours and no stops (planet, cannon)",
+      "fix": "evenStops helper / explicit stops",
+      "tags": [
+        "flutter",
+        "gradient",
+        "crash"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:08:54.370138+00:00"
+    },
+    {
+      "id": "bug-053",
+      "timestamp": "2026-10-26T16:08:54.370138+00:00",
+      "error_message": "Resuming the app restarted the wrong music",
+      "file": "mobile/lib/src/games/common/game_audio.dart",
+      "root_cause": "resumeMusic called startMusic() with default theme/chapter",
+      "fix": "GameAudio remembers last theme/chapter",
+      "tags": [
+        "audio"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:08:54.370138+00:00"
+    },
+    {
+      "id": "bug-054",
+      "timestamp": "2026-10-26T16:39:23.957Z",
+      "error_message": "Significant refactor of ",
+      "file": "backend/src/domain/proficiency_progress.js",
+      "root_cause": "3 lines replaced/restructured",
+      "fix": "Rewrote 9→4 lines (3 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:39:23.957Z"
+    },
+    {
+      "id": "bug-055",
+      "timestamp": "2026-10-26T16:40:40.796Z",
+      "error_message": "Wrong condition in logic",
+      "file": "backend/src/domain/memorization.js",
+      "root_cause": "Condition was: if (status === 'new')",
+      "fix": "Changed to: if (!p || p.status === 'new')",
+      "tags": [
+        "auto-detected",
+        "logic-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:40:40.796Z"
+    },
+    {
+      "id": "bug-056",
+      "timestamp": "2026-10-26T16:40:57.776Z",
+      "error_message": "Significant refactor of ",
+      "file": "backend/src/word_store.js",
+      "root_cause": "11 lines replaced/restructured",
+      "fix": "Rewrote 14→4 lines (11 removed) | Also: export const SPEAKING_EVENT_TYPES = [; 'speaking_prompt_viewed', | Also: const now = new Date().toISOString();; const word = { | Also: /** Word counts keyed by normalized level (legacy ; return tallyWordLevels( | Also: const submittedTerm = String(term ?? '').trim();; const normalizedTerm = normalizeTerm(submittedTerm",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 5,
+      "last_seen": "2026-10-26T16:41:47.474Z"
+    },
+    {
+      "id": "bug-057",
+      "timestamp": "2026-10-26T16:41:16.402Z",
+      "error_message": "Wrong return value",
+      "file": "backend/src/word_store.js",
+      "root_cause": "Was returning: [...this.words.values()]",
+      "fix": "Now returns: this.#wordsInLanguage(targetLanguage)",
+      "tags": [
+        "auto-detected",
+        "return-value",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 2,
+      "last_seen": "2026-10-26T16:41:17.340Z"
+    },
+    {
+      "id": "bug-058",
+      "timestamp": "2026-10-26T16:48:40.941Z",
+      "error_message": "Wrong reference: _LevelBadge should be LevelBadge",
+      "file": "mobile/lib/src/ui/vocabulary_card.dart",
+      "root_cause": "Used \"_LevelBadge\" instead of \"LevelBadge\"",
+      "fix": "Changed _LevelBadge → LevelBadge",
+      "tags": [
+        "auto-detected",
+        "wrong-reference",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T16:48:40.941Z"
+    },
+    {
+      "id": "bug-059",
+      "timestamp": "2026-10-26T21:55:23.019Z",
+      "error_message": "Significant refactor of ",
+      "file": "backend/test/api.test.js",
+      "root_cause": "2 lines replaced/restructured",
+      "fix": "Rewrote 7→18 lines (2 removed)",
+      "tags": [
+        "auto-detected",
+        "refactor",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T21:55:23.019Z"
+    },
+    {
+      "id": "bug-060",
+      "timestamp": "2026-10-27T05:00:00Z",
+      "error_message": "App only shows 1 article although 50 are published",
+      "file": "backend/src/routes/helpers.js",
+      "root_cause": "clampLimit(raw, min, max) fell back to min (=1) when ?limit= was absent; app calls GET /v1/articles without limit. Same bug on 7 other list routes. Test only created 1 article so never caught it.",
+      "fix": "Replaced with queryLimit(raw, fallback, max): missing/invalid -> explicit per-route default, clamped to [1,max]. api.test lists 2 articles without limit.",
+      "tags": [
+        "backend",
+        "pagination",
+        "articles",
+        "limit"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T05:00:00Z"
+    },
+    {
+      "id": "bug-061",
+      "timestamp": "2026-10-26T22:00:51.227Z",
+      "error_message": "Null/undefined access in ",
+      "file": "mobile/lib/src/data/word_repository.dart",
+      "root_cause": "Property access on potentially null/undefined value",
+      "fix": "Added null safety (optional chaining or null check)",
+      "tags": [
+        "auto-detected",
+        "null-safety",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:00:51.227Z"
+    },
+    {
+      "id": "bug-062",
+      "timestamp": "2026-10-26T22:01:41.684Z",
+      "error_message": "Wrong operator: !== should be ||",
+      "file": "backend/src/domain/srs.js",
+      "root_cause": "Used \"!==\" instead of \"||\"",
+      "fix": "Changed operator !== → ||",
+      "tags": [
+        "auto-detected",
+        "operator-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:01:41.684Z"
+    },
+    {
+      "id": "bug-063",
+      "timestamp": "2026-10-26T22:04:28.147Z",
+      "error_message": "Missing error handling in unknown",
+      "file": "mobile/lib/src/engagement/engagement_controller.dart",
+      "root_cause": "Code path had no error handling — exceptions would propagate uncaught",
+      "fix": "Added try/catch block",
+      "tags": [
+        "auto-detected",
+        "error-handling",
+        "dart"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:04:28.147Z"
+    },
+    {
+      "id": "bug-064",
+      "timestamp": "2026-10-26T22:07:49.349Z",
+      "error_message": "Missing await",
+      "file": "backend/test/postgres_integration.test.js",
+      "root_cause": "Async call without await — returned Promise instead of value",
+      "fix": "Added await to async call",
+      "tags": [
+        "auto-detected",
+        "async-fix",
+        "js"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:07:49.349Z"
+    },
+    {
+      "id": "bug-065",
+      "timestamp": "2026-10-26T22:10:40.540374+00:00",
+      "error_message": "Dashboard pipeline health always 0 queue/0 failed/no p50",
+      "file": "expat8-dashboard/src/lib/analytics.ts",
+      "root_cause": "Queries used article_processing_jobs statuses 'pending'/'completed'/'failed' which the backend never writes",
+      "fix": "Use pending_processing / processed|pending_review / processing_failed|dead_lettered",
+      "tags": [
+        "dashboard",
+        "analytics",
+        "status"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:10:40.540374+00:00"
+    },
+    {
+      "id": "bug-066",
+      "timestamp": "2026-10-26T22:10:40.540374+00:00",
+      "error_message": "Ops log Download button fails (backend download URL needs signed headers)",
+      "file": "expat8-dashboard/src/app/ops/logs/[id]/download/route.ts",
+      "root_cause": "Browser linked straight to backend /v1/admin/log-archives/:id/download which requires HMAC + admin token",
+      "fix": "Added signed proxy route /ops/logs/[id]/download",
+      "tags": [
+        "dashboard",
+        "ops",
+        "auth"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:10:40.540374+00:00"
+    },
+    {
+      "id": "bug-067",
+      "timestamp": "2026-10-26T22:10:40.540374+00:00",
+      "error_message": "Exam results certificate link 404",
+      "file": "expat8-dashboard/src/app/exam/page.tsx",
+      "root_cause": "Linked to non-existent /exam/certificate/:id",
+      "fix": "Link to /api/certificate/:id proxy",
+      "tags": [
+        "dashboard",
+        "exam"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:10:40.540374+00:00"
+    },
+    {
+      "id": "bug-068",
+      "timestamp": "2026-10-26T22:10:40.540374+00:00",
+      "error_message": "Speaking prompts 'all' filter shows nothing",
+      "file": "expat8-dashboard/src/app/speaking-prompts/page.tsx",
+      "root_cause": "Empty status string passed to SQL (status = '')",
+      "fix": "Map empty to null; LEFT JOIN word_senses since word_sense_id is nullable",
+      "tags": [
+        "dashboard",
+        "speaking",
+        "filter"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:10:40.540374+00:00"
+    },
+    {
+      "id": "bug-069",
+      "timestamp": "2026-10-26T22:10:40.540374+00:00",
+      "error_message": "Dashboard server actions silently ignore backend errors",
+      "file": "expat8-dashboard/src/lib/backend.ts",
+      "root_cause": "backendFetch results never checked for response.ok",
+      "fix": "backendRequest throws BackendError; app/error.tsx renders it",
+      "tags": [
+        "dashboard",
+        "error-handling"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-26T22:10:40.540374+00:00"
+    },
+    {
+      "id": "bug-070",
+      "timestamp": "2026-10-27T07:00:00Z",
+      "error_message": "Words rated easy never came back for review (56% of ratings)",
+      "file": "mobile/lib/src/data/word_repository.dart + backend/src/domain/learning_cards.js",
+      "root_cause": "Mobile deleted easy-rated words locally; backend set next_review_at=null for easy/too_easy. Fixed-interval rules differed between mobile (3/7 days) and backend.",
+      "fix": "Shared SM-2 scheduler (backend/src/domain/srs.js + mobile/lib/src/srs/srs_scheduler.dart) pinned by contracts/srs_vectors.json; every rating schedules a review; no deletion.",
+      "tags": [
+        "srs",
+        "review",
+        "offline"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T07:00:00Z"
+    },
+    {
+      "id": "bug-071",
+      "timestamp": "2026-10-27T07:00:00Z",
+      "error_message": "Late offline study events overwrote newer word state",
+      "file": "backend/src/postgres_word_store.js",
+      "root_cause": "#upsertWordState copied the state of whichever event arrived last.",
+      "fix": "State is replayed from all of the owner's events for the word in occurred_at order (replaySrsState).",
+      "tags": [
+        "srs",
+        "sync",
+        "offline",
+        "postgres"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T07:00:00Z"
+    },
+    {
+      "id": "bug-072",
+      "timestamp": "2026-10-27T07:00:00Z",
+      "error_message": "Refetched card reset the word's learning schedule",
+      "file": "mobile/lib/src/data/local_database_words.dart",
+      "root_cause": "upsertWord rebuilt the entity from the incoming VocabularyWord (status/nextReview/srs defaults) — server re-sends due review cards.",
+      "fix": "upsertWord keeps status, lastSeen, nextReview and SRS memory of an existing word; only content updates. Regression test added.",
+      "tags": [
+        "srs",
+        "objectbox",
+        "upsert"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T07:00:00Z"
+    },
+    {
+      "id": "bug-073",
+      "timestamp": "2026-10-27T07:00:00Z",
+      "error_message": "Family device: one member's offline events uploaded under another member's account; schedules mixed",
+      "file": "mobile/lib/src/data/local_database_sync.dart",
+      "root_cause": "StudyEventEntity had no owner; sync used whoever was signed in. Local schedule was device-wide.",
+      "fix": "Events stamped with ownerUserId (queue payload owner_user_id stripped before upload); dueSyncEntries skips other owners; rebuildScheduleForOwner on sign-in/out replays the owner's events; pull from GET /v1/review/states.",
+      "tags": [
+        "multi-user",
+        "sync",
+        "srs"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T07:00:00Z"
+    },
+    {
+      "id": "bug-074",
+      "timestamp": "2026-10-27T07:00:00Z",
+      "error_message": "Level window counted events by arrival time; one offline batch could drop two levels",
+      "file": "backend/src/domain/proficiency_progress.js",
+      "root_cause": "Events of one sync batch share the same received_at millisecond.",
+      "fix": "user_proficiency.level_changed_at = occurred_at of the triggering event; miss window counts events occurring after it.",
+      "tags": [
+        "proficiency",
+        "offline"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T07:00:00Z"
+    },
+    {
+      "id": "bug-075",
+      "timestamp": "2026-10-27T08:30:00Z",
+      "error_message": "Schedule upgrade/sign-in rebuild would wipe a signed-in learner's schedule and progress counts",
+      "file": "mobile/lib/src/data/local_database_words.dart",
+      "root_cause": "Legacy events have ownerUserId null, so replaying only the current owner's events replayed nothing; rebuild also cleared learningState (progress totals).",
+      "fix": "claimUnownedEvents(userId) before every signed-in rebuild (also stamps queue payloads); rebuild resets only status/nextReview/SRS. Regression test in test/srs/family_sync_test.dart.",
+      "tags": [
+        "srs",
+        "upgrade",
+        "data-loss"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T08:30:00Z"
+    },
+    {
+      "id": "bug-076",
+      "timestamp": "2026-10-27T08:30:00Z",
+      "error_message": "FITB vs plain card re-rolled on every rebuild",
+      "file": "mobile/lib/src/ui/learning_screen.dart",
+      "root_cause": "shouldShowFitb drew a random number inside build().",
+      "fix": "Exercise chosen once in the controller when the card is shown (currentExercise); FitbCard removed.",
+      "tags": [
+        "ui",
+        "random",
+        "flutter"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T08:30:00Z"
+    },
+    {
+      "id": "bug-077",
+      "timestamp": "2026-10-27T08:30:00Z",
+      "error_message": "Review exercise could be rated twice via swipe/action bar after answering",
+      "file": "mobile/lib/src/ui/learning_screen.dart",
+      "root_cause": "Gesture surface and StudyActionBar stayed enabled during exercises.",
+      "fix": "Disabled while currentExercise != null; widget test learning_screen_review_test.dart.",
+      "tags": [
+        "ui",
+        "rating"
+      ],
+      "related_bugs": [],
+      "occurrences": 1,
+      "last_seen": "2026-10-27T08:30:00Z"
     }
   ]
 }

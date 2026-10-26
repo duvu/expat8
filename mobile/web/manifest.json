@@ -1,11 +1,11 @@
 {
-    "name": "expat8_language_app",
-    "short_name": "expat8_language_app",
+    "name": "Expat8",
+    "short_name": "Expat8",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#211B9B",
+    "theme_color": "#352ABF",
+    "description": "Learn a little. Use it everywhere.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

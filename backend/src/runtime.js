@@ -7,6 +7,7 @@ import { PostgresNonceCache } from './app_credentials.js';
 import { loadConfig } from './config.js';
 import { VocabularyGenerationService } from './generation_service.js';
 import { LiteLLMClient } from './litellm_client.js';
+import { getSharedLlmRateLimiter } from './llm_rate_limiter.js';
 import { createLogger } from './logger.js';
 import { PostgresWordStore } from './postgres_word_store.js';
 import { FileLogArchiveStore } from './log_archive_store.js';
@@ -50,11 +51,14 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
       component: 'backend'
     });
   const store = createStore({ config, logger: runtimeLogger, poolFactory });
+  const llmRateLimiter = getSharedLlmRateLimiter(config, runtimeLogger.child({ component: 'llm_rate_limiter' }));
   const liteLLMClient = new LiteLLMClient({
     baseUrl: config.liteLLMBaseUrl,
     apiKey: config.liteLLMApiKey,
     model: config.liteLLMModel,
-    logger: runtimeLogger.child({ component: 'litellm_client' })
+    timeoutMs: config.liteLLMTimeoutMs,
+    logger: runtimeLogger.child({ component: 'litellm_client' }),
+    rateLimiter: llmRateLimiter
   });
   const generationService = new VocabularyGenerationService({
     liteLLMClient,
@@ -81,6 +85,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     store,
     generationService,
     config,
+    rateLimiter: llmRateLimiter,
     logger: runtimeLogger.child({ component: 'vocabulary_scheduler' })
   });
   const shadowingVideoResolver = new YouTubeShadowingVideoResolver({

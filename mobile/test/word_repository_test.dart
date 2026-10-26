@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:expat8_language_app/src/api/backend_api_client.dart';
 import 'package:expat8_language_app/src/config.dart';
@@ -19,7 +20,8 @@ void main() {
 
   test('falls back to local new words when backend fails', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final localWord = _word('local_word');
     await database.upsertWord(localWord);
@@ -34,7 +36,8 @@ void main() {
 
   test('emits local-hit log even when backend fails', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_logging_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_logging_fallback_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final localWord = _word('local_word_log');
     await database.upsertWord(localWord);
@@ -130,6 +133,97 @@ void main() {
     expect(entries.any((entry) => entry.event == 'new_word.local.empty'), true);
   });
 
+  test('level-aware pick prefers local words nearest the level', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_level_pick_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('a1_word'));
+    await database.upsertWord(
+        _word('b1_word', DateTime.utc(2026, 1, 1)).copyWith(difficulty: 'B1'));
+    final api = _RecordingApiClient();
+    final repository = WordRepository(
+      database: database,
+      apiClient: api,
+      config: _testConfig(),
+      random: _FixedRandom(0.9), // the 80% branch: the learner's own level
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(level: 'B1');
+
+    expect(result.word?.localId, 'b1_word');
+    expect(api.lastLearningCardsLevel, isNull, reason: 'not strict: no fetch');
+  });
+
+  test('level-aware pick revisits a lower level 20% of the time', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_level_lower_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('a1_word'));
+    await database.upsertWord(
+        _word('b1_word', DateTime.utc(2026, 1, 1)).copyWith(difficulty: 'B1'));
+    final repository = WordRepository(
+      database: database,
+      apiClient: _RecordingApiClient(),
+      config: _testConfig(),
+      random: _FixedRandom(0.1), // falls in the 20% lower-level share
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(level: 'B1');
+
+    expect(result.word?.localId, 'a1_word');
+  });
+
+  test('strict level fetches cards for that level when none are cached',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_level_strict_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('a1_word'));
+    final api = _RecordingApiClient(
+      learningCardItems: [
+        _word('c1_word', DateTime.utc(2026, 2, 1))
+            .copyWith(difficulty: 'C1', serverWordId: 'server_c1'),
+      ],
+    );
+    final repository = WordRepository(
+      database: database,
+      apiClient: api,
+      config: _testConfig(),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(
+      level: 'C1',
+      strictLevel: true,
+    );
+
+    expect(api.lastLearningCardsLevel, 'C1');
+    expect(result.word?.difficulty, 'C1');
+  });
+
+  test('strict level falls back to the nearest cached word when offline',
+      () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'word_repository_test_level_offline_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    await database.upsertWord(_word('a1_word'));
+    final repository = WordRepository(
+      database: database,
+      apiClient: _FailingApiClient(),
+      config: _testConfig(),
+    );
+
+    final result = await repository.getNewWordWithFallbackResult(
+      level: 'C1',
+      strictLevel: true,
+    );
+
+    expect(result.word?.localId, 'a1_word');
+  });
+
   test('falls back to a random non-mastered word when new pool is empty',
       () async {
     final database = await LocalDatabase.open(
@@ -212,7 +306,8 @@ void main() {
   test('reports local fallback source when backend fails but local word exists',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_fallback_result_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_fallback_result_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final localWord = _word('local_word_result');
     await database.upsertWord(localWord);
@@ -230,7 +325,8 @@ void main() {
   test('reports miss source when backend fails and no local word exists',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_fallback_miss_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_fallback_miss_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final repository = WordRepository(
       database: database,
@@ -248,7 +344,8 @@ void main() {
   test('returns server proficiency after immediate rating submission',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_rating_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_rating_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(
@@ -300,7 +397,7 @@ void main() {
     expect(apiClient.lastSyncedCachedServerWordIds, isEmpty);
   });
 
-  test('remembered gesture queues too_easy event and marks word mastered',
+  test('remembered gesture queues too_easy event and schedules a later review',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -325,7 +422,13 @@ void main() {
         jsonDecode(dueEntries.single.payload) as Map<String, dynamic>;
 
     expect(payload['rating'], 'too_easy');
-    expect(await database.randomNotMasteredWord(), isNull);
+    // Known words still come back (in 4 days), they are not dropped.
+    expect(await database.nextDueReviewWord(now.add(const Duration(days: 3))),
+        isNull);
+    final due =
+        await database.nextDueReviewWord(now.add(const Duration(days: 4)));
+    expect(due?.localId, word.localId);
+    expect(due?.status, WordStatus.review);
   });
 
   test('difficult gesture queues too_hard event and schedules relearn',
@@ -380,7 +483,8 @@ void main() {
       'registers user, persists session, and sends session token on learning requests',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_user_session_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_user_session_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(database: database, apiClient: apiClient);
@@ -403,7 +507,8 @@ void main() {
       'clears local session on sign out and keeps anonymous learning available',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_sign_out_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_sign_out_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient();
     final repository = WordRepository(database: database, apiClient: apiClient);
@@ -422,7 +527,8 @@ void main() {
 
   test('sync pending events logs retry on failure', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_sync_retry_log_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_sync_retry_log_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final entries = <LogEntry>[];
     final logger = PersistedLogger(
@@ -632,7 +738,8 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_first_install_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_topup_first_install_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final apiClient = _RecordingApiClient(
       learningCardItems: List.generate(20, (i) => _word('first_install_$i')),
@@ -655,7 +762,8 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_hourly_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_topup_hourly_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     for (var i = 0; i < 5; i++) {
       await database.upsertWord(_word('seed_$i'));
@@ -682,7 +790,8 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_idle_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_topup_idle_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     for (var i = 0; i < 100; i++) {
       await database.upsertWord(_word('idle_$i'));
@@ -705,7 +814,8 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_topup_rotation_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_topup_rotation_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.utc(2026, 5, 1);
     // 10 mastered words (oldest first)
@@ -749,7 +859,8 @@ void main() {
       () async {
     final ts = DateTime.now().microsecondsSinceEpoch;
     final database = await LocalDatabase.open(
-      databaseName: 'word_repository_test_seed_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'word_repository_test_seed_${ts}_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     // English language already has data — should be skipped.
     await database.upsertWord(_word('existing_en_word'));
@@ -826,7 +937,8 @@ void main() {
       now: DateTime.now().toUtc().add(const Duration(minutes: 5)),
     );
 
-    final synced = await database.getSubmittedWord(submission.localSubmissionId);
+    final synced =
+        await database.getSubmittedWord(submission.localSubmissionId);
     expect(synced!.status, SubmittedWordStatus.ready);
   });
 
@@ -855,7 +967,8 @@ void main() {
     expect(queued, isEmpty);
   });
 
-  test('submitted word success imports ready resolved word into local inventory and counts as learned',
+  test(
+      'submitted word success imports ready resolved word into local inventory and counts as learned',
       () async {
     final database = await LocalDatabase.open(
       databaseName:
@@ -884,13 +997,14 @@ void main() {
 
     final deviceId = await repository.getOrCreateDeviceId();
     final items = await repository.loadSubmittedWords();
-    final localWord = await database.getWordByServerId(resolvedWord.serverWordId!);
+    final localWord =
+        await database.getWordByServerId(resolvedWord.serverWordId!);
     final history = await database.getLearningHistory();
     final totals = await database.getLearningProgressTotals();
     expect(submission.status, SubmittedWordStatus.ready);
     expect(items.single.status, SubmittedWordStatus.ready);
-    expect(items.single.resolutionType,
-        SubmittedWordResolutionType.generatedWord);
+    expect(
+        items.single.resolutionType, SubmittedWordResolutionType.generatedWord);
     expect(localWord?.serverWordId, resolvedWord.serverWordId);
     expect(localWord?.status, WordStatus.learning);
     expect(history.single.snapshot.title, 'resolved_word');
@@ -963,6 +1077,7 @@ class _FailingApiClient extends BackendApiClient {
     int limit = 20,
     String targetLanguage = 'en',
     String? sessionToken,
+    String? level,
   }) {
     throw BackendApiException('forced failure');
   }
@@ -984,6 +1099,7 @@ class _RecordingApiClient extends BackendApiClient {
   Object? submittedWordCreateError;
   List<SubmittedWord> submittedWordFetchItems = const [];
   SubmittedWord? submittedWordCreateResult;
+  String? lastLearningCardsLevel;
   String? lastLearningCardsDeviceId;
   int? lastLearningCardsLimit;
   String? lastSessionToken;
@@ -1021,7 +1137,9 @@ class _RecordingApiClient extends BackendApiClient {
     int limit = 20,
     String targetLanguage = 'en',
     String? sessionToken,
+    String? level,
   }) async {
+    lastLearningCardsLevel = level;
     lastLearningCardsDeviceId = deviceId;
     lastLearningCardsLimit = limit;
     lastSessionToken = sessionToken;
@@ -1262,4 +1380,20 @@ class _SyncOutcomeApiClient extends BackendApiClient {
       ],
     );
   }
+}
+
+/// Deterministic stand-in for the repository's level mix.
+class _FixedRandom implements Random {
+  _FixedRandom(this.value);
+
+  final double value;
+
+  @override
+  double nextDouble() => value;
+
+  @override
+  int nextInt(int max) => 0;
+
+  @override
+  bool nextBool() => false;
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/local_database.dart';
 import '../models/learning_progress.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/brand_backdrop.dart';
 
 class LearningHistoryScreen extends StatefulWidget {
   const LearningHistoryScreen({required this.database, super.key});
@@ -33,7 +34,8 @@ class _LearningHistoryScreenState extends State<LearningHistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('History')),
-      body: FutureBuilder<List<LearningHistoryEntry>>(
+      body: BrandBackdrop(
+          child: FutureBuilder<List<LearningHistoryEntry>>(
         future: _historyFuture,
         builder: (context, snapshot) {
           final entries = snapshot.data ?? const <LearningHistoryEntry>[];
@@ -81,7 +83,7 @@ class _LearningHistoryScreenState extends State<LearningHistoryScreen> {
             ),
           );
         },
-      ),
+      )),
     );
   }
 }
@@ -98,8 +100,11 @@ class _HistoryCard extends StatelessWidget {
     final snapshot = entry.snapshot;
     // Use theme-driven colors to distinguish vocabulary vs sentence cards.
     final isVocab = snapshot.kind == LearningItemKind.vocabulary;
-    final avatarBg = isVocab ? colorScheme.primaryContainer : colorScheme.tertiaryContainer;
-    final avatarFg = isVocab ? colorScheme.onPrimaryContainer : colorScheme.onTertiaryContainer;
+    final avatarBg =
+        isVocab ? colorScheme.primaryContainer : colorScheme.tertiaryContainer;
+    final avatarFg = isVocab
+        ? colorScheme.onPrimaryContainer
+        : colorScheme.onTertiaryContainer;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -142,7 +147,9 @@ class _HistoryCard extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [for (final tag in snapshot.tags) Chip(label: Text(tag))],
+                children: [
+                  for (final tag in snapshot.tags) Chip(label: Text(tag))
+                ],
               ),
             ],
             const SizedBox(height: 12),

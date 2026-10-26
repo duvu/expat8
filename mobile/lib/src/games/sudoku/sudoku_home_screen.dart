@@ -10,6 +10,7 @@ import 'sudoku_difficulty.dart';
 import 'sudoku_game_controller.dart';
 import 'sudoku_game_screen.dart';
 import 'sudoku_generator.dart';
+import '../../widgets/brand_backdrop.dart';
 
 typedef SudokuPuzzleFactory = Future<SudokuPuzzle> Function(
     SudokuDifficulty difficulty);
@@ -175,7 +176,8 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
           ),
         ],
       ),
-      body: ListView(
+      body: BrandBackdrop(
+          child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
           _HeroCard(solved: solved, levelsWithRecords: champions),
@@ -206,7 +208,7 @@ class _SudokuHomeScreenState extends State<SudokuHomeScreen> {
             style: theme.textTheme.bodySmall,
           ),
         ],
-      ),
+      )),
     );
   }
 

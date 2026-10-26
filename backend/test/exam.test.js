@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { WordStore, selectDistractors, shuffleArray, toApiWord } from '../src/word_store.js';
+import { WordStore } from '../src/word_store.js';
+import { selectDistractors, shuffleArray } from '../src/domain/exam.js';
+import { toApiWord } from '../src/domain/vocabulary.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 

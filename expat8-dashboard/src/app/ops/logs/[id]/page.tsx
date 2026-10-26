@@ -1,63 +1,61 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 
-import PageShell from '@/components/PageShell';
-import { formatBytes, formatDateTime, filterLogContentLines } from '@/lib/ops';
+import { filterLogContentLines, formatBytes, formatDateTime } from '@/lib/ops';
 import { loadLogArchive, loadLogArchiveContent } from '@/lib/ops-data';
-import { deleteArchiveAction } from './actions';
+import ActionForm from '@/components/ActionForm';
+import FilterForm from '@/components/FilterForm';
+import PageShell from '@/components/PageShell';
+import { deleteArchiveAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
+
+const backLink = <Link href="/ops/logs" className="button secondary">Back</Link>;
 
 export default async function OpsLogDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; level?: string; deleteError?: string }>;
+  searchParams: Promise<{ q?: string; level?: string; error?: string }>;
 }) {
   const [{ id }, filters] = await Promise.all([params, searchParams]);
-  const [{ archive, error: archiveError }, { content, error: contentError }] = await Promise.all([
+  const [{ data: archive, error: archiveError }, { data: content, error: contentError }] = await Promise.all([
     loadLogArchive(id),
     loadLogArchiveContent(id),
   ]);
 
   if (archiveError || contentError) {
     return (
-      <PageShell title="Log Detail" actions={<Link href="/ops/logs" className="button secondary">Back</Link>}>
+      <PageShell title="Log Detail" actions={backLink}>
         <div className="empty-state error-state">{archiveError ?? contentError}</div>
       </PageShell>
     );
   }
-
   if (!archive) {
     notFound();
   }
 
   const lineResult = filterLogContentLines(content ?? '', filters);
-
-  async function handleDelete() {
-    'use server';
-    const result = await deleteArchiveAction(id);
-    if (result?.error) {
-      redirect(`/ops/logs/${id}?deleteError=${encodeURIComponent(result.error)}`);
-    }
-  }
+  const detailHref = `/ops/logs/${encodeURIComponent(archive.id)}`;
 
   return (
     <PageShell
       title={archive.file_name}
       actions={
         <div className="ops-detail-actions">
-          <a href={archive.download_url} className="button">Download</a>
-          <form action={handleDelete} style={{ display: 'inline' }}>
-            <button type="submit" className="button danger">Delete</button>
-          </form>
+          <a href={`${detailHref}/download`} className="button">Download</a>
+          <ActionForm
+            action={deleteArchiveAction}
+            fields={{ archiveId: archive.id }}
+            label="Delete"
+            buttonClassName="danger"
+            confirm="Permanently delete this log archive?"
+          />
         </div>
       }
     >
-      {filters.deleteError && (
-        <div className="empty-state error-state">{filters.deleteError}</div>
-      )}
+      {filters.error && <div className="empty-state error-state">{filters.error}</div>}
 
       <section className="ops-detail-grid">
         <dl className="ops-meta">
@@ -79,13 +77,13 @@ export default async function OpsLogDetailPage({
             <p className="muted">{lineResult.matchedLines} of {lineResult.totalLines} lines shown.</p>
           </div>
           <div className="ops-detail-actions">
-            <Link href={`/ops/logs/${archive.id}?level=error`} className="button secondary">Errors</Link>
-            <Link href={`/ops/logs/${archive.id}?level=warning`} className="button secondary">Warnings</Link>
-            <Link href={`/ops/logs/${archive.id}`} className="button secondary">All lines</Link>
+            <Link href={`${detailHref}?level=error`} className="button secondary">Errors</Link>
+            <Link href={`${detailHref}?level=warning`} className="button secondary">Warnings</Link>
+            <Link href={detailHref} className="button secondary">All lines</Link>
           </div>
         </div>
 
-        <form className="ops-filters" method="GET">
+        <FilterForm>
           <label>
             Search
             <input name="q" defaultValue={filters.q ?? ''} placeholder="Search log text" />
@@ -100,8 +98,7 @@ export default async function OpsLogDetailPage({
               <option value="debug">Debug</option>
             </select>
           </label>
-          <button type="submit">Filter</button>
-        </form>
+        </FilterForm>
 
         {lineResult.lines.length === 0 ? (
           <div className="empty-state">No log lines match the current filter.</div>

@@ -1,23 +1,21 @@
 import { revalidatePath } from 'next/cache';
 
-import { backendFetch } from '@/lib/backend';
+import { backendRequest } from '@/lib/backend';
 import { listPendingVocabulary } from '@/lib/db';
+import { formText, optionalFormText } from '@/lib/form';
+import ActionForm from '@/components/ActionForm';
+import DataTable from '@/components/DataTable';
 import PageShell from '@/components/PageShell';
+import StatusBadge from '@/components/StatusBadge';
 
 export const dynamic = 'force-dynamic';
 
 async function updateVocabularyItem(formData: FormData) {
   'use server';
-
-  const itemId = String(formData.get('itemId') ?? '');
-  const status = String(formData.get('status') ?? '');
-  const review_note = String(formData.get('review_note') ?? '').trim() || undefined;
-
-  await backendFetch(`/v1/admin/vocabulary/${itemId}`, {
+  await backendRequest(`/v1/admin/vocabulary/${encodeURIComponent(formText(formData, 'itemId'))}`, {
     method: 'PATCH',
-    body: { status, review_note }
+    body: { status: formText(formData, 'status'), review_note: optionalFormText(formData, 'review_note') },
   });
-
   revalidatePath('/review');
 }
 
@@ -27,52 +25,30 @@ export default async function ReviewPage() {
   return (
     <PageShell title="Vocabulary Review">
       <section className="table-panel">
-      <table>
-        <thead>
-          <tr>
-            <th>Article</th>
-            <th>Term</th>
-            <th>Meaning</th>
-            <th>Usage</th>
-            <th>POS</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.length === 0 ? (
-            <tr>
-              <td colSpan={7}>
-                <div className="empty-state">No pending vocabulary items right now.</div>
-              </td>
-            </tr>
-          ) : items.map((item) => (
-            <tr key={item.id}>
-              <td data-label="Article">{item.article_title ?? '—'}</td>
-              <td data-label="Term">{item.display_term ?? '—'}</td>
-              <td data-label="Meaning">{item.meaning_vi ?? '—'}</td>
-              <td data-label="Usage">{item.example ?? item.example_vi ?? '—'}</td>
-              <td data-label="POS">{item.part_of_speech ?? '—'}</td>
-              <td data-label="Status"><span className="badge" data-status={item.status}>{item.status}</span></td>
-              <td data-label="Actions">
+        <DataTable
+          rows={items}
+          rowKey={(item) => item.id}
+          empty="No pending vocabulary items right now."
+          columns={[
+            { label: 'Article', render: (item) => item.article_title ?? '—' },
+            { label: 'Term', render: (item) => item.display_term ?? '—' },
+            { label: 'Meaning', render: (item) => item.meaning_vi ?? '—' },
+            { label: 'Usage', render: (item) => item.example ?? item.example_vi ?? '—' },
+            { label: 'POS', render: (item) => item.part_of_speech ?? '—' },
+            { label: 'Status', render: (item) => <StatusBadge status={item.status} /> },
+            {
+              label: 'Actions',
+              render: (item) => (
                 <div className="stacked-actions">
-                  <form className="inline-form" action={updateVocabularyItem}>
-                    <input type="hidden" name="itemId" value={item.id} />
-                    <input type="hidden" name="status" value="approved" />
-                    <button type="submit">Approve</button>
-                  </form>
-                  <form className="inline-form" action={updateVocabularyItem}>
-                    <input type="hidden" name="itemId" value={item.id} />
-                    <input type="hidden" name="status" value="rejected" />
-                    <input name="review_note" placeholder="Reason" />
-                    <button type="submit">Reject</button>
-                  </form>
+                  <ActionForm action={updateVocabularyItem} fields={{ itemId: item.id, status: 'approved' }} label="Approve" />
+                  <ActionForm action={updateVocabularyItem} fields={{ itemId: item.id, status: 'rejected' }} label="Reject">
+                    <input name="review_note" placeholder="Reason" aria-label="Rejection reason" />
+                  </ActionForm>
                 </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              ),
+            },
+          ]}
+        />
       </section>
     </PageShell>
   );

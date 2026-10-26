@@ -25,7 +25,8 @@ void main() {
     );
 
     final firstLoad = await repository.seedFromBundleIfEmpty(languages: ['en']);
-    final secondLoad = await repository.seedFromBundleIfEmpty(languages: ['en']);
+    final secondLoad =
+        await repository.seedFromBundleIfEmpty(languages: ['en']);
 
     expect(firstLoad, 2);
     expect(secondLoad, 0);
@@ -60,7 +61,8 @@ void main() {
     expect(apiClient.lastTargetLanguage, 'en');
   });
 
-  test('nextSentence prefers unseen items then randomizes learned items', () async {
+  test('nextSentence prefers unseen items then randomizes learned items',
+      () async {
     final database = await LocalDatabase.open(
       databaseName:
           'workplace_sentence_repository_rotation_${DateTime.now().microsecondsSinceEpoch}.db',

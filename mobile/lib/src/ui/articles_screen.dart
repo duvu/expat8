@@ -4,6 +4,8 @@ import '../data/article_repository.dart';
 import '../models/article.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/language_picker.dart';
+import '../widgets/brand_backdrop.dart';
+import 'article_reader.dart';
 
 const Map<String, String> kArticleLanguageLabels = {
   'en': 'English',
@@ -17,6 +19,7 @@ class ArticleManagementScreen extends StatefulWidget {
     required this.sessionToken,
     required this.initialLanguage,
     required this.supportedLanguages,
+    this.onAddToReview,
     super.key,
   });
 
@@ -24,6 +27,7 @@ class ArticleManagementScreen extends StatefulWidget {
   final String sessionToken;
   final String initialLanguage;
   final List<String> supportedLanguages;
+  final AddToReview? onAddToReview;
 
   @override
   State<ArticleManagementScreen> createState() =>
@@ -90,6 +94,7 @@ class _ArticleManagementScreenState extends State<ArticleManagementScreen> {
           repository: widget.repository,
           sessionToken: widget.sessionToken,
           articleId: article.id,
+          onAddToReview: widget.onAddToReview,
         ),
       ),
     );
@@ -121,7 +126,8 @@ class _ArticleManagementScreenState extends State<ArticleManagementScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Create'),
       ),
-      body: RefreshIndicator(
+      body: BrandBackdrop(
+          child: RefreshIndicator(
         onRefresh: _loadArticles,
         child: _isLoading
             ? ListView(
@@ -232,7 +238,7 @@ class _ArticleManagementScreenState extends State<ArticleManagementScreen> {
                           );
                         },
                       ),
-      ),
+      )),
     );
   }
 }
@@ -312,7 +318,8 @@ class _ArticleCreateScreenState extends State<ArticleCreateScreen> {
         : widget.supportedLanguages;
     return Scaffold(
       appBar: AppBar(title: const Text('Create article')),
-      body: SafeArea(
+      body: BrandBackdrop(
+          child: SafeArea(
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -382,7 +389,7 @@ class _ArticleCreateScreenState extends State<ArticleCreateScreen> {
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -392,12 +399,16 @@ class ArticleDetailScreen extends StatefulWidget {
     required this.repository,
     required this.sessionToken,
     required this.articleId,
+    this.onAddToReview,
     super.key,
   });
 
   final ArticleRepository repository;
   final String sessionToken;
   final String articleId;
+
+  /// Adds a tapped article word to the learner's reviews.
+  final AddToReview? onAddToReview;
 
   @override
   State<ArticleDetailScreen> createState() => _ArticleDetailScreenState();
@@ -509,129 +520,155 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
             ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_errorMessage!, textAlign: TextAlign.center),
-                  ),
-                )
-              : _article == null
-                  ? const EmptyStateView(
-                      icon: Icons.article_outlined,
-                      title: 'Article not found',
-                      body: 'This article may have been deleted.',
+      body: BrandBackdrop(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child:
+                            Text(_errorMessage!, textAlign: TextAlign.center),
+                      ),
                     )
-                  : RefreshIndicator(
-                      onRefresh: _loadArticle,
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          Text(
-                            _article!.title,
-                            style: theme.textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
+                  : _article == null
+                      ? const EmptyStateView(
+                          icon: Icons.article_outlined,
+                          title: 'Article not found',
+                          body: 'This article may have been deleted.',
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadArticle,
+                          child: ListView(
+                            padding: const EdgeInsets.all(16),
                             children: [
-                              _MetaChip(
-                                  label: _languageLabel(_article!.language)),
-                              _MetaChip(label: _statusLabel(_article!.status)),
-                              _MetaChip(
-                                  label: _article!.visibility == 'public'
-                                      ? 'Public'
-                                      : 'Only me'),
-                              _MetaChip(
-                                  label: _formatDate(_article!.createdAt)),
-                            ],
-                          ),
-                          if (_article!.sourceUrl != null) ...[
-                            const SizedBox(height: 16),
-                            Text('Source URL',
-                                style: theme.textTheme.titleSmall),
-                            const SizedBox(height: 4),
-                            Text(_article!.sourceUrl!),
-                          ],
-                          if (_article!.processingError != null) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              'Processing error',
-                              style: theme.textTheme.titleSmall
-                                  ?.copyWith(color: theme.colorScheme.error),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _article!.processingError!,
-                              style: TextStyle(color: theme.colorScheme.error),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          Text('Vocabulary',
-                              style: theme.textTheme.titleMedium),
-                          const SizedBox(height: 8),
-                          if ((_vocabulary?.items ?? const []).isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
-                              child:
-                                  Text('No vocabulary has been extracted yet.'),
-                            )
-                          else
-                            ..._vocabulary!.items.map(
-                              (item) => Card(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item.displayTerm,
-                                        style: theme.textTheme.titleMedium,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(item.meaningVi),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          if (item.level != null)
-                                            _MetaChip(label: item.level!),
-                                          _MetaChip(
-                                              label: _termStatusLabel(
-                                                  item.status)),
-                                          if (item.classification != null)
-                                            _MetaChip(
-                                                label: item.classification!),
-                                          if (item.suggestionType != null)
-                                            _MetaChip(
-                                                label: item.suggestionType!),
-                                        ],
-                                      ),
-                                      if (item.partOfSpeech != null ||
-                                          item.ipa != null) ...[
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          [
-                                            if (item.partOfSpeech != null)
-                                              item.partOfSpeech,
-                                            if (item.ipa != null) item.ipa,
-                                          ].join(' • '),
-                                          style: theme.textTheme.bodySmall,
+                              Text(
+                                _article!.title,
+                                style: theme.textTheme.headlineSmall,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _MetaChip(
+                                      label:
+                                          _languageLabel(_article!.language)),
+                                  _MetaChip(
+                                      label: _statusLabel(_article!.status)),
+                                  _MetaChip(
+                                      label: _article!.visibility == 'published'
+                                          ? 'Public'
+                                          : 'Only me'),
+                                  _MetaChip(
+                                      label: _formatDate(_article!.createdAt)),
+                                ],
+                              ),
+                              if (_article!.sourceUrl != null) ...[
+                                const SizedBox(height: 16),
+                                Text('Source URL',
+                                    style: theme.textTheme.titleSmall),
+                                const SizedBox(height: 4),
+                                Text(_article!.sourceUrl!),
+                              ],
+                              if (_article!.processingError != null) ...[
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Processing error',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                      color: theme.colorScheme.error),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _article!.processingError!,
+                                  style:
+                                      TextStyle(color: theme.colorScheme.error),
+                                ),
+                              ],
+                              if ((_article!.rawText ?? '')
+                                  .trim()
+                                  .isNotEmpty) ...[
+                                const SizedBox(height: 24),
+                                ArticleBody(
+                                  text: _article!.rawText!.trim(),
+                                  vocabulary: _vocabulary?.items ?? const [],
+                                  onAddToReview: widget.onAddToReview,
+                                ),
+                              ],
+                              const SizedBox(height: 24),
+                              Text('Vocabulary',
+                                  style: theme.textTheme.titleMedium),
+                              const SizedBox(height: 8),
+                              if ((_vocabulary?.items ?? const []).isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 24),
+                                  child: Text(
+                                      'No vocabulary has been extracted yet.'),
+                                )
+                              else
+                                ..._vocabulary!.items.map(
+                                  (item) => Card(
+                                    clipBehavior: Clip.antiAlias,
+                                    child: InkWell(
+                                      onTap: () => showArticleWordSheet(context,
+                                          item: item,
+                                          onAddToReview: widget.onAddToReview),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              item.displayTerm,
+                                              style:
+                                                  theme.textTheme.titleMedium,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(item.meaningVi),
+                                            const SizedBox(height: 8),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                if (item.level != null)
+                                                  _MetaChip(label: item.level!),
+                                                _MetaChip(
+                                                    label: _termStatusLabel(
+                                                        item.status)),
+                                                if (item.classification != null)
+                                                  _MetaChip(
+                                                      label:
+                                                          item.classification!),
+                                                if (item.suggestionType != null)
+                                                  _MetaChip(
+                                                      label:
+                                                          item.suggestionType!),
+                                              ],
+                                            ),
+                                            if (item.partOfSpeech != null ||
+                                                item.ipa != null) ...[
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                [
+                                                  if (item.partOfSpeech != null)
+                                                    item.partOfSpeech,
+                                                  if (item.ipa != null)
+                                                    item.ipa,
+                                                ].join(' • '),
+                                                style:
+                                                    theme.textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ],
                                         ),
-                                      ],
-                                    ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                            ],
+                          ),
+                        )),
     );
   }
 }

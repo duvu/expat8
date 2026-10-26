@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -12,6 +13,7 @@ import '../models/article.dart';
 import '../models/memorization_passage.dart';
 import '../models/proficiency_state.dart';
 import '../models/release_info.dart';
+import '../models/review_state.dart';
 import '../models/shadowing_video.dart';
 import '../models/submitted_word.dart';
 import '../models/user_session.dart';
@@ -19,15 +21,20 @@ import '../models/vocabulary_word.dart';
 import '../models/workplace_sentence.dart';
 import 'models/content_models.dart';
 import 'models/exam_models.dart';
+import 'models/game_models.dart';
 import 'models/learning_models.dart';
 import 'models/speaking_models.dart';
 
 // Barrel exports for backward compatibility.
 export 'models/content_models.dart';
 export 'models/exam_models.dart';
+export 'models/game_models.dart';
 export 'models/learning_models.dart';
 export 'models/speaking_models.dart';
 
+/// Typed access to the Expat8 backend. Every request goes through [_send]
+/// (HMAC signing, timeout, request/response/timeout logging); endpoint
+/// methods only describe the path, the payload and how to read the result.
 class BackendApiClient {
   BackendApiClient({
     required this.baseUrl,
@@ -46,71 +53,43 @@ class BackendApiClient {
   final http.Client _httpClient;
   final Logger _logger;
 
+  // ─── Learning ──────────────────────────────────────────────────────────────
+
   Future<ProficiencyState> fetchProficiency({
     required String deviceId,
     String language = 'en',
     String? sessionToken,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/proficiency').replace(queryParameters: {
-      'device_id': deviceId,
-      'language': language,
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'proficiency.request',
-      message: 'Requesting proficiency state.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'proficiency.timeout',
-        message: 'Proficiency request timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'proficiency.response',
-      message: 'Received proficiency response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Proficiency fetch failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = await _json('GET',
+        _uri('/v1/proficiency', {'device_id': deviceId, 'language': language}),
+        event: 'proficiency',
+        failure: 'Proficiency fetch failed',
+        sessionToken: sessionToken);
     return ProficiencyState.fromJson(body);
+  }
+
+  /// SRS states changed since [cursor] (`GET /v1/review/states`).
+  Future<ReviewStatesPage> fetchReviewStates({
+    required String deviceId,
+    required String language,
+    String? cursor,
+    String? sessionToken,
+  }) async {
+    final body = await _json(
+        'GET',
+        _uri('/v1/review/states', {
+          'device_id': deviceId,
+          'language': language,
+          if (cursor != null) 'cursor': cursor,
+        }),
+        event: 'review.states',
+        failure: 'Review states fetch failed',
+        sessionToken: sessionToken);
+    return ReviewStatesPage(
+      items: _items(body, ServerReviewState.fromJson),
+      nextCursor: body['next_cursor'] as String?,
+      hasMore: body['has_more'] == true,
+    );
   }
 
   Future<StudyEventResult> submitStudyEvent({
@@ -119,39 +98,11 @@ class BackendApiClient {
     String language = 'en',
     String? sessionToken,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/study-events');
-    final payload = jsonEncode({
-      'device_id': deviceId,
-      'language': language,
-      ...event,
-    });
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: sessionToken,
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'study_event.response',
-      message: 'Received study-event response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-      },
-    );
-    _throwIfFailed(response, 'Study-event submit failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = await _json('POST', _uri('/v1/study-events'),
+        event: 'study_event',
+        failure: 'Study-event submit failed',
+        json: {'device_id': deviceId, 'language': language, ...event},
+        sessionToken: sessionToken);
     return StudyEventResult(
       success: (body['success'] ?? false) as bool,
       eventId: body['event_id'] as String?,
@@ -167,85 +118,27 @@ class BackendApiClient {
     int limit = 10,
     String targetLanguage = 'en',
     String? sessionToken,
+    String? level,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/learning/cards');
-    final payload = jsonEncode({
-      'device_id': deviceId,
-      'limit': limit,
-      'target_language': targetLanguage,
-      'card_mode': 'new',
-    });
-    final bodyBytes = Uint8List.fromList(utf8.encode(payload));
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'learning_cards.request',
-      message: 'Requesting learning cards from backend.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'limit': limit,
-        'target_language': targetLanguage,
-        'timeout_ms': timeout.inMilliseconds,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: bodyBytes,
-                sessionToken: sessionToken,
-              ),
-            },
-            body: bodyBytes,
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'learning_cards.timeout',
-        message: 'Learning-card request timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
+    final body = await _json('POST', _uri('/v1/learning/cards'),
+        event: 'learning_cards',
+        failure: 'Learning-card batch failed',
+        json: {
+          'device_id': deviceId,
           'limit': limit,
           'target_language': targetLanguage,
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
+          'card_mode': 'new',
+          // Session study-level override; omitted means the learner's own level.
+          if (level != null) 'level': level,
         },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'learning_cards.response',
-      message: 'Received learning-card response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Learning-card batch failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
+        sessionToken: sessionToken,
+        logContext: {
+          'limit': limit,
+          'target_language': targetLanguage,
+          'level': level,
+        });
     return LearningCardBatch(
-      items: items
-          .map((item) => VocabularyWord.fromJson(item as Map<String, dynamic>))
-          .toList(),
+      items: _items(body, VocabularyWord.fromJson),
       targetMix: LearningCardMix.fromJson(
         body['target_mix'] as Map<String, dynamic>? ?? const {},
       ),
@@ -260,77 +153,14 @@ class BackendApiClient {
     String targetLanguage = 'en',
     String? sessionToken,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/workplace-sentences/recent').replace(
-      queryParameters: {
-        'limit': '$limit',
-        'target_language': targetLanguage,
-      },
-    );
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'workplace_sentences.request',
-      message: 'Requesting workplace sentences from backend.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'limit': limit,
-        'target_language': targetLanguage,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'workplace_sentences.timeout',
-        message: 'Workplace sentence request timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'limit': limit,
-          'target_language': targetLanguage,
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'workplace_sentences.response',
-      message: 'Received workplace sentence response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-
-    _throwIfFailed(response, 'Workplace sentence batch failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
-    return items
-        .map((item) => WorkplaceSentence.fromJson(item as Map<String, dynamic>))
-        .toList(growable: false);
+    final body = await _json(
+        'GET',
+        _uri('/v1/workplace-sentences/recent',
+            {'limit': '$limit', 'target_language': targetLanguage}),
+        event: 'workplace_sentences',
+        failure: 'Workplace sentence batch failed',
+        sessionToken: sessionToken);
+    return _items(body, WorkplaceSentence.fromJson);
   }
 
   Future<CacheInventoryResult> syncCacheInventory({
@@ -339,76 +169,18 @@ class BackendApiClient {
     DateTime? observedAt,
     String? sessionToken,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/user-word-cache');
-    final payload = jsonEncode({
-      'device_id': deviceId,
-      'server_word_ids': serverWordIds,
-      'observed_at':
-          (observedAt ?? DateTime.now().toUtc()).toUtc().toIso8601String(),
-    });
-    await _logger.info(
-      category: AppLogCategory.sync,
-      event: 'cache_inventory.request',
-      message: 'Syncing user cache inventory to backend.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'server_word_ids_count': serverWordIds.length,
-        'timeout_ms': timeout.inMilliseconds,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .put(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'PUT',
-                uri: uri,
-                body: Uint8List.fromList(utf8.encode(payload)),
-                sessionToken: sessionToken,
-              ),
-            },
-            body: payload,
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
+    final body = await _json('PUT', _uri('/v1/user-word-cache'),
+        event: 'cache_inventory',
+        failure: 'Cache inventory sync failed',
         category: AppLogCategory.sync,
-        event: 'cache_inventory.timeout',
-        message: 'Cache inventory sync timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'server_word_ids_count': serverWordIds.length,
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
+        json: {
+          'device_id': deviceId,
+          'server_word_ids': serverWordIds,
+          'observed_at':
+              (observedAt ?? DateTime.now().toUtc()).toUtc().toIso8601String(),
         },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.sync,
-      event: 'cache_inventory.response',
-      message: 'Received cache inventory response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Cache inventory sync failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+        sessionToken: sessionToken,
+        logContext: {'server_word_ids_count': serverWordIds.length});
     return CacheInventoryResult(
       storedCount: body['stored_count'] as int? ?? 0,
       unknownServerWordIds: List<String>.from(
@@ -417,204 +189,23 @@ class BackendApiClient {
     );
   }
 
-  Future<SubmittedWord> createSubmittedWord({
-    required String localSubmissionId,
-    required String deviceId,
-    required String term,
-    required String targetLanguage,
-    String? sessionToken,
-  }) async {
-    final uri = Uri.parse('$baseUrl/v1/user-submitted-words');
-    final payload = jsonEncode({
-      'device_id': deviceId,
-      'term': term,
-      'target_language': targetLanguage,
-    });
-    final bodyBytes = Uint8List.fromList(utf8.encode(payload));
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: bodyBytes,
-              sessionToken: sessionToken,
-            ),
-          },
-          body: bodyBytes,
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Submitted-word create failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return SubmittedWord.fromJson(body, localSubmissionId: localSubmissionId);
-  }
-
-  Future<List<SubmittedWord>> fetchSubmittedWords({
-    required String deviceId,
-    int limit = 50,
-    String? sessionToken,
-  }) async {
-    final uri = Uri.parse('$baseUrl/v1/user-submitted-words').replace(
-      queryParameters: {
-        'device_id': deviceId,
-        'limit': '$limit',
-      },
-    );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Submitted-word fetch failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
-    return items
-        .map((item) => SubmittedWord.fromJson(
-              item as Map<String, dynamic>,
-              localSubmissionId: (item['id'] as String?) ?? '',
-            ))
-        .toList(growable: false);
-  }
-
-  Future<List<ShadowingVideo>> fetchShadowingVideos({
-    required String deviceId,
-    int limit = 50,
-    String? sessionToken,
-  }) async {
-    final uri = Uri.parse('$baseUrl/v1/shadowing/videos').replace(
-      queryParameters: {
-        'device_id': deviceId,
-        'limit': '$limit',
-      },
-    );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Shadowing video fetch failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(ShadowingVideo.fromJson)
-        .toList(growable: false);
-  }
-
-  Future<ShadowingVideo> importShadowingVideo({
-    required String deviceId,
-    required String sourceUrl,
-    String? sessionToken,
-  }) async {
-    final uri = Uri.parse('$baseUrl/v1/shadowing/videos');
-    final payload = jsonEncode({
-      'device_id': deviceId,
-      'source_url': sourceUrl,
-    });
-    final bodyBytes = Uint8List.fromList(utf8.encode(payload));
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: bodyBytes,
-              sessionToken: sessionToken,
-            ),
-          },
-          body: bodyBytes,
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Shadowing video import failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return ShadowingVideo.fromJson(body);
-  }
-
-  Future<ShadowingVideo> fetchShadowingVideoDetail({
-    required String entryId,
-    required String deviceId,
-    String? sessionToken,
-  }) async {
-    final uri = Uri.parse('$baseUrl/v1/shadowing/videos/$entryId').replace(
-      queryParameters: {'device_id': deviceId},
-    );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Shadowing video detail failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    return ShadowingVideo.fromJson(body);
-  }
-
   Future<SyncResult> syncStudyEvents({
     required String deviceId,
     required List<Map<String, dynamic>> events,
     String? sessionToken,
     String? language,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/study-events/sync');
-    final payload = jsonEncode({
-      'device_id': deviceId,
-      if (language != null) 'language': language,
-      'events': events,
-    });
-    await _logger.info(
-      category: AppLogCategory.sync,
-      event: 'sync.request',
-      message: 'Syncing study events.',
-      traceId: traceId,
-      context: {
-        'events_count': events.length,
-      },
-    );
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: sessionToken,
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.sync,
-      event: 'sync.response',
-      message: 'Received sync response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-      },
-    );
-    _throwIfFailed(response, 'Study-event sync failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = await _json('POST', _uri('/v1/study-events/sync'),
+        event: 'sync',
+        failure: 'Study-event sync failed',
+        category: AppLogCategory.sync,
+        json: {
+          'device_id': deviceId,
+          if (language != null) 'language': language,
+          'events': events,
+        },
+        sessionToken: sessionToken,
+        logContext: {'events_count': events.length});
     return SyncResult(
       acceptedEventIds: List<String>.from(
         body['accepted_event_ids'] as List? ?? const [],
@@ -632,223 +223,132 @@ class BackendApiClient {
     );
   }
 
+  // ─── Submitted words & shadowing ──────────────────────────────────────────
+
+  Future<SubmittedWord> createSubmittedWord({
+    required String localSubmissionId,
+    required String deviceId,
+    required String term,
+    required String targetLanguage,
+    String? sessionToken,
+  }) async {
+    final body = await _json('POST', _uri('/v1/user-submitted-words'),
+        event: 'submitted_word.create',
+        failure: 'Submitted-word create failed',
+        json: {
+          'device_id': deviceId,
+          'term': term,
+          'target_language': targetLanguage,
+        },
+        sessionToken: sessionToken);
+    return SubmittedWord.fromJson(body, localSubmissionId: localSubmissionId);
+  }
+
+  Future<List<SubmittedWord>> fetchSubmittedWords({
+    required String deviceId,
+    int limit = 50,
+    String? sessionToken,
+  }) async {
+    final body = await _json(
+        'GET',
+        _uri('/v1/user-submitted-words',
+            {'device_id': deviceId, 'limit': '$limit'}),
+        event: 'submitted_word.list',
+        failure: 'Submitted-word fetch failed',
+        sessionToken: sessionToken);
+    return _items(
+        body,
+        (item) => SubmittedWord.fromJson(item,
+            localSubmissionId: (item['id'] as String?) ?? ''));
+  }
+
+  Future<List<ShadowingVideo>> fetchShadowingVideos({
+    required String deviceId,
+    int limit = 50,
+    String? sessionToken,
+  }) async {
+    final body = await _json(
+        'GET',
+        _uri(
+            '/v1/shadowing/videos', {'device_id': deviceId, 'limit': '$limit'}),
+        event: 'shadowing.list',
+        failure: 'Shadowing video fetch failed',
+        sessionToken: sessionToken);
+    return _items(body, ShadowingVideo.fromJson);
+  }
+
+  Future<ShadowingVideo> importShadowingVideo({
+    required String deviceId,
+    required String sourceUrl,
+    String? sessionToken,
+  }) async =>
+      ShadowingVideo.fromJson(await _json('POST', _uri('/v1/shadowing/videos'),
+          event: 'shadowing.import',
+          failure: 'Shadowing video import failed',
+          json: {'device_id': deviceId, 'source_url': sourceUrl},
+          sessionToken: sessionToken));
+
+  Future<ShadowingVideo> fetchShadowingVideoDetail({
+    required String entryId,
+    required String deviceId,
+    String? sessionToken,
+  }) async =>
+      ShadowingVideo.fromJson(await _json(
+          'GET', _uri('/v1/shadowing/videos/$entryId', {'device_id': deviceId}),
+          event: 'shadowing.detail',
+          failure: 'Shadowing video detail failed',
+          sessionToken: sessionToken));
+
+  // ─── Accounts ──────────────────────────────────────────────────────────────
+
   Future<UserSession> registerUser({
     required String identifier,
     required String password,
     String? displayName,
     String? deviceId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/users/register');
-    final payload = jsonEncode({
-      'identifier': identifier,
-      'password': password,
-      if (displayName != null) 'display_name': displayName,
-      if (deviceId != null) 'device_id': deviceId,
-    });
-    await _logger.info(
-      category: AppLogCategory.auth,
-      event: 'auth.register.request',
-      message: 'Submitting registration request.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'has_display_name': displayName != null,
-        'has_device_id': deviceId != null,
-        'timeout_ms': timeout.inMilliseconds,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: Uint8List.fromList(utf8.encode(payload)),
-              ),
-            },
-            body: payload,
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.auth,
-        event: 'auth.register.timeout',
-        message: 'Registration request timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.auth,
-      event: 'auth.register.response',
-      message: 'Received registration response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Registration failed');
-    return UserSession.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      UserSession.fromJson(await _json('POST', _uri('/v1/users/register'),
+          event: 'auth.register',
+          failure: 'Registration failed',
+          category: AppLogCategory.auth,
+          json: {
+            'identifier': identifier,
+            'password': password,
+            if (displayName != null) 'display_name': displayName,
+            if (deviceId != null) 'device_id': deviceId,
+          },
+          logContext: {
+            'has_display_name': displayName != null,
+            'has_device_id': deviceId != null,
+          }));
 
   Future<UserSession> signIn({
     required String identifier,
     required String password,
     String? deviceId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/users/sign-in');
-    final payload = jsonEncode({
-      'identifier': identifier,
-      'password': password,
-      if (deviceId != null) 'device_id': deviceId,
-    });
-    await _logger.info(
-      category: AppLogCategory.auth,
-      event: 'auth.sign_in.request',
-      message: 'Submitting sign-in request.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'has_device_id': deviceId != null,
-        'timeout_ms': timeout.inMilliseconds,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: Uint8List.fromList(utf8.encode(payload)),
-              ),
-            },
-            body: payload,
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.auth,
-        event: 'auth.sign_in.timeout',
-        message: 'Sign-in request timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.auth,
-      event: 'auth.sign_in.response',
-      message: 'Received sign-in response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Sign-in failed');
-    return UserSession.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      UserSession.fromJson(await _json('POST', _uri('/v1/users/sign-in'),
+          event: 'auth.sign_in',
+          failure: 'Sign-in failed',
+          category: AppLogCategory.auth,
+          json: {
+            'identifier': identifier,
+            'password': password,
+            if (deviceId != null) 'device_id': deviceId,
+          },
+          logContext: {
+            'has_device_id': deviceId != null
+          }));
 
-  Future<void> signOut({required UserSession session}) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/users/sign-out');
-    final payload = jsonEncode({});
-    await _logger.info(
-      category: AppLogCategory.auth,
-      event: 'auth.sign_out.request',
-      message: 'Submitting sign-out request.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'timeout_ms': timeout.inMilliseconds,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: Uint8List.fromList(utf8.encode(payload)),
-                sessionToken: session.sessionToken,
-              ),
-            },
-            body: payload,
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.auth,
-        event: 'auth.sign_out.timeout',
-        message: 'Sign-out request timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.auth,
-      event: 'auth.sign_out.response',
-      message: 'Received sign-out response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Sign-out failed');
-  }
+  Future<void> signOut({required UserSession session}) =>
+      _call('POST', _uri('/v1/users/sign-out'),
+          event: 'auth.sign_out',
+          failure: 'Sign-out failed',
+          category: AppLogCategory.auth,
+          json: const <String, Object?>{},
+          sessionToken: session.sessionToken);
+
+  // ─── Diagnostics & games ───────────────────────────────────────────────────
 
   Future<void> uploadLogArchive({
     required String payload,
@@ -857,104 +357,35 @@ class BackendApiClient {
     String? sessionToken,
     String sourceLabel = 'mobile',
     String contentType = 'text/plain; charset=utf-8',
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/mobile/log-archives');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'log_archive.upload.request',
-      message: 'Uploading sanitized log archive.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'file_name': fileName,
-        'device_id': deviceId,
-        'has_session_token': sessionToken != null,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    final bodyBytes = Uint8List.fromList(utf8.encode(payload));
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': contentType,
-              'x-expat8-device-id': deviceId,
-              'x-expat8-log-source': sourceLabel,
-              'x-expat8-log-filename': fileName,
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: bodyBytes,
-                sessionToken: sessionToken,
-              ),
-            },
-            body: bodyBytes,
-          )
-          .timeout(timeout);
-    } on TimeoutException catch (error) {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'log_archive.upload.timeout',
-        message: 'Log archive upload timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'file_name': fileName,
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'log_archive.upload.response',
-      message: 'Received log archive upload response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Log archive upload failed');
-  }
+  }) =>
+      _call('POST', _uri('/v1/mobile/log-archives'),
+          event: 'log_archive.upload',
+          failure: 'Log archive upload failed',
+          rawBody: Uint8List.fromList(utf8.encode(payload)),
+          headers: {
+            'content-type': contentType,
+            'x-expat8-device-id': deviceId,
+            'x-expat8-log-source': sourceLabel,
+            'x-expat8-log-filename': fileName,
+          },
+          sessionToken: sessionToken,
+          logContext: {
+            'file_name': fileName,
+            'device_id': deviceId,
+            'has_session_token': sessionToken != null,
+          });
 
-  /// Fetches the weekly speaking summary for [deviceId] (and optionally
-  /// a signed-in user via [sessionToken]).
   /// Uploads finished game rounds (idempotent by `client_round_id`).
   Future<GameRoundSyncResult> syncGameRounds({
     required String deviceId,
     required List<Map<String, dynamic>> rounds,
     String? sessionToken,
   }) async {
-    final uri = Uri.parse('$baseUrl/v1/games/rounds');
-    final payload = jsonEncode({'device_id': deviceId, 'rounds': rounds});
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: sessionToken,
-            ),
-          },
-          body: payload,
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Game round sync failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = await _json('POST', _uri('/v1/games/rounds'),
+        event: 'games.rounds',
+        failure: 'Game round sync failed',
+        json: {'device_id': deviceId, 'rounds': rounds},
+        sessionToken: sessionToken);
     List<String> ids(String key) =>
         List<String>.from(body[key] as List? ?? const []);
     return GameRoundSyncResult(
@@ -971,181 +402,52 @@ class BackendApiClient {
     required String sessionToken,
     required String game,
     required String mode,
-  }) async {
-    final uri = Uri.parse('$baseUrl/v1/games/leaderboard')
-        .replace(queryParameters: {'game': game, 'mode': mode});
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(method: 'GET', uri: uri, sessionToken: sessionToken),
-        )
-        .timeout(timeout);
-    _throwIfFailed(response, 'Game leaderboard fetch failed');
-    return GameLeaderboard.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      GameLeaderboard.fromJson(await _json(
+          'GET', _uri('/v1/games/leaderboard', {'game': game, 'mode': mode}),
+          event: 'games.leaderboard',
+          failure: 'Game leaderboard fetch failed',
+          sessionToken: sessionToken));
 
+  // ─── Speaking ──────────────────────────────────────────────────────────────
+
+  /// Fetches the weekly speaking summary for [deviceId] (and optionally a
+  /// signed-in user via [sessionToken]).
   Future<SpeakingWeeklySummary> fetchSpeakingSummary({
     required String deviceId,
     String language = 'en',
     String period = 'week',
     String? sessionToken,
-  }) async {
-    final traceId = _newTraceId();
-    final uri =
-        Uri.parse('$baseUrl/v1/speaking/summary').replace(queryParameters: {
-      'device_id': deviceId,
-      'language': language,
-      'period': period,
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'speaking.summary.request',
-      message: 'Fetching weekly speaking summary.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'speaking.summary.response',
-      message: 'Received weekly speaking summary.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch speaking summary failed');
-    return SpeakingWeeklySummary.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
-
-  void _throwIfFailed(http.Response response, String context) {
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      return;
-    }
-    String? backendError;
-    String? backendReason;
-    try {
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
-      backendError = body['error'] as String?;
-      backendReason = body['reason'] as String?;
-    } catch (_) {
-      backendError = null;
-      backendReason = null;
-    }
-    throw BackendApiException(
-      '$context: ${response.statusCode}',
-      statusCode: response.statusCode,
-      backendError: backendError,
-      backendReason: backendReason,
-    );
-  }
+  }) async =>
+      SpeakingWeeklySummary.fromJson(await _json(
+          'GET',
+          _uri('/v1/speaking/summary',
+              {'device_id': deviceId, 'language': language, 'period': period}),
+          event: 'speaking.summary',
+          failure: 'Fetch speaking summary failed',
+          sessionToken: sessionToken));
 
   /// Fetches approved speaking prompts for offline drill sync.
-  ///
-  /// Calls `GET /v1/speaking/prompts?limit=[limit]` and returns all items.
   Future<List<SpeakingPromptItem>> fetchSpeakingPrompts({
     int limit = 100,
-  }) async {
-    final traceId = _newTraceId();
-    final uri =
-        Uri.parse('$baseUrl/v1/speaking/prompts').replace(queryParameters: {
-      'limit': '$limit',
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'speaking.prompts.request',
-      message: 'Fetching approved speaking prompts.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'speaking.prompts.response',
-      message: 'Received approved speaking prompts.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch speaking prompts failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (body['items'] as List<dynamic>?) ?? [];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(SpeakingPromptItem.fromJson)
-        .toList();
-  }
+  }) async =>
+      _items(
+          await _json('GET', _uri('/v1/speaking/prompts', {'limit': '$limit'}),
+              event: 'speaking.prompts',
+              failure: 'Fetch speaking prompts failed'),
+          SpeakingPromptItem.fromJson);
+
+  // ─── Articles ──────────────────────────────────────────────────────────────
 
   Future<List<ManagedArticle>> listArticles({
     required String sessionToken,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/articles');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.list.request',
-      message: 'Requesting user articles.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.list.response',
-      message: 'Received user articles.',
-      traceId: traceId,
-      context: {'status_code': response.statusCode},
-    );
-    _throwIfFailed(response, 'List articles failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List? ?? const [];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(ManagedArticle.fromJson)
-        .toList(growable: false);
-  }
+  }) async =>
+      _items(
+          await _json('GET', _uri('/v1/articles'),
+              event: 'articles.list',
+              failure: 'List articles failed',
+              sessionToken: sessionToken),
+          ManagedArticle.fromJson);
 
   Future<ManagedArticle> createArticle({
     required String sessionToken,
@@ -1153,1011 +455,251 @@ class BackendApiClient {
     required String language,
     required String rawText,
     String? sourceUrl,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/articles');
-    final payload = jsonEncode({
-      'title': title,
-      'language': language,
-      'raw_text': rawText,
-      if (sourceUrl != null && sourceUrl.trim().isNotEmpty)
-        'source_url': sourceUrl.trim(),
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.create.request',
-      message: 'Creating article.',
-      traceId: traceId,
-      context: {
-        'uri': uri.toString(),
-        'language': language,
-      },
-    );
-    final response = await _httpClient
-        .post(
-          uri,
-          headers: {
-            'content-type': 'application/json',
-            ..._signedHeaders(
-              method: 'POST',
-              uri: uri,
-              body: Uint8List.fromList(utf8.encode(payload)),
-              sessionToken: sessionToken,
-            ),
+  }) async =>
+      ManagedArticle.fromJson(await _json('POST', _uri('/v1/articles'),
+          event: 'articles.create',
+          failure: 'Create article failed',
+          json: {
+            'title': title,
+            'language': language,
+            'raw_text': rawText,
+            if (sourceUrl != null && sourceUrl.trim().isNotEmpty)
+              'source_url': sourceUrl.trim(),
           },
-          body: payload,
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.create.response',
-      message: 'Received article creation response.',
-      traceId: traceId,
-      context: {'status_code': response.statusCode},
-    );
-    _throwIfFailed(response, 'Create article failed');
-    return ManagedArticle.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+          sessionToken: sessionToken,
+          logContext: {'language': language}));
 
   Future<ManagedArticle> getArticle({
     required String sessionToken,
     required String articleId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/articles/$articleId');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.detail.request',
-      message: 'Requesting article detail.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.detail.response',
-      message: 'Received article detail response.',
-      traceId: traceId,
-      context: {'status_code': response.statusCode},
-    );
-    _throwIfFailed(response, 'Fetch article failed');
-    return ManagedArticle.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      ManagedArticle.fromJson(await _json(
+          'GET', _uri('/v1/articles/$articleId'),
+          event: 'articles.detail',
+          failure: 'Fetch article failed',
+          sessionToken: sessionToken));
 
   Future<ArticleVocabularyResponse> getArticleVocabulary({
     required String sessionToken,
     required String articleId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/articles/$articleId/vocabulary');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.vocabulary.request',
-      message: 'Requesting article vocabulary.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final response = await _httpClient
-        .get(
-          uri,
-          headers: _signedHeaders(
-            method: 'GET',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.vocabulary.response',
-      message: 'Received article vocabulary response.',
-      traceId: traceId,
-      context: {'status_code': response.statusCode},
-    );
-    _throwIfFailed(response, 'Fetch article vocabulary failed');
-    return ArticleVocabularyResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      ArticleVocabularyResponse.fromJson(await _json(
+          'GET', _uri('/v1/articles/$articleId/vocabulary'),
+          event: 'articles.vocabulary',
+          failure: 'Fetch article vocabulary failed',
+          sessionToken: sessionToken));
 
   Future<void> deleteArticle({
     required String sessionToken,
     required String articleId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/articles/$articleId');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.delete.request',
-      message: 'Deleting article.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final response = await _httpClient
-        .delete(
-          uri,
-          headers: _signedHeaders(
-            method: 'DELETE',
-            uri: uri,
-            sessionToken: sessionToken,
-          ),
-        )
-        .timeout(timeout);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'articles.delete.response',
-      message: 'Received article delete response.',
-      traceId: traceId,
-      context: {'status_code': response.statusCode},
-    );
-    _throwIfFailed(response, 'Delete article failed');
-  }
+  }) =>
+      _call('DELETE', _uri('/v1/articles/$articleId'),
+          event: 'articles.delete',
+          failure: 'Delete article failed',
+          sessionToken: sessionToken);
 
-  // ─── Memorization Passages ──────────────────────────────────────────────────
+  // ─── Memorization passages ─────────────────────────────────────────────────
 
   Future<List<MemorizationPassage>> listPassages({
     required String sessionToken,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/memorization/passages');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.list_passages.request',
-      message: 'Fetching memorization passages list.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'memorization.list_passages.timeout',
-        message: 'List passages request timed out.',
-        traceId: traceId,
-        context: {'elapsed_ms': stopwatch.elapsedMilliseconds},
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.list_passages.response',
-      message: 'Received passages list response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'List passages failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => MemorizationPassage.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
+  }) async =>
+      _items(
+          await _json('GET', _uri('/v1/memorization/passages'),
+              event: 'memorization.list_passages',
+              failure: 'List passages failed',
+              sessionToken: sessionToken),
+          MemorizationPassage.fromJson);
 
   Future<MemorizationPassage> createPassage({
     required String sessionToken,
     required String title,
     required String language,
     required String rawText,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/memorization/passages');
-    final payload = jsonEncode({
-      'title': title,
-      'language': language,
-      'raw_text': rawText,
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.create_passage.request',
-      message: 'Creating memorization passage.',
-      traceId: traceId,
-      context: {'uri': uri.toString(), 'language': language, 'title_length': title.length},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: Uint8List.fromList(utf8.encode(payload)),
-                sessionToken: sessionToken,
-              ),
-            },
-            body: payload,
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'memorization.create_passage.timeout',
-        message: 'Create passage request timed out.',
-        traceId: traceId,
-        context: {'elapsed_ms': stopwatch.elapsedMilliseconds},
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.create_passage.response',
-      message: 'Received create passage response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Create passage failed');
-    return MemorizationPassage.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      MemorizationPassage.fromJson(await _json(
+          'POST', _uri('/v1/memorization/passages'),
+          event: 'memorization.create_passage',
+          failure: 'Create passage failed',
+          json: {'title': title, 'language': language, 'raw_text': rawText},
+          sessionToken: sessionToken,
+          logContext: {'language': language, 'title_length': title.length}));
 
   Future<MemorizationPassage> getPassage({
     required String sessionToken,
     required String passageId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/memorization/passages/$passageId');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.get_passage.request',
-      message: 'Fetching memorization passage.',
-      traceId: traceId,
-      context: {'passage_id': passageId},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'memorization.get_passage.timeout',
-        message: 'Get passage request timed out.',
-        traceId: traceId,
-        context: {'passage_id': passageId, 'elapsed_ms': stopwatch.elapsedMilliseconds},
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.get_passage.response',
-      message: 'Received get passage response.',
-      traceId: traceId,
-      context: {
-        'passage_id': passageId,
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch passage failed');
-    return MemorizationPassage.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      MemorizationPassage.fromJson(await _json(
+          'GET', _uri('/v1/memorization/passages/$passageId'),
+          event: 'memorization.get_passage',
+          failure: 'Fetch passage failed',
+          sessionToken: sessionToken,
+          logContext: {'passage_id': passageId}));
 
   Future<void> deletePassage({
     required String sessionToken,
     required String passageId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/memorization/passages/$passageId');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.delete_passage.request',
-      message: 'Deleting memorization passage.',
-      traceId: traceId,
-      context: {'passage_id': passageId},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .delete(
-            uri,
-            headers: _signedHeaders(
-              method: 'DELETE',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'memorization.delete_passage.timeout',
-        message: 'Delete passage request timed out.',
-        traceId: traceId,
-        context: {'passage_id': passageId, 'elapsed_ms': stopwatch.elapsedMilliseconds},
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.delete_passage.response',
-      message: 'Received delete passage response.',
-      traceId: traceId,
-      context: {
-        'passage_id': passageId,
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Delete passage failed');
-  }
+  }) =>
+      _call('DELETE', _uri('/v1/memorization/passages/$passageId'),
+          event: 'memorization.delete_passage',
+          failure: 'Delete passage failed',
+          sessionToken: sessionToken,
+          logContext: {'passage_id': passageId});
 
   Future<List<MemorizationSegmentProgress>> getPassageProgress({
     required String sessionToken,
     required String passageId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri =
-        Uri.parse('$baseUrl/v1/memorization/progress?passage_id=$passageId');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.get_progress.request',
-      message: 'Fetching memorization passage progress.',
-      traceId: traceId,
-      context: {'passage_id': passageId},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
+  }) async =>
+      _items(
+          await _json('GET',
+              _uri('/v1/memorization/progress', {'passage_id': passageId}),
+              event: 'memorization.get_progress',
+              failure: 'Fetch passage progress failed',
               sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'memorization.get_progress.timeout',
-        message: 'Get passage progress request timed out.',
-        traceId: traceId,
-        context: {'passage_id': passageId, 'elapsed_ms': stopwatch.elapsedMilliseconds},
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.get_progress.response',
-      message: 'Received passage progress response.',
-      traceId: traceId,
-      context: {
-        'passage_id': passageId,
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch passage progress failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = body['items'] as List<dynamic>? ?? [];
-    return items
-        .map((e) =>
-            MemorizationSegmentProgress.fromJson(e as Map<String, dynamic>))
-        .toList();
-  }
+              logContext: {'passage_id': passageId}),
+          MemorizationSegmentProgress.fromJson);
 
   Future<void> upsertSegmentProgress({
     required String sessionToken,
     required List<Map<String, dynamic>> progressUpdates,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/memorization/progress');
-    final payload = jsonEncode({'entries': progressUpdates});
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.upsert_progress.request',
-      message: 'Upserting memorization segment progress.',
-      traceId: traceId,
-      context: {'entry_count': progressUpdates.length},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              'content-type': 'application/json',
-              ..._signedHeaders(
-                method: 'POST',
-                uri: uri,
-                body: Uint8List.fromList(utf8.encode(payload)),
-                sessionToken: sessionToken,
-              ),
-            },
-            body: payload,
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'memorization.upsert_progress.timeout',
-        message: 'Upsert segment progress request timed out.',
-        traceId: traceId,
-        context: {'entry_count': progressUpdates.length, 'elapsed_ms': stopwatch.elapsedMilliseconds},
-      );
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'memorization.upsert_progress.response',
-      message: 'Received upsert progress response.',
-      traceId: traceId,
-      context: {
-        'entry_count': progressUpdates.length,
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Upsert segment progress failed');
-  }
+  }) =>
+      _call('POST', _uri('/v1/memorization/progress'),
+          event: 'memorization.upsert_progress',
+          failure: 'Upsert segment progress failed',
+          json: {'entries': progressUpdates},
+          sessionToken: sessionToken,
+          logContext: {'entry_count': progressUpdates.length});
 
-  // ─── Exam endpoints ─────────────────────────────────────────────────────────
+  // ─── Exams ─────────────────────────────────────────────────────────────────
 
-  /// Returns the list of topics the signed-in user has studied words in for
-  /// [language]. Calls `GET /v1/exam/topics?language=<language>`.
+  /// Topics the signed-in user has studied words in for [language].
   Future<List<String>> fetchExamTopics({
     required String sessionToken,
     String language = 'en',
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/exam/topics').replace(queryParameters: {
-      'language': language,
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.topics.request',
-      message: 'Fetching exam topics.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(uri,
-              headers: _signedHeaders(
-                  method: 'GET', uri: uri, sessionToken: sessionToken))
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.topics.response',
-      message: 'Received exam topics.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch exam topics failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = await _json(
+        'GET', _uri('/v1/exam/topics', {'language': language}),
+        event: 'exam.topics',
+        failure: 'Fetch exam topics failed',
+        sessionToken: sessionToken);
     return ((body['topics'] as List<dynamic>?) ?? [])
         .whereType<String>()
         .toList();
   }
 
-  /// Checks whether the backend is ready without sending app credential headers.
-  Future<bool> checkBackendReadiness() async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/health/ready');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'health.ready.request',
-      message: 'Checking backend readiness.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final stopwatch = Stopwatch()..start();
-    try {
-      final response = await _httpClient.get(uri).timeout(timeout);
-      await _logger.info(
-        category: AppLogCategory.api,
-        event: 'health.ready.response',
-        message: 'Received backend readiness response.',
-        traceId: traceId,
-        context: {
-          'status_code': response.statusCode,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-        },
-      );
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return true;
-      }
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'health.ready.unhealthy',
-        message: 'Backend readiness probe reported unhealthy.',
-        traceId: traceId,
-        context: {
-          'status_code': response.statusCode,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-        },
-      );
-      return false;
-    } on TimeoutException catch (error) {
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'health.ready.timeout',
-        message: 'Backend readiness probe timed out.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'timeout_ms': timeout.inMilliseconds,
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      return false;
-    } catch (error) {
-      await _logger.warning(
-        category: AppLogCategory.api,
-        event: 'health.ready.failed',
-        message: 'Backend readiness probe failed.',
-        traceId: traceId,
-        context: {
-          'uri': uri.toString(),
-          'elapsed_ms': stopwatch.elapsedMilliseconds,
-          'error': '$error',
-        },
-      );
-      return false;
-    } finally {
-      if (stopwatch.isRunning) {
-        stopwatch.stop();
-      }
-    }
-  }
-
-  /// Calls `POST /v1/exam/start` to generate a new exam session.
-  ///
-  /// Returns an [ExamSessionResponse]. Throws [BackendApiException] with
+  /// Generates a new exam session. Throws [BackendApiException] with
   /// `backendError == 'INSUFFICIENT_WORDS'` when fewer than 5 words are
-  /// available for the requested language.
+  /// available for [language].
   Future<ExamSessionResponse> startExamSession({
     required String sessionToken,
     String language = 'en',
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/exam/start');
-    final rawBody = utf8.encode(jsonEncode({'language': language}));
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.start.request',
-      message: 'Starting exam session.',
-      traceId: traceId,
-      context: {'language': language},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              ..._signedHeaders(
-                  method: 'POST',
-                  uri: uri,
-                  body: Uint8List.fromList(rawBody),
-                  sessionToken: sessionToken),
-              'content-type': 'application/json',
-            },
-            body: rawBody,
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.start.response',
-      message: 'Received exam session.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Start exam session failed');
-    return ExamSessionResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      ExamSessionResponse.fromJson(await _json('POST', _uri('/v1/exam/start'),
+          event: 'exam.start',
+          failure: 'Start exam session failed',
+          json: {'language': language},
+          sessionToken: sessionToken,
+          logContext: {'language': language}));
 
-  /// Calls `POST /v1/exam/submit` to score an exam session.
-  ///
-  /// [answers] is a list of 0-based choice indices in question ordinal order.
+  /// Scores an exam session; [answers] are 0-based choice indices in
+  /// question order.
   Future<ExamSubmitResponse> submitExamSession({
     required String sessionToken,
     required String sessionId,
     required List<int> answers,
     String? localAttemptId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/exam/submit');
-    final bodyMap = <String, dynamic>{
-      'session_id': sessionId,
-      'answers': answers,
-      if (localAttemptId != null) 'local_attempt_id': localAttemptId,
-    };
-    final rawBody = utf8.encode(jsonEncode(bodyMap));
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.submit.request',
-      message: 'Submitting exam session.',
-      traceId: traceId,
-      context: {'session_id': sessionId},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .post(
-            uri,
-            headers: {
-              ..._signedHeaders(
-                  method: 'POST',
-                  uri: uri,
-                  body: Uint8List.fromList(rawBody),
-                  sessionToken: sessionToken),
-              'content-type': 'application/json',
-            },
-            body: rawBody,
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.submit.response',
-      message: 'Received exam result.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Submit exam session failed');
-    return ExamSubmitResponse.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      ExamSubmitResponse.fromJson(await _json('POST', _uri('/v1/exam/submit'),
+          event: 'exam.submit',
+          failure: 'Submit exam session failed',
+          json: {
+            'session_id': sessionId,
+            'answers': answers,
+            if (localAttemptId != null) 'local_attempt_id': localAttemptId,
+          },
+          sessionToken: sessionToken,
+          logContext: {'session_id': sessionId}));
 
-  /// Calls `GET /v1/exam/results?page=<page>&limit=<limit>` to retrieve the
-  /// authenticated user's exam history.
+  /// The authenticated user's exam history.
   Future<ExamResultsPage> fetchExamResults({
     required String sessionToken,
     int page = 1,
     int limit = 20,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/exam/results').replace(queryParameters: {
-      'page': '$page',
-      'limit': '$limit',
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.results.request',
-      message: 'Fetching exam results.',
-      traceId: traceId,
-      context: {'uri': uri.toString()},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(uri,
-              headers: _signedHeaders(
-                  method: 'GET', uri: uri, sessionToken: sessionToken))
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.results.response',
-      message: 'Received exam results.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch exam results failed');
-    return ExamResultsPage.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      ExamResultsPage.fromJson(await _json(
+          'GET', _uri('/v1/exam/results', {'page': '$page', 'limit': '$limit'}),
+          event: 'exam.results',
+          failure: 'Fetch exam results failed',
+          sessionToken: sessionToken));
 
-  /// Calls `GET /v1/exam/certificate/:id` (public — no session required).
+  /// Public certificate (no session required).
   Future<ExamCertificate> fetchExamCertificate({
     required String certificateId,
-  }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/exam/certificate/$certificateId');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.certificate.request',
-      message: 'Fetching exam certificate.',
-      traceId: traceId,
-      context: {'certificate_id': certificateId},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'exam.certificate.response',
-      message: 'Received exam certificate.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch exam certificate failed');
-    return ExamCertificate.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  }) async =>
+      ExamCertificate.fromJson(await _json(
+          'GET', _uri('/v1/exam/certificate/$certificateId'),
+          event: 'exam.certificate',
+          failure: 'Fetch exam certificate failed',
+          logContext: {'certificate_id': certificateId}));
 
-  /// Lists published content packs for [language].
-  ///
-  /// Pass [afterVersion] to receive only packs with a higher version number
-  /// (incremental sync). Returns at most [limit] results (1–200).
+  // ─── Content packs & releases ──────────────────────────────────────────────
+
+  /// Published content packs for [language]; [afterVersion] limits the list
+  /// to newer packs (incremental sync). At most [limit] (1–200) results.
   Future<List<ContentPackSummary>> listContentPacks({
     String language = 'en',
     int? afterVersion,
     int limit = 100,
     String? sessionToken,
-  }) async {
-    final traceId = _newTraceId();
-    final queryParams = <String, String>{
-      'language': language,
-      'limit': limit.toString(),
-      if (afterVersion != null) 'after_version': afterVersion.toString(),
-    };
-    final uri = Uri.parse('$baseUrl/v1/content-packs')
-        .replace(queryParameters: queryParams);
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'content_packs.list.request',
-      message: 'Requesting content pack list.',
-      traceId: traceId,
-      context: {
-        'language': language,
-        'after_version': afterVersion,
-        'limit': limit,
-      },
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'content_packs.list.response',
-      message: 'Received content pack list.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'List content packs failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (body['items'] as List<dynamic>?) ?? const [];
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(ContentPackSummary.fromJson)
-        .toList(growable: false);
-  }
+  }) async =>
+      _items(
+          await _json(
+              'GET',
+              _uri('/v1/content-packs', {
+                'language': language,
+                'limit': '$limit',
+                if (afterVersion != null) 'after_version': '$afterVersion',
+              }),
+              event: 'content_packs.list',
+              failure: 'List content packs failed',
+              sessionToken: sessionToken),
+          ContentPackSummary.fromJson);
 
-  /// Downloads a single published content pack by [id].
-  ///
-  /// Returns `null` when the pack is not found (404).
+  /// One published content pack, or `null` when it does not exist (404).
   Future<ContentPack?> fetchContentPack({
     required String id,
     String? sessionToken,
   }) async {
-    final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/content-packs/$id');
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'content_pack.fetch.request',
-      message: 'Fetching content pack.',
-      traceId: traceId,
-      context: {'pack_id': id},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(
-            uri,
-            headers: _signedHeaders(
-              method: 'GET',
-              uri: uri,
-              sessionToken: sessionToken,
-            ),
-          )
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'content_pack.fetch.response',
-      message: 'Received content pack.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
+    final response = await _send('GET', _uri('/v1/content-packs/$id'),
+        event: 'content_pack.fetch',
+        sessionToken: sessionToken,
+        logContext: {'pack_id': id});
     if (response.statusCode == 404) return null;
     _throwIfFailed(response, 'Fetch content pack failed');
     return ContentPack.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
+        (await _decodeJson(response)) as Map<String, dynamic>);
   }
 
-  /// Fetches the latest available release for [platform].
-  ///
-  /// Returns `null` if no release exists for the given platform.
+  /// The latest release for [platform], or `null` if there is none.
   Future<ReleaseInfo?> fetchLatestRelease({
     String platform = 'android',
   }) async {
-    final traceId = _newTraceId();
-    final uri =
-        Uri.parse('$baseUrl/v1/releases/latest').replace(queryParameters: {
-      'platform': platform,
-    });
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'releases.latest.request',
-      message: 'Checking latest release.',
-      traceId: traceId,
-      context: {'platform': platform},
-    );
-    final stopwatch = Stopwatch()..start();
-    http.Response response;
-    try {
-      response = await _httpClient
-          .get(uri, headers: _signedHeaders(method: 'GET', uri: uri))
-          .timeout(timeout);
-    } on TimeoutException {
-      stopwatch.stop();
-      rethrow;
-    } finally {
-      if (stopwatch.isRunning) stopwatch.stop();
-    }
-    await _logger.info(
-      category: AppLogCategory.api,
-      event: 'releases.latest.response',
-      message: 'Received latest release response.',
-      traceId: traceId,
-      context: {
-        'status_code': response.statusCode,
-        'elapsed_ms': stopwatch.elapsedMilliseconds,
-      },
-    );
-    _throwIfFailed(response, 'Fetch latest release failed');
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final body = await _json(
+        'GET', _uri('/v1/releases/latest', {'platform': platform}),
+        event: 'releases.latest', failure: 'Fetch latest release failed');
     final release = body['release'];
-    if (release == null) return null;
-    return ReleaseInfo.fromJson(release as Map<String, dynamic>);
+    return release == null
+        ? null
+        : ReleaseInfo.fromJson(release as Map<String, dynamic>);
   }
 
-  /// Downloads the release APK for [releaseId] to a temporary file.
-  ///
-  /// Calls [onProgress] periodically with (bytesReceived, totalBytes).
-  /// Returns the path to the downloaded file.
+  /// Downloads the release APK for [releaseId] to a temporary file, calling
+  /// [onProgress] with (bytesReceived, totalBytes). Returns the file path.
   Future<String> downloadRelease(
     String releaseId, {
     void Function(int received, int total)? onProgress,
   }) async {
     final traceId = _newTraceId();
-    final uri = Uri.parse('$baseUrl/v1/releases/$releaseId/download');
+    final uri = _uri('/v1/releases/$releaseId/download');
     await _logger.info(
       category: AppLogCategory.api,
       event: 'releases.download.request',
@@ -2165,10 +707,9 @@ class BackendApiClient {
       traceId: traceId,
       context: {'release_id': releaseId},
     );
-    final request = http.Request('GET', uri);
-    request.headers.addAll(_signedHeaders(method: 'GET', uri: uri));
-    final streamedResponse =
-        await _httpClient.send(request).timeout(timeout);
+    final request = http.Request('GET', uri)
+      ..headers.addAll(_signedHeaders(method: 'GET', uri: uri));
+    final streamedResponse = await _httpClient.send(request).timeout(timeout);
     if (streamedResponse.statusCode < 200 ||
         streamedResponse.statusCode >= 300) {
       await streamedResponse.stream.drain<void>();
@@ -2178,11 +719,9 @@ class BackendApiClient {
       );
     }
     final totalBytes = streamedResponse.contentLength ?? 0;
-    final tempDir = io.Directory.systemTemp;
-    final filePath = '${tempDir.path}/release-$releaseId.apk';
-    final file = io.File(filePath);
-    final sink = file.openWrite();
-    int received = 0;
+    final filePath = '${io.Directory.systemTemp.path}/release-$releaseId.apk';
+    final sink = io.File(filePath).openWrite();
+    var received = 0;
     try {
       await for (final chunk in streamedResponse.stream) {
         sink.add(chunk);
@@ -2200,18 +739,199 @@ class BackendApiClient {
       context: {
         'release_id': releaseId,
         'file_path': filePath,
-        'bytes': received,
+        'bytes': received
       },
     );
     return filePath;
   }
 
-  String _newTraceId() {
-    return 'api_${DateTime.now().microsecondsSinceEpoch}';
+  /// Whether the backend is ready (unsigned probe; never throws).
+  Future<bool> checkBackendReadiness() async {
+    try {
+      final response = await _send('GET', _uri('/health/ready'),
+          event: 'health.ready', signed: false);
+      if (_isSuccess(response.statusCode)) return true;
+      await _logger.warning(
+        category: AppLogCategory.api,
+        event: 'health.ready.unhealthy',
+        message: 'Backend readiness probe reported unhealthy.',
+        context: {'status_code': response.statusCode},
+      );
+      return false;
+    } on Object catch (error) {
+      if (error is! TimeoutException) {
+        await _logger.warning(
+          category: AppLogCategory.api,
+          event: 'health.ready.failed',
+          message: 'Backend readiness probe failed.',
+          context: {'error': '$error'},
+        );
+      }
+      return false;
+    }
   }
-}
 
-extension on BackendApiClient {
+  // ─── Transport ─────────────────────────────────────────────────────────────
+
+  Uri _uri(String path, [Map<String, String>? query]) {
+    final uri = Uri.parse('$baseUrl$path');
+    return query == null ? uri : uri.replace(queryParameters: query);
+  }
+
+  /// Sends one request. [json] is encoded as the JSON body; [rawBody] is sent
+  /// as-is with caller [headers]. Logs `<event>.request`, `.response` and
+  /// `.timeout` (rethrowing the timeout) under [category].
+  Future<http.Response> _send(
+    String method,
+    Uri uri, {
+    required String event,
+    Object? json,
+    Uint8List? rawBody,
+    Map<String, String> headers = const {},
+    String? sessionToken,
+    bool signed = true,
+    AppLogCategory category = AppLogCategory.api,
+    Map<String, Object?> logContext = const {},
+  }) async {
+    final traceId = _newTraceId();
+    final body = rawBody ??
+        (json == null
+            ? null
+            : Uint8List.fromList(utf8.encode(jsonEncode(json))));
+    final requestHeaders = {
+      if (json != null) 'content-type': 'application/json',
+      ...headers,
+      if (signed)
+        ..._signedHeaders(
+            method: method, uri: uri, body: body, sessionToken: sessionToken),
+    };
+    await _logger.info(
+      category: category,
+      event: '$event.request',
+      message: '$method ${uri.path}',
+      traceId: traceId,
+      context: {
+        'uri': uri.toString(),
+        'timeout_ms': timeout.inMilliseconds,
+        ...logContext,
+      },
+    );
+    final stopwatch = Stopwatch()..start();
+    final http.Response response;
+    try {
+      final request = http.Request(method, uri)..headers.addAll(requestHeaders);
+      if (body != null) request.bodyBytes = body;
+      response = await http.Response.fromStream(
+          await _httpClient.send(request).timeout(timeout));
+    } on TimeoutException catch (error) {
+      await _logger.warning(
+        category: category,
+        event: '$event.timeout',
+        message: '$method ${uri.path} timed out.',
+        traceId: traceId,
+        context: {
+          'uri': uri.toString(),
+          'timeout_ms': timeout.inMilliseconds,
+          'elapsed_ms': stopwatch.elapsedMilliseconds,
+          'error': '$error',
+          ...logContext,
+        },
+      );
+      rethrow;
+    }
+    await _logger.info(
+      category: category,
+      event: '$event.response',
+      message: '$method ${uri.path} → ${response.statusCode}',
+      traceId: traceId,
+      context: {
+        'status_code': response.statusCode,
+        'elapsed_ms': stopwatch.elapsedMilliseconds,
+      },
+    );
+    return response;
+  }
+
+  /// [_send] that must succeed; returns the decoded JSON object.
+  Future<Map<String, dynamic>> _json(
+    String method,
+    Uri uri, {
+    required String event,
+    required String failure,
+    Object? json,
+    String? sessionToken,
+    AppLogCategory category = AppLogCategory.api,
+    Map<String, Object?> logContext = const {},
+  }) async {
+    final response = await _send(method, uri,
+        event: event,
+        json: json,
+        sessionToken: sessionToken,
+        category: category,
+        logContext: logContext);
+    _throwIfFailed(response, failure);
+    return (await _decodeJson(response)) as Map<String, dynamic>;
+  }
+
+  /// [_send] that must succeed; the response body is not needed.
+  Future<void> _call(
+    String method,
+    Uri uri, {
+    required String event,
+    required String failure,
+    Object? json,
+    Uint8List? rawBody,
+    Map<String, String> headers = const {},
+    String? sessionToken,
+    AppLogCategory category = AppLogCategory.api,
+    Map<String, Object?> logContext = const {},
+  }) async {
+    final response = await _send(method, uri,
+        event: event,
+        json: json,
+        rawBody: rawBody,
+        headers: headers,
+        sessionToken: sessionToken,
+        category: category,
+        logContext: logContext);
+    _throwIfFailed(response, failure);
+  }
+
+  /// The `items` array of [body], parsed with [fromJson].
+  List<T> _items<T>(Map<String, dynamic> body,
+          T Function(Map<String, dynamic>) fromJson) =>
+      [
+        for (final item in body['items'] as List? ?? const [])
+          if (item is Map<String, dynamic>) fromJson(item),
+      ];
+
+  static bool _isSuccess(int status) => status >= 200 && status < 300;
+
+  void _throwIfFailed(http.Response response, String context) {
+    if (_isSuccess(response.statusCode)) return;
+    String? backendError;
+    String? backendReason;
+    try {
+      // Error bodies are tiny: decode inline (this method is synchronous).
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      backendError = body['error'] as String?;
+      backendReason = body['reason'] as String?;
+    } catch (_) {
+      backendError = null;
+      backendReason = null;
+    }
+    throw BackendApiException(
+      '$context: ${response.statusCode}',
+      statusCode: response.statusCode,
+      backendError: backendError,
+      backendReason: backendReason,
+    );
+  }
+
+  String _newTraceId() => 'api_${DateTime.now().microsecondsSinceEpoch}';
+
+  // ─── Request signing (see contracts/api.md) ────────────────────────────────
+
   Map<String, String> _signedHeaders({
     required String method,
     required Uri uri,
@@ -2220,17 +940,14 @@ extension on BackendApiClient {
   }) {
     final timestamp = DateTime.now().toUtc().toIso8601String();
     final nonce = _newNonce();
-    final rawBody = body ?? Uint8List(0);
-    final contentSha256 = _hashBody(rawBody);
-    final canonicalRequest = _buildCanonicalRequest(
+    final contentSha256 = _hashBody(body ?? Uint8List(0));
+    final signature = _signCanonicalRequest(_buildCanonicalRequest(
       method: method,
       uri: uri,
       timestamp: timestamp,
       nonce: nonce,
       contentSha256: contentSha256,
-    );
-    final signature = _signCanonicalRequest(canonicalRequest);
-
+    ));
     return {
       'x-expat8-app-id': appId,
       'x-expat8-timestamp': timestamp,
@@ -2247,10 +964,8 @@ extension on BackendApiClient {
     return 'mobile_${base64Url.encode(bytes).replaceAll('=', '')}';
   }
 
-  String _hashBody(Uint8List rawBody) {
-    final digest = sha256.convert(rawBody);
-    return base64Url.encode(digest.bytes).replaceAll('=', '');
-  }
+  String _hashBody(Uint8List rawBody) =>
+      base64Url.encode(sha256.convert(rawBody).bytes).replaceAll('=', '');
 
   String _buildCanonicalRequest({
     required String method,
@@ -2259,9 +974,8 @@ extension on BackendApiClient {
     required String nonce,
     required String contentSha256,
   }) {
-    final sortedKeys = uri.queryParametersAll.keys.toList()..sort();
     final sortedParams = <String>[];
-    for (final key in sortedKeys) {
+    for (final key in uri.queryParametersAll.keys.toList()..sort()) {
       final values = [...(uri.queryParametersAll[key] ?? const <String>[])]
         ..sort();
       for (final value in values) {
@@ -2273,7 +987,6 @@ extension on BackendApiClient {
     final canonicalPathWithQuery = sortedParams.isEmpty
         ? uri.path
         : '${uri.path}?${sortedParams.join('&')}';
-
     return [
       'v1',
       method.toUpperCase(),
@@ -2285,90 +998,10 @@ extension on BackendApiClient {
   }
 
   String _signCanonicalRequest(String canonicalRequest) {
-    final hmacDigest = Hmac(sha256, utf8.encode(appSecret)).convert(
-      utf8.encode(canonicalRequest),
-    );
-    final signature = base64Url.encode(hmacDigest.bytes).replaceAll('=', '');
-    return 'v1=$signature';
+    final hmacDigest = Hmac(sha256, utf8.encode(appSecret))
+        .convert(utf8.encode(canonicalRequest));
+    return 'v1=${base64Url.encode(hmacDigest.bytes).replaceAll('=', '')}';
   }
-}
-
-class GameRoundSyncResult {
-  const GameRoundSyncResult({
-    required this.acceptedRoundIds,
-    required this.duplicateRoundIds,
-    required this.rejectedRounds,
-  });
-
-  final List<String> acceptedRoundIds;
-  final List<String> duplicateRoundIds;
-  final List<Map<String, dynamic>> rejectedRounds;
-}
-
-class GameLeaderboardEntry {
-  const GameLeaderboardEntry({
-    required this.rank,
-    required this.displayName,
-    required this.score,
-    required this.accuracy,
-    required this.bestCombo,
-    required this.isMe,
-  });
-
-  factory GameLeaderboardEntry.fromJson(Map<String, dynamic> json) =>
-      GameLeaderboardEntry(
-        rank: (json['rank'] as num?)?.toInt() ?? 0,
-        displayName: json['display_name'] as String? ?? 'Player',
-        score: (json['score'] as num?)?.toInt() ?? 0,
-        accuracy: (json['accuracy'] as num?)?.toDouble() ?? 0,
-        bestCombo: (json['best_combo'] as num?)?.toInt() ?? 0,
-        isMe: json['is_me'] as bool? ?? false,
-      );
-
-  final int rank;
-  final String displayName;
-  final int score;
-  final double accuracy;
-  final int bestCombo;
-  final bool isMe;
-
-  Map<String, dynamic> toJson() => {
-        'rank': rank,
-        'display_name': displayName,
-        'score': score,
-        'accuracy': accuracy,
-        'best_combo': bestCombo,
-        'is_me': isMe,
-      };
-}
-
-class GameLeaderboard {
-  const GameLeaderboard({
-    required this.weekStart,
-    required this.entries,
-    this.me,
-  });
-
-  factory GameLeaderboard.fromJson(Map<String, dynamic> json) => GameLeaderboard(
-        weekStart: json['week_start'] as String? ?? '',
-        entries: [
-          for (final e in json['entries'] as List? ?? const [])
-            GameLeaderboardEntry.fromJson(e as Map<String, dynamic>),
-        ],
-        me: json['me'] is Map<String, dynamic>
-            ? GameLeaderboardEntry.fromJson(json['me'] as Map<String, dynamic>)
-            : null,
-      );
-
-  final String weekStart;
-  final List<GameLeaderboardEntry> entries;
-  final GameLeaderboardEntry? me;
-
-  Map<String, dynamic> toJson() => {
-        'week_start': weekStart,
-        'entries': [for (final e in entries) e.toJson()],
-        if (me != null) 'me': me!.toJson(),
-      };
 }
 
 class BackendApiException implements Exception {
@@ -2388,6 +1021,16 @@ class BackendApiException implements Exception {
   String toString() => message;
 }
 
-// ─── Re-exported models (backward compatibility) ────────────────────────────
-// DTOs have been extracted to models/ subdirectory.
-// These exports maintain backward compatibility for existing imports.
+/// Responses above this size are decoded on a background isolate.
+const _backgroundDecodeBytes = 16 * 1024;
+
+/// Decodes a JSON response. Large bodies (card batches, article lists) are
+/// UTF-8 + JSON decoded on a worker isolate so the UI thread keeps rendering;
+/// small ones are decoded inline because spawning an isolate costs more.
+Future<Object?> _decodeJson(http.Response response) {
+  final bytes = response.bodyBytes;
+  if (bytes.length < _backgroundDecodeBytes) {
+    return Future.value(jsonDecode(response.body));
+  }
+  return Isolate.run(() => jsonDecode(utf8.decode(bytes)));
+}

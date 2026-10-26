@@ -41,7 +41,8 @@ class ConnectivityMonitor extends ChangeNotifier {
     );
   }
 
-  void _update(List<ConnectivityResult> results, {required bool notifyReconnect}) {
+  void _update(List<ConnectivityResult> results,
+      {required bool notifyReconnect}) {
     final online = results.any((r) => r != ConnectivityResult.none);
     if (online == _isOnline) return;
     _isOnline = online;

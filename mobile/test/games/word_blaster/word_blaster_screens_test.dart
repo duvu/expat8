@@ -10,6 +10,7 @@ import 'package:expat8_language_app/src/games/game_storage.dart';
 import 'package:expat8_language_app/src/games/word_blaster/game/word_blaster_game.dart';
 import 'package:expat8_language_app/src/games/word_blaster/ui/word_blaster_home_screen.dart';
 import 'package:expat8_language_app/src/games/word_blaster/word_blaster_context.dart';
+import 'package:expat8_language_app/src/games/word_blaster/word_blaster_theme.dart';
 import 'package:expat8_language_app/src/games/word_blaster/word_blaster_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flame/game.dart';
@@ -112,9 +113,81 @@ Future<void> waitForMeteors(WidgetTester tester) async {
   }
 }
 
+/// The story card sits above the modes: scroll the home screen to a mode.
+Future<void> revealMode(WidgetTester tester, String mode) async {
+  await tester.scrollUntilVisible(
+      find.byKey(ValueKey('word-blaster-mode-$mode')), 150,
+      scrollable: find.byType(Scrollable).first);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
+  });
+
+  testWidgets(
+      'home screen lets the player pick the level to shoot and remembers it',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (ctx, db, _) = await tester.runAsync(buildContext) as (
+      WordBlasterContext,
+      LocalDatabase,
+      List<String>
+    );
+    addTearDown(db.close);
+
+    await tester
+        .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('word-blaster-level-auto')), findsOneWidget);
+    expect(find.byKey(const ValueKey('word-blaster-level-B1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('word-blaster-level-B1')));
+    await tester.pumpAndSettle();
+    expect(await tester.runAsync(ctx.targetLevel), 2);
+
+    await tester.tap(find.byKey(const ValueKey('word-blaster-level-auto')));
+    await tester.pumpAndSettle();
+    expect(await tester.runAsync(ctx.targetLevel), isNull);
+  });
+
+  testWidgets('Easter egg theme can be chosen, is remembered and plays a round',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (ctx, db, _) = await tester.runAsync(buildContext) as (
+      WordBlasterContext,
+      LocalDatabase,
+      List<String>
+    );
+    addTearDown(db.close);
+
+    await tester
+        .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Easter eggs'));
+    await tester.pumpAndSettle();
+    expect(await tester.runAsync(ctx.theme), WordBlasterTheme.easter);
+
+    await revealMode(tester, 'classic');
+
+    await tester.tap(find.byKey(const ValueKey('word-blaster-mode-classic')));
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await frames(tester, 50);
+    await waitForMeteors(tester);
+    expect(gameOf(tester).isEaster, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('egg size grows with word length', () {
+    expect(eggScaleForLength(3), lessThan(eggScaleForLength(7)));
+    expect(eggScaleForLength(7), lessThan(eggScaleForLength(12)));
+    expect(eggScaleForLength(1), eggScaleForLength(3));
+    expect(eggScaleForLength(30), eggScaleForLength(12));
   });
 
   testWidgets('plays a classic round to game over and records reviews',
@@ -131,7 +204,10 @@ void main() {
     await tester
         .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
     await tester.pumpAndSettle();
+    await revealMode(tester, 'classic');
     expect(find.text('Classic'), findsOneWidget);
+
+    await revealMode(tester, 'classic');
 
     await tester.tap(find.byKey(const ValueKey('word-blaster-mode-classic')));
     await tester
@@ -227,6 +303,7 @@ void main() {
     await tester
         .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
     await tester.pumpAndSettle();
+    await revealMode(tester, 'listening');
     await tester.tap(find.byKey(const ValueKey('word-blaster-mode-listening')));
     await tester
         .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
@@ -277,6 +354,7 @@ void main() {
     await tester
         .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
     await tester.pumpAndSettle();
+    await revealMode(tester, 'classic');
     await tester.tap(find.byKey(const ValueKey('word-blaster-mode-classic')));
     await tester
         .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
@@ -287,6 +365,8 @@ void main() {
 
   testWidgets('locks Fill the gap below A2 and disables Listening without TTS',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final (base, db, _) = await tester.runAsync(buildContext) as (
       WordBlasterContext,
       LocalDatabase,
@@ -304,7 +384,9 @@ void main() {
     await tester
         .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
     await tester.pumpAndSettle();
+    await revealMode(tester, 'fillGap');
     expect(find.textContaining('Unlocks at level A2'), findsOneWidget);
+    await revealMode(tester, 'listening');
     expect(find.text('Needs text-to-speech on this device'), findsOneWidget);
   });
 }

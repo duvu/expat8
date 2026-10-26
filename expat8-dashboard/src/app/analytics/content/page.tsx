@@ -1,34 +1,23 @@
-import { Suspense } from 'react';
-
 import {
   getWordTopicCoverage,
   getEntryTypeDistribution,
   getQualityScoreHistogram,
   getVocabReviewThroughput,
 } from '@/lib/analytics';
+import { resolveTimeRange } from '@/lib/time-range';
+import ChartPanel from '@/components/ChartPanel';
 import PageShell from '@/components/PageShell';
-import TimeRangeSelectorWrapper from '@/components/TimeRangeSelectorWrapper';
-import KpiCard from '@/components/charts/KpiCard';
+import TimeRangeSelector from '@/components/TimeRangeSelector';
 import BarChart from '@/components/charts/BarChart';
+import KpiCard from '@/components/charts/KpiCard';
 import PieChart from '@/components/charts/PieChart';
-import { parseTimeRange, type TimeRange } from '@/lib/time-range';
-
 
 export const dynamic = 'force-dynamic';
 
-function parseRange(r: string | undefined): number {
-  if (r === '7d') return 7;
-  if (r === '90d') return 90;
-  if (r === 'all') return 3650;
-  return 30;
-}
+const ENTRY_TYPE_COLORS = ['#2563eb', '#7c3aed', '#d97706'];
 
-export default async function ContentCoveragePage({ searchParams }: { searchParams: Promise<{ range?: string }>; }) {
-  const params = await searchParams;
-  const range = params.range;
-  const days = parseRange(range);
-  const currentRange: TimeRange = parseTimeRange(range ?? null);
-
+export default async function ContentCoveragePage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const { range, days } = resolveTimeRange((await searchParams).range);
   const [topicCoverage, entryTypes, qualityHistogram, reviewThroughput] = await Promise.all([
     getWordTopicCoverage(),
     getEntryTypeDistribution(),
@@ -36,33 +25,23 @@ export default async function ContentCoveragePage({ searchParams }: { searchPara
     getVocabReviewThroughput(days),
   ]);
 
-  const entryTypeSlices = entryTypes.map((e: { type: string; count: number }, i: number) => ({
+  const entryTypeSlices = entryTypes.map((e, i) => ({
     name: e.type,
     value: e.count,
-    color: ['#2563eb', '#7c3aed', '#d97706'][i % 3],
+    color: ENTRY_TYPE_COLORS[i % ENTRY_TYPE_COLORS.length],
   }));
 
   return (
-    <PageShell
-      title="Content Coverage"
-      actions={
-        <Suspense>
-          <TimeRangeSelectorWrapper current={currentRange} />
-        </Suspense>
-      }
-    >
+    <PageShell title="Content Coverage" actions={<TimeRangeSelector current={range} />}>
       <section className="kpi-grid">
-        <KpiCard label="Total Topics" value={topicCoverage.total_topics} />
-        <KpiCard label="Total Words" value={topicCoverage.total_words} />
+        <KpiCard label="Total Topics" value={topicCoverage.rows.length} />
+        <KpiCard label="Total Words" value={topicCoverage.totalWords} />
         <KpiCard label="Entry Types" value={entryTypes.length} />
-        <KpiCard label="Avg Quality Score" value={qualityHistogram.avg_score?.toFixed(2) ?? '—'} />
+        <KpiCard label="Avg Quality Score" value={qualityHistogram.avgScore?.toFixed(2) ?? '—'} />
       </section>
 
       <section className="analytics-grid wide">
-        <div className="chart-panel">
-          <div className="chart-panel-header">
-            <h2 className="chart-panel-title">Topic Coverage</h2>
-          </div>
+        <ChartPanel title="Topic Coverage">
           <BarChart
             data={topicCoverage.rows}
             xKey="topic"
@@ -70,32 +49,23 @@ export default async function ContentCoveragePage({ searchParams }: { searchPara
             series={[{ key: 'count', label: 'Words', color: '#2563eb' }]}
             height={320}
           />
-        </div>
+        </ChartPanel>
 
-        <div className="chart-panel">
-          <div className="chart-panel-header">
-            <h2 className="chart-panel-title">Entry Type Distribution</h2>
-          </div>
+        <ChartPanel title="Entry Type Distribution">
           <PieChart data={entryTypeSlices} donut />
-        </div>
+        </ChartPanel>
       </section>
 
       <section className="analytics-grid wide">
-        <div className="chart-panel">
-          <div className="chart-panel-header">
-            <h2 className="chart-panel-title">Quality Score Histogram</h2>
-          </div>
+        <ChartPanel title="Quality Score Histogram">
           <BarChart
             data={qualityHistogram.rows}
             xKey="bucket"
             series={[{ key: 'count', label: 'Words', color: '#7c3aed' }]}
           />
-        </div>
+        </ChartPanel>
 
-        <div className="chart-panel">
-          <div className="chart-panel-header">
-            <h2 className="chart-panel-title">Review Throughput</h2>
-          </div>
+        <ChartPanel title="Review Throughput">
           <BarChart
             data={reviewThroughput}
             xKey="date"
@@ -105,7 +75,7 @@ export default async function ContentCoveragePage({ searchParams }: { searchPara
               { key: 'rejected', label: 'Rejected', color: '#dc2626' },
             ]}
           />
-        </div>
+        </ChartPanel>
       </section>
     </PageShell>
   );

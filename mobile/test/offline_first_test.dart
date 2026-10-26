@@ -48,7 +48,9 @@ class _SwitchableApi extends BackendApiClient {
     final error = syncError;
     if (error != null) throw error;
     return SyncResult(
-      acceptedEventIds: [for (final e in events) e['client_event_id'] as String],
+      acceptedEventIds: [
+        for (final e in events) e['client_event_id'] as String
+      ],
       rejectedEvents: const [],
     );
   }
@@ -223,8 +225,8 @@ void main() {
     final offline = await repository.loadPassages(sessionToken: 't');
     expect(offline.fromCache, isTrue);
     expect(offline.data.map((p) => p.id), ['p1']);
-    final progress =
-        await repository.loadPassageProgress(sessionToken: 't', passageId: 'p1');
+    final progress = await repository.loadPassageProgress(
+        sessionToken: 't', passageId: 'p1');
     expect(progress.single.reviewCount, 2);
   });
 
@@ -268,7 +270,8 @@ void main() {
     );
   });
 
-  test('connectivity monitor fires reconnect only on offline to online', () async {
+  test('connectivity monitor fires reconnect only on offline to online',
+      () async {
     final changes = StreamController<List<ConnectivityResult>>();
     addTearDown(changes.close);
     final monitor = ConnectivityMonitor(

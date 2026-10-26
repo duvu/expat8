@@ -162,3 +162,16 @@ test('admin-created article transitions to pending_review on successful processi
   const processed = store.getArticleById({ articleId: article.id });
   assert.equal(processed.status, 'pending_review');
 });
+
+test('reclaims a job stranded in processing by a dead worker', async () => {
+  const store = new WordStore({ seed: false });
+  const article = store.createArticle({ userId: null, title: 't', language: 'en', rawText: 'x' });
+  const first = store.claimNextArticleProcessingJob();
+  assert.equal(first.article_id, article.id);
+  assert.equal(store.claimNextArticleProcessingJob(), null, 'a fresh in-flight job is left alone');
+
+  first.started_at = new Date(Date.now() - 16 * 60_000).toISOString();
+  const reclaimed = store.claimNextArticleProcessingJob();
+  assert.equal(reclaimed?.id, first.id);
+  assert.equal(reclaimed.attempt_count, 2);
+});

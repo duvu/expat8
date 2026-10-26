@@ -1,6 +1,6 @@
 import express from 'express';
-import { toApiSpeakingPrompt } from '../word_store.js';
-import { asyncHandler, clampLimit, resolveOptionalUserSession } from './helpers.js';
+import { toApiSpeakingPrompt } from '../domain/speaking.js';
+import { asyncHandler, queryLimit, resolveOptionalUserSession } from './helpers.js';
 
 export function createSpeakingRouter({ store, config }) {
   const router = express.Router();
@@ -8,7 +8,7 @@ export function createSpeakingRouter({ store, config }) {
   router.get(
     '/prompts',
     asyncHandler(async (request, response) => {
-      const limit = clampLimit(request.query.limit ?? 100, 1, 200);
+      const limit = queryLimit(request.query.limit, 100, 200);
       const wordSenseId = typeof request.query.word_sense_id === 'string' ? request.query.word_sense_id : null;
       let prompts = await store.listSpeakingPrompts({ status: 'approved', limit });
       if (wordSenseId) {

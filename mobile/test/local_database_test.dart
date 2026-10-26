@@ -5,12 +5,15 @@ import 'package:expat8_language_app/src/models/user_session.dart';
 import 'package:expat8_language_app/src/models/vocabulary_word.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+const _aMinute = Duration(minutes: 1);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('persists words and prunes to 1000 most recent', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_prune_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
 
@@ -26,7 +29,8 @@ void main() {
 
   test('stores pending study events before sync', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_sync_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_sync_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     await database.insertStudyEvent(
@@ -61,7 +65,8 @@ void main() {
 
   test('normalizes an existing raw device id to anonymous format', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_device_id_normalize_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_device_id_normalize_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.setSetting('device_id', 'raw_uuid');
@@ -73,7 +78,8 @@ void main() {
 
   test('persists and clears active user session', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_user_session_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_user_session_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     const session = UserSession(
       userId: 'user_1',
@@ -95,7 +101,8 @@ void main() {
   test('returns the most recently learned word before due-review fallback',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_recent_review_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_recent_review_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     // Both words are due (nextReviewAt in the past) so the scheduling gate
@@ -161,7 +168,8 @@ void main() {
 
   test('prunes logs by age and max entries', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_log_prune_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_log_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.persistLogEntry(
@@ -248,7 +256,8 @@ void main() {
 
   test('getSetting returns null for unknown key', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_get_setting_null_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_get_setting_null_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     final value = await database.getSetting('unknown_key');
@@ -257,7 +266,8 @@ void main() {
 
   test('setSetting stores and getSetting retrieves a value', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_set_get_setting_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_set_get_setting_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.setSetting('my_key', 'my_value');
@@ -268,7 +278,8 @@ void main() {
 
   test('setSetting replaces existing value for the same key', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_set_replace_setting_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_set_replace_setting_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     await database.setSetting('my_key', 'first');
@@ -280,7 +291,8 @@ void main() {
 
   test('countUnstudiedNewWords returns 0 for empty database', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_count_new_empty_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_count_new_empty_${DateTime.now().microsecondsSinceEpoch}.db',
     );
 
     final count = await database.countUnstudiedNewWords();
@@ -289,7 +301,8 @@ void main() {
 
   test('countUnstudiedNewWords counts only new_word status entries', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_count_new_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_count_new_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     await database.upsertWord(_word('new_1', now));
@@ -305,7 +318,8 @@ void main() {
   test('lists active cached server ids and deletes local words by id',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_active_cache_delete_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_active_cache_delete_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4);
     await database.upsertWord(_word('server_1', now));
@@ -322,7 +336,8 @@ void main() {
   test('addBatch prunes to 990 before inserting when count is at 995',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_add_batch_prune_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_add_batch_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.utc(2026, 5, 4);
 
@@ -349,7 +364,8 @@ void main() {
   test('addBatch inserts all words without pruning when count is low',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_add_batch_no_prune_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_add_batch_no_prune_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime.utc(2026, 5, 4);
 
@@ -416,32 +432,57 @@ void main() {
     expect(activeIds, containsAll(batch.map((word) => word.serverWordId)));
   });
 
-  test('markWordRememberedLowFrequency schedules far review as mastered',
-      () async {
+  test('a refetched card keeps its learning schedule', () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_mark_remembered_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_refetch_${DateTime.now().microsecondsSinceEpoch}.db',
     );
-    final now = DateTime.utc(2026, 5, 4, 10, 0);
+    final now = DateTime.utc(2026, 5, 4, 10);
+    final word = _word('refetched', now);
+    await database.upsertWord(word);
+    await database.updateWordAfterRating(
+        word: word, rating: StudyRating.easy, now: now);
+    await database.updateWordAfterRating(
+        word: word, rating: StudyRating.easy, now: now);
+
+    // The server sends the same word again as a due review card.
+    await database.addBatch([word]);
+
+    final kept =
+        await database.nextDueReviewWord(now.add(const Duration(days: 6)));
+    expect(kept?.localId, word.localId);
+    expect(kept?.status, WordStatus.review);
+    expect(kept?.nextReviewAt, now.add(const Duration(days: 6)));
+  });
+
+  test('remembered words grow their interval until mastered', () async {
+    final database = await LocalDatabase.open(
+      databaseName:
+          'local_database_test_mark_remembered_${DateTime.now().microsecondsSinceEpoch}.db',
+    );
+    var now = DateTime.utc(2026, 5, 4, 10, 0);
     final word = _word('remembered_1', now);
     await database.upsertWord(word);
 
-    await database.markWordRememberedLowFrequency(word: word, now: now);
-
-    // Fetch via nextDueReviewWord at a time when the scheduled review is due
-    final updated = await database.nextDueReviewWord(
-      now.add(const Duration(days: 11)),
-    );
-    expect(updated, isNotNull);
-    expect(updated!.status, WordStatus.mastered);
-    expect(updated.nextReviewAt, isNotNull);
-    expect(
-        updated.nextReviewAt!.isAfter(now.add(const Duration(days: 9))), true);
+    // too_easy each time it is due: 4 days, then 14.56, then 55.84 (mastered).
+    final expectedDays = [4.0, 14.56, 55.84];
+    for (final days in expectedDays) {
+      await database.markWordRememberedLowFrequency(word: word, now: now);
+      final due = now.add(Duration(milliseconds: (days * 86400000).round()));
+      expect(await database.nextDueReviewWord(due.subtract(_aMinute)), isNull);
+      final updated = await database.nextDueReviewWord(due);
+      expect(updated?.nextReviewAt, due);
+      now = due;
+    }
+    final mastered = await database.nextDueReviewWord(now);
+    expect(mastered!.status, WordStatus.mastered);
   });
 
   test('markWordDifficultForRelearn schedules near-term relearn as learning',
       () async {
     final database = await LocalDatabase.open(
-      databaseName: 'local_database_test_mark_difficult_${DateTime.now().microsecondsSinceEpoch}.db',
+      databaseName:
+          'local_database_test_mark_difficult_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final now = DateTime.utc(2026, 5, 4, 10, 0);
     final word = _word('difficult_1', now);
@@ -710,22 +751,11 @@ void main() {
           'local_database_test_null_review_${DateTime.now().microsecondsSinceEpoch}.db',
     );
     final base = DateTime(2024, 6, 1, 12, 0, 0).toUtc();
-    // A learning word with no nextReviewAtMs (null)
-    final word = _word('word_c', base).copyWith(
+    // A seen learning word with no nextReviewAtMs (null).
+    await database.upsertWord(_word('word_c', base).copyWith(
       status: WordStatus.learning,
-      // nextReviewAt left null
-    );
-    await database.upsertWord(word);
-    await database.markWordAsLearning(word: word, now: base);
-
-    // Overwrite nextReviewAtMs back to null by upserting directly
-    await database.upsertWord(
-      word.copyWith(
-        status: WordStatus.learning,
-        lastSeenAt: base,
-        nextReviewAt: null,
-      ),
-    );
+      lastSeenAt: base,
+    ));
 
     final result = await database.recentlyLearnedReviewWord(base);
     expect(result?.localId, 'word_c');

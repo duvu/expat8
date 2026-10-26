@@ -43,8 +43,9 @@ void main() {
 
     final words = {for (final w in await db.wordsForLanguage('en')) w.term: w};
     expect(words, hasLength(2), reason: 'games never delete local words');
-    expect(words['curious']!.status, WordStatus.learning);
-    expect(words['curious']!.nextReviewAt, now.add(const Duration(days: 1)));
+    // Shared SRS: correct = easy (first review in 2 days), wrong = hard (1 day).
+    expect(words['curious']!.status, WordStatus.review);
+    expect(words['curious']!.nextReviewAt, now.add(const Duration(days: 2)));
     expect(words['brave']!.status, WordStatus.review);
     expect(words['brave']!.nextReviewAt, now.add(const Duration(days: 1)));
 

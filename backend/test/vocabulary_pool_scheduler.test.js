@@ -10,7 +10,7 @@ test('fills vocabulary pool when language inventory is below minimum size', asyn
   const scheduler = new VocabularyPoolScheduler({
     store,
     generationService,
-    config: schedulerConfig({ vocabPoolMinSize: 1000, vocabGenerationBatchSize: 25 }),
+    config: schedulerConfig({ vocabGenerationBatchSize: 25 }),
     now: () => new Date('2026-05-05T00:00:00.000Z')
   });
 
@@ -19,6 +19,9 @@ test('fills vocabulary pool when language inventory is below minimum size', asyn
   assert.equal(result.mode, 'fill');
   assert.equal(generationService.calls.length, 1);
   assert.equal(generationService.calls[0].limit, 25);
+  // Every level is empty, so the highest-targeted level (largest deficit, ties to higher level) goes first.
+  assert.equal(generationService.calls[0].difficultyLevel, 'B2');
+  assert.equal(result.level, 'B2');
   assert.equal(store.generationRuns.length, 1);
   assert.equal(store.generationRuns[0].status, 'success');
 });
@@ -32,7 +35,7 @@ test('runs daily top-up once after vocabulary pool reaches minimum size', async 
   const scheduler = new VocabularyPoolScheduler({
     store,
     generationService,
-    config: schedulerConfig({ vocabPoolMinSize: 1000, vocabDailyGenerationCount: 10 }),
+    config: schedulerConfig({ vocabLevelTargets: { A1: 1000 }, vocabDailyGenerationCount: 10 }),
     now: () => new Date('2026-05-05T02:00:00.000Z')
   });
 
@@ -45,6 +48,68 @@ test('runs daily top-up once after vocabulary pool reaches minimum size', async 
   assert.equal(generationService.calls[0].limit, 10);
 });
 
+test('targets the level with the largest deficit and steers away from existing terms', async () => {
+  const store = new WordStore({ seed: false });
+  for (let index = 0; index < 300; index += 1) {
+    store.insertWord(wordInput(index));
+  }
+  const generationService = new RecordingGenerationService();
+  const scheduler = new VocabularyPoolScheduler({
+    store,
+    generationService,
+    config: schedulerConfig({ vocabLevelTargets: { A1: 200, B1: 300, B2: 50 } }),
+    now: () => new Date('2026-05-05T00:00:00.000Z')
+  });
+
+  const result = await scheduler.runOnce({ targetLanguage: 'en' });
+
+  assert.equal(result.level, 'B1');
+  assert.equal(generationService.calls[0].difficultyLevel, 'B1');
+  assert.ok(generationService.calls[0].avoidTerms.length > 0);
+});
+
+test('backs off exponentially while generation adds nothing, then recovers', async () => {
+  const store = new WordStore({ seed: false });
+  const generationService = new RecordingGenerationService();
+  let clock = new Date('2026-05-05T00:00:00.000Z').getTime();
+  const scheduler = new VocabularyPoolScheduler({
+    store,
+    generationService,
+    config: schedulerConfig({ vocabFillIntervalSeconds: 60, vocabMaxBackoffSeconds: 1800 }),
+    now: () => new Date(clock)
+  });
+
+  assert.equal((await scheduler.runOnce()).mode, 'fill');
+  assert.equal((await scheduler.runOnce()).reason, 'backing_off');
+  clock += 120_000;
+  assert.equal((await scheduler.runOnce()).mode, 'fill');
+  clock += 120_000;
+  assert.equal((await scheduler.runOnce()).reason, 'backing_off');
+  assert.equal(generationService.calls.length, 2);
+
+  generationService.nextResult = [{ id: 'w' }];
+  clock += 3_600_000;
+  assert.equal((await scheduler.runOnce()).insertedCount, 1);
+  assert.equal((await scheduler.runOnce()).mode, 'fill');
+});
+
+test('pauses background generation when the LLM hourly budget is nearly spent', async () => {
+  const store = new WordStore({ seed: false });
+  const generationService = new RecordingGenerationService();
+  const scheduler = new VocabularyPoolScheduler({
+    store,
+    generationService,
+    config: schedulerConfig({ llmReservedRequestsPerHour: 30 }),
+    rateLimiter: { remainingHourlyBudget: () => 10 },
+    now: () => new Date('2026-05-05T00:00:00.000Z')
+  });
+
+  const result = await scheduler.runOnce();
+
+  assert.equal(result.reason, 'llm_budget_low');
+  assert.equal(generationService.calls.length, 0);
+});
+
 class RecordingGenerationService {
   constructor() {
     this.calls = [];
@@ -52,7 +117,7 @@ class RecordingGenerationService {
 
   async generateAndStore(input) {
     this.calls.push(input);
-    return [];
+    return this.nextResult ?? [];
   }
 }
 
@@ -61,6 +126,9 @@ function schedulerConfig(overrides = {}) {
     defaultSourceLanguage: 'vi',
     defaultTargetLanguage: 'en',
     vocabPoolMinSize: 1000,
+    vocabLevelTargets: { A1: 200, A2: 250, B1: 300, B2: 300, C1: 200 },
+    vocabFillIntervalSeconds: 60,
+    vocabMaxBackoffSeconds: 1800,
     vocabGenerationBatchSize: 20,
     vocabDailyGenerationCount: 10,
     vocabDailyGenerationHourUtc: 0,

@@ -38,12 +38,10 @@ class GithubReleaseService {
       final cached = await _getCached(prefs);
       if (cached != null) return cached;
 
-      final response = await http
-          .get(
-            Uri.parse(_apiUrl),
-            headers: {'Accept': 'application/vnd.github+json'},
-          )
-          .timeout(const Duration(seconds: 10));
+      final response = await http.get(
+        Uri.parse(_apiUrl),
+        headers: {'Accept': 'application/vnd.github+json'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) return UpdateCheckResult.noUpdate;
 

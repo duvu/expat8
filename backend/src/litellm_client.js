@@ -1,12 +1,22 @@
 import { getProficiencyProfile, normalizeDifficultyLevel } from './proficiency.js';
 
 export class LiteLLMClient {
-  constructor({ baseUrl, apiKey, model, fetchImpl = fetch, logger = console }) {
+  constructor({ baseUrl, apiKey, model, timeoutMs = 120_000, fetchImpl = fetch, logger = console, rateLimiter = null }) {
     this.baseUrl = baseUrl ? baseUrl.replace(/\/$/, '') : undefined;
     this.apiKey = apiKey;
     this.model = model;
+    // Router gateways (OmniRoute) may walk a long fallback chain; never hang a worker job forever.
+    this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
     this.logger = logger;
+    // Optional shared throttle; without one requests go straight to the gateway (tests, scripts).
+    this.rateLimiter = rateLimiter;
+  }
+
+  /** Every gateway call goes through here so retries and rate limiting apply uniformly. */
+  #fetch(url, init) {
+    const send = () => this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
+    return this.rateLimiter ? this.rateLimiter.run(send) : send();
   }
 
   /**
@@ -24,7 +34,7 @@ export class LiteLLMClient {
     const startedAt = Date.now();
     let response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+      response = await this.#fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -81,7 +91,7 @@ export class LiteLLMClient {
 
     let response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+      response = await this.#fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -124,6 +134,80 @@ export class LiteLLMClient {
     return body.choices?.[0]?.message?.content ?? '';
   }
 
+  /**
+   * Grades a web article for learners: CEFR level of its language, writing quality (1-5), and whether it
+   * suits a general study corpus (no explicit/hateful/tragic-news/ad/listicle/sports-score content).
+   */
+  async assessArticle({ title, text }) {
+    const response = await this.chatCompletion({
+      temperature: 0.1,
+      messages: [
+        {
+          role: 'system',
+          content: 'You grade English reading material for Vietnamese learners. Return valid JSON only.'
+        },
+        {
+          role: 'user',
+          content: [
+            'Assess this article for an English vocabulary-study corpus. Return one JSON object with exactly these fields:',
+            '- cefr_level: the CEFR level (A1/A2/B1/B2/C1/C2) a learner needs to read it comfortably, judged from vocabulary and grammar, not from topic.',
+            '- quality: integer 1-5 for clear, well-written, reusable everyday/work/general-knowledge language (1 = unusable).',
+            '- suitable: false for explicit, violent, hateful, medical-advice, gambling, ad/sponsored, pure sports-score, or heavily local-politics content.',
+            '- reason: one short sentence.',
+            `Title: ${title}`,
+            'Article:',
+            String(text).slice(0, 3500)
+          ].join('\n')
+        }
+      ]
+    });
+    const parsed = parseJsonObject(response.choices?.[0]?.message?.content ?? '');
+    const level = String(parsed.cefr_level ?? '').trim().toUpperCase();
+    return {
+      cefr_level: normalizeDifficultyLevel(level, { language: 'en' }),
+      quality: Math.max(0, Math.min(5, Math.round(Number(parsed.quality) || 0))),
+      suitable: parsed.suitable === true,
+      reason: typeof parsed.reason === 'string' ? parsed.reason.slice(0, 200) : null
+    };
+  }
+
+  /** Suggests exact English Wikipedia article titles for the curated reading collection. */
+  async suggestWikipediaTitles({ category, count = 8, avoid = [] }) {
+    const subject = {
+      speech: 'famous world speeches (the title of the Wikipedia article about the speech)',
+      biography: 'influential historical figures and role models',
+      history: 'important historical events, inventions, places and eras'
+    }[category];
+    const response = await this.chatCompletion({
+      temperature: 0.6,
+      messages: [
+        { role: 'system', content: 'You pick reading material for English learners. Return valid JSON only.' },
+        {
+          role: 'user',
+          content: [
+            `List ${count} exact English Wikipedia article titles about ${subject}.`,
+            'Choose well-known, uplifting or educational topics suitable for general learners.',
+            `Do not repeat any of these: ${avoid.slice(0, 120).join('; ')}.`,
+            'Return a JSON array of strings only.'
+          ].join('\n')
+        }
+      ]
+    });
+    const raw = String(response.choices?.[0]?.message?.content ?? '')
+      .trim()
+      .replace(/^```(?:json)?/i, '')
+      .replace(/```$/, '')
+      .trim();
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((title) => typeof title === 'string' && title.trim()).map((title) => title.trim())
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
   async generateSubmittedVocabulary({
     sourceLanguage = 'vi',
     targetLanguage = 'en',
@@ -147,7 +231,7 @@ export class LiteLLMClient {
 
     let response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+      response = await this.#fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -230,7 +314,7 @@ export class LiteLLMClient {
 
     let response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+      response = await this.#fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -307,7 +391,7 @@ export class LiteLLMClient {
 
     let response;
     try {
-      response = await this.fetchImpl(`${this.baseUrl}/v1/chat/completions`, {
+      response = await this.#fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -415,8 +499,9 @@ function buildArticleSuggestionPromptLines({
   return [
     `Analyze article chunk ${chunkIndex + 1} and suggest up to ${maxSuggestions} useful ${targetLanguage} words or phrases for ${sourceLanguage} speakers.`,
     articleTitle ? `Article title: ${articleTitle}.` : null,
-    `Article language is ${articleLanguage}. Target proficiency scale is ${profile.scale.toUpperCase()} and target level is ${difficultyLevel}.`,
+    `Article language is ${articleLanguage}. Proficiency scale is ${profile.scale.toUpperCase()}.`,
     'Each suggestion must be directly supported by the chunk and should be useful for vocabulary study.',
+    `Judge each term's real ${profile.scale.toUpperCase()} level honestly (use ${difficultyLevel} only when unsure) and prefer terms above the most basic level: skip everyday beginner words a learner already knows.`,
     'Return a JSON array of objects with exactly these fields: term, language, meaning_vi, part_of_speech, ipa, vietnamese_pronunciation, example, example_vi, difficulty, level, topics, classification, suggestion_type.',
     `Use difficulty and level values from ${difficultyLevels} or the nearest valid level for the article language.`,
     'Use classification values like article_keyword, article_phrase, or article_concept when appropriate.',
@@ -449,4 +534,22 @@ function buildArticleWorkplaceSentencePromptLines({
 function getDefaultArticleDifficulty({ language }) {
   const profile = getProficiencyProfile({ language });
   return profile.defaultLevel;
+}
+
+function parseJsonObject(raw) {
+  const text = String(raw).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return {};
+    }
+    try {
+      return JSON.parse(match[0]);
+    } catch {
+      return {};
+    }
+  }
 }

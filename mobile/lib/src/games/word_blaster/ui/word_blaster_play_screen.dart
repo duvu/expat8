@@ -10,8 +10,12 @@ import '../word_blaster_context.dart';
 import '../word_blaster_mode.dart';
 import '../word_blaster_session.dart';
 import '../word_blaster_stats.dart';
+import '../word_blaster_theme.dart';
 import '../word_pool.dart';
 import 'word_blaster_recap_screen.dart';
+import '../../common/game_activity.dart';
+import '../../common/game_story.dart';
+import '../../common/game_story_scene.dart';
 
 /// One Word Blaster round: HUD, Flame scene and prompt panel.
 class WordBlasterPlayScreen extends StatefulWidget {
@@ -19,21 +23,24 @@ class WordBlasterPlayScreen extends StatefulWidget {
     required this.context,
     required this.mode,
     required this.pool,
+    this.theme = WordBlasterTheme.space,
     super.key,
   });
 
   final WordBlasterContext context;
   final WordBlasterMode mode;
   final WordPool pool;
+  final WordBlasterTheme theme;
 
   @override
   State<WordBlasterPlayScreen> createState() => _WordBlasterPlayScreenState();
 }
 
 class _WordBlasterPlayScreenState extends State<WordBlasterPlayScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, GameActivityScope<WordBlasterPlayScreen> {
   WordBlasterContext get _ctx => widget.context;
   late final WordBlasterSession _session;
+  late final GameStoryDriver _story = _ctx.storyDriver(widget.theme);
   WordBlasterGame? _game;
   StreamSubscription<WordBlasterEvent>? _events;
   Timer? _countdownTimer;
@@ -67,7 +74,7 @@ class _WordBlasterPlayScreenState extends State<WordBlasterPlayScreen>
         timer.cancel();
         setState(() => _countdown = 0);
         _session.start();
-        _ctx.audio.startMusic();
+        _story.start();
       } else {
         setState(() => _countdown--);
       }
@@ -89,6 +96,7 @@ class _WordBlasterPlayScreenState extends State<WordBlasterPlayScreen>
         palette: palette,
         audio: _ctx.audio,
         reducedMotion: _ctx.settings.reducedMotion,
+        theme: widget.theme,
       );
     } else {
       game.palette = palette;
@@ -136,6 +144,10 @@ class _WordBlasterPlayScreenState extends State<WordBlasterPlayScreen>
                 ? 'Boss incoming!'
                 : 'Bonus wave! x1.5 points')
             : 'Wave ${event.value} cleared!');
+        if (_story.reach(_session.chapter)) {
+          _game?.chapter = _story.chapter;
+          setState(() {});
+        }
       case WordBlasterEventKind.overheated:
         _showBanner('Overheated! Aim carefully');
       case WordBlasterEventKind.gameOver:
@@ -267,6 +279,15 @@ class _WordBlasterPlayScreenState extends State<WordBlasterPlayScreen>
                       ),
                     if (_countdown > 0)
                       Positioned.fill(child: _Countdown(value: _countdown)),
+                    if (_countdown == 0)
+                      // Keyed by chapter: plays once when a chapter opens.
+                      Positioned.fill(
+                        child: StoryLevelUpBanner(
+                          key: ValueKey('banner-${_story.chapter.name}'),
+                          theme: widget.theme,
+                          chapter: _story.chapter,
+                        ),
+                      ),
                     Positioned.fill(
                       child: ListenableBuilder(
                         listenable: _session,

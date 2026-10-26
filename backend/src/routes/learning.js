@@ -1,7 +1,8 @@
 import express from 'express';
 import { rateLimitMiddleware } from '../rate_limit.js';
-import { toApiWord } from '../word_store.js';
-import { asyncHandler, clampLimit, resolveOptionalUserSession } from './helpers.js';
+import { normalizeDifficultyLevel } from '../proficiency.js';
+import { toApiWord } from '../domain/vocabulary.js';
+import { asyncHandler, queryLimit, resolveOptionalUserSession } from './helpers.js';
 
 export function createLearningRouter({ store, config, rateLimiters = {} }) {
   const { learningCardsLimiter } = rateLimiters;
@@ -22,16 +23,26 @@ export function createLearningRouter({ store, config, rateLimiters = {} }) {
       if (normalizeCardMode(body.card_mode) !== 'new') {
         return response.status(400).json({ error: 'bad_request' });
       }
-      const limit = clampLimit(body.limit ?? 10, 1, 100);
+      const limit = queryLimit(body.limit, 10, 100);
       const targetLanguage = body.target_language ?? config.defaultTargetLanguage;
+      // Optional study-level override (the learner picked a level for this session). Absent/null means
+      // "use the learner's own proficiency level".
+      const requestedLevel = body.level ?? null;
+      const level =
+        requestedLevel === null ? null : normalizeDifficultyLevel(requestedLevel, { language: targetLanguage });
+      if (requestedLevel !== null && level === null) {
+        return response.status(400).json({ error: 'bad_request' });
+      }
       const result = await store.learningCards({
         deviceId: body.device_id,
         userId: userSession?.user.id ?? null,
         targetLanguage,
         limit,
+        level,
         now: new Date().toISOString()
       });
       return response.json({
+        level: result.level,
         target_mix: result.target_mix,
         actual_mix: result.actual_mix,
         items: result.items.map((card) => ({

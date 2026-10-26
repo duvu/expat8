@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/local_database.dart';
 import '../models/learning_progress.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/brand_backdrop.dart';
 
 class LearningProgressStatsScreen extends StatefulWidget {
   const LearningProgressStatsScreen({required this.database, super.key});
@@ -35,7 +36,8 @@ class _LearningProgressStatsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Stats')),
-      body: FutureBuilder<LearningProgressTotals>(
+      body: BrandBackdrop(
+          child: FutureBuilder<LearningProgressTotals>(
         future: _totalsFuture,
         builder: (context, snapshot) {
           final totals = snapshot.data;
@@ -110,7 +112,7 @@ class _LearningProgressStatsScreenState
             ),
           );
         },
-      ),
+      )),
     );
   }
 }

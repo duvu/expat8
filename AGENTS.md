@@ -92,3 +92,51 @@ LITELLM_API_KEY=... docker compose up --build -d
 - `CLAUDE.md` and `.github/copilot-instructions.md` — deploy/build details.
 - `.wolf/*` — active OpenWolf memory; update when you learn something durable.
 - `contracts/api.md` — trust this over handler code for API behavior.
+
+## Programming Rules
+
+Agent MUST follow these principles for every implementation and code review:
+
+### SOLID
+- Keep each class, module, function, and component focused on one responsibility.
+- Depend on abstractions or narrow interfaces where this reduces coupling; avoid hard-coding infrastructure details into domain logic.
+- Prefer composition and small, replaceable units over deep inheritance hierarchies.
+- New code must be open for extension without requiring risky changes to stable behavior, and substitutable implementations must honor the same contract.
+- Do not introduce an abstraction solely to satisfy the acronym; it must provide a clear testing, replacement, or separation benefit.
+
+### DRY
+- Keep business rules, validation, API contracts, design tokens, and shared transformations defined in one authoritative place.
+- Before adding duplicated logic, search for an existing helper, service, hook, component, or token that can be reused.
+- Do not prematurely generalize code that only happens to look similar; extract shared code when the behavior and change reason are genuinely the same.
+
+### KISS
+- Choose the simplest design that correctly satisfies the requirement and existing contracts.
+- Prefer readable control flow, explicit data transformations, and standard project conventions over clever abstractions or unnecessary indirection.
+- Keep functions, components, and files small enough to understand locally; split them when responsibilities or change reasons diverge.
+- Avoid adding dependencies, patterns, configuration, or runtime complexity without a concrete benefit.
+
+### YAGNI
+- Implement only requirements that are currently requested or required by an existing contract.
+- Do not add speculative extension points, unused configuration, premature optimization, or hypothetical error handling.
+- Preserve existing behavior unless the task explicitly requires a behavior change; document intentional contract changes and update tests.
+
+### General implementation requirements
+- Read the relevant existing code, tests, and canonical documentation before modifying behavior.
+- Keep API behavior aligned with `contracts/api.md`; when code and contract disagree, treat the contract as authoritative and call out the discrepancy.
+- Validate inputs at boundaries, return actionable errors, and avoid leaking secrets or sensitive data in logs and responses.
+- Add or update focused tests for changed behavior. Do not weaken or delete tests merely to make the suite pass.
+- Keep changes scoped to the request. Avoid unrelated refactors and formatting churn.
+- Before handoff, run the narrowest relevant checks, then broader checks when practical, and report any checks that could not be run.
+
+## Frontend Theme Rules
+
+These rules apply to `expat8-dashboard/` and any future frontend surfaces in this repository. The visual theme MUST be consistent across the entire project.
+
+- Define colors, typography, spacing, border radii, shadows, breakpoints, and component states as shared design tokens in the existing theme/design-system location. Do not scatter raw visual values throughout pages or components.
+- Reuse the shared theme and existing UI primitives before creating a new component or one-off style. New primitives must be justified and documented by their reusable purpose.
+- Keep light/dark mode behavior, semantic colors, focus states, hover states, disabled states, loading states, and error states consistent across screens.
+- Use the same visual language for buttons, forms, tables, cards, dialogs, navigation, alerts, empty states, and responsive layouts. Variants must come from the theme rather than ad-hoc overrides.
+- Do not introduce page-specific colors, fonts, spacing scales, radii, shadows, or arbitrary breakpoints unless the exception is necessary, documented, and added to the shared design system.
+- Ensure accessible contrast, visible keyboard focus, readable text sizing, semantic HTML, and usable touch targets while preserving the established theme.
+- When changing the theme, review all affected screens and update snapshots, visual tests, or screenshots where the project provides them.
+- A frontend change is incomplete if it works functionally but makes the product visually inconsistent with the rest of the project.

@@ -23,6 +23,7 @@ export declare function filterLogArchives(
   archives: LogArchiveRecord[],
   filters?: {
     q?: string;
+    user?: string;
     source?: string;
     state?: string;
     from?: string;

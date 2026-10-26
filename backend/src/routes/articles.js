@@ -1,6 +1,6 @@
 import express from 'express';
 import { rateLimitMiddleware } from '../rate_limit.js';
-import { asyncHandler, clampLimit, resolveRequiredUserSession } from './helpers.js';
+import { asyncHandler, queryLimit, resolveRequiredUserSession } from './helpers.js';
 
 export function createArticlesRouter({ store, _config, rateLimiters = {} }) {
   const { articleUploadLimiter } = rateLimiters;
@@ -39,7 +39,7 @@ export function createArticlesRouter({ store, _config, rateLimiters = {} }) {
       if (!userSession) {
         return;
       }
-      const limit = clampLimit(request.query.limit, 1, 100);
+      const limit = queryLimit(request.query.limit, 50, 100);
       const items = await store.listArticles({ userId: userSession.user.id, limit });
       return response.json({ items: items.map(toApiArticle) });
     })
@@ -59,7 +59,7 @@ export function createArticlesRouter({ store, _config, rateLimiters = {} }) {
       if (!article) {
         return response.status(404).json({ error: 'not_found' });
       }
-      return response.json(toApiArticle(article));
+      return response.json({ ...toApiArticle(article), raw_text: article.raw_text });
     })
   );
 

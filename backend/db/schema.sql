@@ -58,6 +58,7 @@ CREATE TABLE user_proficiency (
   device_id TEXT NOT NULL,
   language TEXT NOT NULL DEFAULT 'en',
   level TEXT NOT NULL,
+  level_changed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id)
@@ -75,9 +76,26 @@ CREATE TABLE user_word_states (
   next_review_at TEXT,
   ease_factor REAL,
   review_count INTEGER NOT NULL DEFAULT 0,
+  interval_days REAL NOT NULL DEFAULT 0,
+  reps INTEGER NOT NULL DEFAULT 0,
+  lapses INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (word_id) REFERENCES words(id)
 );
+
+CREATE TABLE crawled_urls (
+  url_hash TEXT PRIMARY KEY,
+  url TEXT NOT NULL,
+  feed_url TEXT,
+  status TEXT NOT NULL,
+  reason TEXT,
+  cefr_level TEXT,
+  quality INTEGER,
+  article_id TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_crawled_urls_created ON crawled_urls (created_at DESC);
 
 CREATE TABLE generation_runs (
   id TEXT PRIMARY KEY,
@@ -457,3 +475,10 @@ CREATE TABLE IF NOT EXISTS nonces (
 
 CREATE INDEX IF NOT EXISTS nonces_expires_at_idx ON nonces (expires_at);
 CREATE INDEX idx_memorization_segment_terms_segment ON memorization_segment_terms(segment_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_word_states_user_updated
+  ON user_word_states (user_id, updated_at, id) WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_user_word_states_device_updated
+  ON user_word_states (device_id, updated_at, id) WHERE user_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_study_events_user_word ON study_events (user_id, word_id);
+CREATE INDEX IF NOT EXISTS idx_study_events_device_word ON study_events (device_id, word_id);

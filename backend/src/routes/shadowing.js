@@ -8,7 +8,7 @@ import {
   canAccessShadowingEntry,
   toApiShadowingEntry
 } from '../shadowing_videos.js';
-import { asyncHandler, clampLimit, resolveOptionalUserSession } from './helpers.js';
+import { asyncHandler, queryLimit, resolveOptionalUserSession } from './helpers.js';
 
 const unavailableShadowingVideoResolver = new UnavailableShadowingVideoResolver();
 
@@ -31,7 +31,7 @@ export function createShadowingRouter({ store, shadowingVideoResolver = unavaila
       const items = await store.listShadowingVideoEntries({
         deviceId,
         userId: userSession?.user.id ?? null,
-        limit: clampLimit(request.query.limit, 1, 100)
+        limit: queryLimit(request.query.limit, 50, 100)
       });
       return response.json({ items: items.map((entry) => toApiShadowingEntry(entry)) });
     })

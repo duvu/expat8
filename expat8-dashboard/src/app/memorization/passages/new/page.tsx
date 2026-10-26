@@ -1,25 +1,29 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { backendFetch } from '@/lib/backend';
+
+import { backendRequest } from '@/lib/backend';
+import { formText } from '@/lib/form';
+import { PASSAGE_LANGUAGE_OPTIONS, VISIBILITY_OPTIONS } from '@/lib/options';
 import PageShell from '@/components/PageShell';
+import Select from '@/components/Select';
+
+async function createPassage(formData: FormData) {
+  'use server';
+  const passage = await backendRequest<{ id: string }>('/v1/admin/memorization/passages', {
+    method: 'POST',
+    body: {
+      title: formText(formData, 'title'),
+      language: formText(formData, 'language'),
+      // Not trimmed: the backend enforces the 50–20000 character bounds on the raw text.
+      raw_text: String(formData.get('raw_text') ?? ''),
+      visibility: formText(formData, 'visibility'),
+    },
+  });
+  revalidatePath('/memorization/passages');
+  redirect(`/memorization/passages/${passage.id}`);
+}
 
 export default function NewMemorizationPassagePage() {
-  async function createPassage(formData: FormData) {
-    'use server';
-    const title = formData.get('title') as string;
-    const language = formData.get('language') as string;
-    const raw_text = formData.get('raw_text') as string;
-    const visibility = formData.get('visibility') as string;
-
-    const response = await backendFetch('/v1/admin/memorization/passages', {
-      method: 'POST',
-      body: { title, language, raw_text, visibility },
-    });
-    const passage = await response.json();
-    revalidatePath('/memorization/passages');
-    redirect(`/memorization/passages/${passage.id}`);
-  }
-
   return (
     <PageShell title="New Memorization Passage">
       <form action={createPassage} className="editor-form">
@@ -27,24 +31,8 @@ export default function NewMemorizationPassagePage() {
           Title
           <input name="title" required placeholder="e.g. I Have a Dream" />
         </label>
-
-        <label>
-          Language
-          <select name="language" defaultValue="en">
-            <option value="en">English</option>
-            <option value="zh">Chinese</option>
-            <option value="vi">Vietnamese</option>
-          </select>
-        </label>
-
-        <label>
-          Visibility
-          <select name="visibility" defaultValue="published">
-            <option value="private">Private</option>
-            <option value="published">Published</option>
-          </select>
-        </label>
-
+        <Select label="Language" name="language" options={PASSAGE_LANGUAGE_OPTIONS} defaultValue="en" />
+        <Select label="Visibility" name="visibility" options={VISIBILITY_OPTIONS} defaultValue="published" />
         <label>
           Passage Text
           <textarea
@@ -56,8 +44,7 @@ export default function NewMemorizationPassagePage() {
             placeholder="Paste the full passage text here (50-20000 characters)..."
           />
         </label>
-
-        <button type="submit">Create Passage</button>
+        <button type="submit" className="primary">Create Passage</button>
       </form>
     </PageShell>
   );

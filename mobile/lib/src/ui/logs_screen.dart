@@ -162,9 +162,8 @@ class _LogsScreenState extends State<LogsScreen> {
           ),
           IconButton(
             tooltip: 'Export logs',
-            onPressed: (_isLoading || _isExporting || _isSending)
-                ? null
-                : _exportLogs,
+            onPressed:
+                (_isLoading || _isExporting || _isSending) ? null : _exportLogs,
             icon: _isExporting
                 ? const SizedBox(
                     width: 18,
