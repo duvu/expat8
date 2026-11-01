@@ -1,13 +1,15 @@
 import Link from 'next/link';
 
 import { listExamResults } from '@/lib/db';
-import { formatDateTime } from '@/lib/format';
 import { queryParam } from '@/lib/form';
 import DataTable from '@/components/DataTable';
+import DateTime from '@/components/DateTime';
 import FilterForm from '@/components/FilterForm';
+import LanguageChip from '@/components/LanguageChip';
 import PageShell from '@/components/PageShell';
 import StatusBadge from '@/components/StatusBadge';
 
+export const metadata = { title: 'Exam results' };
 export const dynamic = 'force-dynamic';
 
 export default async function ExamResultsPage({
@@ -22,7 +24,7 @@ export default async function ExamResultsPage({
   const results = await listExamResults({ userId, topic, language });
 
   return (
-    <PageShell title="Exam Results">
+    <PageShell title="Exam results" description="Every exam attempt, with score and certificate.">
       <section className="table-panel">
         <FilterForm>
           <label>
@@ -45,14 +47,15 @@ export default async function ExamResultsPage({
           rows={results}
           rowKey={(r) => r.id}
           empty="No exam attempts found for the current filter."
+          noun="attempts"
           columns={[
             { label: 'User', render: (r) => <Link href={`/users/${r.user_id}`}>{r.user_id}</Link> },
             { label: 'Topic', render: (r) => r.topic },
-            { label: 'Language', render: (r) => r.language },
+            { label: 'Language', render: (r) => <LanguageChip code={r.language} /> },
             { label: 'Difficulty', render: (r) => r.difficulty_level ?? '—' },
-            { label: 'Score', render: (r) => `${r.correct_count}/${r.total_questions} (${Math.round(r.score_pct)}%)` },
+            { label: 'Score', numeric: true, nowrap: true, render: (r) => `${r.correct_count}/${r.total_questions} (${Math.round(r.score_pct)}%)` },
             { label: 'Result', render: (r) => <StatusBadge status={r.passed ? 'published' : 'failed'} label={r.passed ? 'Pass' : 'Fail'} /> },
-            { label: 'Date', render: (r) => formatDateTime(r.created_at) },
+            { label: 'Date', nowrap: true, render: (r) => <DateTime value={r.created_at} /> },
             {
               label: 'Certificate',
               render: (r) => r.certificate_id

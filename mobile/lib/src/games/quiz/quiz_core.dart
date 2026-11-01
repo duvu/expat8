@@ -29,6 +29,10 @@ abstract interface class QuizItem {
   /// A strategy or rule shown after a miss.
   String? get hint;
 
+  /// The curriculum skill this item trains, or null when the item is not
+  /// tied to one (answers to such items are not tracked per skill).
+  String? get skillId;
+
   Map<String, dynamic> toJson();
 }
 

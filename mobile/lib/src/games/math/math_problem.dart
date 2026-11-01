@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../quiz/quiz_core.dart';
 import 'math_secondary.dart';
+import 'math_skills_map.dart';
 
 /// An integer as shown to players (typographic minus for negatives).
 String formatInt(int v) => v < 0 ? '−${-v}' : '$v';
@@ -70,6 +71,7 @@ class MathProblem implements QuizItem {
     required this.op,
     required this.key,
     this.hint,
+    this.skillId,
     this.signed = false,
     String? cue,
   }) : _cue = cue;
@@ -81,6 +83,7 @@ class MathProblem implements QuizItem {
             orElse: () => MathOp.mixed),
         key: json['key'] as String,
         hint: json['hint'] as String?,
+        skillId: json['skill'] as String?,
         signed: json['signed'] as bool? ?? false,
         cue: json['cue'] as String?,
       );
@@ -93,6 +96,8 @@ class MathProblem implements QuizItem {
   final String key;
   @override
   final String? hint;
+  @override
+  final String? skillId;
 
   /// The answer may be negative (grade 7+): options may be negative too and
   /// always include the sign-flipped answer, the classic mistake.
@@ -114,6 +119,7 @@ class MathProblem implements QuizItem {
         'op': op.name,
         'key': key,
         if (hint != null) 'hint': hint,
+        if (skillId != null) 'skill': skillId,
         if (signed) 'signed': true,
         if (_cue != null) 'cue': _cue,
       };
@@ -262,6 +268,7 @@ class MathProblemGenerator implements QuizSource<MathProblem> {
         answer: a + b * c,
         op: MathOp.mixed,
         key: '$a+$b×$c',
+        skillId: MathSkill.orderOfOperations,
         hint:
             'Multiply first: $b × $c = ${b * c}, then $a + ${b * c} = ${a + b * c}',
       );
@@ -273,6 +280,7 @@ class MathProblemGenerator implements QuizSource<MathProblem> {
       answer: product - a,
       op: MathOp.mixed,
       key: '$b×$c−$a',
+      skillId: MathSkill.orderOfOperations,
       hint:
           'Multiply first: $b × $c = $product, then $product − $a = ${product - a}',
     );
@@ -304,6 +312,7 @@ MathProblem additionProblem(int a, int b) {
     answer: sum,
     op: MathOp.add,
     key: _sortedKey(a, '+', b),
+    skillId: MathSkill.addSub(sum),
     hint: hint,
   );
 }
@@ -325,6 +334,7 @@ MathProblem subtractionProblem(int a, int b) {
     answer: diff,
     op: MathOp.subtract,
     key: '$a−$b',
+    skillId: MathSkill.addSub(a),
     hint: hint,
   );
 }
@@ -359,6 +369,7 @@ MathProblem multiplicationProblem(int a, int b) {
     answer: product,
     op: MathOp.multiply,
     key: _sortedKey(a, '×', b),
+    skillId: MathSkill.multiply(a, b),
     hint: hint,
   );
 }
@@ -370,6 +381,7 @@ MathProblem divisionProblem(int dividend, int divisor) {
     answer: quotient,
     op: MathOp.divide,
     key: '$dividend÷$divisor',
+    skillId: MathSkill.divide(divisor, quotient),
     hint: 'Think times table: $divisor × $quotient = $dividend',
   );
 }

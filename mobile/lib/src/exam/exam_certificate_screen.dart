@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api/backend_api_client.dart';
+import '../theme/app_radius.dart';
 
 /// Public certificate view screen.
 ///
@@ -158,7 +159,7 @@ class _CertificateBody extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRadius.small,
             ),
             child: Text(
               cert.disclaimer,

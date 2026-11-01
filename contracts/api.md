@@ -187,8 +187,26 @@ Response `201`:
 ```
 
 Duplicate identifiers return `409 { "error": "user_exists" }`. Invalid input
-returns `400 { "error": "bad_request" }`. See [Rate Limits](#rate-limits) for
-`429` behavior.
+returns `400 { "error": "bad_request" }` (password shorter than 8 characters or
+empty identifier). See [Rate Limits](#rate-limits) for `429` behavior.
+
+An email identifier on a very likely mistyped provider domain (for example
+`gmal.com`, `gmial.com`, `gmail.con`, `hotmial.com`, `yaho.com`, `outlok.com`,
+`iclould.com`; a small fixed list of exact domains, matched after trimming and
+lower-casing) is rejected so a learner does not end up with an unreachable
+second account:
+
+```json
+{
+  "error": "bad_request",
+  "reason": "identifier_domain_typo",
+  "suggestion": "learner@gmail.com"
+}
+```
+
+`suggestion` is the identifier with the corrected domain. Phone numbers,
+usernames and every other domain are unaffected, and `POST /v1/users/sign-in`
+never applies this check (accounts created before the guard still sign in).
 
 ## POST /v1/users/sign-in
 
@@ -2029,74 +2047,13 @@ Error responses:
 
 ---
 
-### GET /v1/admin/review/vocabulary
+### Vocabulary has no review step
 
-Lists vocabulary items pending admin review.
-
-Query parameters:
-
-- `limit`: optional, max `200`, default `200`.
-- `status`: optional filter string, default `"pending"`.
-
-Success response (200):
-
-```json
-{
-  "items": [
-    {
-      "id": "vocab_item_123",
-      "term": "reliable",
-      "status": "pending",
-      "word_sense_id": "sense_123"
-    }
-  ]
-}
-```
-
-Error responses:
-
-| Status | `error` field | Meaning                        |
-|--------|---------------|--------------------------------|
-| 403    | `forbidden`   | Missing or invalid admin token |
-
----
-
-### PATCH /v1/admin/vocabulary/:id
-
-Approves, rejects, or resets a vocabulary item.
-
-Request:
-
-```json
-{
-  "status": "approved",
-  "review_note": "Looks good"
-}
-```
-
-Fields:
-
-- `status`: required, one of `"approved"`, `"rejected"`, `"pending"`.
-- `review_note`: optional string note.
-
-Success response (200):
-
-```json
-{
-  "id": "vocab_item_123",
-  "term": "reliable",
-  "status": "approved",
-  "review_note": "Looks good"
-}
-```
-
-Error responses:
-
-| Status | `error` field | Meaning                                          |
-|--------|---------------|--------------------------------------------------|
-| 400    | `bad_request` | Missing or invalid `status` value                |
-| 403    | `forbidden`   | Missing or invalid admin token                   |
-| 404    | `not_found`   | Vocabulary item ID not found                     |
+Vocabulary extracted from articles and memorization passages (user- or admin-owned) is approved on
+creation and goes straight into the `words` pool, so learning cards can serve it immediately.
+Placeholder items produced when LLM enrichment is unavailable (`isStub`, e.g. "Nghia cua <term>")
+are never stored. The former `GET /v1/admin/review/vocabulary` and `PATCH /v1/admin/vocabulary/:id`
+endpoints no longer exist; the `vocabulary_review_items` table is kept only as history.
 
 ---
 
@@ -3100,3 +3057,121 @@ Error responses:
 | 400    | `bad_request` | Missing or invalid `next_segment_id`         |
 | 403    | `forbidden`   | Missing or invalid admin token               |
 | 404    | `not_found`   | Segments not found or not adjacent           |
+
+---
+
+## Party relay (WebSocket) — internet party games
+
+Phones that are not on the same WiFi play a party game through the backend. The
+host phone stays authoritative (it runs the rules in
+`mobile/lib/src/games/party/`); the relay only forwards messages. Both endpoints
+are WebSocket upgrades on the API port and require the standard app-credential
+headers (signed `GET`, empty body, fresh nonce per connection).
+
+- `GET /v1/party/host` — a host. First frame within 5 s:
+  `{"t":"relay_host"}` (new room) or `{"t":"relay_host","resume":"<host_token>"}`
+  (take the room back after a drop, within 30 s). The token is sent in the frame,
+  never in the URL (proxy logs record URLs).
+- `GET /v1/party/join/:code` — a guest; `code` is 6 Crockford base32 characters
+  (case, spaces, dashes and O/I/L look-alikes tolerated).
+
+Frames:
+
+| direction | frame |
+|---|---|
+| relay → host | `{"t":"relay_room","code","host_token","guests":[ids]}` (on open and on resume) |
+| relay → host | `{"from":"g1","open":true}` · `{"from":"g1","m":{party message}}` · `{"from":"g1","closed":true}` |
+| host → relay | `{"to":"g1","m":{party message}}` · `{"close":"g1"}` · `{"t":"relay_end"}` |
+| guest ↔ relay | plain party messages (`mobile/lib/src/games/party/party_protocol.dart`) |
+
+The relay assigns guest ids (guests cannot spoof them) and drops frames for ids
+outside the host's room. Guests of a closed or unknown room receive a party
+`{"t":"reject","reason":"room_closed"|"no_room"|"room_full"}` before the close.
+
+Limits: 16 KB per message, 40 messages/s per socket, 8 guests per room, 200
+rooms, 20 rooms per IP per hour, 30 failed joins per IP per 10 minutes, idle
+rooms closed after 2 h, dead sockets dropped by ping. Client IPs come from the
+last `X-Forwarded-For` entry only when the connection is from `TRUST_PROXY`.
+Rooms live in memory: a backend restart ends games in progress. Message contents
+are never logged.
+
+---
+
+### POST /v1/admin/users/:id/reset-password
+
+Sets a new password for a learner and revokes all of their sessions (every
+device must sign in again). Requires the admin token.
+
+Request (all fields optional):
+
+```json
+{ "new_password": "at least 8 characters" }
+```
+
+Without `new_password` the backend generates a temporary password (16
+characters, no ambiguous characters such as `0/O/1/l/I`).
+
+Response `200`:
+
+```json
+{
+  "user_id": "user_123",
+  "identifier": "learner@example.com",
+  "revoked_sessions": 2,
+  "temporary_password": "Hq7mXk3pTz9RwBnc"
+}
+```
+
+`temporary_password` is present only when it was generated; it is returned once
+and never stored or logged in clear text. The action is audit-logged as
+`admin_user_password_reset` (user id only).
+
+| Status | Body                                                | Meaning                          |
+|--------|-----------------------------------------------------|----------------------------------|
+| 400    | `{ "error": "bad_request", "reason": "password_too_short" }` | `new_password` fails the registration rule |
+| 403    | `{ "error": "forbidden" }`                          | Missing or invalid admin token   |
+| 404    | `{ "error": "not_found" }`                          | Unknown user                     |
+
+---
+
+### DELETE /v1/admin/users/:id
+
+Permanently deletes a learner account and everything tied to it in one
+transaction: the user row, sessions, proficiency, study, speaking, game and exam
+history, word states and caches, submitted words, owned articles, memorization
+passages and shadowing entries, and data recorded anonymously (no `user_id`) on
+the devices the user signed in from. Admin-owned content the user reviewed is
+kept with the reviewer reference cleared. Rows of other accounts on a shared
+device are kept. Requires the admin token.
+
+The caller must repeat the user's identifier (case-insensitive) as a fat-finger
+guard, in the JSON body (preferred, keeps it out of URLs) or as `?confirm=`:
+
+```json
+{ "confirm": "learner@example.com" }
+```
+
+Response `200`:
+
+```json
+{
+  "user_id": "user_123",
+  "identifier": "learner@example.com",
+  "deleted": {
+    "user": 1, "sessions": 2, "proficiency": 1, "study_events": 1034,
+    "speaking_events": 0, "game_rounds": 0, "exam_rows": 0, "word_states": 40,
+    "cached_words": 40, "submitted_words": 0, "articles": 0,
+    "memorization_content": 0, "memorization_progress": 0,
+    "shadowing_entries": 0, "cleared_reviewer_refs": 0
+  }
+}
+```
+
+| Status | Body                                      | Meaning                                   |
+|--------|-------------------------------------------|-------------------------------------------|
+| 400    | `{ "error": "confirmation_required" }`    | `confirm` missing or not the user's identifier |
+| 403    | `{ "error": "forbidden" }`                | Missing or invalid admin token            |
+| 404    | `{ "error": "not_found" }`                | Unknown user                              |
+
+Audit-logged as `admin_user_deleted`. The same cleanup is available offline as
+`backend/db/ops/delete_user.sql`.

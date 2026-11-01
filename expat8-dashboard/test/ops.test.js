@@ -12,7 +12,7 @@ import {
 test('sidebar active link covers nested ops routes', () => {
   assert.equal(isSidebarLinkActive('/ops', '/ops'), true);
   assert.equal(isSidebarLinkActive('/ops/logs', '/ops'), true);
-  assert.equal(isSidebarLinkActive('/review', '/ops'), false);
+  assert.equal(isSidebarLinkActive('/articles', '/ops'), false);
 });
 
 test('formats archive sizes and summary counts', () => {

@@ -8,6 +8,7 @@ import 'learning_progress_stats_screen.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/study_action_bar.dart';
 import '../widgets/brand_backdrop.dart';
+import '../theme/app_radius.dart';
 
 class WorkplaceSentenceScreen extends StatefulWidget {
   const WorkplaceSentenceScreen({
@@ -156,7 +157,7 @@ class _WorkplaceSentenceCard extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: scheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.control,
                 ),
                 child: Text(
                   sentence.topic!,

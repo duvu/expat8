@@ -1,5 +1,8 @@
 # Expat8 brand assets
 
+The files keep their historical `expa8-` prefix. The product name is always
+**Expat8**; do not copy the prefix into UI copy or new asset names.
+
 ## Asset map
 
 - `expa8-mark.svg` — refreshed square mark for app surfaces and navigation.

@@ -1,6 +1,6 @@
-# Expat8 Language Learning MVP
+# Expat8
 
-This workspace contains the OpenSpec-driven MVP implementation for a Flutter vocabulary learning app, an `expat8-dashboard` admin web app, and a lightweight backend service.
+This workspace contains the OpenSpec-driven implementation of Expat8: a Flutter learning app (vocabulary, reviews, math and English practice, party games), an `expat8-dashboard` admin web app, and a lightweight backend service.
 
 ## Adaptive Proficiency
 

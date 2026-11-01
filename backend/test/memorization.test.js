@@ -975,7 +975,7 @@ test('pipeline: extracts vocabulary per segment and links it to segments', async
   assert.equal(link.passage_id, passage.id);
   assert.equal(link.segment_id, segment.id);
   assert.equal(link.surface_text, 'bold');
-  assert.equal([...store.vocabularyReviewItemsById.values()][0].status, 'approved');
+  assert.equal([...store.wordSensesById.values()][0].status, 'approved');
   assert.ok([...store.words.values()].some((word) => word.term === 'bold'));
 });
 

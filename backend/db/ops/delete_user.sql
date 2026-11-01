@@ -7,12 +7,16 @@
 --
 -- Without -v confirm=yes the script prints what it would delete and rolls back.
 --
+-- The admin API does the same: DELETE /v1/admin/users/:id (see contracts/api.md).
+-- Use this script for anonymous devices or when the backend is unavailable.
+--
 -- Deleted: the users row, sessions, proficiency, study/speaking/game/exam
 -- history, word states and caches, submitted words, and content the learner
 -- owns (articles, memorization passages, shadowing entries). Data recorded
--- anonymously on the learner's devices (device_id seen in user_sessions) is
--- deleted too. Admin-owned content the learner reviewed is kept; only the
--- reviewer reference is cleared.
+-- anonymously (no user_id) on the learner's devices (device_id seen in
+-- user_sessions) is deleted too; rows of other accounts on a shared device stay.
+-- Admin-owned content the learner reviewed is kept; only the reviewer reference
+-- is cleared.
 \set ON_ERROR_STOP on
 \if :{?user_id}
 \else
@@ -45,6 +49,10 @@ SELECT (SELECT count(*) FROM del_user) AS users_matched,
 CREATE TEMP TABLE del_articles ON COMMIT DROP AS
 SELECT id FROM articles WHERE owner_user_id IN (SELECT id FROM del_user);
 
+CREATE TEMP TABLE del_sentences ON COMMIT DROP AS
+SELECT DISTINCT workplace_sentence_id FROM article_workplace_sentences
+WHERE article_id IN (SELECT id FROM del_articles);
+
 CREATE TEMP TABLE del_senses ON COMMIT DROP AS
 SELECT DISTINCT word_sense_id AS id FROM article_terms
 WHERE article_id IN (SELECT id FROM del_articles) AND word_sense_id IS NOT NULL
@@ -63,7 +71,8 @@ DELETE FROM vocabulary_review_items WHERE article_id IN (SELECT id FROM del_arti
 DELETE FROM article_terms WHERE article_id IN (SELECT id FROM del_articles);
 DELETE FROM article_workplace_sentences WHERE article_id IN (SELECT id FROM del_articles);
 DELETE FROM workplace_sentences ws
-WHERE NOT EXISTS (SELECT 1 FROM article_workplace_sentences a WHERE a.workplace_sentence_id = ws.id);
+WHERE ws.id IN (SELECT workplace_sentence_id FROM del_sentences)
+  AND NOT EXISTS (SELECT 1 FROM article_workplace_sentences a WHERE a.workplace_sentence_id = ws.id);
 DELETE FROM article_processing_jobs WHERE article_id IN (SELECT id FROM del_articles);
 DELETE FROM articles WHERE id IN (SELECT id FROM del_articles);
 
@@ -82,7 +91,7 @@ WHERE s.id IN (SELECT id FROM del_senses)
 
 DELETE FROM shadowing_video_entries
 WHERE owner_user_id IN (SELECT id FROM del_user)
-   OR owner_device_id IN (SELECT device_id FROM del_devices);
+   OR (owner_user_id IS NULL AND owner_device_id IN (SELECT device_id FROM del_devices));
 
 -- Learning history (account and the account's devices) -----------------------
 DELETE FROM exam_certificates WHERE user_id IN (SELECT id FROM del_user)
@@ -98,17 +107,17 @@ DELETE FROM user_submitted_word_jobs WHERE submission_id IN
 DELETE FROM user_submitted_words WHERE user_id IN (SELECT id FROM del_user);
 
 DELETE FROM speaking_events WHERE user_id IN (SELECT id FROM del_user)
-   OR device_id IN (SELECT device_id FROM del_devices);
+   OR (user_id IS NULL AND device_id IN (SELECT device_id FROM del_devices));
 DELETE FROM study_events WHERE user_id IN (SELECT id FROM del_user)
-   OR device_id IN (SELECT device_id FROM del_devices);
+   OR (user_id IS NULL AND device_id IN (SELECT device_id FROM del_devices));
 DELETE FROM game_rounds WHERE user_id IN (SELECT id FROM del_user)
-   OR device_id IN (SELECT device_id FROM del_devices);
+   OR (user_id IS NULL AND device_id IN (SELECT device_id FROM del_devices));
 DELETE FROM user_word_states WHERE user_id IN (SELECT id FROM del_user)
-   OR device_id IN (SELECT device_id FROM del_devices);
+   OR (user_id IS NULL AND device_id IN (SELECT device_id FROM del_devices));
 DELETE FROM user_cached_words WHERE user_id IN (SELECT id FROM del_user)
-   OR device_id IN (SELECT device_id FROM del_devices);
+   OR (user_id IS NULL AND device_id IN (SELECT device_id FROM del_devices));
 DELETE FROM user_proficiency WHERE user_id IN (SELECT id FROM del_user)
-   OR device_id IN (SELECT device_id FROM del_devices);
+   OR (user_id IS NULL AND device_id IN (SELECT device_id FROM del_devices));
 
 -- Keep admin-owned content, drop the reference to this reviewer.
 UPDATE vocabulary_review_items SET reviewer_user_id = NULL WHERE reviewer_user_id IN (SELECT id FROM del_user);

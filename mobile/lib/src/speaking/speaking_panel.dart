@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/vocabulary_word.dart';
 import 'speaking_audio_service.dart';
 import 'speaking_repository.dart';
+import '../theme/app_radius.dart';
 
 /// Displays the speaking panel for a vocabulary card.
 ///
@@ -113,7 +114,7 @@ class _SpeakingPanelState extends State<SpeakingPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.control,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

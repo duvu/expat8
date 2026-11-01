@@ -1,69 +1,64 @@
 # Play Store Listing Copy
 
+Name the product "Expat8" only. Mention a subject here only once it ships
+(see `BRAND.md`).
+
 ## Title (≤50 chars)
 
-Expat8 – Learn English
-(22 chars ✓)
+Expat8 – English and math practice
+(34 chars ✓)
 
 ## Short Description (≤80 chars)
 
-Swipe cards, fill in the blanks, and build English vocabulary with spaced repetition.
-(86 chars — trim to:)
-
-Build English vocabulary with swipe cards and fill-in-the-blank exercises.
-(75 chars ✓)
+English vocabulary, spaced reviews and math games for the whole family.
+(70 chars ✓)
 
 ## Full Description (≤4000 chars)
 
-Expat8 is a vocabulary-first English learning app built for expats and intermediate learners who want to move beyond basic phrases and into fluent, confident English.
+Expat8 helps you learn a little every day and use it everywhere: English vocabulary with spaced repetition, and quick math and English games for children from grade 1 to grade 9.
 
-**How it works**
+**Vocabulary cards**
 
-Swipe through vocabulary cards one at a time. Each card shows an English word or phrase, its Vietnamese meaning, pronunciation guide, and an example sentence.
+Each card shows a word or phrase, its Vietnamese meaning, a pronunciation guide and an example sentence. New cards match your level, which moves up when words feel easy and down when they feel hard.
 
-- Swipe right-to-left for a new card
-- Swipe left-to-right to review recent words
-- Swipe bottom-to-top when you know a word well (marks it as mastered)
-- Swipe top-to-bottom to flag a difficult word for extra practice
+**Reviews that make you think**
 
-**Fill-in-the-Blank mode**
+Words come back at the right time. Instead of just flipping a card, you choose the meaning, listen and pick the word, fill in the blank or type it. Quick, correct answers space a word further out; mistakes bring it back sooner.
 
-As you build up reviewed words, Expat8 starts hiding the target word in example sentences. Read the sentence, guess the missing word, then tap to reveal. This active recall technique is proven to strengthen long-term retention.
+**Reading**
 
-**Spaced Repetition**
+Read short articles with the useful words highlighted, and add any word to your reviews with one tap.
 
-Expat8 automatically surfaces words at the right time — prioritising words you find difficult and spacing out words you know well. No manual scheduling required.
+**Math and English games**
 
-**Exam Mode**
+Number Blaster, Math Race, Whack-a-Number, Number Tower and Math Duel cover grade 1 to grade 9 maths, and English grammar games cover grades 6 to 9. Each game adapts to how quickly and accurately you answer, and replays the questions you missed.
 
-Test yourself with multiple-choice vocabulary quizzes. Earn a proficiency level (A1–C2) and track your progress over time.
+**Play together**
 
-**Speaking Drills**
+Start a Quiz Night or a Duel on the same WiFi or over the internet. Everyone plays on their own phone and at their own level, so a grade 3 and a grade 7 student can share a room.
 
-Practice saying words aloud with the speaking drill feature. Record yourself and get instant feedback.
+**For the whole family**
+
+Several family members can use one phone. Each signed-in account keeps its own reviews and streaks.
 
 **Works offline**
 
-Vocabulary cards are cached locally so you can study anywhere — on the metro, between meetings, or wherever you have a spare moment.
+Vocabulary and reviews are stored on your phone, so you can study on the metro, between meetings or wherever you have a spare moment. Progress syncs when you are back online.
 
-**Who is Expat8 for?**
+**Also in Expat8**
 
-- Expats living in or moving to English-speaking environments
-- Vietnamese learners preparing for IELTS, TOEIC, or TOEFL
-- Intermediate English learners (B1–C1) who want to expand their vocabulary beyond textbooks
+- Exam mode with a proficiency level from A1 to C2
+- Speaking drills: say the word aloud and record yourself
+- Daily goal and gentle reminders
 
-Start with a curated C2-level word list and work your way through it at your own pace.
-
-Download Expat8 and start building the vocabulary that matters.
-
-(1,579 chars ✓)
+Download Expat8 and make a few minutes a day count.
 
 ## Keywords / Tags (up to 7)
 
 1. vocabulary
 2. English learning
-3. flashcards
+3. math games
 4. spaced repetition
-5. IELTS preparation
-6. expat
+5. flashcards
+6. family learning
 7. language learning

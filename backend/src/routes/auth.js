@@ -2,6 +2,7 @@ import express from 'express';
 import { rateLimitMiddleware } from '../rate_limit.js';
 import {
   DuplicateUserError,
+  IdentifierDomainTypoError,
   InvalidCredentialsError,
   InvalidRegistrationInputError,
   normalizeUserIdentifier
@@ -28,6 +29,13 @@ export function createAuthRouter({ store, _config, rateLimiters = {} }) {
       } catch (error) {
         if (error instanceof DuplicateUserError) {
           return response.status(409).json({ error: 'user_exists' });
+        }
+        if (error instanceof IdentifierDomainTypoError) {
+          return response.status(400).json({
+            error: 'bad_request',
+            reason: error.reason,
+            suggestion: error.suggestion
+          });
         }
         if (error instanceof InvalidRegistrationInputError) {
           return response.status(400).json({ error: 'bad_request' });

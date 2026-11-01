@@ -25,12 +25,10 @@ import { toApiSpeakingPrompt } from './domain/speaking.js';
 import { resolveEventKey, routeStudyEvents, toSyncResponse } from './domain/study_events.js';
 import { buildSubmittedWord, normalizeSubmittedTerm, submittedWordFailureReason } from './domain/submitted_words.js';
 import {
-  articleItemRequiresReview,
   bridgedWordInput,
   buildWordRecord,
-  passageRequiresReview,
   pickTermSample,
-  reviewStatuses,
+  releasableItems,
   senseFieldsFromItem,
   tallyWordLevels,
   toApiWord
@@ -42,6 +40,7 @@ import { PostgresGameMethods } from './stores/postgres/games.js';
 import { PostgresMemorizationMethods } from './stores/postgres/memorization.js';
 import { PostgresShadowingMethods } from './stores/postgres/shadowing.js';
 import { PostgresSpeakingMethods } from './stores/postgres/speaking.js';
+import { PostgresUserAdminMethods } from './stores/postgres/user_admin.js';
 import { withOptionalTransaction } from './stores/postgres/transaction.js';
 
 /** Production store backed by PostgreSQL; shared business rules live in `domain/`. */
@@ -1338,49 +1337,6 @@ export class PostgresWordStore {
     return result.rows[0] ?? null;
   }
 
-  async listVocabularyReviewItems({ status = 'pending', limit = 100 }) {
-    const result = await this.pool.query(
-      `SELECT * FROM vocabulary_review_items
-      WHERE status = $1
-      ORDER BY created_at DESC
-      LIMIT $2`,
-      [status, clampLimit(limit, 200)]
-    );
-    return result.rows;
-  }
-
-  async reviewVocabularyItem({ itemId, status, reviewNote = null, reviewerUserId = null }) {
-    const now = new Date().toISOString();
-    // Update the review item and sync word_senses.status so that
-    // getArticleVocabulary visibility filtering (word_senses.status = 'approved')
-    // reflects the admin decision. Mirrors InMemory WordStore behaviour.
-    const senseStatus = status === 'approved' ? 'approved' : 'rejected';
-    const result = await this.#withOptionalTransaction(async (client) => {
-      const itemResult = await client.query(
-        `UPDATE vocabulary_review_items
-        SET status = $2,
-            review_note = $3,
-            reviewer_user_id = $4,
-            reviewed_at = $5,
-            updated_at = $5
-        WHERE id = $1
-        RETURNING *`,
-        [itemId, status, reviewNote, reviewerUserId, now]
-      );
-      const item = itemResult.rows[0];
-      if (!item) {
-        return null;
-      }
-      await client.query(`UPDATE word_senses SET status = $1, updated_at = $2 WHERE id = $3`, [
-        senseStatus,
-        now,
-        item.word_sense_id
-      ]);
-      return item;
-    });
-    return result;
-  }
-
   async listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
     const result = await this.pool.query(
       `SELECT * FROM content_packs
@@ -1515,12 +1471,10 @@ export class PostgresWordStore {
   }
 
   /**
-   * Stores the term, a new sense, its link row (via `insertLinkRow`) and its
-   * review item for an extracted vocabulary item; approved items are also
-   * bridged into the words pool.
+   * Stores the term, a new approved sense and its link row (via `insertLinkRow`) for an extracted
+   * vocabulary item, and bridges it into the words pool.
    */
-  async #persistVocabularyItem({ client, item, normalized, requiresReview, now, insertLinkRow, reviewArticleId, bridgedWord }) {
-    const { senseStatus, reviewStatus, reviewedAt } = reviewStatuses(requiresReview, now);
+  async #persistVocabularyItem({ client, item, normalized, now, insertLinkRow, bridgedWord }) {
     const termResult = await client.query(
       `INSERT INTO terms (id, language, display_term, normalized_term, lemma, created_at)
       VALUES ($1, $2, $3, $4, NULL, $5)
@@ -1537,7 +1491,7 @@ export class PostgresWordStore {
         pronunciation, ipa, pinyin, level_scale, level,
         quality_score, status, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'approved', $12, $12)
       RETURNING *`,
       [
         createId('sense'),
@@ -1551,7 +1505,6 @@ export class PostgresWordStore {
         fields.level_scale,
         fields.level,
         fields.quality_score,
-        senseStatus,
         now,
       ]
     );
@@ -1559,44 +1512,33 @@ export class PostgresWordStore {
 
     await insertLinkRow(client, term.id, sense.id);
 
+    const word = bridgedWordInput(item, bridgedWord);
     await client.query(
-      `INSERT INTO vocabulary_review_items (
-        id, word_sense_id, article_id, status,
-        reviewer_user_id, review_note, reviewed_at, created_at, updated_at
+      `INSERT INTO words (
+        id, term, normalized_term, language, meaning_vi,
+        part_of_speech, ipa, vietnamese_pronunciation,
+        example, example_vi, difficulty, topics_json,
+        generation_source, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, NULL, NULL, $5, $6, $6)`,
-      [createId('review_item'), sense.id, reviewArticleId ?? null, reviewStatus, reviewedAt, now]
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+      ON CONFLICT (language, normalized_term) DO NOTHING`,
+      [
+        createId('word'),
+        word.term,
+        normalized,
+        word.language,
+        word.meaning_vi,
+        word.part_of_speech,
+        word.ipa,
+        word.vietnamese_pronunciation,
+        word.example,
+        word.example_vi,
+        word.difficulty,
+        JSON.stringify(word.topics),
+        word.generation_source,
+        now,
+      ]
     );
-
-    if (!requiresReview) {
-      const word = bridgedWordInput(item, bridgedWord);
-      await client.query(
-        `INSERT INTO words (
-          id, term, normalized_term, language, meaning_vi,
-          part_of_speech, ipa, vietnamese_pronunciation,
-          example, example_vi, difficulty, topics_json,
-          generation_source, created_at, updated_at
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
-        ON CONFLICT (language, normalized_term) DO NOTHING`,
-        [
-          createId('word'),
-          word.term,
-          normalized,
-          word.language,
-          word.meaning_vi,
-          word.part_of_speech,
-          word.ipa,
-          word.vietnamese_pronunciation,
-          word.example,
-          word.example_vi,
-          word.difficulty,
-          JSON.stringify(word.topics),
-          word.generation_source,
-          now,
-        ]
-      );
-    }
   }
 
   async persistArticleVocabulary({ articleId, items = [] }) {
@@ -1626,7 +1568,7 @@ export class PostgresWordStore {
       let persistedCount = 0;
       const seen = new Set();
 
-      for (const item of items) {
+      for (const item of releasableItems(items)) {
         const normalized = normalizeTerm(item.term);
         const dedupeKey = `${item.language}:${normalized}`;
         if (seen.has(dedupeKey)) {
@@ -1638,7 +1580,6 @@ export class PostgresWordStore {
           client,
           item,
           normalized,
-          requiresReview: articleItemRequiresReview(article, item),
           now,
           insertLinkRow: async (c, termId, senseId) => {
             await c.query(
@@ -1663,7 +1604,6 @@ export class PostgresWordStore {
               ]
             );
           },
-          reviewArticleId: articleId,
           bridgedWord: { example: item.example ?? '', topics: [], generationSource: 'article_vocabulary' }
         });
         persistedCount += 1;
@@ -1703,11 +1643,10 @@ export class PostgresWordStore {
       );
       const segmentById = new Map(segmentsResult.rows.map((segment) => [segment.id, segment]));
       const now = new Date().toISOString();
-      const requiresReview = passageRequiresReview(passage);
       const seen = new Set();
       let persistedCount = 0;
 
-      for (const item of items) {
+      for (const item of releasableItems(items)) {
         const segment = segmentById.get(item.segment_id);
         if (!segment) {
           continue;
@@ -1727,7 +1666,6 @@ export class PostgresWordStore {
           client,
           item,
           normalized,
-          requiresReview,
           now,
           insertLinkRow: async (c, termId, senseId) => {
             await c.query(
@@ -1753,7 +1691,6 @@ export class PostgresWordStore {
               ]
             );
           },
-          reviewArticleId: null,
           bridgedWord: {
             example: item.example ?? segment.text,
             topics: ['memorization'],
@@ -1785,7 +1722,7 @@ export class PostgresWordStore {
       let persistedCount = 0;
       const seen = new Set();
 
-      for (const item of items) {
+      for (const item of releasableItems(items)) {
         const normalizedText = normalizeSentenceText(item.text);
         const dedupeKey = `${item.language}:${normalizedText}`;
         if (!normalizedText || seen.has(dedupeKey)) {
@@ -2126,7 +2063,7 @@ export class PostgresWordStore {
   }
 }
 
-mixinMethods(PostgresWordStore, PostgresSpeakingMethods, PostgresGameMethods, PostgresExamMethods, PostgresShadowingMethods, PostgresMemorizationMethods);
+mixinMethods(PostgresWordStore, PostgresSpeakingMethods, PostgresGameMethods, PostgresExamMethods, PostgresShadowingMethods, PostgresMemorizationMethods, PostgresUserAdminMethods);
 
 function rowToPipelineHealthSection(row = {}) {
   return {

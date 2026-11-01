@@ -7,6 +7,7 @@ import '../config.dart';
 import '../models/vocabulary_word.dart';
 import '../speaking/speaking_panel.dart';
 import '../speaking/speaking_repository.dart';
+import '../theme/app_radius.dart';
 
 class VocabularyCardView extends StatefulWidget {
   const VocabularyCardView({
@@ -115,7 +116,7 @@ class _VocabularyCardViewState extends State<VocabularyCardView> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: scheme.primaryContainer.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: AppRadius.control,
               ),
               child: Text(
                 word.meaningVi,
@@ -143,7 +144,7 @@ class _VocabularyCardViewState extends State<VocabularyCardView> {
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: AppRadius.control,
                   border: Border(left: BorderSide(color: levelColor, width: 4)),
                 ),
                 child: Column(
@@ -198,7 +199,7 @@ class _Tag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRadius.control,
       ),
       child: Text(
         text,

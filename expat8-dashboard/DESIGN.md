@@ -11,7 +11,7 @@ Expat8 should feel like a calm study room: focused, encouraging, and easy to sca
 | Role | Token | Light | Dark-ready value | Usage |
 | --- | --- | --- | --- | --- |
 | Canvas | `--color-canvas` | `#f4f6fb` | `#111827` | App background |
-| Surface | `--color-surface` | `rgba(255,255,255,.88)` | `rgba(31,41,55,.92)` | Panels and shell |
+| Surface | `--color-surface` | `#ffffff` | `#1f2937` | Panels and shell (flat, no glass/blur) |
 | Surface solid | `--color-surface-solid` | `#ffffff` | `#1f2937` | Controls and elevated surfaces |
 | Surface muted | `--color-surface-muted` | `#f8fafc` | `#243244` | Metadata, empty states, table rows |
 | Ink | `--color-ink` | `#172033` | `#f8fafc` | Primary text |
@@ -117,13 +117,13 @@ Strategy: mixed. Panels use a quiet 1px line and a tinted shadow; nested metadat
 
 | Token | Value | Usage |
 | --- | --- | --- |
-| `--radius-sm` | `8px` | Compact controls |
-| `--radius-md` | `12px` | Inputs, buttons, small cards |
-| `--radius-lg` | `18px` | Cards and nested panels |
-| `--radius-xl` | `24px` | Main panels |
+| `--radius-sm` | `6px` | Chips, compact controls |
+| `--radius-md` | `10px` | Inputs, buttons |
+| `--radius-lg` | `14px` | KPI cards, table frame |
+| `--radius-xl` | `18px` | Main panels |
 | `--radius-full` | `9999px` | Status badges |
-| `--shadow-panel` | `0 16px 40px rgba(23,32,51,.07)` | Main panels |
-| `--shadow-soft` | `0 4px 16px rgba(23,32,51,.06)` | Small elevation |
+| `--shadow-panel` | `0 1px 2px rgba(23,32,51,.05), 0 6px 16px rgba(23,32,51,.04)` | Main panels |
+| `--shadow-soft` | `0 1px 2px rgba(23,32,51,.06), 0 4px 12px rgba(23,32,51,.06)` | Small elevation |
 
 ## 8. Accessibility constraints & accepted debt
 
@@ -133,6 +133,17 @@ Strategy: mixed. Panels use a quiet 1px line and a tinted shadow; nested metadat
 - Preserve readable text at 200% zoom and support narrow screens without horizontal page overflow.
 - Respect `prefers-reduced-motion`.
 
+Dark mode ships: `prefers-color-scheme` by default, plus a light/dark/system toggle in the page header persisted in `localStorage` (`expat8-theme`) and applied before paint via `<html data-theme>`. Text-on-tint tokens (`--color-*-text`) are darker in light mode so badge text stays at 4.5:1 or better. Chart series use `--chart-*` variables (`src/lib/chart-colors.ts`).
+
+## 9. Page structure and shared components
+
+- `PageShell`: sticky toolbar (breadcrumb, environment chip, "Updated HH:MM UTC", theme toggle) then page header (title, one-line description, actions). Detail pages pass `breadcrumbs`.
+- `DataTable`: sticky header, row hover, `numeric` right-aligned columns, `nowrap` cells, results summary (`noun`), empty state; stacked cards below 560px.
+- `StatusBadge` (tone + dot + text), `LanguageChip`, `DateTime` (compact UTC, full timestamp in tooltip), `KpiCard`/`KpiGrid`, `ChartPanel`, `EmptyState`, `PageSkeleton` (route `loading.tsx`).
+- Dates render in UTC (server-side); the tooltip carries the full timestamp.
+
+## 10. Accepted debt
+
 | Item | Location | Why accepted | Exit |
 | --- | --- | --- | --- |
-| Dark mode tokens are documented but not yet exposed as a user toggle | `globals.css` | Current product ships light mode only | Add when product requirements include theme switching |
+| Timestamps are UTC, not viewer-local | `lib/datetime.js` | Pages are server-rendered; a client clock would need hydration-safe islands | Add a client `LocalTime` if operators ask |

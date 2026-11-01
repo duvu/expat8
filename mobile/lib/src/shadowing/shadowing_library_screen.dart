@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../data/shadowing_repository.dart';
 import '../models/shadowing_video.dart';
 import 'shadowing_player_screen.dart';
+import '../theme/app_radius.dart';
 
 /// Displays the curated and saved shadowing video library.
 /// Also allows importing a new video by YouTube URL.
@@ -296,7 +297,7 @@ class _Thumbnail extends StatelessWidget {
       );
     }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: AppRadius.small,
       child: Image.network(
         url!,
         width: 80,

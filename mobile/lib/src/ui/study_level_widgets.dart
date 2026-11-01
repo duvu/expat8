@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_radius.dart';
 
 // Learning-language and study-level pickers shown in the app bar.
 const Map<String, String> kLearningLanguageLabels = {
@@ -120,10 +121,10 @@ class ProficiencyLevelLabel extends StatelessWidget {
         label: '$label. Change study level',
         child: Material(
           color: background,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: AppRadius.control,
           child: InkWell(
             key: const Key('study-level-chip'),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: AppRadius.control,
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../../curriculum/skill_answer_sink.dart';
 import '../common/game_audio.dart';
 import '../common/game_score_store.dart';
 import '../common/game_settings.dart';
@@ -74,6 +75,7 @@ class QuizGameContext {
     required this.storage,
     required this.settings,
     required this.audio,
+    this.skillSink,
     Random Function()? randomFactory,
   })  : randomFactory = randomFactory ?? Random.new,
         mathSkills = MathSkillTracker(storage),
@@ -82,6 +84,9 @@ class QuizGameContext {
   final GameStorage storage;
   final GameSettings settings;
   final GameAudio audio;
+
+  /// Records answers to skill-tagged questions for the signed-in learner.
+  final SkillAnswerSink? skillSink;
   final Random Function() randomFactory;
   final MathSkillTracker mathSkills;
   final EnglishSkillTracker englishSkills;
@@ -122,13 +127,17 @@ class QuizGameContext {
       );
 
   MathRoundLog mathRoundLog(MathLevel level) => MathRoundLog(
-      level: level, generator: generator(level), skills: mathSkills);
+      level: level,
+      generator: generator(level),
+      skills: mathSkills,
+      skillSink: skillSink);
 
   EnglishRoundLog englishRoundLog(EnglishLevel level) => EnglishRoundLog(
         level: level,
         generator: EnglishSource(
             level: level, random: randomFactory(), weakItems: englishSkills),
         skills: englishSkills,
+        skillSink: skillSink,
       );
 
   /// A scored round for any subject's [level].

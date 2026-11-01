@@ -8,6 +8,7 @@ import '../data/memorization_repository.dart';
 import '../models/memorization_passage.dart';
 import '../models/user_session.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_radius.dart';
 
 /// Entry point for a memorization drill session.
 ///
@@ -207,7 +208,7 @@ class _ReadingPhaseView extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.control,
                   border: Border.all(color: statusColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
@@ -313,7 +314,7 @@ class _FullRecallExerciseState extends State<_FullRecallExercise> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRadius.small,
             ),
             child: Text(
               _prompt,
@@ -506,7 +507,7 @@ class _ClozeChip extends StatelessWidget {
               .colorScheme
               .primaryContainer
               .withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: AppRadius.small,
         ),
         child: Text(item.text,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -521,7 +522,7 @@ class _ClozeChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: AppRadius.small,
         ),
         child: Text(
           '_ ' * (item.text.split(' ').length.clamp(1, 5)),
@@ -588,7 +589,7 @@ class _NextSegmentPredictionExerciseState
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppRadius.small,
               ),
               child: Text(
                 '…$_previousEnding',

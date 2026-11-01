@@ -212,7 +212,8 @@ export class VocabularyEnrichmentAdapter {
       language,
       meaning_vi: String(item.meaning_vi ?? '').trim() || `Nghia cua ${term}`,
       part_of_speech: String(item.part_of_speech ?? 'unknown').trim() || 'unknown',
-      ipa: item.ipa ?? '',
+      // Chinese has no IPA; the LLM sometimes invents one anyway.
+      ipa: language.toLowerCase().startsWith('zh') ? '' : (item.ipa ?? ''),
       vietnamese_pronunciation: String(item.vietnamese_pronunciation ?? term).trim() || term,
       example: String(item.example ?? '').trim() || `${term} appears in the uploaded article.`,
       example_vi: String(item.example_vi ?? '').trim() || `${term} xuat hien trong bai viet duoc tai len.`,

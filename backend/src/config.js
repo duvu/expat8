@@ -49,10 +49,13 @@ export function loadConfig(env = process.env) {
     // Requests per hour kept free for user-facing work (submitted words) before background jobs pause.
     llmReservedRequestsPerHour: Number.parseInt(env.LLM_RESERVED_REQUESTS_PER_HOUR ?? '30', 10),
     crawlerEnabled: parseBoolean(env.CRAWLER_ENABLED ?? 'true'),
-    crawlerIntervalMinutes: Number.parseInt(env.CRAWLER_INTERVAL_MINUTES ?? '180', 10),
-    crawlerMaxArticlesPerRun: Number.parseInt(env.CRAWLER_MAX_ARTICLES_PER_RUN ?? '3', 10),
+    crawlerIntervalMinutes: Number.parseInt(env.CRAWLER_INTERVAL_MINUTES ?? '1440', 10),
+    crawlerMaxArticlesPerRun: Number.parseInt(env.CRAWLER_MAX_ARTICLES_PER_RUN ?? '1', 10),
     crawlerMinArticleQuality: Number.parseInt(env.CRAWLER_MIN_ARTICLE_QUALITY ?? '3', 10),
-    crawlerFeeds: parseCrawlerFeeds(env.CRAWLER_FEEDS),
+    crawlerFeeds: {
+      en: parseCrawlerFeeds(env.CRAWLER_FEEDS, DEFAULT_CRAWLER_FEEDS.en),
+      zh: parseCrawlerFeeds(env.CRAWLER_FEEDS_ZH, DEFAULT_CRAWLER_FEEDS.zh)
+    },
     // Curated collection (speeches, biographies, history): backfill first, then one article per interval.
     curatedEnabled: parseBoolean(env.CURATED_ENABLED ?? 'true'),
     curatedInitialCount: Number.parseInt(env.CURATED_INITIAL_COUNT ?? '20', 10),
@@ -158,18 +161,28 @@ function parseLevelTargets(raw) {
   return targets;
 }
 
-const DEFAULT_CRAWLER_FEEDS = [
-  'https://www.newsinlevels.com/feed/',
-  'https://feeds.bbci.co.uk/news/technology/rss.xml',
-  'https://feeds.npr.org/1001/rss.xml',
-  'https://www.sciencedaily.com/rss/top/science.xml',
-  'https://www.theguardian.com/world/rss'
-];
+// Reading material per language. Chinese comes from mainland sources (simplified characters).
+const DEFAULT_CRAWLER_FEEDS = {
+  en: [
+    'https://www.newsinlevels.com/feed/',
+    'https://feeds.bbci.co.uk/news/technology/rss.xml',
+    'https://feeds.npr.org/1001/rss.xml',
+    'https://www.sciencedaily.com/rss/top/science.xml',
+    'https://www.theguardian.com/world/rss'
+  ],
+  zh: [
+    'https://www.chinanews.com.cn/rss/society.xml',
+    'https://www.chinanews.com.cn/rss/life.xml',
+    'https://www.chinanews.com.cn/rss/health.xml',
+    'https://www.chinanews.com.cn/rss/world.xml',
+    'http://www.xinhuanet.com/tech/news_tech.xml'
+  ]
+};
 
-/** Comma-separated feed URLs (English). Set CRAWLER_FEEDS= (empty) to disable all feeds. */
-function parseCrawlerFeeds(raw) {
+/** Comma-separated feed URLs. Unset = the language's defaults; set empty (CRAWLER_FEEDS=) to disable it. */
+function parseCrawlerFeeds(raw, defaults) {
   if (raw === undefined) {
-    return DEFAULT_CRAWLER_FEEDS;
+    return defaults;
   }
   return String(raw)
     .split(',')

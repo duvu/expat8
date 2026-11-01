@@ -503,11 +503,12 @@ test('reprocessArticle clears existing vocabulary so double-reprocess yields no 
   const afterSecond = [...store.articleTermsById.values()].filter((at) => at.article_id === article.id);
   assert.equal(afterSecond.length, 2, 'expected 2 article_terms after reprocess (no duplicates)');
 
-  const reviewItems = [...store.vocabularyReviewItemsById.values()].filter((ri) => ri.article_id === article.id);
-  assert.equal(reviewItems.length, 2, 'expected 2 vocabulary_review_items after reprocess (no duplicates)');
+  const senses = [...store.wordSensesById.values()].filter((sense) => afterSecond.some((at) => at.word_sense_id === sense.id));
+  assert.equal(senses.length, 2, 'expected 2 word_senses after reprocess (no duplicates)');
+  assert.ok(senses.every((sense) => sense.status === 'approved'));
 });
 
-test('stub vocabulary items have approved=false regardless of article type', () => {
+test('placeholder (stub) vocabulary is never stored, whoever owns the article', () => {
   const store = new WordStore({ seed: false });
   const adminArticle = store.createAdminArticle({
     adminUserId: 'admin_stub',
@@ -521,30 +522,15 @@ test('stub vocabulary items have approved=false regardless of article type', () 
     language: 'en',
     rawText: 'content'
   });
-
-  const stubItem = { term: 'perseverance', language: 'en', meaning_vi: 'su kien tri', isStub: true };
+  const stubItem = { term: 'perseverance', language: 'en', meaning_vi: 'Nghia cua perseverance', isStub: true };
   const normalItem = { term: 'resilience', language: 'en', meaning_vi: 'suc chong chiu' };
 
-  // User article with LLM enrichment (non-stub) → auto-approved
-  store.persistArticleVocabulary({ articleId: userArticle.id, items: [normalItem] });
-  const userNormalReview = [...store.vocabularyReviewItemsById.values()].find((ri) => ri.article_id === userArticle.id);
-  assert.equal(userNormalReview.status, 'approved', 'user article non-stub should be approved');
+  assert.equal(store.persistArticleVocabulary({ articleId: adminArticle.id, items: [stubItem] }).count, 0);
+  assert.equal(store.persistArticleVocabulary({ articleId: userArticle.id, items: [stubItem, normalItem] }).count, 1);
 
-  // Admin article with stubs → pending (requires review)
-  store.persistArticleVocabulary({ articleId: adminArticle.id, items: [stubItem] });
-  const adminStubReview = [...store.vocabularyReviewItemsById.values()].find((ri) => ri.article_id === adminArticle.id);
-  assert.equal(adminStubReview.status, 'pending', 'admin article stub should be pending');
-
-  // User article with stub → also pending (stubs never auto-approve)
-  const userArticle2 = store.createArticle({
-    userId: 'user_stub2',
-    title: 'User Article 2',
-    language: 'en',
-    rawText: 'content'
-  });
-  store.persistArticleVocabulary({ articleId: userArticle2.id, items: [stubItem] });
-  const userStubReview = [...store.vocabularyReviewItemsById.values()].find((ri) => ri.article_id === userArticle2.id);
-  assert.equal(userStubReview.status, 'pending', 'user article stub should also be pending');
+  const terms = [...store.words.values()].map((word) => word.term);
+  assert.deepEqual(terms, ['resilience']);
+  assert.ok([...store.wordSensesById.values()].every((sense) => sense.status === 'approved'));
 });
 
 test('approved article vocabulary is bridged into words pool and served by learningCards', () => {
@@ -579,7 +565,7 @@ test('approved article vocabulary is bridged into words pool and served by learn
   assert.equal(bridgedWord.generation_source, 'article_vocabulary');
 });
 
-test('admin article vocabulary is NOT bridged into words pool (requires review)', () => {
+test('admin article vocabulary is bridged into the words pool like any other (no review queue)', () => {
   const store = new WordStore({ seed: false });
   const adminArticle = store.createAdminArticle({
     adminUserId: 'admin_bridge',
@@ -593,9 +579,9 @@ test('admin article vocabulary is NOT bridged into words pool (requires review)'
     items: [{ term: 'curation', language: 'en', meaning_vi: 'su tuyen chon', ipa: '/kjʊˈreɪʃn/', level: 'B2' }]
   });
 
-  // Word should NOT be in the words pool (pending_review)
-  const wordTerms = [...store.words.values()].map((w) => w.term);
-  assert.ok(!wordTerms.includes('curation'), 'admin article vocab should NOT be in words pool');
+  const word = [...store.words.values()].find((entry) => entry.term === 'curation');
+  assert.ok(word, 'admin article vocab is served to learners');
+  assert.equal(word.generation_source, 'article_vocabulary');
 });
 
 test('recentWorkplaceSentences only returns sentences linked to published articles and preserves dedupe across articles', () => {

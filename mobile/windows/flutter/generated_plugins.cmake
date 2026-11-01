@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
+  bonsoir_windows
   connectivity_plus
   flutter_tts
   objectbox_flutter_libs

@@ -27,6 +27,22 @@ test('accepts Chinese item with pinyin and no IPA', () => {
   );
 });
 
+test('accepts tone-marked pinyin that has no ASCII letter', () => {
+  assert.deepEqual(
+    validateVocabularyItem(
+      wordInput({
+        language: 'zh',
+        term: '啊',
+        ipa: '',
+        vietnamese_pronunciation: 'ā',
+        difficulty: 'HSK3',
+        example: '啊，我明白了。'
+      })
+    ),
+    { ok: true }
+  );
+});
+
 test('rejects Chinese item without pinyin even when IPA is present', () => {
   assert.deepEqual(
     validateVocabularyItem(
@@ -75,3 +91,21 @@ function wordInput(overrides = {}) {
     ...overrides
   };
 }
+
+test('Chinese pronunciation must be pinyin: a Hán-Việt reading is rejected, tone-marked pinyin accepted', () => {
+  const base = {
+    term: '守墓',
+    language: 'zh',
+    meaning_vi: 'trông coi phần mộ',
+    ipa: '',
+    example: '自此，王茂贵就成了守墓人。',
+    example_vi: 'Từ đó, ông Vương Mậu Quý trở thành người trông mộ.',
+    difficulty: 'HSK5',
+    topics: ['article-ingestion']
+  };
+  assert.deepEqual(validateVocabularyItem({ ...base, vietnamese_pronunciation: 'shǒu mù' }), { ok: true });
+  assert.deepEqual(validateVocabularyItem({ ...base, vietnamese_pronunciation: 'yī huìr' }), { ok: true });
+  assert.equal(validateVocabularyItem({ ...base, vietnamese_pronunciation: 'thủ mộ' }).reason, 'invalid_chinese_pinyin');
+  assert.equal(validateVocabularyItem({ ...base, vietnamese_pronunciation: 'cửu tuần' }).reason, 'invalid_chinese_pinyin');
+  assert.equal(validateVocabularyItem({ ...base, vietnamese_pronunciation: '守墓' }).reason, 'invalid_chinese_pinyin');
+});

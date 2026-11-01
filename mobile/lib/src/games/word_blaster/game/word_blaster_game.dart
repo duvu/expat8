@@ -7,6 +7,7 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame/particles.dart';
 import 'package:flutter/animation.dart' show Curves;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart'
     show ColorScheme, Icons, IconData, HSLColor;
 import 'package:flutter/painting.dart'
@@ -17,6 +18,7 @@ import '../word_blaster_session.dart';
 import '../word_blaster_theme.dart';
 import '../../common/game_story.dart';
 import '../../common/game_story_scene.dart';
+import 'shot_ray.dart';
 
 /// Colours for the space scene; accents follow the app's colour scheme.
 class WordBlasterPalette {
@@ -84,6 +86,7 @@ class WordBlasterGame extends FlameGame {
   @override
   Future<void> onLoad() async {
     await add(StarfieldComponent(layers: reducedMotion ? 2 : 3));
+    await add(AimSurface());
     cannon = CannonComponent();
     boss = BossComponent();
     shield = ShieldComponent();
@@ -164,24 +167,56 @@ class WordBlasterGame extends FlameGame {
     }
   }
 
-  void onMeteorTapped(MeteorComponent meteor) {
-    if (session.phase != WordBlasterPhase.playing || session.isOverheated) {
-      if (session.isOverheated) cannon.flashOverheat();
+  /// The learner touched [tap]: shoot along the straight line from the cannon
+  /// through that point. The shot hits the first meteor on the line; with
+  /// none there, it flies off the field and costs nothing.
+  void fireToward(Vector2 tap) {
+    if (session.phase != WordBlasterPhase.playing) return;
+    if (session.isOverheated) {
+      cannon.flashOverheat();
       return;
     }
-    cannon.aimAt(meteor.position);
-    meteor.awaitingImpact = true;
-    final fired = session.shoot(meteor.state.id);
-    if (!fired) {
-      meteor.awaitingImpact = false;
-      return;
-    }
+    final pivot = Offset(cannon.position.x, cannon.position.y);
+    // Touching the cannon itself gives no direction.
+    if ((Offset(tap.x, tap.y) - pivot).distance < size.x * 0.06) return;
+    final angle = aimAngle(pivot, Offset(tap.x, tap.y));
+    cannon.aimAt(angle);
+    final muzzle = Offset(cannon.muzzle.x, cannon.muzzle.y);
+    final first = _firstMeteorOnLine(muzzle, angle);
+    final hit = first?.item;
+    final hitDistance = first?.distance ?? 0;
+
     audio.play(GameSound.shotFor(chapter), volume: 0.5);
-    add(ProjectileComponent(
-      from: cannon.muzzle,
-      target: meteor,
-      onImpact: () => _impact(meteor),
-    ));
+    final from = Vector2(muzzle.dx, muzzle.dy);
+    if (hit != null && session.shoot(hit.state.id)) {
+      final target = hit;
+      target.awaitingImpact = true;
+      final end = muzzle + Offset(cos(angle), sin(angle)) * hitDistance;
+      add(ProjectileComponent(
+        from: from,
+        to: Vector2(end.dx, end.dy),
+        onImpact: () => _impact(target),
+      ));
+      return;
+    }
+    final end = shotExit(muzzle, angle, Size(size.x, size.y));
+    add(ProjectileComponent(from: from, to: Vector2(end.dx, end.dy)));
+  }
+
+  ({MeteorComponent item, double distance})? _firstMeteorOnLine(
+          Offset muzzle, double angle) =>
+      firstHit(muzzle, angle, [
+        for (final m in _meteors.values)
+          if (m.targetable) (m, m.hitBox),
+      ]);
+
+  /// Which meteor a touch at [tap] would hit, without shooting (tests).
+  @visibleForTesting
+  int? meteorIdAlong(Vector2 tap) {
+    final pivot = Offset(cannon.position.x, cannon.position.y);
+    final angle = aimAngle(pivot, Offset(tap.x, tap.y));
+    final muzzle = cannon.muzzleAt(angle);
+    return _firstMeteorOnLine(Offset(muzzle.x, muzzle.y), angle)?.item.state.id;
   }
 
   void onPowerUpTapped() {
@@ -460,7 +495,7 @@ class _Star {
 // ─── meteors ────────────────────────────────────────────────────────────────
 
 class MeteorComponent extends PositionComponent
-    with TapCallbacks, HasGameReference<WordBlasterGame> {
+    with HasGameReference<WordBlasterGame> {
   MeteorComponent(this.state) : super(anchor: Anchor.center, priority: 10);
 
   final MeteorState state;
@@ -542,19 +577,18 @@ class MeteorComponent extends PositionComponent
     size = Vector2(width, height);
   }
 
-  @override
-  bool containsLocalPoint(Vector2 point) {
-    // Generous hit box for thumbs.
-    final pad = size.x * 0.12;
-    return point.x >= -pad &&
-        point.y >= -pad &&
-        point.x <= size.x + pad &&
-        point.y <= size.y + pad;
-  }
+  /// Can still be hit: not already shot, vanishing or exploding.
+  bool get targetable =>
+      !_vanishing && !_exploding && !awaitingImpact && !state.destroyed;
 
-  @override
-  void onTapDown(TapDownEvent event) {
-    if (!_vanishing && !_exploding) game.onMeteorTapped(this);
+  /// What a shot must cross to hit; generous, for thumbs.
+  Rect get hitBox {
+    final pad = size.x * 0.12;
+    return Rect.fromCenter(
+      center: Offset(position.x, position.y),
+      width: size.x + pad * 2,
+      height: size.y + pad * 2,
+    );
   }
 
   @override
@@ -855,17 +889,18 @@ class CannonComponent extends PositionComponent
   CannonComponent() : super(anchor: Anchor.center, priority: 20);
 
   double _aim = -pi / 2;
-  double _targetAim = -pi / 2;
   double _recoil = 0;
   double _overheat = 0;
 
-  Vector2 get muzzle =>
-      position + Vector2(cos(_aim), sin(_aim)) * (game.size.x * 0.1);
+  Vector2 get muzzle => muzzleAt(_aim);
 
-  void aimAt(Vector2 target) {
-    final d = target - position;
-    _targetAim = atan2(d.y, d.x).clamp(-pi + 0.25, -0.25);
-    _aim = _targetAim;
+  /// Where the barrel's tip is when pointing along [angle].
+  Vector2 muzzleAt(double angle) =>
+      position + Vector2(cos(angle), sin(angle)) * (game.size.x * 0.1);
+
+  /// Points the barrel along [angle] (see aimAngle) with a recoil kick.
+  void aimAt(double angle) {
+    _aim = angle;
     _recoil = 1;
   }
 
@@ -929,15 +964,16 @@ class CannonComponent extends PositionComponent
 
 class ProjectileComponent extends Component
     with HasGameReference<WordBlasterGame> {
-  ProjectileComponent(
-      {required this.from, required this.target, required this.onImpact})
+  ProjectileComponent({required this.from, required this.to, this.onImpact})
       : super(priority: 15);
 
   static const flightSeconds = 0.16;
 
   final Vector2 from;
-  final MeteorComponent target;
-  final void Function() onImpact;
+
+  /// Where the shot ends: the point it hit a meteor, or the field's edge.
+  final Vector2 to;
+  final void Function()? onImpact;
   final Paint _paint = Paint();
   double _t = 0;
   double _time = 0;
@@ -947,17 +983,33 @@ class ProjectileComponent extends Component
     _t += dt / flightSeconds;
     _time += dt;
     if (_t >= 1) {
-      onImpact();
+      onImpact?.call();
       removeFromParent();
     }
   }
 
   @override
   void render(Canvas canvas) {
-    final to = target.position;
     paintStoryShot(canvas, Offset(from.x, from.y), Offset(to.x, to.y),
         min(1, _t), game.stage.shot, game.size.x, _time, _paint);
   }
+}
+
+/// The whole play field as one touch target: where the learner touches sets
+/// the direction of the shot. Below every other component, so a power-up
+/// under the finger is still collected instead.
+class AimSurface extends PositionComponent
+    with TapCallbacks, HasGameReference<WordBlasterGame> {
+  AimSurface() : super(priority: -1);
+
+  @override
+  void onGameResize(Vector2 size) {
+    super.onGameResize(size);
+    this.size = size;
+  }
+
+  @override
+  void onTapDown(TapDownEvent event) => game.fireToward(event.canvasPosition);
 }
 
 class ShieldComponent extends PositionComponent

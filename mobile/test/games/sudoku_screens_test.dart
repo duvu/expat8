@@ -53,6 +53,8 @@ void main() {
     await tester.scrollUntilVisible(find.text('Sudoku'), 200);
     expect(find.text('Sudoku'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Sudoku'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sudoku'));
     await tester.pumpAndSettle();
     for (final d in SudokuDifficulty.values) {

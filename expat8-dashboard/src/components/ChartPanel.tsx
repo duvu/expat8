@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react';
 
-export default function ChartPanel({ title, children }: { title: string; children: ReactNode }) {
+type Props = {
+  title: string;
+  /** Short caption under the title (unit, period). */
+  description?: string;
+  children: ReactNode;
+};
+
+export default function ChartPanel({ title, description, children }: Props) {
   return (
-    <div className="chart-panel">
+    <section className="chart-panel">
       <div className="chart-panel-header">
         <h2 className="chart-panel-title">{title}</h2>
+        {description && <p className="chart-panel-description">{description}</p>}
       </div>
       {children}
-    </div>
+    </section>
   );
 }

@@ -335,8 +335,8 @@ backend/src/
 | PATCH  | `/v1/admin/articles/:id`           | Update metadata/status         | Admin token |
 | POST   | `/v1/admin/articles/:id/reprocess` | Chạy lại extraction/enrichment | Admin token |
 | POST   | `/v1/admin/articles/:id/publish`   | Publish bài                    | Admin token |
-| GET    | `/v1/admin/review/vocabulary`      | Review vocab pending           | Admin token |
-| PATCH  | `/v1/admin/vocabulary/:id`         | Sửa/approve/reject vocab       | Admin token |
+| POST   | `/v1/admin/users/:id/reset-password` | Admin đặt lại mật khẩu, thu hồi session | Admin token |
+| DELETE | `/v1/admin/users/:id`              | Xóa vĩnh viễn tài khoản + dữ liệu (cần `confirm`) | Admin token |
 
 ### 4.5 Learning and sync
 
@@ -814,7 +814,7 @@ article_processing_jobs
 article_terms
 terms
 word_senses
-vocabulary_review_items
+vocabulary_review_items   (legacy, no longer written: vocabulary is approved on creation)
 content_packs
 content_pack_items
 ```

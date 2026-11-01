@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/app_radius.dart';
 
 /// The shell of every study card: a raised card topped by a brand accent
 /// strip tinted toward the word's level.
@@ -54,7 +55,7 @@ class LevelBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: AppTheme.levelColor(level),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppRadius.control,
         ),
         child: Text(
           level,

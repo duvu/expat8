@@ -16,6 +16,8 @@ import '../models/sync_queue_entry.dart';
 import '../models/user_session.dart';
 import '../models/vocabulary_word.dart';
 import '../models/workplace_sentence.dart';
+import '../curriculum/curriculum.dart' show subjectOf;
+import '../curriculum/skill_mastery.dart';
 import '../srs/srs_scheduler.dart';
 import 'local_database_entities.dart';
 
@@ -30,6 +32,7 @@ part 'local_database_exams.dart';
 part 'local_database_memorization.dart';
 part 'local_database_shadowing.dart';
 part 'local_database_engagement.dart';
+part 'local_database_skills.dart';
 
 class LocalDatabase {
   LocalDatabase(this._store, {Logger? logger})
@@ -50,7 +53,8 @@ class LocalDatabase {
         _segmentProgress = _store.box<LocalSegmentProgressEntity>(),
         _shadowingVideos = _store.box<ShadowingVideoEntity>(),
         _shadowingSegments = _store.box<ShadowingSegmentEntity>(),
-        _shadowingProgress = _store.box<ShadowingProgressEntity>();
+        _shadowingProgress = _store.box<ShadowingProgressEntity>(),
+        _skillAnswers = _store.box<SkillAnswerEntity>();
   final Store _store;
   Logger _logger;
   final Box<LocalWordEntity> _localWords;
@@ -70,6 +74,7 @@ class LocalDatabase {
   final Box<ShadowingVideoEntity> _shadowingVideos;
   final Box<ShadowingSegmentEntity> _shadowingSegments;
   final Box<ShadowingProgressEntity> _shadowingProgress;
+  final Box<SkillAnswerEntity> _skillAnswers;
   void attachLogger(Logger logger) {
     _logger = logger;
   }

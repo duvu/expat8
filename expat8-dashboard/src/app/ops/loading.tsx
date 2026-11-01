@@ -1,9 +1,5 @@
-import PageShell from '@/components/PageShell';
+import PageSkeleton from '@/components/PageSkeleton';
 
 export default function OpsLoading() {
-  return (
-    <PageShell title="Ops">
-      <div className="empty-state">Loading backend health and archive summaries…</div>
-    </PageShell>
-  );
+  return <PageSkeleton title="Ops and logs" />;
 }

@@ -9,9 +9,12 @@ import ChartPanel from '@/components/ChartPanel';
 import PageShell from '@/components/PageShell';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
 import KpiCard from '@/components/charts/KpiCard';
+import KpiGrid from '@/components/charts/KpiGrid';
 import PieChart from '@/components/charts/PieChart';
 import TimeSeriesChart from '@/components/charts/TimeSeriesChart';
+import { CHART } from '@/lib/chart-colors';
 
+export const metadata = { title: 'Speaking analytics' };
 export const dynamic = 'force-dynamic';
 
 export default async function SpeakingAnalyticsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
@@ -24,26 +27,26 @@ export default async function SpeakingAnalyticsPage({ searchParams }: { searchPa
   ]);
 
   const ratingSlices = [
-    { name: 'Clear', value: selfRatings.clear, color: '#059669' },
-    { name: 'Hesitated', value: selfRatings.hesitated, color: '#d97706' },
-    { name: 'Could Not Say', value: selfRatings.could_not_say, color: '#dc2626' },
+    { name: 'Clear', value: selfRatings.clear, color: CHART.progress },
+    { name: 'Hesitated', value: selfRatings.hesitated, color: CHART.attention },
+    { name: 'Could not say', value: selfRatings.could_not_say, color: CHART.danger },
   ];
 
   return (
-    <PageShell title="Speaking Analytics" actions={<TimeRangeSelector current={range} />}>
-      <section className="kpi-grid">
-        <KpiCard label="Total Drills Completed" value={drillStats.completed} />
-        <KpiCard label="Completion Rate" value={`${drillStats.completionRatePct.toFixed(1)}%`} accent />
-        <KpiCard label="Avg Duration" value={`${drillStats.avgDurationSeconds.toFixed(1)}s`} />
-        <KpiCard label="Prompt Coverage" value={`${promptCoverage.coveragePct.toFixed(1)}%`} />
-      </section>
+    <PageShell title="Speaking analytics" description="Speaking drills, completion and self-ratings." actions={<TimeRangeSelector current={range} />}>
+      <KpiGrid>
+        <KpiCard label="Drills completed" value={drillStats.completed} sub="in the selected period" icon="mic" />
+        <KpiCard label="Completion rate" value={`${drillStats.completionRatePct.toFixed(1)}%`} sub="drills finished" icon="check" />
+        <KpiCard label="Average duration" value={`${drillStats.avgDurationSeconds.toFixed(1)}s`} sub="per drill" icon="clock" />
+        <KpiCard label="Prompt coverage" value={`${promptCoverage.coveragePct.toFixed(1)}%`} sub="prompts with activity" icon="chat" />
+      </KpiGrid>
 
       <section className="analytics-grid wide">
-        <ChartPanel title="Speaking Event Volume">
-          <TimeSeriesChart data={timeSeries} xKey="date" series={[{ key: 'events', label: 'Events', color: '#2563eb' }]} />
+        <ChartPanel title="Speaking event volume" description="Events per day">
+          <TimeSeriesChart data={timeSeries} xKey="date" series={[{ key: 'events', label: 'Events', color: CHART.primary }]} />
         </ChartPanel>
 
-        <ChartPanel title="Self-Rating Distribution">
+        <ChartPanel title="Self-rating distribution">
           <PieChart data={ratingSlices} donut />
         </ChartPanel>
       </section>

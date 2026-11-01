@@ -20,5 +20,7 @@ export function getAdminConfig() {
     adminToken: readEnv('ADMIN_TOKEN'),
     appId: readEnv('APP_CREDENTIAL_APP_ID'),
     appSecret: readEnv('APP_CREDENTIAL_SECRET'),
+    /** Shown in the header and sidebar footer; purely informational. */
+    envLabel: readEnv('EXPAT8_ENV_LABEL') || (process.env.NODE_ENV === 'production' ? 'Production' : 'Development'),
   };
 }

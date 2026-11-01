@@ -11,6 +11,7 @@ import PageShell from '@/components/PageShell';
 import Select from '@/components/Select';
 import StatusBadge from '@/components/StatusBadge';
 
+export const metadata = { title: 'Speaking prompts' };
 export const dynamic = 'force-dynamic';
 
 async function updateSpeakingPromptStatus(formData: FormData) {
@@ -36,7 +37,7 @@ export default async function SpeakingPromptsPage({
   const items = await listSpeakingPrompts({ status: status || null, missingRequired });
 
   return (
-    <PageShell title="Speaking Prompts">
+    <PageShell title="Speaking prompts" description="Review and approve prompts for speaking drills.">
       <section className="table-panel">
         <FilterForm>
           <Select label="Status" name="status" options={SPEAKING_PROMPT_STATUS_OPTIONS} defaultValue={status} emptyLabel="all" />
@@ -52,6 +53,7 @@ export default async function SpeakingPromptsPage({
           rows={items}
           rowKey={(item) => item.id}
           empty="No speaking prompts match the current filter."
+          noun="prompts"
           columns={[
             { label: 'Term', render: (item) => item.display_term ?? '—' },
             { label: 'Meaning', render: (item) => item.meaning_vi ?? '—' },

@@ -3,7 +3,8 @@ import http from 'node:http';
 import pg from 'pg';
 
 import { createApp } from './app.js';
-import { PostgresNonceCache } from './app_credentials.js';
+import { attachPartyRelay } from './party_relay.js';
+import { InMemoryNonceCache, PostgresNonceCache } from './app_credentials.js';
 import { loadConfig } from './config.js';
 import { VocabularyGenerationService } from './generation_service.js';
 import { LiteLLMClient } from './litellm_client.js';
@@ -95,7 +96,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
   // Use Postgres-backed nonce cache when a database is configured so replay
   // protection survives process restarts and works across multiple instances.
   // Falls back to the in-memory implementation for local/test environments.
-  const nonceCache = store.pool ? new PostgresNonceCache(store.pool) : undefined;
+  const nonceCache = store.pool ? new PostgresNonceCache(store.pool) : new InMemoryNonceCache();
 
   const server = http.createServer(
     createApp({
@@ -106,9 +107,15 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
       logArchiveStore,
       releaseStore,
       shadowingVideoResolver,
-      ...(nonceCache ? { nonceCache } : {})
+      nonceCache
     })
   );
+  // Internet party games: WebSocket relay on the same port (see party_relay.js).
+  const partyRelay = attachPartyRelay(server, {
+    config,
+    nonceCache,
+    logger: runtimeLogger.child({ component: 'party_relay' })
+  });
 
   return {
     config,
@@ -119,6 +126,7 @@ export function createBackendRuntime({ config = loadConfig(), poolFactory, logge
     shadowingVideoResolver,
     vocabularyPoolScheduler,
     server,
+    partyRelay,
     logger: runtimeLogger
   };
 }

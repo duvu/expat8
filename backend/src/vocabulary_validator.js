@@ -51,9 +51,13 @@ export function validateVocabularyItem(item, options = {}) {
   return { ok: true };
 }
 
+// Pinyin: ASCII letters plus the tone-marked vowels (and ü/ê), syllables separated by spaces, apostrophes
+// or hyphens. Vietnamese letters (ư ơ ă â ô ế ạ ...) are deliberately outside this set, so a Hán-Việt
+// reading ("cửu tuần") is not mistaken for pinyin.
+const PINYIN = /^[a-zA-ZüÜêÊāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ\s'’·-]+$/u;
+
 function hasPinyin(value) {
-  const pronunciation = value.trim();
-  return /[a-zA-Z]/.test(pronunciation);
+  return PINYIN.test(value.trim());
 }
 
 export function normalizeSuggestionType(value, term) {

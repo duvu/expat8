@@ -111,13 +111,13 @@ export class CuratedCollector {
         break;
       }
       // Curated topics are pre-vetted, so `suitable` is not enforced; level and quality still are.
-      if (!ACCEPTED_LEVELS.has(assessment.cefr_level) || assessment.quality < this.config.crawlerMinArticleQuality) {
+      if (!ACCEPTED_LEVELS.has(assessment.level) || assessment.quality < this.config.crawlerMinArticleQuality) {
         await this.store.recordCrawledUrl({
           url: page.url,
           feedUrl,
           status: 'rejected',
           reason: assessment.reason ?? 'level_or_quality',
-          level: assessment.cefr_level,
+          level: assessment.level,
           quality: assessment.quality
         });
         summary.rejected += 1;
@@ -135,7 +135,7 @@ export class CuratedCollector {
         url: page.url,
         feedUrl,
         status: 'queued',
-        level: assessment.cefr_level,
+        level: assessment.level,
         quality: assessment.quality,
         articleId: article.id
       });
@@ -144,7 +144,7 @@ export class CuratedCollector {
         category: topic.category,
         title: page.title,
         url: page.url,
-        cefr_level: assessment.cefr_level,
+        cefr_level: assessment.level,
         quality: assessment.quality
       });
     }

@@ -4,7 +4,8 @@
 backend/.env
 backend/.env.*
 !backend/.env.example
-backend/data/
+backend/data/*
+!backend/data/zh_hsk/
 **/key.properties
 **/*.jks
 **/*.keystore

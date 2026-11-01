@@ -8,6 +8,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/language_picker.dart';
 import 'memorization_drill_screen.dart';
 import '../widgets/brand_backdrop.dart';
+import '../theme/app_radius.dart';
 
 /// Main memorization passages list screen.
 class MemorizationScreen extends StatefulWidget {
@@ -768,7 +769,7 @@ class _SegmentCardState extends State<_SegmentCard> {
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer
                       .withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: AppRadius.small,
                 ),
                 child: Text(
                   segment.ipaText!,
@@ -790,7 +791,7 @@ class _SegmentCardState extends State<_SegmentCard> {
                 decoration: BoxDecoration(
                   color: theme.colorScheme.secondaryContainer
                       .withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: AppRadius.small,
                 ),
                 child: Text(
                   segment.translationText!,
@@ -810,7 +811,7 @@ class _SegmentCardState extends State<_SegmentCard> {
                 decoration: BoxDecoration(
                   color: theme.colorScheme.tertiaryContainer
                       .withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: AppRadius.small,
                 ),
                 child: Text(
                   segment.vietReadingText!,
@@ -857,8 +858,7 @@ class _ProgressBadge extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: bg, borderRadius: AppRadius.control),
       child: Text(
         label,
         style: Theme.of(context)

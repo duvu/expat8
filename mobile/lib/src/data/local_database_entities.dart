@@ -685,3 +685,39 @@ class ShadowingProgressEntity {
   @Index()
   int? lastOpenedAtMs;
 }
+
+/// One answer to a skill-tagged quiz question, kept per account so a shared
+/// family device never mixes children's progress. Mastery is replayed from
+/// these rows (see curriculum/skill_mastery.dart).
+@Entity()
+class SkillAnswerEntity {
+  SkillAnswerEntity({
+    this.id = 0,
+    this.ownerUserId,
+    required this.subject,
+    required this.skillId,
+    required this.correct,
+    required this.elapsedMs,
+    required this.answeredAtMs,
+    required this.source,
+  });
+
+  int id;
+
+  /// Signed-in account, null for answers given while signed out.
+  @Index()
+  String? ownerUserId;
+
+  String subject;
+
+  @Index()
+  String skillId;
+
+  bool correct;
+  int elapsedMs;
+
+  @Index()
+  int answeredAtMs;
+
+  String source;
+}

@@ -30,12 +30,10 @@ import { toApiSpeakingPrompt } from './domain/speaking.js';
 import { resolveEventKey, routeStudyEventsSync, toSyncResponse } from './domain/study_events.js';
 import { buildSubmittedWord, normalizeSubmittedTerm, submittedWordFailureReason } from './domain/submitted_words.js';
 import {
-  articleItemRequiresReview,
   bridgedWordInput,
   buildWordRecord,
-  passageRequiresReview,
   pickTermSample,
-  reviewStatuses,
+  releasableItems,
   senseFieldsFromItem,
   tallyWordLevels,
   toApiWord
@@ -47,6 +45,7 @@ import { MemoryGameMethods } from './stores/memory/games.js';
 import { MemoryMemorizationMethods, deletePassageVocabularyLinks } from './stores/memory/memorization.js';
 import { MemoryShadowingMethods } from './stores/memory/shadowing.js';
 import { MemorySpeakingMethods } from './stores/memory/speaking.js';
+import { MemoryUserAdminMethods } from './stores/memory/user_admin.js';
 
 /**
  * In-memory store used by tests and local development. Implements the same
@@ -59,7 +58,6 @@ export class WordStore {
     this.studyEventsByClientId = new Map();
     this.userProficiencies = new Map();
     this.articlesById = new Map();
-    this.vocabularyReviewItemsById = new Map();
     this.contentPacksById = new Map();
     this.articleProcessingJobsById = new Map();
     this.workplaceSentencesById = new Map();
@@ -877,11 +875,6 @@ export class WordStore {
         this.wordSensesById.delete(id);
       }
     }
-    for (const [id, item] of this.vocabularyReviewItemsById) {
-      if (item.article_id === articleId) {
-        this.vocabularyReviewItemsById.delete(id);
-      }
-    }
     for (const [id, link] of this.articleWorkplaceSentenceLinksById) {
       if (link.article_id === articleId) {
         this.articleWorkplaceSentenceLinksById.delete(id);
@@ -1002,34 +995,6 @@ export class WordStore {
     return true;
   }
 
-  listVocabularyReviewItems({ status = 'pending', limit = 100 }) {
-    return [...this.vocabularyReviewItemsById.values()]
-      .filter((item) => (status ? item.status === status : true))
-      .sort((left, right) => right.created_at.localeCompare(left.created_at))
-      .slice(0, clampLimit(limit, 200));
-  }
-
-  reviewVocabularyItem({ itemId, status, reviewNote = null, reviewerUserId = null }) {
-    const item = this.vocabularyReviewItemsById.get(itemId);
-    if (!item) {
-      return null;
-    }
-    item.status = status;
-    item.review_note = reviewNote;
-    item.reviewer_user_id = reviewerUserId;
-    item.reviewed_at = new Date().toISOString();
-    item.updated_at = item.reviewed_at;
-
-    // Sync the linked word sense status so getArticleVocabulary visibility filter works.
-    const sense = this.wordSensesById.get(item.word_sense_id);
-    if (sense) {
-      sense.status = status === 'approved' ? 'approved' : 'rejected';
-      sense.updated_at = item.updated_at;
-    }
-
-    return item;
-  }
-
   listContentPacks({ language = 'en', afterVersion = null, limit = 100 }) {
     return [...this.contentPacksById.values()]
       .filter((pack) => pack.status === 'published')
@@ -1128,18 +1093,16 @@ export class WordStore {
     }
     const persisted = [];
     const seen = new Set();
-    for (const item of items) {
+    for (const item of releasableItems(items)) {
       const normalized = normalizeTerm(item.term);
       const dedupeKey = `${item.language}:${normalized}`;
       if (seen.has(dedupeKey)) {
         continue;
       }
       seen.add(dedupeKey);
-      const { term, sense, reviewItem } = this.#persistExtractedTerm({
+      const { term, sense } = this.#persistExtractedTerm({
         item,
         normalized,
-        requiresReview: articleItemRequiresReview(article, item),
-        reviewArticleId: articleId,
         bridgedWord: { example: item.example ?? '', topics: [], generationSource: 'article_vocabulary' },
         now
       });
@@ -1159,17 +1122,13 @@ export class WordStore {
         created_at: now
       };
       this.articleTermsById.set(articleTerm.id, articleTerm);
-      persisted.push({ term, sense, articleTerm, reviewItem });
+      persisted.push({ term, sense, articleTerm });
     }
     return { count: persisted.length, items: persisted };
   }
 
-  /**
-   * Stores the term, a new sense and its review item for an extracted
-   * vocabulary item; approved items are also bridged into the words pool.
-   */
-  #persistExtractedTerm({ item, normalized, requiresReview, reviewArticleId, bridgedWord, now }) {
-    const { senseStatus, reviewStatus, reviewedAt } = reviewStatuses(requiresReview, now);
+  /** Stores the term and a new approved sense for an extracted item, and bridges it into the words pool. */
+  #persistExtractedTerm({ item, normalized, bridgedWord, now }) {
     let term = [...this.termsById.values()].find(
       (entry) => entry.language === item.language && entry.normalized_term === normalized
     );
@@ -1189,29 +1148,13 @@ export class WordStore {
       id: createId('sense'),
       term_id: term.id,
       ...senseFieldsFromItem(item),
-      status: senseStatus,
+      status: 'approved',
       created_at: now,
       updated_at: now
     };
     this.wordSensesById.set(sense.id, sense);
-
-    if (!requiresReview) {
-      this.insertWord(bridgedWordInput(item, bridgedWord));
-    }
-
-    const reviewItem = {
-      id: createId('review_item'),
-      word_sense_id: sense.id,
-      article_id: reviewArticleId,
-      status: reviewStatus,
-      reviewer_user_id: null,
-      review_note: null,
-      reviewed_at: reviewedAt,
-      created_at: now,
-      updated_at: now
-    };
-    this.vocabularyReviewItemsById.set(reviewItem.id, reviewItem);
-    return { term, sense, reviewItem };
+    this.insertWord(bridgedWordInput(item, bridgedWord));
+    return { term, sense };
   }
 
   persistPassageVocabulary({ passageId, items = [] }) {
@@ -1225,8 +1168,7 @@ export class WordStore {
 
     const persisted = [];
     const seen = new Set();
-    const requiresReview = passageRequiresReview(passage);
-    for (const item of items) {
+    for (const item of releasableItems(items)) {
       const segment = this.memorizationSegmentsById.get(item.segment_id);
       if (!segment || segment.passage_id !== passageId) {
         continue;
@@ -1241,11 +1183,9 @@ export class WordStore {
       }
       seen.add(dedupeKey);
 
-      const { term, sense, reviewItem } = this.#persistExtractedTerm({
+      const { term, sense } = this.#persistExtractedTerm({
         item,
         normalized,
-        requiresReview,
-        reviewArticleId: null,
         bridgedWord: {
           example: item.example ?? segment.text,
           topics: ['memorization'],
@@ -1268,7 +1208,7 @@ export class WordStore {
         created_at: now
       };
       this.memorizationSegmentTermsById.set(segmentTerm.id, segmentTerm);
-      persisted.push({ term, sense, segmentTerm, reviewItem });
+      persisted.push({ term, sense, segmentTerm });
     }
 
     return { count: persisted.length, items: persisted };
@@ -1290,7 +1230,7 @@ export class WordStore {
     const now = new Date().toISOString();
     const persisted = [];
     const seen = new Set();
-    for (const item of items) {
+    for (const item of releasableItems(items)) {
       const normalizedText = normalizeSentenceText(item.text);
       const dedupeKey = `${item.language}:${normalizedText}`;
       if (!normalizedText || seen.has(dedupeKey)) {
@@ -1416,7 +1356,7 @@ export class WordStore {
   }
 }
 
-mixinMethods(WordStore, MemorySpeakingMethods, MemoryGameMethods, MemoryExamMethods, MemoryShadowingMethods, MemoryMemorizationMethods);
+mixinMethods(WordStore, MemorySpeakingMethods, MemoryGameMethods, MemoryExamMethods, MemoryShadowingMethods, MemoryMemorizationMethods, MemoryUserAdminMethods);
 
 function buildPipelineHealthSection({ pendingCount, failedCount, processedAtValues }) {
   const validProcessedAtValues = processedAtValues.filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)));

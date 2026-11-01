@@ -45,6 +45,9 @@ class LearningSessionController extends ChangeNotifier {
   /// words, or when no exercise fits and the plain card is shown.
   ReviewExercise? currentExercise;
 
+  /// The learner has answered [currentExercise]; only then can they continue.
+  bool exerciseAnswered = false;
+
   VocabularyWord? currentWord;
   CardKind? currentCardKind;
   bool isLoading = false;
@@ -598,6 +601,7 @@ class LearningSessionController extends ChangeNotifier {
     required String emptyMessage,
   }) {
     currentExercise = exercise;
+    exerciseAnswered = false;
     if (word == null) {
       currentWord = null;
       currentCardKind = null;
@@ -1011,7 +1015,10 @@ class LearningSessionController extends ChangeNotifier {
     bool nearMiss = false,
   }) async {
     final word = currentWord;
-    if (word == null) return null;
+    if (word == null || exerciseAnswered) return null;
+    // Unlocks Continue at once; recording the rating may take a moment.
+    exerciseAnswered = true;
+    notifyListeners();
     final rating = gradeReviewAnswer(
         correct: correct, elapsed: elapsed, nearMiss: nearMiss);
     final language = _activeLearningLanguage;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import 'engagement_repository.dart';
+import '../theme/app_radius.dart';
 
 /// Compact habit strip on the main learning screen: today's goal ring,
 /// the study streak and how many words are about to be forgotten.
@@ -30,7 +31,7 @@ class EngagementPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Material(
         color: scheme.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppRadius.card,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onOpenSettings,

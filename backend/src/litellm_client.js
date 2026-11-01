@@ -138,21 +138,26 @@ export class LiteLLMClient {
    * Grades a web article for learners: CEFR level of its language, writing quality (1-5), and whether it
    * suits a general study corpus (no explicit/hateful/tragic-news/ad/listicle/sports-score content).
    */
-  async assessArticle({ title, text }) {
+  async assessArticle({ title, text, language = 'en' }) {
+    const isChinese = language === 'zh';
     const response = await this.chatCompletion({
       temperature: 0.1,
       messages: [
         {
           role: 'system',
-          content: 'You grade English reading material for Vietnamese learners. Return valid JSON only.'
+          content: isChinese
+            ? 'You grade Chinese (Simplified) reading material for Vietnamese learners of Chinese. Return valid JSON only.'
+            : 'You grade English reading material for Vietnamese learners. Return valid JSON only.'
         },
         {
           role: 'user',
           content: [
-            'Assess this article for an English vocabulary-study corpus. Return one JSON object with exactly these fields:',
-            '- cefr_level: the CEFR level (A1/A2/B1/B2/C1/C2) a learner needs to read it comfortably, judged from vocabulary and grammar, not from topic.',
+            `Assess this article for ${isChinese ? 'a Chinese' : 'an English'} vocabulary-study corpus. Return one JSON object with exactly these fields:`,
+            isChinese
+              ? '- level: the HSK level (HSK1/HSK2/HSK3/HSK4/HSK5/HSK6) a learner needs to read it comfortably, judged from vocabulary and grammar, not from topic; use "BEYOND" when it needs more than HSK6.'
+              : '- level: the CEFR level (A1/A2/B1/B2/C1/C2) a learner needs to read it comfortably, judged from vocabulary and grammar, not from topic.',
             '- quality: integer 1-5 for clear, well-written, reusable everyday/work/general-knowledge language (1 = unusable).',
-            '- suitable: false for explicit, violent, hateful, medical-advice, gambling, ad/sponsored, pure sports-score, or heavily local-politics content.',
+            `- suitable: false for explicit, violent, hateful, medical-advice, gambling, ad/sponsored, pure sports-score, or heavily local-politics content${isChinese ? ', and for slogan-heavy official or political statements' : ''}.`,
             '- reason: one short sentence.',
             `Title: ${title}`,
             'Article:',
@@ -162,9 +167,10 @@ export class LiteLLMClient {
       ]
     });
     const parsed = parseJsonObject(response.choices?.[0]?.message?.content ?? '');
-    const level = String(parsed.cefr_level ?? '').trim().toUpperCase();
+    const level = String(parsed.level ?? parsed.cefr_level ?? '').trim().toUpperCase();
     return {
-      cefr_level: normalizeDifficultyLevel(level, { language: 'en' }),
+      // Chinese news is usually above HSK6: keep that signal instead of dropping it.
+      level: isChinese && level === 'BEYOND' ? 'BEYOND' : normalizeDifficultyLevel(level, { language }),
       quality: Math.max(0, Math.min(5, Math.round(Number(parsed.quality) || 0))),
       suitable: parsed.suitable === true,
       reason: typeof parsed.reason === 'string' ? parsed.reason.slice(0, 200) : null
@@ -484,6 +490,13 @@ function buildSubmittedVocabularyPromptLines({ sourceLanguage: _sourceLanguage, 
   ];
 }
 
+// Field rules that differ for Chinese terms (the validator rejects Hán-Việt readings posing as pinyin).
+const CHINESE_ARTICLE_FIELD_RULES = [
+  'Chinese rules: term is a Simplified-Chinese word or short phrase (typically 2-4 characters, never a whole clause) copied exactly as it appears in the chunk.',
+  'ipa MUST be an empty string. vietnamese_pronunciation MUST be the pinyin of the term with tone marks and one space between syllables (e.g. "shǒu mù"); NEVER a Sino-Vietnamese (Hán Việt) reading.',
+  'example MUST be one sentence from the chunk that contains the term verbatim; example_vi is its natural Vietnamese translation.'
+];
+
 function buildArticleSuggestionPromptLines({
   sourceLanguage,
   targetLanguage,
@@ -506,6 +519,7 @@ function buildArticleSuggestionPromptLines({
     `Use difficulty and level values from ${difficultyLevels} or the nearest valid level for the article language.`,
     'Use classification values like article_keyword, article_phrase, or article_concept when appropriate.',
     'Use suggestion_type word for single words and phrase for multiword expressions.',
+    ...(profile.scale === 'hsk' ? CHINESE_ARTICLE_FIELD_RULES : []),
     'Chunk text:',
     chunk
   ].filter(Boolean);

@@ -70,6 +70,18 @@ docker rmi <REGISTRY>/expat8-backend:<tag-cũ>      # từng tag, trừ 2 bản 
 docker image prune -f                             # chỉ image không có tag
 ```
 
+### Registry Nexus (`docker.x51.vn`)
+
+Registry chạy trên z440 (Nexus OSS 3.x, repo `docker`). Nexus OSS chỉ lọc theo tuổi / lần tải / regex, **không có "giữ N bản mới nhất"**, nên việc giữ tối đa **5 tag mới nhất cho mỗi image (project)** do script `docs/ops/nexus_prune_images.py` làm (bản chạy thật nằm ở `~/deployment/worker-z440/ops/` trên z440):
+
+- Cron hằng ngày 03:30 (`crontab -l` của user `beou`): `nexus_prune_images.py --apply >> ~/deployment/nexus-prune.log`.
+- Không bao giờ xoá: tag `latest` (không tính vào 5) và tag của container đang chạy trên máy.
+- Xoá tag **không** giải phóng layer: Nexus giữ lại layer mồ côi mãi mãi (2026-10-28 phát hiện 58,9 GB layer không manifest nào dùng, trong khi image thật chỉ ~20 GB). Script đọc mọi manifest, chuyển layer không ai tham chiếu (cũ hơn 24h) sang `/nexus-data/quarantine/<ngày>/` trong container, kiểm tra mọi layer đang dùng vẫn tải được (thiếu → trả lại hết), và chỉ xoá hẳn thư mục cách ly sau 7 ngày. Khôi phục tay: chuyển file `.bytes` + `.properties` về `/nexus-data/blobs/default/content/` rồi Admin → Repair - Reconcile (không cần nếu chỉ lỡ tay trong 7 ngày và layer có tham chiếu).
+- Dữ liệu Nexus nằm ở `/home/beou/HDD.1T/nexus-data` (ổ `/home` 1,8 TB), không phải ổ gốc.
+- Sau khi xoá, script chạy tác vụ Nexus "Docker - Delete unused manifests and images" rồi "Admin - Compact blob store" để thu hồi đĩa.
+- Chạy thử không xoá gì: `python3 ~/deployment/worker-z440/ops/nexus_prune_images.py` (thêm `--keep N` để đổi số bản giữ). Đăng nhập lấy từ `docker login docker.x51.vn` có sẵn trên máy, tài khoản cần quyền xoá component.
+- Push image từ máy dev cần phân giải được `docker.x51.vn` (VPN không có DNS cho tên này): thêm `10.113.213.9 docker.x51.vn` vào `/etc/hosts`, hoặc push từ z440 sau `docker save | ssh z440 docker load`.
+
 ## Database
 
 Autovacuum mặc định của Postgres là đủ. Kiểm tra hằng tháng:

@@ -5,6 +5,7 @@ import '../models/user_session.dart';
 import '../speaking/speaking_drill_screen.dart';
 import '../speaking/speaking_repository.dart';
 import '../speaking/speaking_summary_screen.dart';
+import '../theme/app_radius.dart';
 
 // Navigation drawer of the learning screen.
 class LearningDrawer extends StatelessWidget {
@@ -190,7 +191,7 @@ class LearningDrawer extends StatelessWidget {
                       leading: const Icon(Icons.tune_rounded),
                       title: const Text('Tools & settings'),
                       shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
+                        borderRadius: AppRadius.control,
                       ),
                       childrenPadding: const EdgeInsets.only(left: 8),
                       children: [
@@ -300,7 +301,7 @@ class _DrawerHeaderCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppRadius.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

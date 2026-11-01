@@ -7,6 +7,9 @@ import { VISIBILITY_OPTIONS } from '@/lib/options';
 import PageShell from '@/components/PageShell';
 import Select from '@/components/Select';
 
+export const metadata = { title: 'New article' };
+export const dynamic = 'force-dynamic';
+
 async function createArticle(formData: FormData) {
   'use server';
 
@@ -27,7 +30,7 @@ async function createArticle(formData: FormData) {
 
 export default function NewArticlePage() {
   return (
-    <PageShell title="New Article">
+    <PageShell title="New article" description="Submit text for processing into vocabulary and sentences." breadcrumbs={[{ label: 'Articles', href: '/articles' }, { label: 'New article' }]}>
       <form className="editor-form" action={createArticle}>
         <label>
           Title

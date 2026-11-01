@@ -1,0 +1,547 @@
+{
+  "version": 1,
+  "subject": "math",
+  "topics": [
+    {
+      "id": "add-sub",
+      "title": "Adding and subtracting"
+    },
+    {
+      "id": "mul-div",
+      "title": "Multiplying and dividing"
+    },
+    {
+      "id": "arith",
+      "title": "Order of operations"
+    },
+    {
+      "id": "number",
+      "title": "Factors and multiples"
+    },
+    {
+      "id": "frac",
+      "title": "Fractions"
+    },
+    {
+      "id": "rational",
+      "title": "Rational numbers"
+    },
+    {
+      "id": "percent",
+      "title": "Percentages"
+    },
+    {
+      "id": "ratio",
+      "title": "Ratio and proportion"
+    },
+    {
+      "id": "integers",
+      "title": "Negative numbers"
+    },
+    {
+      "id": "algebra",
+      "title": "Algebra"
+    },
+    {
+      "id": "powers",
+      "title": "Powers and roots"
+    },
+    {
+      "id": "geometry",
+      "title": "Shapes and angles"
+    },
+    {
+      "id": "measure",
+      "title": "Measurement"
+    },
+    {
+      "id": "words",
+      "title": "Word problems"
+    }
+  ],
+  "skills": [
+    {
+      "id": "math.add-sub.within-20",
+      "topic": "add-sub",
+      "grade": 1,
+      "title": "Add and subtract within 20",
+      "prerequisites": [],
+      "example": {
+        "question": "8 + 7",
+        "answer": "15"
+      }
+    },
+    {
+      "id": "math.add-sub.within-100",
+      "topic": "add-sub",
+      "grade": 2,
+      "title": "Add and subtract within 100",
+      "prerequisites": [
+        "math.add-sub.within-20"
+      ],
+      "example": {
+        "question": "46 + 38",
+        "answer": "84"
+      }
+    },
+    {
+      "id": "math.add-sub.within-1000",
+      "topic": "add-sub",
+      "grade": 3,
+      "title": "Add and subtract within 1000",
+      "prerequisites": [
+        "math.add-sub.within-100"
+      ],
+      "example": {
+        "question": "356 + 249",
+        "answer": "605"
+      }
+    },
+    {
+      "id": "math.add-sub.within-10000",
+      "topic": "add-sub",
+      "grade": 5,
+      "title": "Add and subtract within 10000",
+      "prerequisites": [
+        "math.add-sub.within-1000"
+      ],
+      "example": {
+        "question": "4382 + 2759",
+        "answer": "7141"
+      }
+    },
+    {
+      "id": "math.mul-div.tables",
+      "topic": "mul-div",
+      "grade": 3,
+      "title": "Times tables",
+      "prerequisites": [
+        "math.add-sub.within-100"
+      ],
+      "example": {
+        "question": "7 × 8",
+        "answer": "56"
+      }
+    },
+    {
+      "id": "math.mul-div.divide-facts",
+      "topic": "mul-div",
+      "grade": 3,
+      "title": "Division facts",
+      "prerequisites": [
+        "math.mul-div.tables"
+      ],
+      "example": {
+        "question": "56 ÷ 7",
+        "answer": "8"
+      }
+    },
+    {
+      "id": "math.mul-div.two-by-one",
+      "topic": "mul-div",
+      "grade": 4,
+      "title": "Multiply a 2-digit number by 1 digit",
+      "prerequisites": [
+        "math.mul-div.tables"
+      ],
+      "example": {
+        "question": "34 × 6",
+        "answer": "204"
+      }
+    },
+    {
+      "id": "math.mul-div.divide-larger",
+      "topic": "mul-div",
+      "grade": 4,
+      "title": "Divide larger numbers",
+      "prerequisites": [
+        "math.mul-div.divide-facts"
+      ],
+      "example": {
+        "question": "156 ÷ 6",
+        "answer": "26"
+      }
+    },
+    {
+      "id": "math.mul-div.two-by-two",
+      "topic": "mul-div",
+      "grade": 5,
+      "title": "Multiply two 2-digit numbers",
+      "prerequisites": [
+        "math.mul-div.two-by-one"
+      ],
+      "example": {
+        "question": "23 × 14",
+        "answer": "322"
+      }
+    },
+    {
+      "id": "math.arith.order-of-operations",
+      "topic": "arith",
+      "grade": 5,
+      "title": "Multiply before you add",
+      "prerequisites": [
+        "math.mul-div.tables"
+      ],
+      "example": {
+        "question": "3 + 4 × 5",
+        "answer": "23"
+      }
+    },
+    {
+      "id": "math.arith.brackets",
+      "topic": "arith",
+      "grade": 6,
+      "title": "Brackets first",
+      "prerequisites": [
+        "math.arith.order-of-operations"
+      ],
+      "example": {
+        "question": "(3 + 4) × 5",
+        "answer": "35"
+      }
+    },
+    {
+      "id": "math.number.gcd",
+      "topic": "number",
+      "grade": 6,
+      "title": "Greatest common divisor",
+      "prerequisites": [
+        "math.mul-div.divide-facts"
+      ],
+      "example": {
+        "question": "GCD(12, 18)",
+        "answer": "6"
+      }
+    },
+    {
+      "id": "math.number.lcm",
+      "topic": "number",
+      "grade": 6,
+      "title": "Least common multiple",
+      "prerequisites": [
+        "math.mul-div.divide-facts"
+      ],
+      "example": {
+        "question": "LCM(4, 6)",
+        "answer": "12"
+      }
+    },
+    {
+      "id": "math.frac.parts-of-whole",
+      "topic": "frac",
+      "grade": 3,
+      "title": "Fractions as parts of a whole",
+      "prerequisites": [
+        "math.mul-div.divide-facts"
+      ],
+      "example": {
+        "question": "A pizza is cut into 8 equal slices and 3 are eaten. What fraction was eaten?",
+        "answer": "3/8"
+      }
+    },
+    {
+      "id": "math.frac.fraction-of-amount",
+      "topic": "frac",
+      "grade": 6,
+      "title": "Fraction of an amount",
+      "prerequisites": [
+        "math.frac.parts-of-whole",
+        "math.mul-div.divide-facts"
+      ],
+      "example": {
+        "question": "3/4 of 20",
+        "answer": "15"
+      }
+    },
+    {
+      "id": "math.percent.of-amount",
+      "topic": "percent",
+      "grade": 6,
+      "title": "Percent of an amount",
+      "prerequisites": [
+        "math.frac.fraction-of-amount"
+      ],
+      "example": {
+        "question": "25% of 80",
+        "answer": "20"
+      }
+    },
+    {
+      "id": "math.percent.change",
+      "topic": "percent",
+      "grade": 7,
+      "title": "Percent increase and decrease",
+      "prerequisites": [
+        "math.percent.of-amount"
+      ],
+      "example": {
+        "question": "Increase 60 by 10%",
+        "answer": "66"
+      }
+    },
+    {
+      "id": "math.ratio.share",
+      "topic": "ratio",
+      "grade": 7,
+      "title": "Share in a ratio",
+      "prerequisites": [
+        "math.frac.fraction-of-amount"
+      ],
+      "example": {
+        "question": "Share 20 in ratio 1:4. Larger part?",
+        "answer": "16"
+      }
+    },
+    {
+      "id": "math.integers.operations",
+      "topic": "integers",
+      "grade": 7,
+      "title": "Add, subtract, multiply and divide negatives",
+      "prerequisites": [
+        "math.add-sub.within-100",
+        "math.mul-div.tables"
+      ],
+      "example": {
+        "question": "−3 + (−5)",
+        "answer": "−8"
+      }
+    },
+    {
+      "id": "math.integers.signed-powers",
+      "topic": "integers",
+      "grade": 7,
+      "title": "Powers of negative numbers",
+      "prerequisites": [
+        "math.integers.operations"
+      ],
+      "example": {
+        "question": "(−2)³",
+        "answer": "−8"
+      }
+    },
+    {
+      "id": "math.rational.operations",
+      "topic": "rational",
+      "grade": 7,
+      "title": "Add and subtract fractions",
+      "prerequisites": [
+        "math.frac.fraction-of-amount",
+        "math.integers.operations"
+      ],
+      "example": {
+        "question": "1/2 + 1/3",
+        "answer": "5/6"
+      }
+    },
+    {
+      "id": "math.algebra.expressions",
+      "topic": "algebra",
+      "grade": 7,
+      "title": "Simplify expressions",
+      "prerequisites": [
+        "math.integers.operations"
+      ],
+      "example": {
+        "question": "3x + 2x − x",
+        "answer": "4x"
+      }
+    },
+    {
+      "id": "math.algebra.one-step-equations",
+      "topic": "algebra",
+      "grade": 7,
+      "title": "One-step equations",
+      "prerequisites": [
+        "math.integers.operations"
+      ],
+      "example": {
+        "question": "x + 4 = 9, x = ?",
+        "answer": "5"
+      }
+    },
+    {
+      "id": "math.geometry.angles",
+      "topic": "geometry",
+      "grade": 7,
+      "title": "Angles in triangles and lines",
+      "prerequisites": [
+        "math.add-sub.within-100"
+      ],
+      "example": {
+        "question": "Two angles of a triangle are 50° and 60°. The third?",
+        "answer": "70°"
+      }
+    },
+    {
+      "id": "math.algebra.two-step-equations",
+      "topic": "algebra",
+      "grade": 8,
+      "title": "Two-step equations",
+      "prerequisites": [
+        "math.algebra.one-step-equations"
+      ],
+      "example": {
+        "question": "2x + 3 = 11, x = ?",
+        "answer": "4"
+      }
+    },
+    {
+      "id": "math.algebra.substitution",
+      "topic": "algebra",
+      "grade": 8,
+      "title": "Substitute values",
+      "prerequisites": [
+        "math.integers.operations"
+      ],
+      "example": {
+        "question": "2a + 3b when a = 1, b = 2",
+        "answer": "8"
+      }
+    },
+    {
+      "id": "math.powers.integer-powers",
+      "topic": "powers",
+      "grade": 8,
+      "title": "Powers",
+      "prerequisites": [
+        "math.mul-div.tables"
+      ],
+      "example": {
+        "question": "2³",
+        "answer": "8"
+      }
+    },
+    {
+      "id": "math.powers.roots",
+      "topic": "powers",
+      "grade": 8,
+      "title": "Square and cube roots",
+      "prerequisites": [
+        "math.powers.integer-powers"
+      ],
+      "example": {
+        "question": "√49",
+        "answer": "7"
+      }
+    },
+    {
+      "id": "math.geometry.pythagoras",
+      "topic": "geometry",
+      "grade": 8,
+      "title": "Pythagoras' theorem",
+      "prerequisites": [
+        "math.powers.roots"
+      ],
+      "example": {
+        "question": "Legs 3 and 4: hypotenuse?",
+        "answer": "5"
+      }
+    },
+    {
+      "id": "math.algebra.quadratics",
+      "topic": "algebra",
+      "grade": 9,
+      "title": "Solve quadratics by factoring",
+      "prerequisites": [
+        "math.algebra.two-step-equations",
+        "math.powers.integer-powers"
+      ],
+      "example": {
+        "question": "x² − 5x + 6 = 0: larger root?",
+        "answer": "3"
+      }
+    },
+    {
+      "id": "math.algebra.simultaneous",
+      "topic": "algebra",
+      "grade": 9,
+      "title": "Simultaneous equations",
+      "prerequisites": [
+        "math.algebra.two-step-equations"
+      ],
+      "example": {
+        "question": "x + y = 7, x − y = 1: x = ?",
+        "answer": "4"
+      }
+    },
+    {
+      "id": "math.algebra.functions",
+      "topic": "algebra",
+      "grade": 9,
+      "title": "Functions",
+      "prerequisites": [
+        "math.algebra.substitution"
+      ],
+      "example": {
+        "question": "f(x) = 2x + 1, f(3) = ?",
+        "answer": "7"
+      }
+    },
+    {
+      "id": "math.powers.index-laws",
+      "topic": "powers",
+      "grade": 9,
+      "title": "Index laws",
+      "prerequisites": [
+        "math.powers.integer-powers"
+      ],
+      "example": {
+        "question": "2³ × 2⁴ = 2ⁿ, n = ?",
+        "answer": "7"
+      }
+    },
+    {
+      "id": "math.measure.units",
+      "topic": "measure",
+      "grade": 3,
+      "title": "Length, mass and capacity units",
+      "prerequisites": [
+        "math.add-sub.within-1000"
+      ],
+      "example": {
+        "question": "2 m 30 cm in centimetres?",
+        "answer": "230 cm"
+      }
+    },
+    {
+      "id": "math.measure.time",
+      "topic": "measure",
+      "grade": 3,
+      "title": "Telling and adding time",
+      "prerequisites": [
+        "math.add-sub.within-100"
+      ],
+      "example": {
+        "question": "Class starts at 7:45 and lasts 50 minutes. When does it end?",
+        "answer": "8:35"
+      }
+    },
+    {
+      "id": "math.geometry.perimeter",
+      "topic": "geometry",
+      "grade": 3,
+      "title": "Perimeter of simple shapes",
+      "prerequisites": [
+        "math.add-sub.within-100"
+      ],
+      "example": {
+        "question": "A rectangle is 6 cm by 4 cm. Its perimeter?",
+        "answer": "20 cm"
+      }
+    },
+    {
+      "id": "math.words.one-two-step",
+      "topic": "words",
+      "grade": 3,
+      "title": "Word problems with one or two steps",
+      "prerequisites": [
+        "math.add-sub.within-100"
+      ],
+      "example": {
+        "question": "Mai has 24 stickers, gives away 9 and buys 15 more. How many now?",
+        "answer": "30"
+      }
+    }
+  ]
+}

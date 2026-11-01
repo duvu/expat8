@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_radius.dart';
 
 /// Big, labelled buttons for the three study actions, so learners do not need
 /// to discover the swipe gestures (which still work as shortcuts).
@@ -123,9 +124,9 @@ class _StudyButton extends StatelessWidget {
       excludeSemantics: true,
       child: Material(
         color: enabled ? background : scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: AppRadius.card,
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: AppRadius.card,
           onTap: onPressed,
           child: SizedBox(
             height: 64,

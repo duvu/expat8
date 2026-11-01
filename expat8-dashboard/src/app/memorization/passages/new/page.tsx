@@ -7,6 +7,9 @@ import { PASSAGE_LANGUAGE_OPTIONS, VISIBILITY_OPTIONS } from '@/lib/options';
 import PageShell from '@/components/PageShell';
 import Select from '@/components/Select';
 
+export const metadata = { title: 'New passage' };
+export const dynamic = 'force-dynamic';
+
 async function createPassage(formData: FormData) {
   'use server';
   const passage = await backendRequest<{ id: string }>('/v1/admin/memorization/passages', {
@@ -25,7 +28,7 @@ async function createPassage(formData: FormData) {
 
 export default function NewMemorizationPassagePage() {
   return (
-    <PageShell title="New Memorization Passage">
+    <PageShell title="New passage" description="Add a passage for learners to memorize." breadcrumbs={[{ label: 'Passages', href: '/memorization/passages' }, { label: 'New passage' }]}>
       <form action={createPassage} className="editor-form">
         <label>
           Title

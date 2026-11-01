@@ -1,6 +1,6 @@
 # Expat8 Mobile App
 
-Flutter client for the Expat8 vocabulary learning MVP.
+Flutter client for Expat8 (vocabulary, reviews and school-subject practice).
 
 ## Current Architecture
 

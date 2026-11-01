@@ -13,7 +13,7 @@ import type {
   UserDetail,
   UserProficiency,
   UserRow,
-  VocabularyReviewItem,
+  ArticleVocabularyItem,
 } from '../types';
 
 let pool: pg.Pool | null = null;
@@ -38,7 +38,7 @@ export function clampLimit(limit: number, max: number) {
   return Math.max(1, Math.min(Math.trunc(limit) || 1, max));
 }
 
-// ── Articles & vocabulary review ─────────────────────────────────────────────
+// ── Articles & their vocabulary ──────────────────────────────────────────────
 
 const ARTICLE_COLUMNS =
   'id, title, source_url, language, visibility, status, processing_error, created_at, updated_at';
@@ -59,43 +59,23 @@ export async function getAdminArticle(articleId: string): Promise<AdminArticle |
   return rows[0] ?? null;
 }
 
-const VOCABULARY_SELECT = `
-  SELECT
-    vri.id,
-    vri.status,
-    vri.review_note,
-    vri.reviewed_at,
-    vri.created_at,
-    a.id AS article_id,
-    a.title AS article_title,
-    t.display_term,
-    ws.meaning_vi,
-    art.surface_text AS example,
-    art.sentence_context AS example_vi,
-    ws.part_of_speech,
-    ws.ipa
-  FROM vocabulary_review_items vri
-  JOIN word_senses ws ON ws.id = vri.word_sense_id
-  JOIN terms t ON t.id = ws.term_id
-  LEFT JOIN articles a ON a.id = vri.article_id
-  LEFT JOIN article_terms art ON art.article_id = a.id AND art.word_sense_id = ws.id`;
-
+/** Terms extracted from an article. Vocabulary goes live on creation, so there is no review status. */
 export function listArticleVocabulary(articleId: string) {
-  return queryRows<VocabularyReviewItem>(
-    `${VOCABULARY_SELECT}
-     WHERE vri.article_id = $1
-     ORDER BY vri.created_at DESC`,
+  return queryRows<ArticleVocabularyItem>(
+    `SELECT
+       art.id,
+       ws.status,
+       t.display_term,
+       ws.meaning_vi,
+       art.sentence_context AS example,
+       ws.part_of_speech,
+       ws.ipa
+     FROM article_terms art
+     JOIN word_senses ws ON ws.id = art.word_sense_id
+     JOIN terms t ON t.id = art.term_id
+     WHERE art.article_id = $1
+     ORDER BY art.created_at, art.id`,
     [articleId]
-  );
-}
-
-export function listPendingVocabulary(limit = 100) {
-  return queryRows<VocabularyReviewItem>(
-    `${VOCABULARY_SELECT}
-     WHERE vri.status = 'pending'
-     ORDER BY vri.created_at DESC
-     LIMIT $1`,
-    [clampLimit(limit, 200)]
   );
 }
 

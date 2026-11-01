@@ -6,6 +6,7 @@ import '../api/backend_api_client.dart';
 import '../models/user_session.dart';
 import 'exam_certificate_screen.dart';
 import 'exam_session_controller.dart';
+import '../theme/app_radius.dart';
 
 /// Results screen shown after exam submission.
 ///
@@ -228,7 +229,7 @@ class _ExamResultsScreenState extends State<ExamResultsScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.control,
                 ),
                 child: Column(
                   children: [

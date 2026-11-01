@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_radius.dart';
 
 /// Semantic color tokens for the app.
 ///
@@ -209,8 +210,7 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         color: scheme.surfaceContainerLowest,
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(24))),
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.surface),
         clipBehavior: Clip.antiAlias,
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -231,11 +231,11 @@ abstract final class AppTheme {
         filled: true,
         fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
         border: const OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
+          borderRadius: AppRadius.control,
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          borderRadius: AppRadius.control,
           borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         contentPadding:
@@ -247,8 +247,7 @@ abstract final class AppTheme {
         backgroundColor: scheme.surfaceContainerHigh,
       ),
       listTileTheme: const ListTileThemeData(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(16))),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.control),
         minVerticalPadding: 12,
       ),
       snackBarTheme:

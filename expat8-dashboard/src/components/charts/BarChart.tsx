@@ -11,6 +11,8 @@ import {
   YAxis,
 } from 'recharts';
 
+import { AXIS_TICK, ChartEmpty, GRID_PROPS, LEGEND_PROPS, MARGIN, TOOLTIP_PROPS, isEmptyChart, xTickFormatter, yTickFormatter } from './chart-common';
+
 type BarSeries = {
   key: string;
   label: string;
@@ -27,25 +29,37 @@ type Props = {
 };
 
 export default function BarChart({ data, xKey, series, height = 240, stacked = false, layout = 'horizontal' }: Props) {
+  if (isEmptyChart(data, series.map((s) => s.key))) return <ChartEmpty height={height} />;
+
+  const vertical = layout === 'vertical';
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <RechartsBarChart data={data} layout={layout} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.06)" />
-        {layout === 'horizontal' ? (
+      <RechartsBarChart data={data} layout={layout} margin={MARGIN}>
+        <CartesianGrid {...GRID_PROPS} vertical={vertical} horizontal={!vertical} />
+        {vertical ? (
           <>
-            <XAxis dataKey={xKey} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+            <XAxis type="number" tick={AXIS_TICK} tickLine={false} axisLine={false} allowDecimals={false} tickFormatter={yTickFormatter} />
+            <YAxis dataKey={xKey} type="category" tick={AXIS_TICK} tickLine={false} axisLine={false} width={120} />
           </>
         ) : (
           <>
-            <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-            <YAxis dataKey={xKey} type="category" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={120} />
+            <XAxis dataKey={xKey} tick={AXIS_TICK} tickLine={false} axisLine={false} tickFormatter={xTickFormatter} minTickGap={16} tickMargin={8} />
+            <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} allowDecimals={false} tickFormatter={yTickFormatter} />
           </>
         )}
-        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-        <Legend iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+        <Tooltip {...TOOLTIP_PROPS} />
+        {series.length > 1 && <Legend {...LEGEND_PROPS} />}
         {series.map((s) => (
-          <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} stackId={stacked ? 'stack' : undefined} radius={stacked ? 0 : [3, 3, 0, 0]} />
+          <Bar
+            key={s.key}
+            dataKey={s.key}
+            name={s.label}
+            fill={s.color}
+            stackId={stacked ? 'stack' : undefined}
+            radius={stacked ? 0 : vertical ? [0, 4, 4, 0] : [4, 4, 0, 0]}
+            maxBarSize={36}
+            isAnimationActive={false}
+          />
         ))}
       </RechartsBarChart>
     </ResponsiveContainer>

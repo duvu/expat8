@@ -42,9 +42,20 @@ export function parseFeed(xml) {
     .filter((item) => /^https?:\/\//i.test(item.link) && item.title);
 }
 
+const CJK = /[\u3400-\u9fff]/g;
+// A prose paragraph ends like a sentence (Latin or CJK punctuation, optionally closed by a quote).
+const SENTENCE_END = /[.!?。！？…]["”’」』）)]?$|["”」』]$/;
+const BOILERPLATE = /cookie|subscribe|newsletter|©|版权所有|责任编辑|责编|来源[:：]|转载|扫码|关注我们|点击查看/i;
+
+/** Chinese packs more meaning into fewer characters, so its paragraphs are shorter. */
+function minParagraphLength(paragraph) {
+  const cjkChars = paragraph.match(CJK)?.length ?? 0;
+  return cjkChars > paragraph.length / 2 ? 30 : 60;
+}
+
 /**
  * Pulls readable paragraphs out of an article page: prefers the `<article>` element, drops scripts,
- * navigation and boilerplate, keeps only paragraphs that look like prose.
+ * navigation and boilerplate, keeps only paragraphs that look like prose (English or Chinese).
  */
 export function extractArticleText(html, { maxChars = 6000 } = {}) {
   const page = String(html ?? '')
@@ -53,7 +64,10 @@ export function extractArticleText(html, { maxChars = 6000 } = {}) {
   const scope = page.match(/<article[\s\S]*?<\/article>/i)?.[0] ?? page.match(/<main[\s\S]*?<\/main>/i)?.[0] ?? page;
   const paragraphs = (scope.match(/<p[\s>][\s\S]*?<\/p>/gi) ?? [])
     .map((paragraph) => stripTags(paragraph).replace(/\s+/g, ' '))
-    .filter((paragraph) => paragraph.length >= 60 && /[.!?”"]$/.test(paragraph) && !/cookie|subscribe|newsletter|©/i.test(paragraph));
+    .filter(
+      (paragraph) =>
+        paragraph.length >= minParagraphLength(paragraph) && SENTENCE_END.test(paragraph) && !BOILERPLATE.test(paragraph)
+    );
   const text = [];
   let length = 0;
   for (const paragraph of paragraphs) {

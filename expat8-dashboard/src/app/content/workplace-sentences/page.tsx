@@ -1,12 +1,15 @@
 import Link from 'next/link';
 
 import { listWorkplaceSentences } from '@/lib/analytics';
-import { formatDateTime, truncate } from '@/lib/format';
+import { truncate } from '@/lib/format';
 import { queryParam } from '@/lib/form';
 import DataTable from '@/components/DataTable';
+import DateTime from '@/components/DateTime';
 import FilterForm from '@/components/FilterForm';
+import LanguageChip from '@/components/LanguageChip';
 import PageShell from '@/components/PageShell';
 
+export const metadata = { title: 'Workplace sentences' };
 export const dynamic = 'force-dynamic';
 
 export default async function WorkplaceSentencesPage({
@@ -20,7 +23,7 @@ export default async function WorkplaceSentencesPage({
   const sentences = await listWorkplaceSentences({ topic, language });
 
   return (
-    <PageShell title="Workplace Sentences">
+    <PageShell title="Workplace sentences" description="Example sentences extracted from articles, by topic.">
       <section className="table-panel">
         <FilterForm>
           <label>
@@ -39,17 +42,18 @@ export default async function WorkplaceSentencesPage({
           rows={sentences}
           rowKey={(s) => s.id}
           empty="No workplace sentences found."
+          noun="sentences"
           columns={[
             { label: 'Sentence', render: (s) => <span title={s.text}>{truncate(s.text, 80)}</span> },
             { label: 'Topic', render: (s) => s.topic ?? '—' },
-            { label: 'Language', render: (s) => s.language },
+            { label: 'Language', render: (s) => <LanguageChip code={s.language} /> },
             {
               label: 'Article',
               render: (s) => s.article_id
                 ? <Link href={`/articles/${s.article_id}`}>{s.article_id}</Link>
                 : <span className="muted">—</span>,
             },
-            { label: 'Created At', render: (s) => formatDateTime(s.created_at) },
+            { label: 'Created', nowrap: true, render: (s) => <DateTime value={s.created_at} /> },
           ]}
         />
       </section>

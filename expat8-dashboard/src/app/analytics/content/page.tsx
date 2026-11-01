@@ -2,7 +2,7 @@ import {
   getWordTopicCoverage,
   getEntryTypeDistribution,
   getQualityScoreHistogram,
-  getVocabReviewThroughput,
+  getWordsAddedPerDay,
 } from '@/lib/analytics';
 import { resolveTimeRange } from '@/lib/time-range';
 import ChartPanel from '@/components/ChartPanel';
@@ -10,19 +10,22 @@ import PageShell from '@/components/PageShell';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
 import BarChart from '@/components/charts/BarChart';
 import KpiCard from '@/components/charts/KpiCard';
+import KpiGrid from '@/components/charts/KpiGrid';
 import PieChart from '@/components/charts/PieChart';
+import { CHART } from '@/lib/chart-colors';
 
+export const metadata = { title: 'Content coverage' };
 export const dynamic = 'force-dynamic';
 
-const ENTRY_TYPE_COLORS = ['#2563eb', '#7c3aed', '#d97706'];
+const ENTRY_TYPE_COLORS = [CHART.primary, CHART.info, CHART.attention];
 
 export default async function ContentCoveragePage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const { range, days } = resolveTimeRange((await searchParams).range);
-  const [topicCoverage, entryTypes, qualityHistogram, reviewThroughput] = await Promise.all([
+  const [topicCoverage, entryTypes, qualityHistogram, wordsAdded] = await Promise.all([
     getWordTopicCoverage(),
     getEntryTypeDistribution(),
     getQualityScoreHistogram(),
-    getVocabReviewThroughput(days),
+    getWordsAddedPerDay(days),
   ]);
 
   const entryTypeSlices = entryTypes.map((e, i) => ({
@@ -32,48 +35,44 @@ export default async function ContentCoveragePage({ searchParams }: { searchPara
   }));
 
   return (
-    <PageShell title="Content Coverage" actions={<TimeRangeSelector current={range} />}>
-      <section className="kpi-grid">
-        <KpiCard label="Total Topics" value={topicCoverage.rows.length} />
-        <KpiCard label="Total Words" value={topicCoverage.totalWords} />
-        <KpiCard label="Entry Types" value={entryTypes.length} />
-        <KpiCard label="Avg Quality Score" value={qualityHistogram.avgScore?.toFixed(2) ?? '—'} />
-      </section>
+    <PageShell title="Content coverage" description="Vocabulary breadth by topic, entry type and quality." actions={<TimeRangeSelector current={range} />}>
+      <KpiGrid>
+        <KpiCard label="Topics" value={topicCoverage.rows.length} sub="with vocabulary" icon="layers" />
+        <KpiCard label="Words" value={topicCoverage.totalWords} sub="across all topics" icon="book" />
+        <KpiCard label="Entry types" value={entryTypes.length} sub="kinds of entry" icon="list" />
+        <KpiCard label="Average quality" value={qualityHistogram.avgScore?.toFixed(2) ?? '—'} sub="score per word" icon="award" />
+      </KpiGrid>
 
       <section className="analytics-grid wide">
-        <ChartPanel title="Topic Coverage">
+        <ChartPanel title="Topic coverage" description="Words per topic">
           <BarChart
             data={topicCoverage.rows}
             xKey="topic"
             layout="vertical"
-            series={[{ key: 'count', label: 'Words', color: '#2563eb' }]}
+            series={[{ key: 'count', label: 'Words', color: CHART.primary }]}
             height={320}
           />
         </ChartPanel>
 
-        <ChartPanel title="Entry Type Distribution">
+        <ChartPanel title="Entry types">
           <PieChart data={entryTypeSlices} donut />
         </ChartPanel>
       </section>
 
       <section className="analytics-grid wide">
-        <ChartPanel title="Quality Score Histogram">
+        <ChartPanel title="Quality scores" description="Words per score band">
           <BarChart
             data={qualityHistogram.rows}
             xKey="bucket"
-            series={[{ key: 'count', label: 'Words', color: '#7c3aed' }]}
+            series={[{ key: 'count', label: 'Words', color: CHART.info }]}
           />
         </ChartPanel>
 
-        <ChartPanel title="Review Throughput">
+        <ChartPanel title="Words added" description="New study words per day">
           <BarChart
-            data={reviewThroughput}
+            data={wordsAdded}
             xKey="date"
-            stacked
-            series={[
-              { key: 'approved', label: 'Approved', color: '#059669' },
-              { key: 'rejected', label: 'Rejected', color: '#dc2626' },
-            ]}
+            series={[{ key: 'words', label: 'Words', color: CHART.progress }]}
           />
         </ChartPanel>
       </section>

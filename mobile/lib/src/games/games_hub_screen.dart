@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'common/game_audio.dart';
 import 'common/game_settings.dart';
 import 'game_storage.dart';
+import 'party/party_home_screen.dart';
+import 'party/party_relay_host.dart';
+import 'party/room_discovery.dart';
 import 'quiz/quiz_catalog.dart';
 import 'quiz/quiz_game_context.dart';
 import 'sudoku/sudoku_home_screen.dart';
 import 'word_blaster/ui/word_blaster_home_screen.dart';
 import 'word_blaster/word_blaster_context.dart';
 import '../widgets/brand_backdrop.dart';
+import '../theme/app_radius.dart';
 
 /// Entry point for offline mini-games. Add new games to [_games].
 class GamesHubScreen extends StatelessWidget {
@@ -16,10 +20,18 @@ class GamesHubScreen extends StatelessWidget {
     required this.storage,
     this.wordBlaster,
     this.quiz,
+    this.roomDiscovery,
+    this.partyRelay,
     super.key,
   });
 
   final GameStorage storage;
+
+  /// Finds party rooms on the WiFi; bonsoir (mDNS/Bonjour) when not given.
+  final RoomDiscovery? roomDiscovery;
+
+  /// Internet play through the backend; null keeps parties on the WiFi.
+  final PartyRelay? partyRelay;
 
   /// Shared state for the math and English games; built from [storage] when
   /// not given.
@@ -37,6 +49,20 @@ class GamesHubScreen extends StatelessWidget {
   }
 
   List<_GameEntry> get _games => [
+        _GameEntry(
+          section: 'Play together',
+          title: 'Party',
+          description:
+              'Quiz Night or Duel on the same WiFi or online, each on their own phone and level.',
+          icon: Icons.groups_rounded,
+          colors: const [Color(0xFF7C2D92), Color(0xFFE0517A)],
+          builder: (_) => PartyHomeScreen(
+            storage: storage,
+            skillSink: _quiz.skillSink,
+            discovery: roomDiscovery ?? BonsoirRoomDiscovery(),
+            relay: partyRelay,
+          ),
+        ),
         if (wordBlaster != null)
           _GameEntry(
             section: 'Vocabulary',
@@ -94,7 +120,7 @@ class GamesHubScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Material(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: AppRadius.surface,
                 clipBehavior: Clip.antiAlias,
                 child: Ink(
                   decoration: BoxDecoration(
@@ -116,7 +142,7 @@ class GamesHubScreen extends StatelessWidget {
                             height: 60,
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(18),
+                              borderRadius: AppRadius.card,
                             ),
                             child:
                                 Icon(game.icon, size: 32, color: Colors.white),

@@ -52,28 +52,18 @@ export function senseFieldsFromItem(item) {
   };
 }
 
-/** Statuses for a new sense and its review item; approved items skip the admin queue. */
-export function reviewStatuses(requiresReview, now) {
-  return {
-    senseStatus: requiresReview ? 'pending_review' : 'approved',
-    reviewStatus: requiresReview ? 'pending' : 'approved',
-    reviewedAt: requiresReview ? null : now
-  };
-}
-
-/** Admin-created articles and fallback stubs need review; user article vocabulary is auto-approved. */
-export function articleItemRequiresReview(article, item) {
-  return Boolean(article.created_by_admin_id) || Boolean(item.isStub);
-}
-
-/** Only vocabulary of user-owned memorization passages is auto-approved. */
-export function passageRequiresReview(passage) {
-  return passage.owner_type !== 'user';
+/**
+ * Extracted vocabulary goes straight to production: there is no review queue. Placeholder items
+ * (`isStub`, produced when LLM enrichment is unavailable, e.g. "Nghia cua <term>") are the exception:
+ * they carry no real meaning, so they are never stored.
+ */
+export function releasableItems(items) {
+  return items.filter((item) => !item.isStub);
 }
 
 /**
- * Word-insert input for an approved extracted item, bridging it into the
- * `words` pool so learning cards can serve it.
+ * Word-insert input for an extracted item, bridging it into the `words` pool so learning cards
+ * can serve it.
  */
 export function bridgedWordInput(item, { example, topics, generationSource }) {
   return {

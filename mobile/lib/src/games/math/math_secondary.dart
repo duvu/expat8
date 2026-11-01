@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'math_problem.dart';
+import 'math_skills_map.dart';
 
 // Lower-secondary problem families (grades 6-9). Every answer is an integer;
 // from grade 7 answers may be negative ([MathProblem.signed]). Each builder
@@ -37,7 +38,7 @@ String _coefficient(int a, String variable) => switch (a) {
 
 int _gcd(int a, int b) => b == 0 ? a.abs() : _gcd(b, a % b);
 
-MathProblem _p(String text, int answer, String hint,
+MathProblem _p(String skillId, String text, int answer, String hint,
         {bool signed = false, String? cue}) =>
     MathProblem(
       text: text,
@@ -45,6 +46,7 @@ MathProblem _p(String text, int answer, String hint,
       op: MathOp.mixed,
       key: text,
       hint: hint,
+      skillId: skillId,
       signed: signed,
       cue: cue,
     );
@@ -53,13 +55,16 @@ MathProblem _p(String text, int answer, String hint,
 
 MathProblem bracketsProblem(int a, int b, int c) {
   final sum = a + b;
-  return _p('($a + $b) × $c', sum * c,
+  return _p(MathSkill.brackets, '($a + $b) × $c', sum * c,
       'Brackets first: $a + $b = $sum, then $sum × $c = ${sum * c}');
 }
 
 MathProblem fractionOfProblem(int numerator, int denominator, int whole) {
   final part = whole ~/ denominator;
-  return _p('$numerator/$denominator of $whole', part * numerator,
+  return _p(
+      MathSkill.fractionOfAmount,
+      '$numerator/$denominator of $whole',
+      part * numerator,
       '$whole ÷ $denominator = $part, then × $numerator = ${part * numerator}');
 }
 
@@ -71,18 +76,18 @@ MathProblem percentOfProblem(int percent, int base) {
     75 => 'Three quarters: $base ÷ 4 = ${base ~/ 4}, × 3 = $answer',
     _ => '10% of $base = ${base ~/ 10}, × ${percent ~/ 10} = $answer',
   };
-  return _p('$percent% of $base', answer, hint);
+  return _p(MathSkill.percentOfAmount, '$percent% of $base', answer, hint);
 }
 
 MathProblem gcdProblem(int a, int b) {
   final g = _gcd(a, b);
-  return _p('GCD($a, $b)', g,
+  return _p(MathSkill.gcd, 'GCD($a, $b)', g,
       'Largest number dividing both: $a = $g × ${a ~/ g}, $b = $g × ${b ~/ g}');
 }
 
 MathProblem lcmProblem(int a, int b) {
   final l = a * b ~/ _gcd(a, b);
-  return _p('LCM($a, $b)', l,
+  return _p(MathSkill.lcm, 'LCM($a, $b)', l,
       'Smallest common multiple: $a × $b ÷ GCD ${_gcd(a, b)} = $l');
 }
 
@@ -106,7 +111,8 @@ MathProblem integerProblem(int a, String op, int b) {
         ? 'Same signs give a positive result'
         : 'Different signs give a negative result',
   };
-  return _p('${signed(a, leading: true)} $op ${signed(b)}', answer, hint,
+  return _p(MathSkill.integerOperations,
+      '${signed(a, leading: true)} $op ${signed(b)}', answer, hint,
       signed: true);
 }
 
@@ -125,13 +131,17 @@ MathProblem oneStepEquation(int x, String op, int k) {
   };
   // For "x ÷ k = q" the unknown is q × k.
   final answer = op == '÷' ? x * k : x;
-  return _p('$text, x = ?', answer, hint, signed: true, cue: 'Equation');
+  return _p(MathSkill.oneStepEquations, '$text, x = ?', answer, hint,
+      signed: true, cue: 'Equation');
 }
 
 MathProblem ratioProblem(int total, int p, int q) {
   final unit = total ~/ (p + q);
   final larger = max(p, q) * unit;
-  return _p('Share $total in ratio $p:$q. Larger part?', larger,
+  return _p(
+      MathSkill.ratioShare,
+      'Share $total in ratio $p:$q. Larger part?',
+      larger,
       '$total ÷ ${p + q} parts = $unit, larger share ${max(p, q)} × $unit = $larger',
       cue: 'Ratio');
 }
@@ -140,7 +150,10 @@ MathProblem percentChangeProblem(int base, int percent,
     {required bool increase}) {
   final change = base * percent ~/ 100;
   final answer = increase ? base + change : base - change;
-  return _p('${increase ? 'Increase' : 'Decrease'} $base by $percent%', answer,
+  return _p(
+      MathSkill.percentChange,
+      '${increase ? 'Increase' : 'Decrease'} $base by $percent%',
+      answer,
       '$percent% of $base = $change, $base ${increase ? '+' : '−'} $change = $answer',
       cue: '% change');
 }
@@ -149,25 +162,31 @@ MathProblem percentChangeProblem(int base, int percent,
 
 MathProblem powerProblem(int base, int exponent) {
   final answer = pow(base, exponent).toInt();
-  return _p('$base${_power(exponent)}', answer,
+  return _p(MathSkill.integerPowers, '$base${_power(exponent)}', answer,
       '${List.filled(exponent, base).join(' × ')} = $answer');
 }
 
 MathProblem rootProblem(int root, {bool cube = false}) => cube
-    ? _p('∛${root * root * root}', root,
+    ? _p(MathSkill.roots, '∛${root * root * root}', root,
         '$root × $root × $root = ${root * root * root}')
-    : _p('√${root * root}', root, '$root × $root = ${root * root}');
+    : _p(MathSkill.roots, '√${root * root}', root,
+        '$root × $root = ${root * root}');
 
 MathProblem twoStepEquation(int a, int b, int x) {
   final c = a * x + b;
-  return _p('${a}x ${_term(b)} = ${signed(c, leading: true)}, x = ?', x,
+  return _p(
+      MathSkill.twoStepEquations,
+      '${a}x ${_term(b)} = ${signed(c, leading: true)}, x = ?',
+      x,
       'Undo ${_term(b)} first: ${signed(c, leading: true)} ${_term(-b)} = ${signed(a * x, leading: true)}, then ÷ $a = $x',
-      signed: true, cue: 'Equation');
+      signed: true,
+      cue: 'Equation');
 }
 
 MathProblem substitutionProblem(int p, int q, int a, int b) {
   final answer = p * a + q * b;
   return _p(
+      MathSkill.substitution,
       '${p}a + ${q}b when a = ${signed(a, leading: true)}, b = ${signed(b, leading: true)}',
       answer,
       '$p × ${signed(a)} + $q × ${signed(b)} = ${signed(p * a, leading: true)} ${_term(q * b)} = ${signed(answer, leading: true)}',
@@ -177,8 +196,8 @@ MathProblem substitutionProblem(int p, int q, int a, int b) {
 
 MathProblem pythagorasProblem(int a, int b) {
   final c = sqrt(a * a + b * b).round();
-  return _p(
-      'Legs $a and $b: hypotenuse?', c, '√($a² + $b²) = √${a * a + b * b} = $c',
+  return _p(MathSkill.pythagoras, 'Legs $a and $b: hypotenuse?', c,
+      '√($a² + $b²) = √${a * a + b * b} = $c',
       cue: 'Pythagoras');
 }
 
@@ -193,12 +212,17 @@ MathProblem quadraticProblem(int r1, int r2) {
   ];
   final larger = max(r1, r2);
   String factor(int r) => r >= 0 ? '(x − $r)' : '(x + ${-r})';
-  return _p('${terms.join(' ')} = 0: larger root?', larger,
+  return _p(
+      MathSkill.quadratics,
+      '${terms.join(' ')} = 0: larger root?',
+      larger,
       'Factor: ${factor(r1)}${factor(r2)} = 0 → x = ${signed(r1, leading: true)} or ${signed(r2, leading: true)}',
-      signed: true, cue: 'Quadratic');
+      signed: true,
+      cue: 'Quadratic');
 }
 
 MathProblem simultaneousProblem(int x, int y) => _p(
+    MathSkill.simultaneous,
     'x + y = ${signed(x + y, leading: true)}, x − y = ${signed(x - y, leading: true)}: x = ?',
     x,
     'Add the equations: 2x = ${signed(2 * x, leading: true)} → x = ${signed(x, leading: true)}',
@@ -223,12 +247,13 @@ MathProblem indexLawProblem(int base, int m, int n, String law) {
         'Power of a power: multiply $m × $n = ${m * n}'
       ),
   };
-  return _p(text, answer, hint, cue: 'Index law');
+  return _p(MathSkill.indexLaws, text, answer, hint, cue: 'Index law');
 }
 
 MathProblem functionProblem(int a, int b, int x) {
   final answer = a * x + b;
   return _p(
+      MathSkill.functions,
       'f(x) = ${_coefficient(a, 'x')} ${_term(b)}, f(${signed(x, leading: true)}) = ?',
       answer,
       'Replace x with ${signed(x, leading: true)}: $a × ${signed(x)} ${_term(b)} = ${signed(answer, leading: true)}',

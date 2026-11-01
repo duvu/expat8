@@ -90,7 +90,8 @@ Future<bool> tapMeteor(WidgetTester tester, {required bool correct}) async {
   for (final m in game.session.meteors) {
     if (m.isCorrect != correct || !m.visible) continue;
     final center = game.meteorCenter(m.id);
-    if (center == null) continue;
+    // A shot hits the first meteor on the line: skip ones another shields.
+    if (center == null || game.meteorIdAlong(center) != m.id) continue;
     await tester.tapAt(origin + Offset(center.x, center.y));
     await tester.pump();
     return true;
@@ -287,6 +288,60 @@ void main() {
     expect(reviewed, missedCount);
     expect(find.text('Review done'), findsOneWidget);
     expect(find.text('You knew $missedCount of $missedCount.'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a touch sets the direction: the shot hits the meteor on the line',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final (ctx, db, _) = await tester.runAsync(buildContext) as (
+      WordBlasterContext,
+      LocalDatabase,
+      List<String>
+    );
+    addTearDown(db.close);
+    await tester
+        .pumpWidget(MaterialApp(home: WordBlasterHomeScreen(context: ctx)));
+    await tester.pumpAndSettle();
+    await revealMode(tester, 'classic');
+    await tester.tap(find.byKey(const ValueKey('word-blaster-mode-classic')));
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await frames(tester, 50);
+    await waitForMeteors(tester);
+
+    final game = gameOf(tester);
+    final origin =
+        tester.getTopLeft(find.byKey(const ValueKey('word-blaster-game')));
+    final pivot = game.cannon.position;
+
+    // Touching the empty field fires a shot that hits nothing and costs nothing.
+    Vector2? empty;
+    for (var i = 1; i < 40 && empty == null; i++) {
+      final candidate = Vector2(game.size.x * i / 40, game.size.y * 0.55);
+      if (game.meteorIdAlong(candidate) == null) empty = candidate;
+    }
+    expect(empty, isNotNull, reason: 'some line across the field is clear');
+    final lives = game.session.lives;
+    await tester.tapAt(origin + Offset(empty!.x, empty.y));
+    await frames(tester, 6);
+    expect(game.session.meteors.any((m) => m.destroyed), isFalse);
+    expect(game.session.lives, lives);
+
+    // Touching a point on the way to a meteor — well short of it, not on
+    // it — still hits that meteor.
+    for (final m in game.session.meteors) {
+      final center = game.meteorCenter(m.id)!;
+      final touch = pivot + (center - pivot) * 0.55;
+      if (game.meteorIdAlong(touch) != m.id) continue;
+      expect((touch - center).length, greaterThan(game.size.x * 0.1));
+      await tester.tapAt(origin + Offset(touch.x, touch.y));
+      await frames(tester, 6);
+      expect(m.destroyed, isTrue);
+      return;
+    }
+    fail('no meteor with a clear line');
   });
 
   testWidgets('pausing freezes the round and resume continues it',

@@ -4,9 +4,11 @@ import type { ReactNode } from 'react';
 import { formatBytes, formatDateTime, summarizeLogArchives } from '@/lib/ops';
 import { loadOpsOverview, type ContentPipelineSection } from '@/lib/ops-data';
 import DataTable from '@/components/DataTable';
+import EmptyState from '@/components/EmptyState';
 import PageShell from '@/components/PageShell';
 import { HealthBadge, RetentionBadge } from '@/components/StatusBadge';
 
+export const metadata = { title: 'Ops and logs' };
 export const dynamic = 'force-dynamic';
 
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -49,9 +51,9 @@ function OpsPanel({
         {action}
       </div>
       {error ? (
-        <div className="empty-state error-state">{error}</div>
+        <EmptyState tone="error" title={error} hint="The backend may be offline or the dashboard credentials may not match." />
       ) : unavailable ? (
-        <div className="empty-state">{unavailable}</div>
+        <EmptyState icon="server" title={unavailable} />
       ) : children}
     </section>
   );
@@ -85,7 +87,7 @@ export default async function OpsPage() {
   const gamesData = games.data;
 
   return (
-    <PageShell title="Ops" actions={<Link href="/ops/logs" className="button">Browse archives</Link>}>
+    <PageShell title="Ops and logs" description="Backend health, content pipeline backlogs and uploaded support logs." actions={<Link href="/ops/logs" className="button">Browse archives</Link>}>
       <section className="ops-hero">
         <div>
           <p className="eyebrow">Operations workspace</p>
@@ -153,8 +155,8 @@ export default async function OpsPage() {
                 empty="No rounds."
                 columns={[
                   { label: 'Day', render: (row) => row.day },
-                  { label: 'Rounds', render: (row) => row.rounds },
-                  { label: 'Players', render: (row) => row.players },
+                  { label: 'Rounds', numeric: true, render: (row) => row.rounds },
+                  { label: 'Players', numeric: true, render: (row) => row.players },
                 ]}
               />
             )}
@@ -163,7 +165,7 @@ export default async function OpsPage() {
       </OpsPanel>
 
       <OpsPanel
-        title="Content Pipeline"
+        title="Content pipeline"
         description="Article, memorization, and shadowing processing backlogs."
         error={pipelineHealth.error}
         unavailable={!pipeline && 'Content pipeline data unavailable.'}

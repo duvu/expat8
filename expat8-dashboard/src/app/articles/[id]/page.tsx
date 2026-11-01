@@ -4,15 +4,18 @@ import { revalidatePath } from 'next/cache';
 import { backendRequest } from '@/lib/backend';
 import { getAdminArticle, listArticleVocabulary } from '@/lib/db';
 import { getArticleProcessingJobs, getArticleWorkplaceSentences } from '@/lib/analytics';
-import { formatDate, formatDateTime, formatSeconds, truncate } from '@/lib/format';
+import { formatSeconds, truncate } from '@/lib/format';
 import { formText } from '@/lib/form';
 import { VISIBILITY_OPTIONS } from '@/lib/options';
 import ActionForm from '@/components/ActionForm';
+import DateTime from '@/components/DateTime';
 import DataTable from '@/components/DataTable';
+import LanguageChip from '@/components/LanguageChip';
 import PageShell from '@/components/PageShell';
 import Select from '@/components/Select';
 import StatusBadge from '@/components/StatusBadge';
 
+export const metadata = { title: 'Article' };
 export const dynamic = 'force-dynamic';
 
 function articlePath(formData: FormData) {
@@ -64,10 +67,10 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
   const idField = { articleId: article.id };
 
   return (
-    <PageShell title={article.title}>
+    <PageShell title={article.title} breadcrumbs={[{ label: 'Articles', href: '/articles' }, { label: article.title }]}>
       <dl className="article-meta">
         <div><dt>Status</dt><dd><StatusBadge status={article.status} /></dd></div>
-        <div><dt>Language</dt><dd>{article.language}</dd></div>
+        <div><dt>Language</dt><dd><LanguageChip code={article.language} /></dd></div>
         <div><dt>Visibility</dt><dd><StatusBadge status={article.visibility} /></dd></div>
         <div><dt>Processing error</dt><dd>{article.processing_error ?? 'None'}</dd></div>
       </dl>
@@ -78,7 +81,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <section className="table-panel">
-        <h2>Edit Metadata</h2>
+        <h2>Edit metadata</h2>
         <form action={patchArticle} className="filter-form">
           <input type="hidden" name="articleId" value={article.id} />
           <label>
@@ -95,16 +98,16 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
       </section>
 
       <section className="table-panel">
-        <h2>Processing History</h2>
+        <h2>Processing history</h2>
         <DataTable
           rows={jobs}
           rowKey={(job) => job.id}
           empty="No processing jobs found."
           columns={[
-            { label: 'Attempts', render: (job) => job.attempt_count },
+            { label: 'Attempts', numeric: true, render: (job) => job.attempt_count },
             { label: 'Status', render: (job) => <StatusBadge status={job.status} /> },
-            { label: 'Started', render: (job) => formatDateTime(job.started_at) },
-            { label: 'Duration', render: (job) => formatSeconds(job.duration_s) },
+            { label: 'Started', nowrap: true, render: (job) => <DateTime value={job.started_at} /> },
+            { label: 'Duration', numeric: true, render: (job) => formatSeconds(job.duration_s) },
             {
               label: 'Error',
               render: (job) => job.error_message
@@ -124,7 +127,7 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
           columns={[
             { label: 'Term', render: (item) => item.display_term ?? 'Unknown' },
             { label: 'Meaning', render: (item) => item.meaning_vi ?? '—' },
-            { label: 'Usage', render: (item) => item.example ?? item.example_vi ?? '—' },
+            { label: 'Usage', render: (item) => item.example ?? '—' },
             { label: 'POS', render: (item) => item.part_of_speech ?? '—' },
             { label: 'IPA', render: (item) => item.ipa ?? '—' },
             { label: 'Status', render: (item) => <StatusBadge status={item.status} /> },
@@ -142,8 +145,8 @@ export default async function ArticleDetailPage({ params }: { params: Promise<{ 
             columns={[
               { label: 'Sentence', render: (s) => s.text },
               { label: 'Topic', render: (s) => s.topic ?? '—' },
-              { label: 'Language', render: (s) => s.language },
-              { label: 'Created', render: (s) => formatDate(s.created_at) },
+              { label: 'Language', render: (s) => <LanguageChip code={s.language} /> },
+              { label: 'Created', nowrap: true, render: (s) => <DateTime value={s.created_at} dateOnly /> },
             ]}
           />
         </section>

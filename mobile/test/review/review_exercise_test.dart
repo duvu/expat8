@@ -99,10 +99,9 @@ void main() {
         StudyRating.hard);
   });
 
-  testWidgets('a wrong choice shows the answer, then continues',
+  testWidgets('a wrong choice shows the answer and locks the choices',
       (tester) async {
     final answers = <ReviewAnswer>[];
-    var continued = false;
     final exercise = ReviewExercise(
       kind: ReviewExerciseKind.chooseMeaning,
       word: word('resilient', meaning: 'kiên cường'),
@@ -120,7 +119,6 @@ void main() {
           child: ReviewExerciseView(
             exercise: exercise,
             onAnswered: (a) async => answers.add(a),
-            onContinue: () => continued = true,
           ),
         ),
       ),
@@ -135,9 +133,6 @@ void main() {
     // Answering again is ignored.
     await tester.tap(find.byKey(const ValueKey('review-choice-1')));
     expect(answers, hasLength(1));
-
-    await tester.tap(find.byKey(const ValueKey('review-continue')));
-    expect(continued, isTrue);
   });
 
   testWidgets('typing with one typo counts as nearly right', (tester) async {
@@ -151,7 +146,6 @@ void main() {
                 word: word('resilient'),
                 answer: 'resilient'),
             onAnswered: (a) async => answers.add(a),
-            onContinue: () {},
           ),
         ),
       ),

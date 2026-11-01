@@ -7,7 +7,9 @@ import '../games/common/game_settings.dart';
 import '../games/word_blaster/word_blaster_context.dart';
 import '../games/game_storage.dart';
 import '../games/games_hub_screen.dart';
+import '../games/party/party_relay_host.dart';
 import '../games/quiz/quiz_game_context.dart';
+import '../curriculum/local_skill_answer_sink.dart';
 import '../data/article_repository.dart';
 import '../data/memorization_repository.dart';
 import '../data/workplace_sentence_repository.dart';
@@ -241,7 +243,11 @@ class _LearningScreenState extends State<LearningScreen> {
                   onSwipeTopToBottom: controller.onSwipeTopToBottom,
                   child: LayoutBuilder(
                     builder: (context, constraints) => SingleChildScrollView(
-                      physics: const NeverScrollableScrollPhysics(),
+                      // Swipes drive plain cards; an exercise card may be taller than
+                      // the area, so it scrolls instead.
+                      physics: controller.currentExercise == null
+                          ? const NeverScrollableScrollPhysics()
+                          : const ClampingScrollPhysics(),
                       child: ConstrainedBox(
                         constraints:
                             BoxConstraints(minHeight: constraints.maxHeight),
@@ -265,7 +271,6 @@ class _LearningScreenState extends State<LearningScreen> {
                                   elapsed: answer.elapsed,
                                   nearMiss: answer.nearMiss,
                                 ),
-                                onContinue: controller.nextCard,
                                 onListen: _speak,
                               )
                             else if (controller.currentWord != null)
@@ -299,16 +304,21 @@ class _LearningScreenState extends State<LearningScreen> {
                   ),
                 ),
               ),
-              StudyActionBar(
-                enabled: !controller.isLoading &&
-                    controller.currentWord != null &&
-                    controller.currentExercise == null,
-                onDifficult: controller.onSwipeTopToBottom,
-                onNext: controller.onSwipeRightToLeft,
-                onRemembered: controller.onSwipeBottomToTop,
-                swipeHint:
-                    'You can also swipe the card: left for next, up if you remember it, down if it is hard.',
-              ),
+              if (controller.currentExercise != null)
+                _ContinueBar(
+                  enabled: controller.exerciseAnswered && !controller.isLoading,
+                  onContinue: controller.nextCard,
+                )
+              else
+                StudyActionBar(
+                  enabled:
+                      !controller.isLoading && controller.currentWord != null,
+                  onDifficult: controller.onSwipeTopToBottom,
+                  onNext: controller.onSwipeRightToLeft,
+                  onRemembered: controller.onSwipeBottomToTop,
+                  swipeHint:
+                      'You can also swipe the card: left for next, up if you remember it, down if it is hard.',
+                ),
             ],
           ),
         ),
@@ -486,8 +496,12 @@ class _LearningScreenState extends State<LearningScreen> {
           MaterialPageRoute(
             builder: (_) => GamesHubScreen(
               storage: storage,
+              partyRelay: PartyRelay(repository.apiClient.signedSocket),
               quiz: QuizGameContext(
-                  storage: storage, settings: settings, audio: audio),
+                  storage: storage,
+                  settings: settings,
+                  audio: audio,
+                  skillSink: LocalSkillAnswerSink(repository.database)),
               wordBlaster: AppConfig.fromEnvironment().wordBlasterEnabled
                   ? WordBlasterContext(
                       repository: repository,
@@ -549,6 +563,38 @@ class _LearningScreenState extends State<LearningScreen> {
       MaterialPageRoute(
         builder: (_) => LearningProgressStatsScreen(
           database: widget.controller.repository.database,
+        ),
+      ),
+    );
+  }
+}
+
+/// The pinned way forward from a review exercise (in the action bar's place),
+/// enabled once the question is answered.
+class _ContinueBar extends StatelessWidget {
+  const _ContinueBar({required this.enabled, required this.onContinue});
+
+  final bool enabled;
+  final Future<void> Function() onContinue;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(
+            top: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.5))),
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        height: 56,
+        child: FilledButton(
+          key: const ValueKey('review-continue'),
+          onPressed: enabled ? onContinue : null,
+          child: Text(enabled ? 'Continue' : 'Choose an answer'),
         ),
       ),
     );

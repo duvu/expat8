@@ -74,6 +74,10 @@ class EnglishItem implements QuizItem {
   @override
   final String? hint;
 
+  /// English items are not tied to curriculum skills yet.
+  @override
+  String? get skillId => null;
+
   @override
   String get text => sentence;
 

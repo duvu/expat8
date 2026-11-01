@@ -10,20 +10,15 @@ export type AdminArticle = {
   updated_at: string;
 };
 
-export type VocabularyReviewItem = {
+/** A term extracted from an article, as shown on the article page. */
+export type ArticleVocabularyItem = {
   id: string;
   status: string;
-  review_note: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-  article_id?: string | null;
-  article_title?: string | null;
-  display_term?: string | null;
-  meaning_vi?: string | null;
-  example?: string | null;
-  example_vi?: string | null;
-  part_of_speech?: string | null;
-  ipa?: string | null;
+  display_term: string | null;
+  meaning_vi: string | null;
+  example: string | null;
+  part_of_speech: string | null;
+  ipa: string | null;
 };
 
 export type ExamResult = {

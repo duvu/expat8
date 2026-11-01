@@ -4,10 +4,13 @@ import { notFound } from 'next/navigation';
 import { filterLogContentLines, formatBytes, formatDateTime } from '@/lib/ops';
 import { loadLogArchive, loadLogArchiveContent } from '@/lib/ops-data';
 import ActionForm from '@/components/ActionForm';
+import EmptyState from '@/components/EmptyState';
 import FilterForm from '@/components/FilterForm';
 import PageShell from '@/components/PageShell';
+import { RetentionBadge } from '@/components/StatusBadge';
 import { deleteArchiveAction } from '../actions';
 
+export const metadata = { title: 'Log detail' };
 export const dynamic = 'force-dynamic';
 
 const backLink = <Link href="/ops/logs" className="button secondary">Back</Link>;
@@ -27,8 +30,8 @@ export default async function OpsLogDetailPage({
 
   if (archiveError || contentError) {
     return (
-      <PageShell title="Log Detail" actions={backLink}>
-        <div className="empty-state error-state">{archiveError ?? contentError}</div>
+      <PageShell title="Log detail" actions={backLink}>
+        <EmptyState tone="error" title={archiveError ?? contentError} />
       </PageShell>
     );
   }
@@ -42,6 +45,7 @@ export default async function OpsLogDetailPage({
   return (
     <PageShell
       title={archive.file_name}
+      breadcrumbs={[{ label: 'Ops and logs', href: '/ops' }, { label: 'Log archives', href: '/ops/logs' }, { label: archive.file_name }]}
       actions={
         <div className="ops-detail-actions">
           <a href={`${detailHref}/download`} className="button">Download</a>
@@ -55,7 +59,7 @@ export default async function OpsLogDetailPage({
         </div>
       }
     >
-      {filters.error && <div className="empty-state error-state">{filters.error}</div>}
+      {filters.error && <EmptyState tone="error" title={filters.error} />}
 
       <section className="ops-detail-grid">
         <dl className="ops-meta">
@@ -64,7 +68,7 @@ export default async function OpsLogDetailPage({
           <div><dt>Source</dt><dd>{archive.source_label ?? 'mobile'}</dd></div>
           <div><dt>Device</dt><dd>{archive.source_device_id ?? '—'}</dd></div>
           <div><dt>User</dt><dd>{archive.source_user_id ?? '—'}</dd></div>
-          <div><dt>Status</dt><dd>{archive.retention_state}</dd></div>
+          <div><dt>Status</dt><dd><RetentionBadge state={archive.retention_state} /></dd></div>
           <div><dt>Expires</dt><dd>{formatDateTime(archive.retention_expires_at)}</dd></div>
           <div><dt>Content type</dt><dd>{archive.content_type}</dd></div>
         </dl>
@@ -101,7 +105,7 @@ export default async function OpsLogDetailPage({
         </FilterForm>
 
         {lineResult.lines.length === 0 ? (
-          <div className="empty-state">No log lines match the current filter.</div>
+          <EmptyState icon="search" title="No log lines match the current filter." />
         ) : (
           <div className="ops-log-lines">
             {lineResult.lines.map((line) => (

@@ -82,11 +82,11 @@ test('article ingest: vocabulary items created and accessible to owner after pro
   assert.equal(vocab.items[0].classification, 'article_keyword');
 });
 
-test('vocabulary review: pending items are surfaced for admin approval', async () => {
+test('admin article vocabulary goes straight to the words pool (no review queue)', async () => {
   const store = new WordStore({ seed: false });
-  store.createAdminArticle({
+  const article = store.createAdminArticle({
     adminUserId: 'admin_1',
-    title: 'Review Batch',
+    title: 'Straight To Production',
     language: 'en',
     rawText: 'Automation enables consistent and repeatable deployments at scale.'
   });
@@ -98,48 +98,14 @@ test('vocabulary review: pending items are surfaced for admin approval', async (
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
 
-  const pendingItems = store.listVocabularyReviewItems({ status: 'pending' });
-  assert.ok(pendingItems.length > 0, 'review items are created in pending state');
+  const vocab = store.getArticleVocabulary({ articleId: article.id, userId: 'admin_1' });
+  assert.ok(vocab.items.length > 0);
+  assert.ok(vocab.items.every((item) => item.status === 'approved'));
   assert.ok(
-    pendingItems.every((item) => item.status === 'pending'),
-    'all returned items are pending'
+    store.recentWords({ targetLanguage: 'en', limit: 100 }).some((word) => word.term === 'automation'),
+    'the term is served to learners without anyone approving it'
   );
-});
-
-test('publish eligibility: admin article requires vocabulary review before publish', async () => {
-  const store = new WordStore({ seed: false });
-  const article = store.createAdminArticle({
-    adminUserId: 'admin_2',
-    title: 'Publish Eligibility',
-    language: 'en',
-    rawText: 'Observability tools enable engineers to detect anomalies early.'
-  });
-
-  const pipeline = new ArticleProcessingPipeline({
-    store,
-    suggestionAdapter: makeSuggestionAdapter('observability')
-  });
-  const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
-  await worker.runOnce();
-
-  // Article is in pending_review; vocabulary must be reviewed before publish
-  const afterProcessing = store.getArticleById({ articleId: article.id });
-  assert.equal(afterProcessing.status, 'pending_review');
-
-  // Approve all pending vocabulary
-  const pending = store.listVocabularyReviewItems({ status: 'pending' });
-  for (const item of pending) {
-    store.reviewVocabularyItem({
-      itemId: item.id,
-      status: 'approved',
-      reviewerUserId: 'admin_2'
-    });
-  }
-
-  // Now publish
-  const published = store.publishArticle({ articleId: article.id });
-  assert.equal(published.status, 'published');
-  assert.equal(published.visibility, 'published');
+  assert.equal(store.listVocabularyReviewItems, undefined, 'the review queue no longer exists');
 });
 
 test('publish eligibility: non-owner cannot read unpublished vocabulary', async () => {
@@ -170,7 +136,7 @@ test('publish eligibility: non-owner cannot read unpublished vocabulary', async 
 test('publish eligibility: non-owner can read published article vocabulary', async () => {
   const store = new WordStore({ seed: false });
 
-  // Create and process an admin article, approve vocab, then publish
+  // Create and process an admin article, then publish
   const article = store.createAdminArticle({
     adminUserId: 'admin_pub',
     title: 'Public Article',
@@ -185,9 +151,6 @@ test('publish eligibility: non-owner can read published article vocabulary', asy
   const worker = new ArticleProcessingWorker({ store, pipeline, maxAttempts: 2 });
   await worker.runOnce();
 
-  for (const item of store.listVocabularyReviewItems({ status: 'pending' })) {
-    store.reviewVocabularyItem({ itemId: item.id, status: 'approved', reviewerUserId: 'admin_pub' });
-  }
   store.publishArticle({ articleId: article.id });
 
   // Any authenticated user can now see the vocabulary

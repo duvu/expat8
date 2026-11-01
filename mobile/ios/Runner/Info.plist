@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Expat8 Language App</string>
+	<string>Expat8</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,6 +45,12 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Expat8 finds and joins party games hosted by family members on the same WiFi.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_expat8party._tcp</string>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Expat8 uses the microphone to record your spoken practice. Recordings stay private on your device.</string>
 </dict>

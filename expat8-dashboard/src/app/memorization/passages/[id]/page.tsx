@@ -12,6 +12,7 @@ import PageShell from '@/components/PageShell';
 import Select from '@/components/Select';
 import StatusBadge from '@/components/StatusBadge';
 
+export const metadata = { title: 'Passage' };
 export const dynamic = 'force-dynamic';
 
 const ADMIN = '/v1/admin/memorization';
@@ -119,7 +120,7 @@ export default async function MemorizationDetailPage({ params }: { params: Promi
   const canEnrich = passage.status === 'segmented' || passage.status === 'published';
 
   return (
-    <PageShell title={passage.title}>
+    <PageShell title={passage.title} breadcrumbs={[{ label: 'Passages', href: '/memorization/passages' }, { label: passage.title }]}>
       {passage.processing_error && (
         <div className="notice warning">
           <strong>Processing Error:</strong> {passage.processing_error}

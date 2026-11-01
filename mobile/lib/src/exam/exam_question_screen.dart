@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/user_session.dart';
 import 'exam_results_screen.dart';
 import 'exam_session_controller.dart';
+import '../theme/app_radius.dart';
 
 /// Displays exam questions one at a time (MCQ).
 ///
@@ -232,7 +233,7 @@ class _ChoiceTile extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: AppRadius.control,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -242,7 +243,7 @@ class _ChoiceTile extends StatelessWidget {
             color: borderColor,
             width: isSelected ? 2 : 1,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppRadius.control,
         ),
         child: Text(
           label,

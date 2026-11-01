@@ -4,6 +4,7 @@ import '../data/local_database.dart';
 import '../models/learning_progress.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/brand_backdrop.dart';
+import '../theme/app_radius.dart';
 
 class LearningProgressStatsScreen extends StatefulWidget {
   const LearningProgressStatsScreen({required this.database, super.key});
@@ -132,7 +133,7 @@ class _TotalBanner extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: scheme.primary,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: AppRadius.surface,
       ),
       child: Row(
         children: [

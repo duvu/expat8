@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 
+import { suggestIdentifierFix } from './domain/identifier_typos.js';
+import { isAcceptablePassword } from './domain/user_admin.js';
+
 const scryptAsync = promisify(crypto.scrypt);
 
 export class DuplicateUserError extends Error {
@@ -25,6 +28,16 @@ export class InvalidRegistrationInputError extends Error {
   }
 }
 
+/** The identifier is an email on a very likely mistyped provider domain. */
+export class IdentifierDomainTypoError extends InvalidRegistrationInputError {
+  constructor(suggestion) {
+    super();
+    this.name = 'IdentifierDomainTypoError';
+    this.reason = 'identifier_domain_typo';
+    this.suggestion = suggestion;
+  }
+}
+
 export function normalizeUserIdentifier(identifier) {
   return String(identifier ?? '')
     .trim()
@@ -33,8 +46,12 @@ export function normalizeUserIdentifier(identifier) {
 
 export function requireRegistrationInput({ identifier, password }) {
   const normalizedIdentifier = normalizeUserIdentifier(identifier);
-  if (!normalizedIdentifier || typeof password !== 'string' || password.length < 8) {
+  if (!normalizedIdentifier || !isAcceptablePassword(password)) {
     throw new InvalidRegistrationInputError();
+  }
+  const suggestion = suggestIdentifierFix(normalizedIdentifier);
+  if (suggestion) {
+    throw new IdentifierDomainTypoError(suggestion);
   }
   return {
     identifier: normalizedIdentifier,

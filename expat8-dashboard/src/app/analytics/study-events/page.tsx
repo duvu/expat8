@@ -5,8 +5,11 @@ import PageShell from '@/components/PageShell';
 import TimeRangeSelector from '@/components/TimeRangeSelector';
 import BarChart from '@/components/charts/BarChart';
 import KpiCard from '@/components/charts/KpiCard';
+import KpiGrid from '@/components/charts/KpiGrid';
 import TimeSeriesChart from '@/components/charts/TimeSeriesChart';
+import { CHART } from '@/lib/chart-colors';
 
+export const metadata = { title: 'Study events' };
 export const dynamic = 'force-dynamic';
 
 export default async function StudyEventsPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
@@ -18,35 +21,35 @@ export default async function StudyEventsPage({ searchParams }: { searchParams: 
   ]);
 
   return (
-    <PageShell title="Study Events Analytics" actions={<TimeRangeSelector current={range} />}>
-      <section className="kpi-grid">
-        <KpiCard label="DAU" value={activeUsers.dau} />
-        <KpiCard label="WAU" value={activeUsers.wau} />
-        <KpiCard label="MAU" value={activeUsers.mau} />
-      </section>
+    <PageShell title="Study events" description="How many cards learners review, and how they rate them." actions={<TimeRangeSelector current={range} />}>
+      <KpiGrid>
+        <KpiCard label="Daily active users" value={activeUsers.dau} sub="DAU, since midnight UTC" icon="activity" />
+        <KpiCard label="Weekly active users" value={activeUsers.wau} sub="WAU, last 7 days" icon="activity" />
+        <KpiCard label="Monthly active users" value={activeUsers.mau} sub="MAU, last 30 days" icon="activity" />
+      </KpiGrid>
 
       <section className="analytics-grid wide">
-        <ChartPanel title="Daily Events & Learners">
+        <ChartPanel title="Daily events and learners">
           <TimeSeriesChart
             data={timeSeries}
             xKey="date"
             series={[
-              { key: 'events', label: 'Events', color: '#2563eb' },
-              { key: 'learners', label: 'Learners', color: '#059669' },
+              { key: 'events', label: 'Events', color: CHART.primary },
+              { key: 'learners', label: 'Learners', color: CHART.progress },
             ]}
           />
         </ChartPanel>
 
-        <ChartPanel title="Rating Distribution">
+        <ChartPanel title="Rating distribution" description="Learner self-ratings per day">
           <BarChart
             data={ratingData}
             xKey="date"
             stacked
             series={[
-              { key: 'easy', label: 'Easy', color: '#059669' },
-              { key: 'too_easy', label: 'Too Easy', color: '#0d9488' },
-              { key: 'hard', label: 'Hard', color: '#d97706' },
-              { key: 'too_hard', label: 'Too Hard', color: '#dc2626' },
+              { key: 'easy', label: 'Easy', color: CHART.progress },
+              { key: 'too_easy', label: 'Too easy', color: CHART.primary },
+              { key: 'hard', label: 'Hard', color: CHART.attention },
+              { key: 'too_hard', label: 'Too hard', color: CHART.danger },
             ]}
           />
         </ChartPanel>

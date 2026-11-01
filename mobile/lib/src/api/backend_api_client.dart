@@ -932,6 +932,17 @@ class BackendApiClient {
 
   // ─── Request signing (see contracts/api.md) ────────────────────────────────
 
+  /// A signed WebSocket address on the backend (the party relay). Call again
+  /// for every connection attempt: each signature carries a fresh nonce,
+  /// which the backend accepts only once.
+  ({Uri uri, Map<String, String> headers}) signedSocket(String path) {
+    final httpUri = _uri(path);
+    return (
+      uri: httpUri.replace(scheme: httpUri.scheme == 'https' ? 'wss' : 'ws'),
+      headers: _signedHeaders(method: 'GET', uri: httpUri),
+    );
+  }
+
   Map<String, String> _signedHeaders({
     required String method,
     required Uri uri,

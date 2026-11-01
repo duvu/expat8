@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import '../../curriculum/skill_answer_sink.dart';
+import '../../curriculum/skill_mastery.dart';
 import 'quiz_core.dart';
 import 'quiz_skills.dart';
 
@@ -24,11 +26,16 @@ class QuizRoundLog<T extends QuizItem, L extends QuizLevel> {
     required this.level,
     required this.generator,
     required this.skills,
+    this.skillSink,
   });
 
   final L level;
   final QuizSource<T> generator;
   final SkillTracker<T> skills;
+
+  /// Where answers to skill-tagged items are recorded; null records nothing
+  /// (a party host does not record other players' answers).
+  final SkillAnswerSink? skillSink;
   final List<QuizAnswer<T>> answers = [];
   int score = 0;
   int combo = 0;
@@ -46,6 +53,15 @@ class QuizRoundLog<T extends QuizItem, L extends QuizLevel> {
         item: item, correct: correct, elapsed: elapsed, given: given));
     generator.recordResult(correct: correct, elapsed: elapsed);
     skills.record(level, item, correct: correct, elapsed: elapsed);
+    final skillId = item.skillId;
+    if (skillId != null) {
+      skillSink?.record(SkillAnswer(
+        skillId: skillId,
+        correct: correct,
+        elapsedMs: elapsed.inMilliseconds,
+        answeredAtMs: DateTime.now().millisecondsSinceEpoch,
+      ));
+    }
     if (!correct) {
       combo = 0;
       return 0;

@@ -1,5 +1,6 @@
 import express from 'express';
 import { openArchiveReadStream } from '../log_archive_store.js';
+import { deletionConfirmed, resolveResetPassword } from '../domain/user_admin.js';
 import { asyncHandler, queryLimit, hasAdminAccess } from './helpers.js';
 
 export function createAdminRouter({ store, config, logArchiveStore }) {
@@ -85,36 +86,6 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
         return response.status(404).json({ error: 'not_found' });
       }
       return response.json(toApiArticle(article));
-    })
-  );
-
-  router.get(
-    '/review/vocabulary',
-    asyncHandler(async (request, response) => {
-      const limit = queryLimit(request.query.limit, 100, 200);
-      const status = typeof request.query.status === 'string' ? request.query.status : 'pending';
-      const items = await store.listVocabularyReviewItems({ status, limit });
-      return response.json({ items });
-    })
-  );
-
-  router.patch(
-    '/vocabulary/:id',
-    asyncHandler(async (request, response) => {
-      const body = request.body ?? {};
-      const nextStatus = String(body.status ?? '').trim();
-      if (!['approved', 'rejected', 'pending'].includes(nextStatus)) {
-        return response.status(400).json({ error: 'bad_request' });
-      }
-      const item = await store.reviewVocabularyItem({
-        itemId: request.params.id,
-        status: nextStatus,
-        reviewNote: typeof body.review_note === 'string' ? body.review_note : null
-      });
-      if (!item) {
-        return response.status(404).json({ error: 'not_found' });
-      }
-      return response.json(item);
     })
   );
 
@@ -271,6 +242,51 @@ export function createAdminRouter({ store, config, logArchiveStore }) {
           }
         })
         .pipe(response);
+    })
+  );
+
+  router.post(
+    '/users/:id/reset-password',
+    asyncHandler(async (request, response) => {
+      const resolved = resolveResetPassword(request.body?.new_password);
+      if (!resolved) {
+        return response.status(400).json({ error: 'bad_request', reason: 'password_too_short' });
+      }
+      const result = await store.resetUserPassword({ userId: request.params.id, password: resolved.password });
+      if (!result) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      request.log?.info('admin_user_password_reset', {
+        user_id: result.user.id,
+        revoked_sessions: result.revokedSessions,
+        generated: resolved.generated
+      });
+      return response.json({
+        user_id: result.user.id,
+        identifier: result.user.identifier,
+        revoked_sessions: result.revokedSessions,
+        ...(resolved.generated ? { temporary_password: resolved.password } : {})
+      });
+    })
+  );
+
+  router.delete(
+    '/users/:id',
+    asyncHandler(async (request, response) => {
+      const user = await store.findUserById({ userId: request.params.id });
+      if (!user) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      const confirm = request.body?.confirm ?? request.query.confirm;
+      if (!deletionConfirmed(user, confirm)) {
+        return response.status(400).json({ error: 'confirmation_required' });
+      }
+      const deleted = await store.deleteUser({ userId: user.id });
+      if (!deleted) {
+        return response.status(404).json({ error: 'not_found' });
+      }
+      request.log?.info('admin_user_deleted', { user_id: user.id, deleted });
+      return response.json({ user_id: user.id, identifier: user.identifier, deleted });
     })
   );
 

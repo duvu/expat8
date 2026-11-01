@@ -29,6 +29,7 @@ npm test                          # Run all tests
 node --test test/api.test.js      # Run a single test file
 npm start                         # Start API server (src/server.js)
 npm run start:worker              # Start processing worker (src/worker.js)
+npm run import:words -- --dir data/zh_hsk [--dry-run]  # Idempotent bulk import of word JSON files (HSK1-6 zh pool, see data/zh_hsk/README.md)
 ```
 
 Backend requires Node >= 22. Uses `node:test` (no external test framework). Tests are integration-style and run against in-memory `WordStore` — no database needed for most tests.
@@ -148,6 +149,15 @@ Cards are loaded exclusively via `POST /v1/learning/cards` with `card_mode: "new
 - Study events carry the local-only `ownerUserId`; the sync queue only uploads the signed-in account's events. Sign-in/out calls `rebuildScheduleForOwner` (replays that account's local events); `pullReviewStates` then applies `GET /v1/review/states` (cursor per account+language), skipping words with pending events.
 - Article reading: vocabulary terms are highlighted; "Add to review" makes the word due now (`addWordForReview`).
 
+### LAN party games (`lib/src/games/party/`)
+
+- Host-authoritative: the host phone runs `PartyHost` (dart:io WebSocket server, port 0) and a pure `PartyEngine` (`QuizNightEngine`, `DuelEngine` wrapping `DuelSession`); questions are generated per player at their own level, answers never leave the host. The host plays through its own loopback `PartyClient` (one client code path).
+- Protocol: JSON with `v`/`t` (`party_protocol.dart`); times are sent as `ms_left`. Seat tokens let a dropped player resume within 30 s; heartbeat 5 s / timeout 15 s.
+- Joining: mDNS/Bonjour via bonsoir (`_expat8party._tcp`, behind `RoomDiscovery`) or a typed 10-char room code (IPv4+port, `RoomAddress.code`). `pickLanAddress` prefers WiFi/hotspot, never VPN/cellular.
+- Party round logs use throwaway skill trackers (`partyRoundLog`) so other players never pollute the host's weak items.
+- iOS: `NSLocalNetworkUsageDescription` + `NSBonjourServices` (`_expat8party._tcp`) in Info.plist; minimum iOS 13.0 (bonsoir). Tests: `test/games/party/` run a real host + clients over 127.0.0.1.
+- Internet play: `PartyHost` is transport-agnostic (`PartyLink`); `LanPartyServer` serves WiFi, `RelayPartyHost` serves through the backend relay (`backend/src/party_relay.js`, `/v1/party/host` + `/v1/party/join/:code`, see contracts/api.md). Online, the host's own player also joins through the relay (fair speed points). `PartyClient` re-signs headers on every reconnect (nonces are single-use). 6-char codes = online, 10-char = LAN.
+
 ## API Design Invariants
 
 - `POST /v1/learning/cards` must never receive client-side exclusion fields (`exclude_server_word_ids`, `current_word_id`, etc.) — backend rejects with 400
@@ -158,4 +168,4 @@ Cards are loaded exclusively via `POST /v1/learning/cards` with `card_mode: "new
 
 ## Content Ingestion Pipeline
 
-Articles flow through statuses: `pending_processing` → `processing` → `pending_review` (admin content) or `processed` (user content). LLM enrichment happens in the worker, never in the request path. `article_processing_pipeline.js` extracts terms and sentences; `vocabulary_enrichment_adapter.js` makes the LLM calls.
+Articles flow through statuses: `pending_processing` → `processing` → `pending_review` (admin content) or `processed` (user content). LLM enrichment happens in the worker, never in the request path. `article_processing_pipeline.js` extracts terms and sentences; `vocabulary_enrichment_adapter.js` makes the LLM calls. There is no vocabulary review queue: extracted vocabulary is approved on creation and bridged straight into `words` (placeholder `isStub` items are dropped by `releasableItems`).

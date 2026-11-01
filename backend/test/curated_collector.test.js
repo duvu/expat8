@@ -55,7 +55,7 @@ test('falls back to English Wikipedia when the Simple English page is a stub', a
     config: config(),
     fetchImpl,
     topics: [topics[0]],
-    liteLLMClient: { assessArticle: async () => ({ cefr_level: 'B2', quality: 4, suitable: false }) },
+    liteLLMClient: { assessArticle: async () => ({ level: 'B2', quality: 4, suitable: false }) },
     logger: {}
   });
 
@@ -75,7 +75,7 @@ test('rejections are remembered and the next candidate is tried', async () => {
     config: config(),
     fetchImpl: wikiFetch({ 'simple.wikipedia.org|Alpha': LONG, 'en.wikipedia.org|Beta': LONG }),
     topics: topics.slice(0, 2),
-    liteLLMClient: { assessArticle: async () => ({ cefr_level: levels.shift(), quality: 4, suitable: true }) },
+    liteLLMClient: { assessArticle: async () => ({ level: levels.shift(), quality: 4, suitable: true }) },
     logger: {}
   });
 
@@ -102,7 +102,7 @@ test('backfills quickly, then switches to one article per week', async () => {
     }),
     topics,
     now: () => clock,
-    liteLLMClient: { assessArticle: async () => ({ cefr_level: 'B1', quality: 4, suitable: true }) },
+    liteLLMClient: { assessArticle: async () => ({ level: 'B1', quality: 4, suitable: true }) },
     logger: {}
   });
 
@@ -156,7 +156,7 @@ test('asks the LLM for new titles once every built-in topic has been used', asyn
         asked += 1;
         return category === 'biography' ? ['Delta'] : [];
       },
-      assessArticle: async () => ({ cefr_level: 'B1', quality: 4 })
+      assessArticle: async () => ({ level: 'B1', quality: 4 })
     },
     logger: {}
   });

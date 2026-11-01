@@ -3,12 +3,17 @@ import { notFound } from 'next/navigation';
 
 import { getUserDetail, getUserProficiency, getUserStudyStats, listExamResults } from '@/lib/db';
 import { getUserSpeakingStats, getUserSrsStates } from '@/lib/analytics';
-import { formatDate, formatDateTime } from '@/lib/format';
+import AccountActions from '@/components/AccountActions';
+import DateTime from '@/components/DateTime';
 import DataTable from '@/components/DataTable';
+import LanguageChip from '@/components/LanguageChip';
 import PageShell from '@/components/PageShell';
+import { formatShortDate } from '@/lib/datetime';
 import StatusBadge from '@/components/StatusBadge';
 import KpiCard from '@/components/charts/KpiCard';
+import KpiGrid from '@/components/charts/KpiGrid';
 
+export const metadata = { title: 'User' };
 export const dynamic = 'force-dynamic';
 
 const TABS = [
@@ -37,17 +42,19 @@ export default async function UserDetailPage({
   }
 
   return (
-    <PageShell title={detail.display_name ?? detail.identifier}>
+    <PageShell title={detail.display_name ?? detail.identifier} description={`Learner profile and activity. ID ${detail.identifier}`} breadcrumbs={[{ label: 'Users', href: '/users' }, { label: detail.display_name ?? detail.identifier }]}>
       <section className="table-panel">
         <h2>Profile</h2>
         <dl className="article-meta">
           <div><dt>Identifier</dt><dd>{detail.identifier}</dd></div>
           <div><dt>Display Name</dt><dd>{detail.display_name ?? dash}</dd></div>
-          <div><dt>Signed Up</dt><dd>{formatDateTime(detail.created_at)}</dd></div>
+          <div><dt>Signed Up</dt><dd><DateTime value={detail.created_at} /></dd></div>
           <div><dt>Sessions</dt><dd>{detail.session_count.toLocaleString()}</dd></div>
           <div><dt>Cached Words</dt><dd>{detail.cached_word_count.toLocaleString()}</dd></div>
         </dl>
       </section>
+
+      <AccountActions userId={detail.id} identifier={detail.identifier} />
 
       {proficiency.length > 0 && (
         <section className="table-panel">
@@ -57,9 +64,9 @@ export default async function UserDetailPage({
             rowKey={(p) => p.language}
             empty="No proficiency data."
             columns={[
-              { label: 'Language', render: (p) => p.language },
+              { label: 'Language', render: (p) => <LanguageChip code={p.language} /> },
               { label: 'Level', render: (p) => p.level },
-              { label: 'Last Updated', render: (p) => formatDate(p.updated_at) },
+              { label: 'Last updated', nowrap: true, render: (p) => <DateTime value={p.updated_at} dateOnly /> },
             ]}
           />
         </section>
@@ -87,11 +94,11 @@ async function StudyTab({ userId }: { userId: string }) {
   const { breakdown, recentEvents } = await getUserStudyStats(userId);
   return (
     <>
-      <section className="kpi-grid">
+      <KpiGrid>
         {breakdown.map((b) => <KpiCard key={b.rating} label={b.rating} value={b.count} />)}
-      </section>
+      </KpiGrid>
       <section className="table-panel">
-        <h2>Recent Activity (last 20)</h2>
+        <h2>Recent activity (last 20)</h2>
         <DataTable
           rows={recentEvents}
           rowKey={(e) => e.id}
@@ -99,7 +106,7 @@ async function StudyTab({ userId }: { userId: string }) {
           columns={[
             { label: 'Word ID / Local ID', render: (e) => e.word_id ?? e.local_word_id ?? dash },
             { label: 'Rating', render: (e) => e.rating },
-            { label: 'Occurred At', render: (e) => formatDateTime(e.occurred_at) },
+            { label: 'Occurred', nowrap: true, render: (e) => <DateTime value={e.occurred_at} relative /> },
           ]}
         />
       </section>
@@ -111,20 +118,20 @@ async function SpeakingTab({ userId }: { userId: string }) {
   const stats = await getUserSpeakingStats(userId);
   return (
     <>
-      <section className="kpi-grid">
-        <KpiCard label="Total Speaking Events" value={stats.totalEvents} />
-        <KpiCard label="Drills Completed" value={stats.drillsCompleted} />
-        <KpiCard label="Last Speaking" value={formatDate(stats.lastSpeakingAt)} />
-      </section>
+      <KpiGrid>
+        <KpiCard label="Speaking events" value={stats.totalEvents} />
+        <KpiCard label="Drills completed" value={stats.drillsCompleted} />
+        <KpiCard label="Last speaking" value={formatShortDate(stats.lastSpeakingAt)} />
+      </KpiGrid>
       <section className="table-panel">
-        <h2>Self-Rating Breakdown</h2>
+        <h2>Self-rating breakdown</h2>
         <DataTable
           rows={stats.selfRatingDistribution}
           rowKey={(r) => r.rating}
           empty="No speaking events."
           columns={[
             { label: 'Rating', render: (r) => r.rating || '(none)' },
-            { label: 'Count', render: (r) => r.count.toLocaleString() },
+            { label: 'Count', numeric: true, render: (r) => r.count.toLocaleString() },
           ]}
         />
       </section>
@@ -144,9 +151,9 @@ async function SrsTab({ userId }: { userId: string }) {
         columns={[
           { label: 'Term', render: (s) => s.term ?? s.word_id.slice(0, 12) },
           { label: 'Status', render: (s) => <StatusBadge status={s.status} /> },
-          { label: 'Reviews', render: (s) => s.review_count },
-          { label: 'Ease Factor', render: (s) => (s.ease_factor != null ? Number(s.ease_factor).toFixed(2) : '—') },
-          { label: 'Next Review', render: (s) => formatDate(s.next_review_at) },
+          { label: 'Reviews', numeric: true, render: (s) => s.review_count },
+          { label: 'Ease factor', numeric: true, render: (s) => (s.ease_factor != null ? Number(s.ease_factor).toFixed(2) : '—') },
+          { label: 'Next review', nowrap: true, render: (s) => <DateTime value={s.next_review_at} dateOnly /> },
         ]}
       />
       {states.length > SRS_ROW_LIMIT && (
@@ -160,17 +167,17 @@ async function ExamsTab({ userId }: { userId: string }) {
   const exams = await listExamResults({ userId, limit: 500 });
   return (
     <section className="table-panel">
-      <h2>Exam History</h2>
+      <h2>Exam history</h2>
       <DataTable
         rows={exams}
         rowKey={(e) => e.id}
         empty="No exam attempts."
         columns={[
           { label: 'Topic', render: (e) => e.topic },
-          { label: 'Language', render: (e) => e.language },
-          { label: 'Score', render: (e) => `${Number(e.score_pct).toFixed(1)}%` },
+          { label: 'Language', render: (e) => <LanguageChip code={e.language} /> },
+          { label: 'Score', numeric: true, render: (e) => `${Number(e.score_pct).toFixed(1)}%` },
           { label: 'Result', render: (e) => <StatusBadge status={e.passed ? 'published' : 'failed'} label={e.passed ? 'Passed' : 'Failed'} /> },
-          { label: 'Date', render: (e) => formatDate(e.created_at) },
+          { label: 'Date', nowrap: true, render: (e) => <DateTime value={e.created_at} dateOnly /> },
           {
             label: 'Certificate',
             render: (e) => e.certificate_id

@@ -1,9 +1,5 @@
-import PageShell from '@/components/PageShell';
+import PageSkeleton from '@/components/PageSkeleton';
 
 export default function OpsLogDetailLoading() {
-  return (
-    <PageShell title="Log Detail">
-      <div className="empty-state">Loading log archive details…</div>
-    </PageShell>
-  );
+  return <PageSkeleton title="Log detail" kpis={0} />;
 }

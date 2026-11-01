@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../review/review_exercise.dart';
 import '../theme/app_theme.dart';
 import '../widgets/study_card_frame.dart';
+import '../theme/app_radius.dart';
 
 /// What the learner did with a review exercise.
 class ReviewAnswer {
@@ -17,20 +18,19 @@ class ReviewAnswer {
   final bool nearMiss;
 }
 
-/// An active-recall review card: the learner answers, sees whether it was
-/// right (and the word with its meaning), then continues to the next card.
+/// An active-recall review card: the learner answers and sees whether it was
+/// right (and the word with its meaning). Moving on is the host screen's
+/// pinned Continue button, so it is always within reach however tall the card.
 class ReviewExerciseView extends StatefulWidget {
   const ReviewExerciseView({
     required this.exercise,
     required this.onAnswered,
-    required this.onContinue,
     this.onListen,
     super.key,
   });
 
   final ReviewExercise exercise;
   final Future<void> Function(ReviewAnswer answer) onAnswered;
-  final VoidCallback onContinue;
 
   /// Speaks the word; required for [ReviewExerciseKind.listen].
   final Future<void> Function(String term)? onListen;
@@ -42,6 +42,7 @@ class ReviewExerciseView extends StatefulWidget {
 class _ReviewExerciseViewState extends State<ReviewExerciseView> {
   final _stopwatch = Stopwatch()..start();
   final _typed = TextEditingController();
+  final _feedbackKey = GlobalKey();
   String? _picked;
   ReviewAnswer? _answer;
 
@@ -66,6 +67,16 @@ class _ReviewExerciseViewState extends State<ReviewExerciseView> {
     if (_answer != null) return;
     _stopwatch.stop();
     setState(() => _answer = answer);
+    // The feedback appears below the choices: bring it on screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _feedbackKey.currentContext;
+      if (context != null && context.mounted) {
+        Scrollable.ensureVisible(context,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+      }
+    });
     await widget.onAnswered(answer);
   }
 
@@ -125,13 +136,7 @@ class _ReviewExerciseViewState extends State<ReviewExerciseView> {
                 ),
             if (_answer case final answer?) ...[
               const SizedBox(height: 16),
-              _Feedback(answer: answer, exercise: _exercise),
-              const SizedBox(height: 12),
-              FilledButton(
-                key: const ValueKey('review-continue'),
-                onPressed: widget.onContinue,
-                child: const Text('Continue'),
-              ),
+              _Feedback(key: _feedbackKey, answer: answer, exercise: _exercise),
             ],
           ],
         ),
@@ -295,7 +300,7 @@ class _ChoiceButton extends StatelessWidget {
 }
 
 class _Feedback extends StatelessWidget {
-  const _Feedback({required this.answer, required this.exercise});
+  const _Feedback({required this.answer, required this.exercise, super.key});
 
   final ReviewAnswer answer;
   final ReviewExercise exercise;
@@ -316,7 +321,7 @@ class _Feedback extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: AppRadius.control,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

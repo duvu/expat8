@@ -451,20 +451,18 @@ export function getQualityScoreHistogram() {
   });
 }
 
-export function getVocabReviewThroughput(days: number) {
-  return safe('vocab review throughput', [] as Array<{ date: string; approved: number; rejected: number }>, async (pool) => {
-    const { rows } = await pool.query<{ date: string; approved: string; rejected: string }>(
-      `SELECT
-         SUBSTRING(reviewed_at, 1, 10) AS date,
-         COUNT(*) FILTER (WHERE status = 'approved')::text AS approved,
-         COUNT(*) FILTER (WHERE status = 'rejected')::text AS rejected
-       FROM vocabulary_review_items
-       WHERE reviewed_at IS NOT NULL AND reviewed_at >= $1
+/** New study words per day: content goes live as soon as it is created, so this is the pipeline's output. */
+export function getWordsAddedPerDay(days: number) {
+  return safe('words added per day', [] as Array<{ date: string; words: number }>, async (pool) => {
+    const { rows } = await pool.query<{ date: string; words: string }>(
+      `SELECT SUBSTRING(created_at, 1, 10) AS date, COUNT(*)::text AS words
+       FROM words
+       WHERE created_at >= $1
        GROUP BY 1
        ORDER BY 1`,
       [sinceDay(days)],
     );
-    return rows.map((r) => ({ date: r.date, approved: toNum(r.approved), rejected: toNum(r.rejected) }));
+    return rows.map((r) => ({ date: r.date, words: toNum(r.words) }));
   });
 }
 

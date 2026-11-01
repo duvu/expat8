@@ -1198,10 +1198,65 @@
         }
       ],
       "relations": []
+    },
+    {
+      "id": "18:6498585034097934708",
+      "lastPropertyId": "8:3543235408899581727",
+      "name": "SkillAnswerEntity",
+      "properties": [
+        {
+          "id": "1:1992522786751164866",
+          "name": "id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:320036565328838776",
+          "name": "ownerUserId",
+          "indexId": "70:861630472227655730",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:2780305920540588167",
+          "name": "subject",
+          "type": 9
+        },
+        {
+          "id": "4:5571993737093813758",
+          "name": "skillId",
+          "indexId": "71:5806459653907777631",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:1053916422043059321",
+          "name": "correct",
+          "type": 1
+        },
+        {
+          "id": "6:5448658909685620536",
+          "name": "elapsedMs",
+          "type": 6
+        },
+        {
+          "id": "7:1982971956331614503",
+          "name": "answeredAtMs",
+          "indexId": "72:6090595825802771630",
+          "type": 6,
+          "flags": 8
+        },
+        {
+          "id": "8:3543235408899581727",
+          "name": "source",
+          "type": 9
+        }
+      ],
+      "relations": []
     }
   ],
-  "lastEntityId": "17:6807144932603146302",
-  "lastIndexId": "69:7374776007522317225",
+  "lastEntityId": "18:6498585034097934708",
+  "lastIndexId": "72:6090595825802771630",
   "lastRelationId": "0:0",
   "lastSequenceId": "0:0",
   "modelVersion": 5,
